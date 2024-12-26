@@ -195,11 +195,24 @@ def action_r1_button_pressed():
 
 def action_l1_button_pressed():
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: L1 Button activated! Shields up!")
-    global toggle
-    if toggle == True:
-        module_servoctl.portMainPlus()
-    elif toggle == False:
-        module_servoctl.portMainMinus()
+    #global toggle
+    #if toggle == True:
+        #module_servoctl.portMainPlus()
+    #elif toggle == False:
+        #module_servoctl.portMainMinus()
+    
+    
+    #This will turn the robot left
+    custompwm(0, 250) # max height
+    time.sleep(2)
+    module_servoctl.turn_left()
+    custompwm(0, 180) #lower a bit
+    module_servoctl.neutral_from_left()
+    custompwm(0, 168) # center
+
+def custompwm(servo, pwmsize):
+    pwm.set_pwm(servo, 0, pwmsize)
+    time.sleep(0.001)
 
 def action_r2_button_pressed():
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: R2 Button? Are we accelerating now?")
