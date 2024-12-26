@@ -15,10 +15,10 @@ starForarm = 200
 portHand = 570
 starHand = 240
 
-# Center Lift Servo (0) Values
-upHeight = 250
+# Center Lift Servo (0) Values in PWM NOT DEGREES
+upHeight = 88 # this is center arm as low as possible
 neutralHeight = 168
-downHeight = 88
+downHeight = 250 #256 is 90 degrees this is full max center arm up
 
 # Port Drive Servo (1) Values
 forwardPort = 400
@@ -164,15 +164,6 @@ def torso_return_vertical2():
 	print('center servo (0) set to: Neutral position\n ')
 
 
-# moves the torso from neutral position to down
-def neutral_to_down():
-    height = neutralHeight
-    print('setting center servo (0) Neutral --> Down position')
-    while (height < downHeight):
-        height = height + 1
-        pwm.set_pwm(0, 0, height)
-        time.sleep(0.001)
-        
 def down_to_up():
     height = downHeight
     print('setting center servo (0) Down --> Neutral position')
@@ -189,14 +180,16 @@ def down_to_neutral():
         pwm.set_pwm(0, 0, height)
         time.sleep(0.001)
 
+# moves the torso from neutral position to down
 def neutral_to_down():
     height = neutralHeight
+    print(f'{height} = {neutralHeight}')
     print('setting center servo (0) Down --> Neutral position')
     while (height < downHeight):
         height = height + 1
         pwm.set_pwm(0, 0, height)
         time.sleep(0.001)
-
+    print(height)
 
 def turn_right():
     port = neutralPort
