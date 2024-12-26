@@ -94,12 +94,6 @@ ipython_config.py
 #   install all needed dependencies.
 #Pipfile.lock
 
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
-
 # poetry
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
@@ -160,6 +154,10 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+#Memory
+TARS.pickle.gz
+/venv
+TARS.wav
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
@@ -167,5 +165,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# PyPI configuration file
-.pypirc
+captured_image.jpg
+config.ini
+output.wav
+/Brain/config.ini
+Brain/config.ini
