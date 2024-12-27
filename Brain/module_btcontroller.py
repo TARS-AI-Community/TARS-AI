@@ -6,6 +6,7 @@ from evdev import InputDevice, categorize, ecodes, list_devices
 import Adafruit_PCA9685
 
 global posevar
+controller_name = "8BitDo"  # Replace with part of your controller's name
 
 pwm = Adafruit_PCA9685.PCA9685(busnum=1)  # Specify I2C bus 1
 
@@ -417,19 +418,25 @@ def start_controls():
     # Clean up
     gamepad.close()
 
-    # Clean up
-    gamepad.close()
+def find_and_start_controller(controller_name=controller_name):
+    """
+    Continuously searches for the specified controller every 5 seconds until found,
+    then starts the control handling.
 
-controller_name = "8BitDo"  # Replace with part of your controller's name
-device = find_controller(controller_name)
-
-#Delete this is for testing
-if __name__ == "__main__":
-    while True:
+    :param controller_name: Partial name of the controller to search for.
+    """
+    device = None
+    while device is None:
         try:
-            start_controls()
+            device = find_controller(controller_name)
+            if device:
+                start_controls()
+            else:
+                #print(f"Controller '{controller_name}' not found. Retrying in 5 seconds...")
+                time.sleep(5)
         except Exception as e:
             print(f"An error occurred: {e}")
-            # Optionally add a small delay to prevent tight infinite loops in case of failure
-            import time
-            time.sleep(1)
+            print("Retrying in 5 seconds...")
+            time.sleep(5)
+
+#find_and_start_controller() #remove the comment for testing

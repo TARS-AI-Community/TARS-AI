@@ -78,10 +78,10 @@ if __name__ == "__main__":
     # Start threads
     stt_thread = threading.Thread(target=start_stt_thread, name="STTThread", daemon=True)
     bt_controller_thread = threading.Thread(target=start_bt_controller_thread, name="BTControllerThread", daemon=True)
-
+    
     stt_thread.start()
     bt_controller_thread.start()
-
+    
     try:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Main program running. Press Ctrl+C to stop.")
         while True:
