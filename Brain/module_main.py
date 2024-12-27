@@ -480,7 +480,7 @@ def start_bt_controller_thread():
     try:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Starting BT Controller thread...")
         while not stop_event.is_set():
-            start_controls()
+            find_and_start_controller()
     except Exception as e:
         print(f"Error in BT Controller thread: {e}")
 

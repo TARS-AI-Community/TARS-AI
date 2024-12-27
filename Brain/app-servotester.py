@@ -10,7 +10,7 @@ except Exception as e:
 
 pwm.set_pwm_freq(60)
 
-MIN_PULSE = 150  # Calibrate these values
+MIN_PULSE = 0  # Calibrate these values
 MAX_PULSE = 600  # Calibrate these values
 
 def set_servo_pulse(channel, pulse):
@@ -21,9 +21,9 @@ def set_servo_pulse(channel, pulse):
         print(f"Pulse out of range ({MIN_PULSE}-{MAX_PULSE}).")
 
 def set_all_servos_preset():
-    set_servo_pulse(0, 250)  # Example preset pulse for servo 0
-    set_servo_pulse(1, 400)  # Example preset pulse for servo 1
-    set_servo_pulse(2, 400)  # Example preset pulse for servo 2
+    set_servo_pulse(0, 88)  # Example preset pulse for servo 0
+    set_servo_pulse(1, 350)  # Example preset pulse for servo 1
+    set_servo_pulse(2, 350)  # Example preset pulse for servo 2
     print("All servos set to preset pulse widths.")
 
 def set_single_servo(channel):
@@ -40,9 +40,9 @@ print("Servo Control Menu (Pulse Width)")
 while True:
     print("\nSelect an option:")
     print("1. Set all servos to preset pulse widths")
-    print("2. Manually set servo 0 pulse width")
-    print("3. Manually set servo 1 pulse width")
-    print("4. Manually set servo 2 pulse width")
+    print("2. Manually set servo 0 (center)")
+    print("3. Manually set servo 1 (port)")
+    print("4. Manually set servo 2 (starboard)")
     print("5. Exit")
 
     choice = input("> ")
