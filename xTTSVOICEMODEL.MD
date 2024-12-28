@@ -36,15 +36,16 @@ Follow the instructions from [github](https://github.com/daswer123/xtts-api-serv
 #### C. Install Dependencies
 1. Install the required Python packages:
     - pip install -r requirements.txt
-2. Download and Organize the TARS Voice Model
-    A. Download the Model Files from Pyrater/TARS page on Hugging Face:
-        - config.json
-        - vocab.json
-        - model.pth
-    B. Organize the Files
-        - Create a directory named tars inside the XTTS models directory. For example:
-        - mkdir -p /xtts-api-server/xtts_models/tars
-        - Place the downloaded config.json, vocab.json, and model.pth files into the tars directory.
+2. Download the ALL of the Model Files from Pyrater/TARS page on Hugging Face:
+    - config.json
+    - vocab.json
+    - model.pth
+    - etc...
+3. Organize the Files
+    - Create a directory named tars inside the XTTS models directory. For example:
+    - mkdir -p /xtts-api-server/xtts_models/tars
+    - Place the downloaded config.json, vocab.json, and model.pth files into the tars directory.
+    - Place reference.wav in the speakers folder and rename it to TARS.wav
 ---
 
 #### D. Launch the XTTS API Server 
