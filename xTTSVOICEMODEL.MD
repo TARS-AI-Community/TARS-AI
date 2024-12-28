@@ -37,8 +37,7 @@ Follow the instructions from [github](https://github.com/daswer123/xtts-api-serv
 1. Install the required Python packages:
     - pip install -r requirements.txt
 2. Download and Organize the TARS Voice Model
-    A. Download the Model Files from Pyrater/TARS page on Hugging Face.
-        - Download the following files:
+    A. Download the Model Files from Pyrater/TARS page on Hugging Face:
         - config.json
         - vocab.json
         - model.pth
