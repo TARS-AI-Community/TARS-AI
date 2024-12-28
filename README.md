@@ -6,6 +6,8 @@
     </a>
 </p>
 
+![TARS-AI](./media/preview.png)
+
 A recreation of the TARS robot from Interstellar, featuring AI capabilities and servo-driven movement. 
 
 ## Table of Contents
