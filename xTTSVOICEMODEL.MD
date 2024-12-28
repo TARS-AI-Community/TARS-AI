@@ -44,7 +44,7 @@ Follow the instructions from [github](https://github.com/daswer123/xtts-api-serv
 3. Organize the Files
     - Create a directory named tars inside the XTTS models directory. For example:
     - mkdir -p /xtts-api-server/xtts_models/tars
-    - Place the downloaded config.json, vocab.json, and model.pth files into the tars directory.
+    - Place the downloaded files into the tars directory.
     - Place reference.wav in the speakers folder and rename it to TARS.wav
 ---
 
