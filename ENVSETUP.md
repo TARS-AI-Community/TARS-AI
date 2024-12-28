@@ -10,17 +10,17 @@
 
 ## Environment Setup Guide (IN DEVELOPMENT)
 
-### 1. Set Up the GPTARS_Interstellar Repository on Raspberry Pi
+### 1. Set Up the TARS-AI Repository on Raspberry Pi
 
 #### A. Clone the Repository
 1. Open a terminal on your Raspberry Pi.
-2. Clone the **GPTARS_Interstellar** repository:
+2. Clone the **TARS-AI** repository:
    ```bash
-   git clone https://github.com/pyrater/GPTARS_Interstellar.git
+   git clone https://github.com/pyrater/TARS-AI.git
    ```
 3. Navigate to the cloned directory:
    ```bash
-   cd GPTARS_Interstellar
+   cd TARS-AI
    ```
 
 Here’s the modified Markdown section for **Installing System-Level Dependencies**:
@@ -189,7 +189,7 @@ Follow the installation guide for your operating system:
 For more details, refer to the official [XTTS API Server Installation Guide](https://github.com/daswer123/xtts-api-server/tree/main).
 
 #### B. Add the TARS.wav Speaker File
-1. Download the `TARS-short.wav` and `TARS-long.wav` files from the `GPTARS_Interstellar` repository under `Brain/TTS/wakewords
+1. Download the `TARS-short.wav` and `TARS-long.wav` files from the `TARS-AI` repository under `Brain/TTS/wakewords
 /VoiceClones`. These will be the different voices you can use for TARS.
 2. Place it in the `speakers/` directory within the XTTS project folder. If the directory does not exist, create it.
 
