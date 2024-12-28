@@ -1,7 +1,7 @@
 """
 module_main.py
 
-Core logic module for the GPTARS application.
+Core logic module for the TARS-AI application.
 
 Integrates modules and manages key functionalities, including:
 - Text-to-Speech (TTS) playback and configuration

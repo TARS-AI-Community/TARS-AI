@@ -1,7 +1,7 @@
 """
 module_memory.py
 
-Memory Management Module for GPTARS.
+Memory Management Module for TARS-AI.
 
 Handles long-term and short-term memory. 
 Ensures contextual and historical knowledge during interactions.
@@ -20,7 +20,7 @@ from memory.hyperdb import *
 
 class MemoryManager:
     """
-    Handles memory operations (long-term and short-term) for GPTARS.
+    Handles memory operations (long-term and short-term) for TARS-AI.
     """
     def __init__(self, config, char_name, char_greeting):
         self.config = config

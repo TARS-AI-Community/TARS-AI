@@ -1,7 +1,7 @@
 """
 module_secrets.py
 
-Secrets Module for GPTARS Application.
+Secrets Module for TARS-AI Application.
 
 This module provides functionality for handling secret or special content.
 """

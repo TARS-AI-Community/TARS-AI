@@ -1,7 +1,7 @@
 """
 module_vision.py
 
-Vision Processing Module for GPTARS Application.
+Vision Processing Module for TARS-AI Application.
 
 This module handles image capture and caption generation, supporting both server-hosted 
 and on-device processing modes. It utilizes the BLIP model for on-device inference and 

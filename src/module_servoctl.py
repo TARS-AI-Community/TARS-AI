@@ -1,7 +1,7 @@
 """
 module_servoctl.py
 
-Servo Control Module for GPTARS Application.
+Servo Control Module for TARS-AI Application.
 
 This module provides a comprehensive set of functions to control servos in TARS, enabling complex movements such as:
 - Torso height adjustment.

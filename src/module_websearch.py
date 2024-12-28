@@ -2,7 +2,7 @@
 """
 module_websearch.py
 
-Web Search Module for GPTARS Application.
+Web Search Module for TARS-AI Application.
 
 This module provides functionality for performing web searches using Selenium WebDriver. 
 It supports multiple search engines and allows for extracting specific content, links, 

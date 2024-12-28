@@ -1,7 +1,7 @@
 """
 module_tts.py
 
-Text-to-Speech (TTS) module for GPTARS application.
+Text-to-Speech (TTS) module for TARS-AI application.
 
 Handles TTS functionality to convert text into audio using:
 - Azure Speech SDK

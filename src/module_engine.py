@@ -1,7 +1,7 @@
 """
 module_engine.py
 
-Core module for GPTARS responsible for:
+Core module for TARS-AI responsible for:
 - Predicting user intents and determining required modules.
 - Executing tool-specific functions like web searches and vision analysis.
 

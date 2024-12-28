@@ -1,9 +1,9 @@
 """
 module_character.py
 
-Character Management Module for GPTARS Application.
+Character Management Module for TARS-AI Application.
 
-This module manages character attributes and dynamic properties for the GPTARS application.
+This module manages character attributes and dynamic properties for the TARS-AI application.
 """
 
 # === Standard Libraries ===
@@ -12,7 +12,7 @@ from datetime import datetime
 
 class CharacterManager:
     """
-    Manages character attributes and dynamic properties for GPTARS.
+    Manages character attributes and dynamic properties for TARS-AI.
     """
     def __init__(self, config):
         self.config = config

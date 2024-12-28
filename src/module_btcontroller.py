@@ -2,7 +2,7 @@
 module_btcontroller.py
 
 Provides functionality for managing and interpreting Bluetooth gamepad input 
-to control servos and execute specific actions in the GPTARS system.
+to control servos and execute specific actions in the TARS-AI system.
 
 This module listens to gamepad events such as button presses, joystick movements, 
 and D-pad directions, mapping these events to corresponding robotic movements or 
@@ -100,30 +100,30 @@ def check_secret_code(button_name):
 
 #functions to move
 def stepForward():
-	module_servoctl.height_neutral_to_up()
-	module_servoctl.torso_neutral_to_forwards()
-	module_servoctl.torso_bump()
-	module_servoctl.torso_return()
+	height_neutral_to_up()
+	torso_neutral_to_forwards()
+	torso_bump()
+	torso_return()
 
 def turnRight():
-	module_servoctl.neutral_to_down()
-	module_servoctl.turn_right()
-	module_servoctl.down_to_neutral()
-	module_servoctl.neutral_from_right()
+	neutral_to_down()
+	turn_right()
+	down_to_neutral()
+	neutral_from_right()
 
 def turnLeft():
-	module_servoctl.neutral_to_down()
-	module_servoctl.turn_left()
-	module_servoctl.down_to_neutral()
-	module_servoctl.neutral_from_left()
+	neutral_to_down()
+	turn_left()
+	down_to_neutral()
+	neutral_from_left()
 
 def poseaction():
-    module_servoctl.neutral_to_down()
-    module_servoctl.torso_neutral_to_backwards()
-    module_servoctl.down_to_up()
+    neutral_to_down()
+    torso_neutral_to_backwards()
+    down_to_up()
 
 def unposeaction():
-    module_servoctl.torso_return2()  
+    torso_return2()  
         
         
 # D-Pad Actions (pressed and released)
@@ -180,49 +180,49 @@ def action_a_button_pressed():
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: A Button? Are you trying to jump?")
     global toggle
     if toggle == True:
-        module_servoctl.starHandPlus()
+        starHandPlus()
     elif toggle == False:
-        module_servoctl.starHandMinus()
+        starHandMinus()
 
 def action_b_button_pressed():
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Oh no, the B! Self-destruct initiated... just kidding!")
     global toggle
     if toggle == True:
-        module_servoctl.portHandPlus()
+        portHandPlus()
     elif toggle == False:
-        module_servoctl.portHandMinus()
+        portHandMinus()
 
 def action_x_button_pressed():
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Hey, stop pushing my X Button!")
     global toggle
     if toggle == True:
-        module_servoctl.starForarmPlus()
+        starForarmPlus()
     elif toggle == False:
-        module_servoctl.starForarmMinus()
+        starForarmMinus()
 
 def action_y_button_pressed():
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Y Button? I hope you know what youre doing!")
     global toggle
     if toggle == True:
-        module_servoctl.portForarmPlus()
+        portForarmPlus()
     elif toggle == False:
-        module_servoctl.portForarmMinus()
+        portForarmMinus()
 
 def action_r1_button_pressed():
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: R1 Button pressed! Thats the turbo button!")
     global toggle
     if toggle == True:
-        module_servoctl.starMainPlus()
+        starMainPlus()
     elif toggle == False:
-        module_servoctl.starMainMinus()
+        starMainMinus()
 
 def action_l1_button_pressed():
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: L1 Button activated! Shields up!")
     global toggle
     if toggle == True:
-        module_servoctl.portMainPlus()
+        portMainPlus()
     elif toggle == False:
-        module_servoctl.portMainMinus()
+        portMainMinus()
 
 def action_r2_button_pressed():
     #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: R2 Button? Are we accelerating now?")

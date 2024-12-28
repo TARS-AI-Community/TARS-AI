@@ -1,7 +1,7 @@
 """
 module_stt.py
 
-Speech-to-Text (STT) Module for GPTARS Application.
+Speech-to-Text (STT) Module for TARS-AI Application.
 
 This module integrates both local and server-based transcription, wake word detection, 
 and voice command handling. It supports custom callbacks to trigger actions upon 

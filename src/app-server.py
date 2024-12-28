@@ -1,7 +1,7 @@
 """
 app-server.py
 
-Flask Server for GPTARS Application.
+Flask Server for TARS-AI Application.
 
 This script provides a Flask-based API server to handle image captioning 
 and audio transcription tasks using pre-trained machine learning models.

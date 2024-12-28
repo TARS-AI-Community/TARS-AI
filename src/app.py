@@ -1,7 +1,7 @@
 """
 app.py
 
-Main entry point for the GPTARS application.
+Main entry point for the TARS-AI application.
 
 Initializes modules, loads configuration, and manages key threads for functionality such as:
 - Speech-to-text (STT)

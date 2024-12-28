@@ -1,7 +1,7 @@
 """
 module_engineTrainer.py
 
-Text Classification Training Module for GPTARS Application.
+Text Classification Training Module for TARS-AI Application.
 
 This module uses labeled training data to build a Naive Bayes-based text classifier with TF-IDF vectorization. 
 The trained model and vectorizer are saved as pickle files for use by other components of the application.
