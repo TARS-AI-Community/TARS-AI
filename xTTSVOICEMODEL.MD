@@ -10,7 +10,7 @@
 
 ## Cloned Voice Model Setup Guide
 
-### A. Set Up the XTTS API Server
+#### A. Set Up the XTTS API Server
     Follow the instructions from [github](https://github.com/daswer123/xtts-api-server) on the PC/SERVER where the TTS processing will happen.
     1. Clone REPO
     git clone https://github.com/daswer123/xtts-api-server
