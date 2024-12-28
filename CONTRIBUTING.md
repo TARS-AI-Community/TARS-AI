@@ -1,6 +1,6 @@
-# Contributing to GPTARS_Interstellar
+# Contributing to TARS-AI
 
-Welcome to the GPTARS_Interstellar community! We're excited to have you contribute code, CAD files, documentation, or related content to this project. This guide is for folks new to GitHub to help you quickly get setup to collaborate on the project.
+Welcome to the TARS-AI community! We're excited to have you contribute code, CAD files, documentation, or related content to this project. This guide is for folks new to GitHub to help you quickly get setup to collaborate on the project.
 
 > "Everybody good? Plenty of slaves for my robot colony?" -TARS
 
@@ -13,12 +13,12 @@ This project includes:
 - **Documentation**
 - **Related content**
 
-The primary repository is maintained by pyrater: [GPTARS_Interstellar on GitHub](https://github.com/pyrater/GPTARS_Interstellar).
+The primary repository is maintained by pyrater: [TARS-AI on GitHub](https://github.com/pyrater/TARS-AI).
 Join us in discord https://discord.gg/UfQpGXPW #repo for related questions and discussions.
 ---
 
 ## **For Experienced GitHub Users**
-- Fork the repo and submit pull requests (PRs) to [pyrater/GPTARS_Interstellar](https://github.com/pyrater/GPTARS_Interstellar).
+- Fork the repo and submit pull requests (PRs) to [pyrater/TARS-AI](https://github.com/pyrater/TARS-AI).
 - Notify pyrater on Discord in the `#repo` channel if your PR is ready for review.
 
 ---
@@ -31,9 +31,9 @@ Never used Git or GitHub before? No problem! This section will guide you through
 - Sign up for a free GitHub account: [Create an account](https://docs.github.com/en/get-started/start-your-journey/creating-an-account-on-github).
 
 ### **Step 2: Fork the Repository**
-1. Go to [GPTARS_Interstellar on GitHub](https://github.com/pyrater/GPTARS_Interstellar).
+1. Go to [TARS-AI on GitHub](https://github.com/pyrater/TARS-AI).
 2. Click the **Fork** button in the top-right corner.
-3. Select **Create a new fork** to make your own copy of the repository. This fork will look like `yourGithubUsername/GPTARS_Interstellar`.
+3. Select **Create a new fork** to make your own copy of the repository. This fork will look like `yourGithubUsername/TARS-AI`.
 
 Why fork? Forking allows you to make changes in your own copy of the repository without affecting the original.
 
@@ -51,11 +51,11 @@ If you’re new to Git, you’ll need to install it on your local machine.
 2. Navigate to the folder where you want to store the repository.
 3. Clone your fork:
    ```bash
-   git clone git@github.com:yourGithubUsername/GPTARS_Interstellar.git
+   git clone git@github.com:yourGithubUsername/TARS-AI.git
    ```
 4. Navigate into the project folder:
    ```bash
-   cd GPTARS_Interstellar
+   cd TARS-AI
    ```
 
 ### **Step 6: Set Up Remotes**
@@ -66,7 +66,7 @@ If you’re new to Git, you’ll need to install it on your local machine.
   You should see your fork as `origin`.
 - Add pyrater's repository as the upstream remote:
   ```bash
-  git remote add upstream git@github.com:pyrater/GPTARS_Interstellar.git
+  git remote add upstream git@github.com:pyrater/TARS-AI.git
   ```
 
 Why? This setup helps you fetch updates from the main repository to keep your fork up-to-date.
@@ -116,13 +116,13 @@ git push origin your-branch-name
 
 ## **Creating a Pull Request (PR)**
 Once your changes are ready:
-1. Go to pyrater's repository: [GPTARS_Interstellar](https://github.com/pyrater/GPTARS_Interstellar).
+1. Go to pyrater's repository: [TARS-AI](https://github.com/pyrater/TARS-AI).
 2. Click **Pull requests** in the top menu.
 3. Click the green **New pull request** button.
 
 On the **Comparing changes** page:
-- **Base repository**: `pyrater/GPTARS_Interstellar`, base: `main`.
-- **Head repository**: `yourGithubUsername/GPTARS_Interstellar`, compare: `your-branch-name`.
+- **Base repository**: `pyrater/TARS-AI`, base: `main`.
+- **Head repository**: `yourGithubUsername/TARS-AI`, compare: `your-branch-name`.
 
 ### **Provide Details**
 - Add a meaningful title for your PR.
