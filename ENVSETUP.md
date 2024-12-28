@@ -99,7 +99,7 @@ These dependencies are required for various operations, including Selenium-based
 
 #### E. Set the API Key in a `.env` File (Recommended for Secure Key Management)
 
-**Create** a `.env` file at the root of your repositor to securely store and use your API keys for your LLM and TTS service.
+**Create** a `.env` file at the root of your repository based on the pre-existing .env file to store your API keys for your LLM and TTS service.
 
 **`.env` Template**:
    Add the following lines to your `.env` file. Replace `your-actual-api-key` with your actual API key for the desired service:
@@ -110,14 +110,16 @@ These dependencies are required for various operations, including Selenium-based
    TABBY_API_KEY="your-actual-tabby-api-key"
 
    # TTS
-   AZURE_API_KEY="4kUr6rr1e37D3f7kBXnxfOugK60YZ0o0OTdtkF9graGqvnX5cHv2JQQJ99ALACYeBjFXJ3w3AAAYACOGPtp6"
+   AZURE_API_KEY="your-actual-azure-api-key"
    ```
    - Set up an OpenAI API Key (very small cost) - [OpenAI API Key](https://www.youtube.com/watch?v=OB99E7Y1cMA)
    - Set up an Azure Speech API Key (FREE) - [Azure Speech API Key](https://www.youtube.com/watch?v=e4_AytZ264Q)
+      - Make sure to create a Free Azure account [Free Azure Signup](https://azure.microsoft.com/en-us/pricing/purchase-options/azure-account?icid=azurefreeaccount)
+      - Follow all the steps in the video up to `Install Azure speech Python package`.
 
 #### F. Set the config.ini Parameters 
 
-1. Open the `config.ini` file located in the `Brain/` folder.
+1. **Create** a `config.ini` file in the `Brain/` folder based on the pre-existing template file.
 
 2. Locate the `[LLM]` section and update the parameters (for OpenAI):
    ```ini
@@ -141,7 +143,8 @@ These dependencies are required for various operations, including Selenium-based
    tts_voice = en-US-Steffan:DragonHDLatestNeural
    # Name of the cloned voice to use (e.g., TARS2)
    ```
-- You can find other voices available with Azure [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts).
+- `tts_voice`: You can find other voices available with Azure [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts).
+   - If en-US-Steffan:DragonHDLatestNeural gives you an error, try en-US-SteffanNeural.
 
 #### G. Run the Program
 1. Navigate to the `Brain/` folder within the repository:
