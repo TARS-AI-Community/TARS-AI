@@ -1,14 +1,160 @@
 # ENVSETUP.md
 
-## Hardware Prerequisites
+## Minimum Hardware Prerequisites
 
-1. **PC with NVIDIA GPU**: Ensure you have a PC with an NVIDIA GPU available for running the XTTS server.
-
-2. **Raspberry Pi**: For obvious reasons.
+1. **Raspberry Pi**: For obvious reasons.
+2. **USB Microphone**: For user input.
+3. **Speaker**: For TARS output.
 
 ---
 
-## Step-by-Step Guide (FOR WINDOWS)
+## Environment Setup Guide (IN DEVELOPMENT)
+
+### 1. Set Up the GPTARS_Interstellar Repository on Raspberry Pi
+
+#### A. Clone the Repository
+1. Open a terminal on your Raspberry Pi.
+2. Clone the **GPTARS_Interstellar** repository:
+   ```bash
+   git clone https://github.com/pyrater/GPTARS_Interstellar.git
+   ```
+3. Navigate to the cloned directory:
+   ```bash
+   cd GPTARS_Interstellar
+   ```
+
+Here’s the modified Markdown section for **Installing System-Level Dependencies**:
+
+---
+
+#### B. Install System-Level Dependencies
+These dependencies are required for various operations, including Selenium-based automation, audio processing, and format handling.
+
+1. **Update Your System**:
+   Ensure your package lists and installed software are up to date:
+   ```bash
+   sudo apt update
+   sudo apt upgrade -y
+   ```
+
+2. **Install Chromium**:
+   Chromium is the browser required for Selenium-based web automation:
+   ```bash
+   sudo apt install -y chromium-browser
+   ```
+
+3. **Install Chromedriver for Selenium**:
+   Chromedriver allows Selenium to control Chromium:
+   ```bash
+   sudo apt install -y chromium-chromedriver
+   ```
+
+4. **Install SoX and Format Support Libraries**:
+   SoX is a command-line tool for processing audio files. 
+   ```bash
+   sudo apt install -y sox libsox-fmt-all
+   ```
+
+5. **Install PortAudio Development Libraries**:
+   PortAudio is a cross-platform audio input/output library.
+   ```bash
+   sudo apt install -y portaudio19-dev
+   ```
+
+6. **Verify Installations**:
+   Confirm that the installed packages are functioning:
+   - Check Chromium version:
+     ```bash
+     chromium-browser --version
+     ```
+   - Check Chromedriver version:
+     ```bash
+     chromedriver --version
+     ```
+   - Check SoX version:
+     ```bash
+     sox --version
+     ```
+---
+
+#### C. Set Up the Python Environment
+
+1. Create a virtual environment:
+   ```bash
+   python3 -m venv venv
+   ```
+2. Activate the virtual environment:
+   ```bash
+   source venv/bin/activate
+   ```
+3. Install the required dependencies under `Brain/`:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+#### D. Connect Hardware
+
+1. Connect your **microphone** to the Raspberry Pi via USB.
+2. Connect your **speaker** to the Raspberry Pi using the audio output or Bluetooth.
+
+#### E. Set the API Key in a `.env` File (Recommended for Secure Key Management)
+
+**Create** a `.env` file at the root of your repositor to securely store and use your API keys for your LLM and TTS service.
+
+**`.env` Template**:
+   Add the following lines to your `.env` file. Replace `your-actual-api-key` with your actual API key for the desired service:
+   ```env
+   # LLM
+   OPENAI_API_KEY="your-actual-openai-api-key"
+   OOBA_API_KEY="your-actual-ooba-api-key"
+   TABBY_API_KEY="your-actual-tabby-api-key"
+
+   # TTS
+   AZURE_API_KEY="4kUr6rr1e37D3f7kBXnxfOugK60YZ0o0OTdtkF9graGqvnX5cHv2JQQJ99ALACYeBjFXJ3w3AAAYACOGPtp6"
+   ```
+   - Set up an OpenAI API Key (very small cost) - [OpenAI API Key](https://www.youtube.com/watch?v=OB99E7Y1cMA)
+   - Set up an Azure Speech API Key (FREE) - [Azure Speech API Key](https://www.youtube.com/watch?v=e4_AytZ264Q)
+
+#### F. Set the config.ini Parameters 
+
+1. Open the `config.ini` file located in the `Brain/` folder.
+
+2. Locate the `[LLM]` section and update the parameters (for OpenAI):
+   ```ini
+   [LLM] # Large Language Model configuration (ooba/OAI or tabby)
+   llm_backend = openai
+   # Set this to `openai` if using OpenAI models.
+   base_url = https://api.openai.com
+   # The URL for the OpenAI API.
+   openai_model = gpt-4o-mini
+   # Specify the OpenAI model to use (e.g., gpt-4o-mini or another supported model).
+   ```
+
+3. Locate the `[TTS]` section and update the parameters:
+   ```ini
+   [TTS] # Text-to-Speech configuration 
+   ttsoption = azure
+   # TTS backend option: [azure, local, xttsv2, TARS]
+   azure_region = eastus
+   # Azure region for Azure TTS (e.g., eastus)
+   ...
+   tts_voice = en-US-Steffan:DragonHDLatestNeural
+   # Name of the cloned voice to use (e.g., TARS2)
+   ```
+- You can find other voices available with Azure [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts).
+
+#### G. Run the Program
+1. Navigate to the `Brain/` folder within the repository:
+   ```bash
+   cd Brain/
+   ```
+2. Start the application:
+   ```bash
+   python app.py
+   ```
+3. The program should now be running and ready to interact using your microphone and speaker.
+
+## (OPTIONAL) Set up XTTS Server
 
 ### 1. Prepare Your PC with NVIDIA GPU
 The TTS server must run on your GPU-enabled PC due to its computational requirements.
@@ -89,122 +235,3 @@ For more details, refer to the official [XTTS API Server Installation Guide](htt
    ```
 6. Click **"Execute"** to send the request.
 7. Check the response for a generated audio file. You should see a download field where you can download and listen to the audio output.
-
----
-
-### 3. Set Up the GPTARS_Interstellar Repository on Raspberry Pi
-
-#### A. Clone the Repository
-1. Open a terminal on your Raspberry Pi.
-2. Clone the **GPTARS_Interstellar** repository:
-   ```bash
-   git clone https://github.com/pyrater/GPTARS_Interstellar.git
-   ```
-3. Navigate to the cloned directory:
-   ```bash
-   cd GPTARS_Interstellar
-   ```
-
-#### B. Install Chromium and Chromedriver
-Chromium and Chromedriver are required for Selenium-based operations in the project.
-
-1. **Update Your System**:
-   ```bash
-   sudo apt update
-   sudo apt upgrade -y
-   ```
-
-2. **Install Chromium**:
-   ```bash
-   sudo apt install -y chromium-browser
-   ```
-
-3. **Install Chromedriver for Selenium**:
-   ```bash
-   sudo apt install -y chromium-chromedriver
-   ```
-
-4. **Verify Installations**:
-
-   - Check Chromium installation:
-     ```bash
-     chromium-browser --version
-     ```
-   - Check Chromedriver installation:
-     ```bash
-     chromedriver --version
-     ```
-
-#### C. Set Up the Python Environment
-
-1. Create a virtual environment:
-   ```bash
-   python3 -m venv venv
-   ```
-2. Activate the virtual environment:
-   ```bash
-   source venv/bin/activate
-   ```
-3. Install the required dependencies under `Brain/`:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-#### D. Connect Hardware
-
-1. Connect your **microphone** to the Raspberry Pi via USB.
-2. Connect your **speaker** to the Raspberry Pi using the audio output or Bluetooth.
-
-#### E. Set the API Key in a `.env` File (Recommended for Secure Key Management)
-
-To securely store and use your API keys for OpenAI, Ooba, or Tabby, create and configure a `.env` file.
-
-**Add API Keys**:
-   Add the following lines to your `.env` file. Replace `your-actual-api-key` with your actual API key for the desired service:
-   ```env
-   OPENAI_API_KEY=your-actual-openai-api-key
-   OOBA_API_KEY=your-actual-ooba-api-key
-   TABBY_API_KEY=your-actual-tabby-api-key
-   ```
-
-#### F. Set the config.ini Parameters 
-
-1. Open the `config.ini` file located in the `Brain/` folder.
-
-2. Locate the `[TTS]` section and update the parameters:
-   ```ini
-   [TTS] # Text-to-Speech configuration (about 3.4GB TTS #xttsv2 or local or TARS)
-   ttsurl = http://<server-ip>:8020
-   # Replace <server-ip> with the IP address of the machine running the XTTS API Server (e.g., 192.168.2.20).
-   charvoice = True
-   # Use character-specific voice settings.
-   ttsoption = xttsv2
-   # Set this to `xttsv2` to use the XTTS API Server.
-   ttsclone = TARS-Short
-   # Set this to the desired speaker file (e.g., `TARS-Short` or `TARS-Long`).
-   ```
-   - The `ttsurl` should point to the IP and port of the XTTS API Server.
-   - The `ttsclone` should match the desired speaker (e.g., `TARS-Short`).
-
-3. Locate the `[LLM]` section and update the parameters (for OpenAI):
-   ```ini
-   [LLM] # Large Language Model configuration (ooba/OAI or tabby)
-   backend = openai
-   # Set this to `openai` if using OpenAI models.
-   base_url = https://api.openai.com
-   # The URL for the OpenAI API.
-   openai_model = gpt-4o-mini
-   # Specify the OpenAI model to use (e.g., gpt-4o-mini or another supported model).
-   ```
-   - Confirm that the `openai_model` matches the model available with your OpenAI API key.
-
-#### G. Run the Program
-1. Navigate to the `Brain/` folder within the repository:
-   ```bash
-   cd Brain/
-   ```
-2. Start the application:
-   ```bash
-   python app.py
-   ```
-3. The program should now be running and ready to interact using your microphone and speaker.

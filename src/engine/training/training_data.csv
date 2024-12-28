@@ -1,0 +1,262 @@
+query,label
+Read me the latest headlines,News
+Give me the top news stories,News
+Give me the latest celebrity news,News
+Give me the breaking news headlines,News
+What's the latest news update?,News
+Give me the latest celebrity gossip,News
+Give me the latest science discoveries,News
+Tell me the latest travel destinations,News
+Read me the latest sports news,News
+Give me the latest music news,News
+Read me the latest news,News
+Tell me the latest fashion news,News
+Give me the latest music releases,News
+Tell me the latest sports scores,News
+What's the current pollen count?,Weather
+What should I wear today?,Weather
+What's the forecast for the next week?,Weather
+What's the wind chill factor tomorrow in Fahrenheit?,Weather
+Is it going to rain today?,Weather
+what is the weather today in Pyeongtaek,Weather
+what is the weather in Pyeongtaek,Weather
+What's the forecast for today?,Weather
+Is it going to be sunny today?,Weather
+What's the heat index tomorrow in Celsius?,Weather
+What's the chance of snow tomorrow?,Weather
+What's the sunrise time today?,Weather
+What's the weather like today?,Weather
+Is it going to be a sunny day?,Weather
+Where can I find the weather forecast for the next week?,Weather
+What's the current chance of rain?,Weather
+What's the current snow depth?,Weather
+What's the UV index tomorrow on a scale from 1 to 10?,Weather
+How does the weather look for tomorrow?,Weather
+What's the weather like right now?,Weather
+What's the chance of rain tomorrow?,Weather
+What's the weather like tomorrow?,Weather
+What's the current UV index?,Weather
+What will the weather be like tomorrow?,Weather
+What's the current air pressure in millibars?,Weather
+What's the current temperature in Kelvin?,Weather
+What's the potential for severe weather today?,Weather
+Should I carry an umbrella today?,Weather
+What's the current temperature outside?,Weather
+Is there a chance of thunderstorms today?,Weather
+What's the current dew point in degrees Celsius?,Weather
+What's the sunset time today?,Weather
+What's the UV index today?,Weather
+Should I bring an umbrella tomorrow?,Weather
+Check the current traffic conditions on the I-95 highway,Search
+Whats the live score of the New York Yankees baseball game,Search
+Find the current stock price of Tesla Inc,Search
+Check the status of flight AA 202 from New York to London,Search
+What are the latest COVID-19 travel restrictions for traveling to Japan,Search
+Find the current exchange rate between the British Pound and the Japanese Yen,Search
+Whats the air quality index in Beijing right now,Search
+Check the real-time price of Bitcoin,Search
+Look up the current wait times at Disneyland,Search
+What are the trending topics on Twitter right now,Search
+Find the latest updates on the ongoing political election results,Search
+What is the current level of the Nile River in Cairo,Search
+Search for the latest traffic regulations in downtown Berlin,Search
+Look up live updates on the ongoing tennis match at Wimbledon,Search
+Check the current sea conditions for sailing in the Caribbean,Search
+What are the latest gold prices per ounce today,Search
+Find the current time and temperature in Sydney Australia,Search
+Search for the latest sports car models released by Ferrari,Search
+Find the current opening hours of the British Museum in London,Search
+Check the next available appointment at the U.S. embassy in Berlin,Search
+What is the current status of the International Space Station,Search
+Find the departure times for trains from Paris to Rome today,Search
+Check the current status of the Tokyo Stock Exchange,Search
+What are the latest visa requirements for tourists visiting Australia,Search
+Find the schedule for upcoming space launches by NASA,Search
+Check the live status of the London Underground service,Search
+What is the current occupancy rate of hotels in Dubai,Search
+Search for the next lunar eclipse visible in North America,Search
+Find the current interest rates for savings accounts in major U.S. banks,Search
+Check the availability of tickets for the Broadway show Hamilton for next weekend,Search
+What are the latest advancements in solar energy technology,Search
+Find the current rankings in mens professional tennis,Search
+Check the status of international shipping lanes in the Mediterranean Sea,Search
+What is the current population of New York City,Search
+Current time in kentucky,Search
+Current time in new york,Search
+Search for the latest innovations in smartphone technology,Search
+Find the status of major airports in Europe due to weather conditions,Search
+Check the availability of electric vehicle charging stations in downtown Chicago,Search
+Who is the current speaker of the house,Search
+Check the current status of flight AA280,Search
+Find the latest updates on international trade agreements,Search
+Check the current wait times at the Louvre Museum,Search
+What are the entry requirements for hiking in the National Parks of Canada,Search
+Search for the next total solar eclipse dates,Search
+Find the latest developments in artificial intelligence research,Search
+Check the live status of the New York Stock Exchange,Search
+What is the current bestselling novel in the UK,Search
+Search for the latest trends in virtual reality gaming,Search
+Find the next scheduled international cricket matches,Search
+Check the status of the Trans-European Rail network,Search
+What is the current exchange rate for Euro to Japanese Yen,Search
+Search for the latest models of hybrid cars available in Europe,Search
+Find the current schedule of Broadway shows in New York,Search
+Check the live waiting times at Universal Studios Orlando,Search
+What are the latest findings in climate change research,Search
+Search for the current trends in fashion in Milan,Search
+Find the schedule of the upcoming film festivals,Search
+Check the status of the Great Barrier Reef conservation efforts,Search
+What is the current water level of the River Thames in London,Search
+What is the current exchange rate for usd to yen,Search
+can you search on google for,Search
+Exchange rate for usd to won,Search
+Search for the latest advancements in space exploration by the European Space Agency,Search
+What is the stock market valued at right now,Search
+What is the value of VTSAX,Search
+current stock ticker value of VTSAX,Search
+can I delete your memory file and reset you,chat
+i am ready,chat
+can I delete you and reset you,chat
+no can i have permission to delete your memory,chat
+your so silly,chat
+hey hows it going?,chat
+dont worry mori your mine,chat
+what is my name,chat
+i got to go,goodbye
+bye,goodbye
+talk to you later,goodbye
+ill be right back,goodbye
+see you later,goodbye
+take care,goodbye
+farewell,goodbye
+catch you later,goodbye
+so long,goodbye
+peace out,goodbye
+till we meet again,goodbye
+adios,goodbye
+cheerio,goodbye
+later gator,goodbye
+toodles,goodbye
+bye for now,goodbye
+ciao,goodbye
+goodbye for now,goodbye
+take it easy,goodbye
+it was nice talking to you,goodbye
+until next time,goodbye
+see you around,goodbye
+have a good one,goodbye
+keep in touch,goodbye
+time to say goodbye,goodbye
+until we meet again,goodbye
+farewell my friend,goodbye
+catch you on the flip side,goodbye
+Im off now,goodbye
+take care of yourself,goodbye
+goodnight,goodbye
+brb,goodbye
+ill brb,goodbye
+i'll be right back,goodbye
+cya,goodbye
+c-ya,goodbye
+grab i gtg again ill brb,goodbye
+i gtg,goodbye
+gtg,goodbye
+show me what you see,Vision
+look at this,Vision
+check this out,Vision
+can you see this,Vision
+what does this look like,Vision
+capture this,Vision
+take a picture of this,Vision
+analyze this image,Vision
+what is in this photo,Vision
+describe this scene,Vision
+identify this object,Vision
+scan this,Vision
+recognize this,Vision
+what do you see here,Vision
+use the camera to view this,Vision
+visualize this,Vision
+inspect this visually,Vision
+what can you tell from this picture,Vision
+can you photograph this,Vision
+what is shown here,Vision
+show me the view,Vision
+whats in front of you,Vision
+can you check this out,Vision
+look over here,Vision
+what do you see now,Vision
+can you analyze this,Vision
+inspect this for me,Vision
+show me the picture,Vision
+whats in this shot,Vision
+can you capture this,Vision
+take a look at this,Vision
+use your camera on this,Vision
+show me whats there,Vision
+can you observe this,Vision
+let me see this,Vision
+look and tell me,Vision
+whats visible here,Vision
+take a snap of this,Vision
+can you identify this,Vision
+focus on this,Vision
+whats in this frame,Vision
+open the camera,Vision
+what do you detect,Vision
+scan this for me,Vision
+analyze the scene,Vision
+show me this area,Vision
+record this view,Vision
+describe whats ahead,Vision
+look around and show me,Vision
+use Vision to check this,Vision
+can you see what this is,Vision
+whats in the image,Vision
+observe this,Vision
+look closely at this,Vision
+analyze what you see,Vision
+describe the picture,Vision
+take a look,Vision
+use your eyes on this,Vision
+inspect the scene,Vision
+focus on whats here,Vision
+can you interpret this,Vision
+whats in view,Vision
+see this and tell me,Vision
+look at this object,Vision
+tell me whats in front,Vision
+use your Vision,Vision
+snap this for me,Vision
+show me whats happening,Vision
+what can you find here,Vision
+take a photo of this,Vision
+check out whats ahead,Vision
+interpret this view,Vision
+scan the object,Vision
+look at what Im showing,Vision
+show me your perspective,Vision
+take a closer look,Vision
+look here and explain,Vision
+can you make sense of this,Vision
+analyze this frame,Vision
+identify whats in the picture,Vision
+spot this for me,Vision
+can you recognize whats here,Vision
+observe and describe,Vision
+give me a visual analysis,Vision
+tell me what you detect here,Vision
+use the camera to explain,Vision
+check the scene,Vision
+take a snapshot,Vision
+whats in the viewfinder,Vision
+look at this angle,Vision
+tell me about this object,Vision
+focus your lens on this,Vision
+describe what you capture,Vision
+what can you make out,Vision
+detect and explain this,Vision
+whats visible around here,Vision
+survey this for me,Vision
+what am i holding,Vision
+hey tars what am i holding?,Vision
