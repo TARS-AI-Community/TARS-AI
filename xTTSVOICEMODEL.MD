@@ -11,19 +11,19 @@
 ## Cloned Voice Model Setup Guide
 
 ### A. Set Up the XTTS API Server
-1. Follow the instructions from [github](https://github.com/daswer123/xtts-api-server) on the PC/SERVER where the TTS processing will happen.
-    # Clone REPO
+    Follow the instructions from [github](https://github.com/daswer123/xtts-api-server) on the PC/SERVER where the TTS processing will happen.
+    1. Clone REPO
     git clone https://github.com/daswer123/xtts-api-server
     cd xtts-api-server
-    # Create virtual env
+    2. Create virtual env
     python -m venv venv
     venv/scripts/activate or source venv/bin/activate
-    # Install deps
+    3. Install deps
     pip install -r requirements.txt
     pip install torch==2.1.1+cu118 torchaudio==2.1.1+cu118 --index-url https://download.pytorch.org/whl/cu118
-    # Launch server to ensure it works
+    4. Launch server to ensure it works
     python -m xtts_api_server
-    # After successfully starting the server close the server.
+    5. After successfully starting the server close the server.
     
 #### B. Clone the Repository
 1. Open a terminal or command prompt.
