@@ -210,7 +210,7 @@ class STTManager:
         Transcribe audio using the local Vosk model.
         """
         recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
-        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16", device=self.mic_index) as stream:
+        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
             for _ in range(50):  # Limit duration (~12.5 seconds)
                 data, _ = stream.read(4000)
                 if recognizer.AcceptWaveform(data.tobytes()):
