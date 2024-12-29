@@ -13,8 +13,6 @@ server_url = http://192.168.2.68:5678/save_audio
 [CHAR] # Character-specific details
 character_card_path = character/TARS.json
 # Path to the JSON file describing the character
-char_name = TARS
-# Name of the character (used in interactions)
 user_name = Joe
 # Name of the user interacting with the character
 user_details = Species: Human. Gender: Male.

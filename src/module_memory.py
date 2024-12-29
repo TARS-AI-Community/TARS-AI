@@ -26,7 +26,7 @@ class MemoryManager:
         self.config = config
         self.char_name = char_name
         self.char_greeting = char_greeting
-        self.memory_db_path = os.path.abspath(f"memory/{self.config['CHAR']['char_name']}.pickle.gz")
+        self.memory_db_path = os.path.abspath(f"memory/{self.char_name}.pickle.gz")
         self.hyper_db = HyperDB()
         self.long_mem_use = True
         self.initial_memory_path = os.path.abspath("memory/initial_memory.json")

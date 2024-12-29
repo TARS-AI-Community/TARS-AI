@@ -175,7 +175,6 @@ def build_prompt(user_prompt):
             #threading.Thread(target=write_tool_used, args=(module_engine,)).start() 
  
     # Build basic prompt structure
-    character_manager.character_card = f"\nPersona: {character_manager.char_persona}\n\nWorld Scenario: {character_manager.world_scenario}\n\nDialog:\n{character_manager.example_dialogue}\n"
     dtg = f"Current Date: {date}\nCurrent Time: {time}\n"
     past = memory_manager.get_longterm_memory(user_prompt) # Get past memories
     # Correct the order and logic of replacements clean up memories and past json crap
@@ -198,14 +197,14 @@ def build_prompt(user_prompt):
         f"{dtg}\n"
         f"User is: {CONFIG['CHAR']['user_details']}\n\n"
         f"{character_manager.character_card}\n"
-        f"Past Memories which may be helpfull to answer {character_manager.char_name}: {past}\n\n"
+        f"Past Memories which may be helpful to answer {character_manager.char_name}: {past}\n\n"
         f"{history}\n"
         #f"{module_engine}"
         f"Respond to {CONFIG['CHAR']['user_name']}'s message of: {userInput}\n"
         f"{module_engine}"
         f"### Response: {character_manager.char_name}: "
     )
-    #Calc how much space is avail for chat history
+    # Calc how much space is avail for chat history
     remaining = memory_manager.token_count(promptsize).get('length', 0)
     memallocation = int(CONFIG['LLM']['contextsize'] - remaining)
     history = memory_manager.get_shortterm_memories_tokenlimit(memallocation)
@@ -232,7 +231,6 @@ def build_prompt(user_prompt):
     prompt = prompt.replace('\"', '"')
     prompt = prompt.replace('<END>', '') 
 
-    #print(prompt)
     return prompt
 
 def get_completion(prompt, istext):

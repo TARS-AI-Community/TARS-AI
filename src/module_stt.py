@@ -164,28 +164,28 @@ class STTManager:
         """
         Detect the wake word using Pocketsphinx.
         """
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: Idle...")
-        try:
-            with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
-                speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=1e-20)
-                for phrase in speech:
-                    if self.WAKE_WORD in phrase.hypothesis().lower():
-                        wake_response = random.choice(self.TARS_RESPONSES)
-                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: {wake_response}")
+        # print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: Idle...")
+        # try:
+        #     with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+        #         speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=1e-20)
+        #         for phrase in speech:
+        #             if self.WAKE_WORD in phrase.hypothesis().lower():
+        #                 wake_response = random.choice(self.TARS_RESPONSES)
+        #                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: {wake_response}")
 
-                        # If a callback is set, send the wake_response
-                        if self.wake_word_callback:
-                            self.wake_word_callback(wake_response)
-                        return True
-        except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Wake word detection failed: {e}")
-        return False
+        #                 # If a callback is set, send the wake_response
+        #                 if self.wake_word_callback:
+        #                     self.wake_word_callback(wake_response)
+        #                 return True
+        # except Exception as e:
+        #     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Wake word detection failed: {e}")
+        # return False
         
         # STUB: Simulate wake word detection
-        # wake_response = "Hello. How can I help you?"
-        # print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: {wake_response}")
-        # self.wake_word_callback(wake_response)
-        # return True
+        wake_response = "Hello. How can I help you?"
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: {wake_response}")
+        self.wake_word_callback(wake_response)
+        return True
 
     def _transcribe_utterance(self):
         """
@@ -198,6 +198,8 @@ class STTManager:
             else:
                 result = self._transcribe_with_vosk()
             
+            time.sleep(10)
+
             # Call post-utterance callback if utterance was detected recently, otherwise return to wake word detection
             if self.post_utterance_callback and result:
                 self.post_utterance_callback()
@@ -209,29 +211,29 @@ class STTManager:
         """
         Transcribe audio using the local Vosk model.
         """
-        recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
-        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
-            for _ in range(50):  # Limit duration (~12.5 seconds)
-                data, _ = stream.read(4000)
-                if recognizer.AcceptWaveform(data.tobytes()):
-                    result = recognizer.Result()
-                    # print(f"[DEBUG] Recognized: {result}")
-                    if self.utterance_callback:
-                        self.utterance_callback(result)
-                    return result
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: No valid transcription within duration limit.")
-        return None
+        # recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
+        # with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+        #     for _ in range(50):  # Limit duration (~12.5 seconds)
+        #         data, _ = stream.read(4000)
+        #         if recognizer.AcceptWaveform(data.tobytes()):
+        #             result = recognizer.Result()
+        #             # print(f"[DEBUG] Recognized: {result}")
+        #             if self.utterance_callback:
+        #                 self.utterance_callback(result)
+        #             return result
+        #     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: No valid transcription within duration limit.")
+        # return None
     
         # STUB: Simulate Vosk transcription
-        # test_message = {
-        #     "text": "How are you doing?",
-        #     "result": []
-        # }
+        test_message = {
+            "text": "Please introduce yourself. What is your name?",
+            "result": []
+        }
         
-        # # Serialize the dictionary to JSON string
-        # message_json = json.dumps(test_message)
-        # self.utterance_callback(message_json)
-        # return True
+        # Serialize the dictionary to JSON string
+        message_json = json.dumps(test_message)
+        self.utterance_callback(message_json)
+        return True
 
     def _transcribe_with_server(self):
         """

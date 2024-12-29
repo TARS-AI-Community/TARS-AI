@@ -47,7 +47,6 @@ def load_config():
         },
         "CHAR": {
             "character_card_path": config['CHAR']['character_card_path'],
-            "char_name": config['CHAR']['char_name'],
             "user_name": config['CHAR']['user_name'],
             "user_details": config['CHAR']['user_details'],
         },
