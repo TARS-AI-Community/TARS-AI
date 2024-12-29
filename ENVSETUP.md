@@ -23,10 +23,6 @@
    cd TARS-AI
    ```
 
-Here’s the modified Markdown section for **Installing System-Level Dependencies**:
-
----
-
 #### B. Install System-Level Dependencies
 These dependencies are required for various operations, including Selenium-based automation, audio processing, and format handling.
 
@@ -75,7 +71,6 @@ These dependencies are required for various operations, including Selenium-based
      ```bash
      sox --version
      ```
----
 
 #### C. Set Up the Python Environment
 
@@ -99,7 +94,7 @@ These dependencies are required for various operations, including Selenium-based
 
 #### E. Set the API Key in a `.env` File (Recommended for Secure Key Management)
 
-**Create** a `.env` file at the root of your repository based on the pre-existing .env file to store your API keys for your LLM and TTS service.
+**Create** a `.env` file at the root of your repository based on the pre-existing .env.template file to store your API keys for your LLM and TTS service.
 
 **`.env` Template**:
    Add the following lines to your `.env` file. Replace `your-actual-api-key` with your actual API key for the desired service:
@@ -119,7 +114,7 @@ These dependencies are required for various operations, including Selenium-based
 
 #### F. Set the config.ini Parameters 
 
-1. **Create** a `config.ini` file in the `Brain/` folder based on the pre-existing template file.
+1. **Create** a `config.ini` file in the `Brain/` folder based on the pre-existing config.ini.template file.
 
 2. Locate the `[LLM]` section and update the parameters (for OpenAI):
    ```ini
