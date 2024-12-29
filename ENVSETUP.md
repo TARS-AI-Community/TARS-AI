@@ -114,7 +114,7 @@ These dependencies are required for various operations, including Selenium-based
 
 #### F. Set the config.ini Parameters 
 
-1. **Create** a `config.ini` file in the `Brain/` folder based on the pre-existing config.ini.template file.
+1. **Create** a `config.ini` file in the `src/` folder based on the pre-existing config.ini.template file.
 
 2. Locate the `[LLM]` section and update the parameters (for OpenAI):
    ```ini
@@ -187,7 +187,7 @@ Follow the installation guide for your operating system:
 For more details, refer to the official [XTTS API Server Installation Guide](https://github.com/daswer123/xtts-api-server/tree/main).
 
 #### B. Add the TARS.wav Speaker File
-1. Download the `TARS-short.wav` and `TARS-long.wav` files from the `TARS-AI` repository under `Brain/TTS/wakewords
+1. Download the `TARS-short.wav` and `TARS-long.wav` files from the `TARS-AI` repository under `src/tts/wakewords
 /VoiceClones`. These will be the different voices you can use for TARS.
 2. Place it in the `speakers/` directory within the XTTS project folder. If the directory does not exist, create it.
 
