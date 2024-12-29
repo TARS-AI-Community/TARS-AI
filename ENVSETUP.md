@@ -82,7 +82,7 @@ These dependencies are required for various operations, including Selenium-based
    ```bash
    source venv/bin/activate
    ```
-3. Install the required dependencies under `Brain/`:
+3. Install the required dependencies under `src/`:
    ```bash
    pip install -r requirements.txt
    ```
@@ -142,9 +142,9 @@ These dependencies are required for various operations, including Selenium-based
    - If en-US-Steffan:DragonHDLatestNeural gives you an error, try en-US-SteffanNeural.
 
 #### G. Run the Program
-1. Navigate to the `Brain/` folder within the repository:
+1. Navigate to the `src/` folder within the repository:
    ```bash
-   cd Brain/
+   cd src/
    ```
 2. Start the application:
    ```bash
