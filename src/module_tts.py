@@ -33,12 +33,12 @@ def update_tts_settings(ttsurl):
     }
     payload = {
         "stream_chunk_size": 100,
-        "temperature": 0.7,
-        "speed": 1.1,
+        "temperature": 0.75,
+        "speed": 1,
         "length_penalty": 1.0,
-        "repetition_penalty": 1.2,
-        "top_p": 0.9,
-        "top_k": 40,
+        "repetition_penalty": 5,
+        "top_p": 0.85,
+        "top_k": 50,
         "enable_text_splitting": True
     }
 

@@ -94,7 +94,7 @@ class STTManager:
 
                     # Display spinner animation
                     spinner_frame = spinner[i % len(spinner)]  # Rotate spinner symbol
-                    print(f"\rMeasuring... {spinner_frame}", end="", flush=True)
+                    print(f"\r[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Measuring... {spinner_frame}", end="", flush=True)
                     time.sleep(0.1)  # Simulate processing time for smooth animation
 
             # Calculate the threshold
@@ -164,7 +164,7 @@ class STTManager:
         """
         Detect the wake word using Pocketsphinx.
         """
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: Idle...")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: Sleeping...")
         try:
             with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
                 speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=1e-20)
@@ -191,7 +191,7 @@ class STTManager:
         """
         Process a user utterance after wake word detection.
         """
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Listening...")
+        #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Listening...")
         try:
             if self.config['STT']['use_server']:
                 result = self._transcribe_with_server()
@@ -200,6 +200,16 @@ class STTManager:
             
             # Call post-utterance callback if utterance was detected recently, otherwise return to wake word detection
             if self.post_utterance_callback and result:
+                if not hasattr(self, 'loopcheck'):
+                    self.loopcheck = 0 
+
+                self.loopcheck += 1
+                if self.loopcheck > 2:
+                    #print("Exceeded 2 iterations. Returning to wake word detection.")
+                    print(f"\r{' ' * 40}\r", end="", flush=True)  # Clear the last line
+                    self._detect_wake_word()
+                    return
+                
                 self.post_utterance_callback()
 
         except Exception as e:

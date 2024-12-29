@@ -79,7 +79,7 @@ def find_controller(controller_name):
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Controller found: {device.name} at {device.path}")
             gamepad_path = device.path
             return device
-    print(f"No controller found with name: {controller_name}")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: {controller_name} Not found, Searching...")
     return None
 
 def check_secret_code(button_name):
