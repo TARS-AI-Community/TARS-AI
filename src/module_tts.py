@@ -17,6 +17,9 @@ from datetime import datetime
 import azure.cognitiveservices.speech as speechsdk
 import numpy as np
 import sounddevice as sd
+import soundfile as sf
+from io import BytesIO
+from module_piper import *
 
 def update_tts_settings(ttsurl):
     """
@@ -128,7 +131,54 @@ def azure_tts(text, azure_api_key, azure_region, tts_voice):
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error details: {cancellation_details.error_details}")
     except Exception as e:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Azure TTS generation failed: {e}")
-    
+
+def alltalk_tts(text, ttsurl, tts_voice):
+    try:
+        # API endpoint and payload
+        url = f"{ttsurl}/api/tts-generate"
+        data = {
+            "text_input": text,
+            "text_filtering": "standard",
+            "character_voice_gen": f"{tts_voice}.wav",
+            "narrator_enabled": "false",
+            "narrator_voice_gen": "default.wav",
+            "text_not_inside": "character",
+            "language": "en",
+            "output_file_name": "test_output",
+            "output_file_timestamp": "true",
+            "autoplay": "false",
+            "autoplay_volume": 0.8,
+        }
+
+        #print("Generating audio on the server...")
+        response = requests.post(url, data=data)
+        response.raise_for_status()
+
+        wav_url = response.json().get("output_file_url")
+        if not wav_url:
+            print("Error: No WAV file URL provided.")
+            return
+
+        #print(f"Audio generated. WAV file URL: {wav_url}")
+
+        # Download the audio file into memory
+        #print("Downloading WAV file...")
+        response = requests.get(wav_url)
+        response.raise_for_status()
+
+        wav_data = BytesIO(response.content)
+
+        # Read and play the audio using sounddevice
+        #print("Playing audio...")
+        data, samplerate = sf.read(wav_data, dtype='float32')
+        sd.play(data, samplerate)
+        sd.wait()  # Wait for playback to finish
+
+        #print("Audio playback complete.")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
 def local_tts(text):
     """
     Generate TTS audio locally using `espeak-ng` and `sox`.
@@ -200,6 +250,14 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
         # Local TTS generation using `espeak-ng`
         elif ttsoption == "local" and toggle_charvoice:
             local_tts(text)
+
+        # Local TTS generation using `espeak-ng`
+        elif ttsoption == "alltalk" and toggle_charvoice:
+            alltalk_tts(text, ttsurl, tts_voice)
+
+        # Local TTS generation using local onboard PIPER TTS
+        elif ttsoption == "piper" and toggle_charvoice:
+            asyncio.run(text_to_speech_with_pipelining(text))
 
         # Server-based TTS generation using `xttsv2`
         elif ttsoption == "xttsv2" and toggle_charvoice:
