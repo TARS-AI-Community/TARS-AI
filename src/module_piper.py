@@ -5,10 +5,13 @@ from piper.voice import PiperVoice
 import asyncio
 import wave
 import re
+import os
 
-model_path = "/home/pyrater/TARS-AI/src/tts/TARS.onnx"  # Update with the actual path to your model
 
-#compile onnxruntime-gpu for speed
+script_dir = os.path.dirname(__file__)
+model_path = os.path.join(script_dir, 'tts/TARS.onnx')
+model_path = os.path.normpath(model_path)
+
 async def synthesize(voice, chunk):
     """
     Synthesize a chunk of text into a BytesIO buffer.
