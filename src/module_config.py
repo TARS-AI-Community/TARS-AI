@@ -44,6 +44,7 @@ def load_config():
             "wake_word": config['STT']['wake_word'],
             "use_server": config.getboolean('STT', 'use_server'),
             "server_url": config['STT']['server_url'],
+            "vosk_model": config['STT']['vosk_model'],
         },
         "CHAR": {
             "character_card_path": config['CHAR']['character_card_path'],

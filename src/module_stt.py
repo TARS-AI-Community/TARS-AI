@@ -59,17 +59,50 @@ class STTManager:
         self._load_vosk_model()
         self._measure_background_noise()
 
+    def _download_vosk_model(self, url, dest_folder):
+        """Download the Vosk model from the specified URL with basic progress display."""
+        file_name = url.split("/")[-1]
+        dest_path = os.path.join(dest_folder, file_name)
+
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Downloading Vosk model from {url}...")
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+
+        total_size = int(response.headers.get('content-length', 0))
+        downloaded_size = 0
+
+        with open(dest_path, "wb") as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                file.write(chunk)
+                downloaded_size += len(chunk)
+                progress = (downloaded_size / total_size) * 100 if total_size else 0
+                print(f"\r[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Download progress: {progress:.2f}%", end="")
+                
+        print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Download complete. Extracting...")
+        if file_name.endswith(".zip"):
+            import zipfile
+            with zipfile.ZipFile(dest_path, 'r') as zip_ref:
+                zip_ref.extractall(dest_folder)
+            os.remove(dest_path)
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Zip file deleted.")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Extraction complete.")
+
     def _load_vosk_model(self):
         """
         Initialize the Vosk model for local STT transcription.
         """
         if not self.config['STT']['use_server']:
-            vosk_model_path = os.path.join(os.getcwd(), "stt", "vosk-model-small-en-us-0.15")
+            vosk_model_path = os.path.join(os.getcwd(), "stt", self.config['STT']['vosk_model'])
             if not os.path.exists(vosk_model_path):
-                raise FileNotFoundError(
-                    f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Vosk model not found. Download from: https://alphacephei.com/vosk/models"
-                )
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Vosk model not found. Downloading...")
+                download_url = f"https://alphacephei.com/vosk/models/{self.config['STT']['vosk_model']}.zip"  # Example URL
+                self._download_vosk_model(download_url, os.path.join(os.getcwd(), "stt"))
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Restarting model loading...")
+                self._load_vosk_model()
+                return
+
             self.vosk_model = Model(vosk_model_path)
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Vosk model loaded successfully.")
 
     def _measure_background_noise(self):
         """

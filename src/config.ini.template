@@ -9,6 +9,8 @@ use_server = false
 # Use an external STT server if True
 server_url = http://192.168.2.68:5678/save_audio
 # URL for the STT server (if enabled)
+vosk_model = vosk-model-small-en-us-0.15
+# Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15)
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS.json
@@ -55,8 +57,8 @@ storepath = ./emotions
 # Directory to store emotion-related data
 
 [TTS] # Text-to-Speech configuration 
-ttsoption = azure
-# TTS backend option: [azure, local, xttsv2, piper]
+ttsoption = piper
+# TTS backend option: [azure, local, xttsv2, alltalk, piper]
 azure_region = eastus
 # Azure region for Azure TTS (e.g., eastus)
 ttsurl = http://192.168.2.20:8020
