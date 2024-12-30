@@ -327,7 +327,7 @@ class STTManager:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Sent {buffer_size} bytes of audio")
             files = {"audio": ("audio.wav", audio_buffer, "audio/wav")}
 
-            response = requests.post(self.config["STT"]["server_url"], files=files, timeout=10)
+            response = requests.post(f"{self.config['STT']['server_url']}/save_audio", files=files, timeout=10)
 
             # Handle server response
             if response.status_code == 200:
@@ -351,7 +351,7 @@ class STTManager:
                             ],
                         }
 
-                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] USER: {formatted_result['text']}")
+                        #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] USER: {formatted_result['text']}")
 
                         # If a callback is set, send the formatted JSON
                         if self.utterance_callback:
