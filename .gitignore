@@ -166,6 +166,10 @@ TARS.wav
 #.idea
 /stt
 /vision
+/llm
+llm/
+vision/
+stt/
 captured_image.jpg
 config.ini
 output.wav
