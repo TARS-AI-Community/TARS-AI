@@ -21,7 +21,7 @@ from sklearn.metrics import accuracy_score
 # === Constants ===
 DEFAULT_TRAINING_DATA_PATH = 'engine/training/training_data.csv'
 DEFAULT_MODEL_PATH = 'engine/pickles/naive_bayes_model.pkl'
-DEFAULT_VECTORIZER_PATH = 'engine/pickles/tfidf_vectorizer.pkl'
+DEFAULT_VECTORIZER_PATH = 'engine/pickles/module_engine_model.pkl'
 
 def delete_existing_files(nb_classifier_path=DEFAULT_MODEL_PATH, vectorizer_path=DEFAULT_VECTORIZER_PATH):
     """
@@ -144,7 +144,3 @@ def train_text_classifier(
         train_and_validate_model(df_train, nb_classifier_path, vectorizer_path)
     else:
         print("Script terminated. Run the script again and type 'y' or 's' when prompted.")
-
-# === Script Execution ===
-if __name__ == '__main__':
-    train_text_classifier()

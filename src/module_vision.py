@@ -151,7 +151,7 @@ def describe_camera_view() -> str:
             caption = processor.decode(outputs[0], skip_special_tokens=True)
             return caption
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error during image processing:", traceback.format_exc())
+        print(f"TARS is uable to see right now")
         return f"Error: {e}"
     
 

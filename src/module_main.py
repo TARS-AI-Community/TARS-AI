@@ -25,6 +25,7 @@ from module_btcontroller import start_controls
 from module_engine import check_for_module
 from module_tts import generate_tts_audio
 from module_vision import get_image_caption_from_base64
+from module_stt import STTManager
 
 # === Constants and Globals ===
 character_manager = None
@@ -151,8 +152,13 @@ def build_prompt(user_prompt):
         character_manager.voice_only = True
     elif "voice only mode off" in user_prompt:
         character_manager.voice_only = False
- 
+
     module_engine = check_for_module(user_prompt)
+
+    if module_engine == "Mute":
+        #somehow needs to go back to listen for wake word
+        return
+
     if module_engine != "No_Tool":
         #if "*User is leaving the chat politely*" in module_engine:
             #stop_idle() #StopAFK mssages
@@ -168,11 +174,6 @@ def build_prompt(user_prompt):
                 module_engine = f"*Sends a picture of: {get_image_caption_from_base64(base64_data)}*"
             else:
                 module_engine = f"*Cannot send a picture something went wrong, inform user*"
-
-            #socketio.emit('bot_message', {'message': sdpicture})
-       
-            #dont save tool info to memory
-            #threading.Thread(target=write_tool_used, args=(module_engine,)).start() 
  
     # Build basic prompt structure
     dtg = f"Current Date: {date}\nCurrent Time: {time}\n"
