@@ -16,6 +16,10 @@ import Adafruit_PCA9685
 from threading import Thread
 from datetime import datetime
 
+from module_config import load_config
+config = load_config()
+
+
 try:
     # Attempt to initialize the PCA9685 using I2C
     pwm = Adafruit_PCA9685.PCA9685(busnum=1)
@@ -27,29 +31,31 @@ except Exception as e:
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Unexpected error during PCA9685 initialization: {e}")
     pwm = None  # Fallback if hardware is unavailable
 
-portMain = 610
-starMain = 200
-portForarm = 570
-starForarm = 200
-portHand = 570
-starHand = 240
+# Servo Configuration Mapping with Integer Casting
+portMain = int(config["SERVO"]["portMain"])
+starMain = int(config["SERVO"]["starMain"])
+portForarm = int(config["SERVO"]["portForarm"])
+starForarm = int(config["SERVO"]["starForarm"])
+portHand = int(config["SERVO"]["portHand"])
+starHand = int(config["SERVO"]["starHand"])
 
 # Center Lift Servo (0) Values
-upHeight = 250
-neutralHeight = 168
-downHeight = 88
+upHeight = int(config["SERVO"]["upHeight"])
+neutralHeight = int(config["SERVO"]["neutralHeight"])
+downHeight = int(config["SERVO"]["downHeight"])
 
 # Port Drive Servo (1) Values
-forwardPort = 400
-neutralPort = 350
-backPort = 300
-perfectportoffset = 0 #use this to fine tune if its off by a few degrees
+forwardPort = int(config["SERVO"]["forwardPort"])
+neutralPort = int(config["SERVO"]["neutralPort"])
+backPort = int(config["SERVO"]["backPort"])
+perfectportoffset = int(config["SERVO"]["perfectportoffset"])  # Use this to fine-tune if it's off by a few degrees
 
 # Starboard Drive Servo (2) Values
-forwardStarboard = 300
-neutralStarboard = 350
-backStarboard = 400
-perfectStaroffset = 0 #use this to fine tune if its off by a few degrees
+forwardStarboard = int(config["SERVO"]["forwardStarboard"])
+neutralStarboard = int(config["SERVO"]["neutralStarboard"])
+backStarboard = int(config["SERVO"]["backStarboard"])
+perfectStaroffset = int(config["SERVO"]["perfectStaroffset"])  # Use this to fine-tune if it's off by a few degrees
+
 
 # moves the torso from a neutral position upwards, allowing the torso to pivot forwards or backwards
 def height_neutral_to_up():

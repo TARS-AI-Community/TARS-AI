@@ -90,6 +90,25 @@ def load_config():
             "channel_id": config['DISCORD']['channel_id'],
             "enabled": config['DISCORD']['enabled'],
         },
+        "SERVO": {
+            "portMain": config['SERVO']['portMain'],
+            "portForarm": config['SERVO']['portForarm'],
+            "portHand": config['SERVO']['portHand'],
+            "starMain": config['SERVO']['starMain'],
+            "starForarm": config['SERVO']['starForarm'],
+            "starHand": config['SERVO']['starHand'],
+            "upHeight": config['SERVO']['upHeight'],
+            "neutralHeight": config['SERVO']['neutralHeight'],
+            "downHeight": config['SERVO']['downHeight'],
+            "forwardPort": config['SERVO']['forwardPort'],
+            "neutralPort": config['SERVO']['neutralPort'],
+            "backPort": config['SERVO']['backPort'],
+            "perfectportoffset": config['SERVO']['perfectportoffset'],
+            "forwardStarboard": config['SERVO']['forwardStarboard'],
+            "neutralStarboard": config['SERVO']['neutralStarboard'],
+            "backStarboard": config['SERVO']['backStarboard'],
+            "perfectStaroffset": config['SERVO']['perfectStaroffset'],
+        },
     }
 
 def get_api_key(llm_backend: str) -> str:
