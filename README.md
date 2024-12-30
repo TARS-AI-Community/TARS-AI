@@ -60,6 +60,8 @@ See [`ENVSETUP.md`](./ENVSETUP.md) for instructions on setting up the software e
   - OpenAI (Recommended)
   - Oobabooga
   - Tabby ([tabbyAPI](https://github.com/theroyallab/tabbyAPI))
+  - LM Studio
+  - Ollama (Soon)
 - **Text-to-Speech**: Choice of:
   - Azure TTS (Recommended) 
   - Local (e-speak)
