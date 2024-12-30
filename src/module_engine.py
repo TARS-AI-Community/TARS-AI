@@ -62,6 +62,7 @@ def predict_class(user_input):
     # Return None if confidence is below threshold
     if max_probability < 0.75:
         return None, max_probability
+    print(f"TOOL: Using Tool {predicted_class} at {max_probability}")
     return predicted_class, max_probability
 
 
