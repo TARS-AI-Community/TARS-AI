@@ -204,8 +204,7 @@ class STTManager:
                     self.loopcheck = 0 
 
                 self.loopcheck += 1
-                if self.loopcheck > 2:
-                    #print("Exceeded 2 iterations. Returning to wake word detection.")
+                if self.loopcheck > 10:
                     print(f"\r{' ' * 40}\r", end="", flush=True)  # Clear the last line
                     self._detect_wake_word()
                     return
