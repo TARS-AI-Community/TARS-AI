@@ -362,7 +362,7 @@ class STTManager:
 
                         return formatted_result
                     else:
-                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Unexpected transcription format or empty transcription.")
+                        #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Unexpected transcription format or empty transcription.")
                         return None
                 except Exception as e:
                     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Exception while processing transcription: {e}")
@@ -375,4 +375,5 @@ class STTManager:
         except Exception as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Unexpected error during server transcription: {e}")
         finally:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Exiting _transcribe_with_server.")
+            #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Exiting _transcribe_with_server.")
+            pass
