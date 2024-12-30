@@ -60,18 +60,26 @@ See [`ENVSETUP.md`](./ENVSETUP.md) for instructions on setting up the software e
   - OpenAI (Recommended)
   - Oobabooga
   - Tabby ([tabbyAPI](https://github.com/theroyallab/tabbyAPI))
+  - Ollama (Soon)
 - **Text-to-Speech**: Choice of:
-  - Azure TTS (Recommended) 
-  - Local
+  - Azure TTS
+  - Local (E-speak)
+  - Local (Piper TTS with custom Voice model) (Recommended)
   - XTTSv2 with voice cloning ([xtts-api-server](https://github.com/daswer123/xtts-api-server))
-- **Speech-to-Text**: Vosk
+- **Speech-to-Text**:
+  - Vosk
+  - Whisper
+- **Vision Handling**:
+  - Saleforce Blip
+- **Tool Utilization**:
+  - Custom Module Engine
 
 ## Build Modifications
 ![print](./media/PrintComplete.jpg)
 - Modified chassis bottom to accommodate SD card installation (See: "Chassis Bottom (Mod SD CARD).stl")
 
 ## License
-[MIT License](./LICENSE)
+[CC-BY-NU License](./LICENSE)
 
 ## Contributing
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for instructions on contributing to this project.
