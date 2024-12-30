@@ -65,6 +65,7 @@ See [`ENVSETUP.md`](./ENVSETUP.md) for instructions on setting up the software e
   - Local (e-speak)
   - Local (Piper TTS with Custom Voice Model)
   - XTTSv2 with voice cloning ([xtts-api-server](https://github.com/daswer123/xtts-api-server))
+  - Alltalk TTS
 - **Speech-to-Text**: Vosk
 
 ## Build Modifications
