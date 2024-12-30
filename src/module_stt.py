@@ -24,6 +24,9 @@ import numpy as np
 import json
 from typing import Callable, Optional
 
+#needed to supress warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 # === Class Definition ===
 class STTManager:
     def __init__(self, config, shutdown_event: threading.Event):
