@@ -30,6 +30,7 @@ A recreation of the TARS robot from Interstellar, featuring AI capabilities and 
 ## Hardware Requirements 
 
 Everything here is **under development** and is subject to change.
+The buck converter and USB power modules are the most important power components and there are many options depending on your build choices. If you have any questions ping us in the discord electrical channel.
 
 | Category | Component | Description | Link |
 |----------|-----------|-------------|------|
@@ -41,9 +42,13 @@ Everything here is **under development** and is subject to change.
 | **Core Components** | Raspberry Pi 5 | Main computing unit | [Buy](https://www.amazon.com/Raspberry-Pi-Quad-core-Cortex-A76-Processor/dp/B0CTQ3BQLS/) |
 | | 3.5" LCD Display | Interface display | [Buy](https://www.amazon.com/OSOYOO-3-5inch-Display-Protective-Raspberry/dp/B09CD9W6NQ/) |
 | | 16-Channel PWM Servo Driver | I2C Interface | [Buy](https://www.amazon.com/gp/product/B00EIB0U7A/) |
-| | Buck Converter | Power management | [Buy](https://www.amazon.com/gp/product/B07SGJSLDL/) |
-| **Servo Motors** | diymore MG996R | Digital servo motors (2x 90g micro servos per leg) | [Buy](https://www.amazon.com/diymore-6-Pack-MG996R-Digital-Helicopter/dp/B0CGRP59HJ/) |
-| | MG996R 55g (Alternative) | Digital RC servo motors with high torque | - |
+| **Power Components** | Buck Converter | Power management | [Buy](https://www.amazon.com/gp/product/B07SGJSLDL/) |
+| | USB power | 2x for Pi and display. Must have 5A minimum to drive a Raspberry Pi 5.| [Buy](https://www.amazon.com/gp/product/B07X5H4M42) |
+| | Single LiPo Battery| 11.1v 3S 2200mAh| [Buy](https://www.amazon.com/gp/product/B0BYNSH6Q7) |
+| | Wire Connectors| PCT-214 (optionally clips into v9 lower lid)| [Buy](https://www.amazon.com/smseace-Conductor-Connectors-Connection-Terminal/dp/B087PBHG9L) |
+| **Servo Motors** | diymore MG996R | Digital servo motors (2x 90g servos per leg) | [Buy](https://www.amazon.com/diymore-6-Pack-MG996R-Digital-Helicopter/dp/B0CGRP59HJ/) |
+| | MG996R 55g (Alternative to above) | Digital 55g high torque (2x per leg) | [Buy](https://www.amazon.com/gp/product/B0BMM1G74B) |
+| | Micro servos (hands) | Digital servo motors (2x S51/9g micro servos per arm/hand) | [Buy](https://www.amazon.com/gp/product/B07L2SF3R4/) |
 | **Drive Train** | Bearings | Motion support | [Buy](https://www.amazon.com/gp/product/B07FW26HD4/) |
 | | Springs | Motion dampening | [Buy](https://www.amazon.com/gp/product/B076M6SFFP/) |
 | | Metal Rods (Option 1) | Structural support | [Buy](https://www.amazon.com/gp/product/B01MAYQ12S/) |
@@ -59,6 +64,8 @@ Everything here is **under development** and is subject to change.
 | | M3 14mm Screws | Mounting (40x needed) | [Buy](https://www.amazon.com/gp/product/B0D9GW9K4G/) |
 | | M3 10mm Screws | Mounting (76x needed) | [Buy](https://www.amazon.com/gp/product/B0CR6G5XWC/) |
 | | M3 Asstd Grub Screws | Mounting (6-8 needed) | [Buy](https://www.amazon.com/dp/B07N7C6HKP/) |
+| | M2.x self tapping | Pi and servo controller mounts (8 needed) | [Buy](https://www.amazon.com/gp/product/B0BLY1MPLR/) |
+
 
 ## Software Stack
 
