@@ -1,12 +1,21 @@
-# TARS-AI
+<h1 align="center">TARS-AI</h2>
 
 <p align="center">
-    <a href="https://discord.gg/H3DYmnjz">
+    <a href="https://discord.gg/uXkqkz3mJJ">
       <img alt="discord invitation link" src="https://dcbadge.vercel.app/api/server/H3DYmnjz?style=flat" align="center" />
+    </a>
+    <a href="https://www.youtube.com/@TARS-AI.py.youtube">
+        <img src="https://img.shields.io/badge/YouTube-red?style=flat-square&logo=youtube&logoColor=white" alt="YouTube" align="center" />
+    </a>
+    <a href="https://www.instagram.com/tars.ai.py">
+        <img src="https://img.shields.io/badge/Instagram-purple?style=flat-square&logo=instagram&logoColor=white" alt="Instagram" align="center" />
+    </a>
+    <a href="https://www.tiktok.com/@tars.ai.py">
+        <img src="https://img.shields.io/badge/TikTok-black?style=flat-square&logo=tiktok&logoColor=white" alt="TikTok" align="center" />
     </a>
 </p>
 
-![TARS-AI](./media/preview.png)
+<p align="center"><a href="https://github.com/pyrater/TARS-AI"><img width=50% alt="" src="/media/tars-ai.png" /></a></p>
 
 A recreation of the TARS robot from Interstellar, featuring AI capabilities and servo-driven movement. 
 
@@ -85,8 +94,9 @@ See [`ENVSETUP.md`](./ENVSETUP.md) for instructions on setting up the software e
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for instructions on contributing to this project.
 
 ## Additional Resources
-- [@wizard.py](https://www.instagram.com/wizard.py/)
+Inspirations + Credits to:
 - [@charliediaz](https://www.hackster.io/charlesdiaz/how-to-build-your-own-replica-of-tars-from-interstellar-224833)
 - [@gptars](https://www.youtube.com/@gptars)
+- [@wizard.py](https://www.instagram.com/wizard.py/)
 - [@poboisvert](https://github.com/poboisvert/GPTARS_Interstellar)
 

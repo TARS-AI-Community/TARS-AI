@@ -103,8 +103,8 @@ starHand = 240
 upHeight = 88
 # Neutral position for centering the servo
 neutralHeight = 168
-# Lower limit for the center servo
-downHeight = 250 (CAUTION: Setting too high may cause damage)
+# Lower limit for the center servo - (CAUTION: Setting too high may cause damage)
+downHeight = 250 
 
 # Forward position for the port drive servo
 forwardPort = 400
