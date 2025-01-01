@@ -83,3 +83,43 @@ channel_id = 1311295891512098920
 # ID of the Discord channel for communication
 TOKEN = ''
 # Discord bot token for authentication
+
+[SERVO]
+# Port for the main servo
+portMain = 610
+# Port for the forearm servo
+portForarm = 570
+# Port for the hand servo
+portHand = 570
+
+# Starting angle for the main servo
+starMain = 200
+# Starting angle for the forearm servo
+starForarm = 200
+# Starting angle for the hand servo
+starHand = 240
+
+# Upper limit
+upHeight = 88
+# Neutral position for centering the servo
+neutralHeight = 168
+# Lower limit for the center servo - (CAUTION: Setting too high may cause damage)
+downHeight = 250 
+
+# Forward position for the port drive servo
+forwardPort = 400
+# Neutral position for the port drive servo
+neutralPort = 350
+# Reverse position for the port drive servo
+backPort = 300
+# Fine-tuning offset for the port drive servo
+perfectportoffset = 0
+
+# Forward position for the starboard drive servo
+forwardStarboard = 300
+# Neutral position for the starboard drive servo
+neutralStarboard = 350
+# Reverse position for the starboard drive servo
+backStarboard = 400
+# Fine-tuning offset for the starboard drive servo
+perfectStaroffset = 0

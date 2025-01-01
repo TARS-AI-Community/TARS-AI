@@ -29,7 +29,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # === Class Definition ===
 class STTManager:
-    def __init__(self, config, shutdown_event: threading.Event):
+    def __init__(self, config, shutdown_event: threading.Event, amp_gain: float = 4.0):
         """
         Initialize the STTManager.
 
@@ -43,6 +43,7 @@ class STTManager:
         self.running = False
         self.wake_word_callback: Optional[Callable[[str], None]] = None
         self.utterance_callback: Optional[Callable[[str], None]] = None
+        self.amp_gain = amp_gain  # Amplification gain factor
         self.post_utterance_callback: Optional[Callable] = None
         self.vosk_model = None
         self.silence_threshold = 10  # Default value; updated dynamically
@@ -111,7 +112,7 @@ class STTManager:
         """
         Measure the background noise level for 2-3 seconds and set the silence threshold.
         """
-        silence_margin = 1.2  # Add a 20% margin to background noise level
+        silence_margin = 1.0  # Add a 20% margin to background noise level
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Measuring background noise...")
 
         spinner = ['|', '/', '-', '\\']  # Spinner symbols
@@ -119,9 +120,16 @@ class STTManager:
             background_rms_values = []
             total_frames = 20  # 20 frames ~ 2-3 seconds
 
-            with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+            with sd.InputStream(
+                samplerate=self.SAMPLE_RATE,
+                channels=1,
+                dtype="int16",
+                blocksize=8000,  # Larger block size
+                latency='high',  # High latency to reduce underruns
+            ) as stream:                    
                 for i in range(total_frames):
                     data, _ = stream.read(4000)
+                    data = self.amplify_audio(data)  # Apply amplification here
                     if data.size == 0 or not np.isfinite(data).all():
                         rms = 0  # Assign zero RMS for invalid or empty data
                     else:
@@ -196,6 +204,18 @@ class STTManager:
         finally:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: STT Manager stopped.")
 
+    def amplify_audio(self, data: np.ndarray) -> np.ndarray:
+        """
+        Amplify audio data using the set amplification gain.
+
+        Parameters:
+        - data (np.ndarray): Raw audio data.
+
+        Returns:
+        - np.ndarray: Amplified audio data.
+        """
+        return np.clip(data * self.amp_gain, -32768, 32767).astype(np.int16)
+
     def _detect_wake_word(self) -> bool:
         """
         Detect the wake word using Pocketsphinx.
@@ -255,9 +275,16 @@ class STTManager:
         Transcribe audio using the local Vosk model.
         """
         recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
-        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+        with sd.InputStream(
+            samplerate=self.SAMPLE_RATE,
+            channels=1,
+            dtype="int16",
+            blocksize=8000,  # Larger block size
+            latency='high'
+        ) as stream:
             for _ in range(50):  # Limit duration (~12.5 seconds)
                 data, _ = stream.read(4000)
+                data = self.amplify_audio(data)  # Apply amplification here
                 if recognizer.AcceptWaveform(data.tobytes()):
                     result = recognizer.Result()
                     # print(f"[DEBUG] Recognized: {result}")
