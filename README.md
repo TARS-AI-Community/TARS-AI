@@ -1,7 +1,7 @@
 <h1 align="center">TARS-AI</h2>
 
 <p align="center">
-    <a href="https://discord.gg/H3DYmnjz">
+    <a href="https://discord.gg/uXkqkz3mJJ">
       <img alt="discord invitation link" src="https://dcbadge.vercel.app/api/server/H3DYmnjz?style=flat" align="center" />
     </a>
     <a href="https://www.youtube.com/@TARS-AI.py.youtube">
