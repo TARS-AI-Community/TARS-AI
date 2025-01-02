@@ -154,6 +154,10 @@ class STTManager:
         """
         Detect the wake word using Pocketsphinx with enhanced false-positive filtering.
         """
+        
+        # Listening State
+        if self.config['STT']['use_indicators']:
+            self.play_beep(400, 0.1, 44100, 0.6) #sleeping tone
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: Sleeping...")
         try:
             kws_threshold = 1e-5  # Stricter keyword threshold
@@ -168,6 +172,8 @@ class STTManager:
 
                     # Process wake word
                     if self.WAKE_WORD in phrase.hypothesis().lower():
+                        if self.config['STT']['use_indicators']:
+                            self.play_beep(1200, 0.1, 44100, 0.8) #wake tone
                         wake_response = random.choice(self.TARS_RESPONSES)
                         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: {wake_response}")
 
@@ -418,6 +424,24 @@ class STTManager:
 
         except Exception as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Failed to measure background noise: {e}")
+
+    def play_beep(self, frequency, duration, sample_rate, volume):
+        """
+        Play a beep sound to indicate the system is listening.
+
+        Parameters:
+        - frequency (int): Frequency of the beep in Hz (e.g., 1000 for 1kHz).
+        - duration (float): Duration of the beep in seconds.
+        - sample_rate (int): Sample rate in Hz (default: 44100).
+        - volume (float): Volume of the beep (0.0 to 1.0).
+        """
+        # Generate a sine wave
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        wave = volume * np.sin(2 * np.pi * frequency * t)
+        
+        # Play the sine wave
+        sd.play(wave, samplerate=sample_rate)
+        sd.wait()  # Wait until the sound finishes playing
 
 #Callbacks
     def set_wake_word_callback(self, callback: Callable[[str], None]):

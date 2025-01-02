@@ -11,6 +11,7 @@ server_url = http://192.168.2.68:5678
 # URL for the STT server (if enabled)
 vosk_model = vosk-model-small-en-us-0.15
 # Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15)
+use_indicators = True
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS.json

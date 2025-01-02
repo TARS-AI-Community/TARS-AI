@@ -45,6 +45,7 @@ def load_config():
             "use_server": config.getboolean('STT', 'use_server'),
             "server_url": config['STT']['server_url'],
             "vosk_model": config['STT']['vosk_model'],
+            "use_indicators": config['STT']['use_indicators'],
         },
         "CHAR": {
             "character_card_path": config['CHAR']['character_card_path'],
