@@ -78,7 +78,8 @@ if __name__ == "__main__":
     bt_controller_thread.start()
 
     # Initilize BLIP to speed up initial image capture
-    initialize_blip()
+    if not CONFIG['VISION']['server_hosted']:
+        initialize_blip()
     
     try:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Main program running. Press Ctrl+C to stop.")
