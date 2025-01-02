@@ -67,7 +67,7 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
     - normalize: Whether to normalize the audio to use the full dynamic range.
     """
     try:
-        with sd.OutputStream(samplerate=samplerate, channels=channels, dtype='int16') as stream:
+        with sd.OutputStream(samplerate=samplerate, channels=channels, dtype='int16', blocksize=4096) as stream:
             for chunk in tts_stream:
                 if chunk:
                     # Convert bytes to int16 using numpy
