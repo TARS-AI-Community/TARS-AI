@@ -6,7 +6,22 @@ import asyncio
 import wave
 import re
 import os
+import ctypes
 
+# Define the error handler function type
+ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(
+    None, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p
+)
+
+# Define the custom error handler function
+def py_error_handler(filename, line, function, err, fmt):
+    pass  # Suppress the error message
+
+# Create a C-compatible function pointer
+c_error_handler = ERROR_HANDLER_FUNC(py_error_handler)
+
+# Load the ALSA library
+asound = ctypes.cdll.LoadLibrary('libasound.so')
 
 script_dir = os.path.dirname(__file__)
 model_path = os.path.join(script_dir, 'tts/TARS.onnx')
@@ -30,8 +45,12 @@ async def play_audio(wav_buffer):
     Play audio from a BytesIO buffer.
     """
     data, samplerate = sf.read(wav_buffer, dtype='float32')
+    # Set the custom error handler
+    asound.snd_lib_error_set_handler(c_error_handler)
     sd.play(data, samplerate)
     await asyncio.sleep(len(data) / samplerate)  # Wait until playback finishes
+    # Reset to the default error handler
+    asound.snd_lib_error_set_handler(None)
 
 async def text_to_speech_with_pipelining(text):
     """
@@ -49,6 +68,6 @@ async def text_to_speech_with_pipelining(text):
             wav_buffer = await synthesize(voice, chunk.strip())
             await play_audio(wav_buffer)
 
-
-#testtext = "The vast expanse of the cosmos is a reminder of humanity's enduring curiosity. Each star in the night sky is a beacon of possibilities. As technology evolves, so too does our capacity to gaze further into the depths of space. In the heart of a bustling city, life unfolds at a pace that reflects modern existence. Moments of tranquility remind us to appreciate the beauty amidst the chaos."
-#asyncio.run(text_to_speech_with_pipelining(testtext))
+# Example usage:
+# testtext = "Your text here."
+# asyncio.run(text_to_speech_with_pipelining(testtext))

@@ -36,8 +36,6 @@ sys.path.append(os.getcwd())
 
 CONFIG = load_config()
 
-# executor = concurrent.futures.ProcessPoolExecutor(max_workers=4)
-
 # === Helper Functions ===
 def init_app():
     """
