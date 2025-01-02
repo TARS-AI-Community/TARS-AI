@@ -94,12 +94,23 @@ def caption_image():
 
         image_file = request.files['image']
         image_bytes = BytesIO(image_file.read())
+
+        # Debug: Save the received file for inspection
+        #with open("received_image_debug.jpg", "wb") as f:
+            #f.write(image_bytes.getvalue())
+        #print("DEBUG: Saved received image as received_image_debug.jpg")
+
         try:
             image = Image.open(image_bytes)
-            image.verify()
-        except Exception:
+            #print(f"DEBUG: Image loaded successfully. Format: {image.format}")
+            image = image.convert("RGB")  # Convert to RGB to ensure BLIP compatibility
+        except Exception as e:
+            #print(f"DEBUG: Failed to open/convert image: {traceback.format_exc()}")
             return jsonify({"error": "Invalid image file"}), 400
 
+        #print(f"DEBUG: Image format: {image.format}, Size: {image.size}, Mode: {image.mode}")
+
+        # Process the image with BLIP
         inputs = blip_processor(image, return_tensors="pt").to(device)
         outputs = blip_model.generate(**inputs, max_new_tokens=100, num_beams=3)
         caption = blip_processor.decode(outputs[0], skip_special_tokens=True)
@@ -108,6 +119,7 @@ def caption_image():
     except Exception as e:
         print("Error occurred during caption generation:", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+
 
 
 @app.route('/save_audio', methods=['POST'])
