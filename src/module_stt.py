@@ -251,7 +251,7 @@ class STTManager:
             audio_buffer = BytesIO()
             detected_speech = False
             silent_frames = 0
-            max_silent_frames = 20  # ~1.25 seconds of silence
+            max_silent_frames = 3  # ~1.25 seconds of silence
 
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Starting audio recording...")
             with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:

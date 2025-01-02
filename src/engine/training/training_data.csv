@@ -114,14 +114,16 @@ Search for the latest advancements in space exploration by the European Space Ag
 What is the stock market valued at right now,Search
 What is the value of VTSAX,Search
 current stock ticker value of VTSAX,Search
-can I delete your memory file and reset you,chat
-i am ready,chat
-can I delete you and reset you,chat
-no can i have permission to delete your memory,chat
-your so silly,chat
-hey hows it going?,chat
-dont worry mori your mine,chat
-what is my name,chat
+can you tell me a funny joke,Chat
+Can you tell me the age-old not not joke about a cow,Chat
+can I delete your memory file and reset you,Chat
+i am ready,Chat
+can I delete you and reset you,Chat
+no can i have permission to delete your memory,Chat
+your so silly,Chat
+hey hows it going?,Chat
+dont worry mori your mine,Chat
+what is my name,Chat
 i got to go,Goodbye
 bye,Goodbye
 talk to you later,Goodbye
@@ -163,31 +165,23 @@ i gtg,Goodbye
 gtg,Goodbye
 show me what you see,Vision
 look at this,Vision
-check this out,Vision
 can you see this,Vision
 what does this look like,Vision
 capture this,Vision
 take a picture of this,Vision
 analyze this image,Vision
 what is in this photo,Vision
-describe this scene,Vision
 identify this object,Vision
 scan this,Vision
 recognize this,Vision
 what do you see here,Vision
 use the camera to view this,Vision
-visualize this,Vision
-inspect this visually,Vision
-what can you tell from this picture,Vision
 can you photograph this,Vision
-what is shown here,Vision
 show me the view,Vision
 whats in front of you,Vision
 can you check this out,Vision
 look over here,Vision
 what do you see now,Vision
-can you analyze this,Vision
-inspect this for me,Vision
 show me the picture,Vision
 whats in this shot,Vision
 can you capture this,Vision
@@ -211,53 +205,6 @@ record this view,Vision
 describe whats ahead,Vision
 look around and show me,Vision
 use Vision to check this,Vision
-can you see what this is,Vision
-whats in the image,Vision
-observe this,Vision
-look closely at this,Vision
-analyze what you see,Vision
-describe the picture,Vision
-take a look,Vision
-use your eyes on this,Vision
-inspect the scene,Vision
-focus on whats here,Vision
-can you interpret this,Vision
-whats in view,Vision
-see this and tell me,Vision
-look at this object,Vision
-tell me whats in front,Vision
-use your Vision,Vision
-snap this for me,Vision
-show me whats happening,Vision
-what can you find here,Vision
-take a photo of this,Vision
-check out whats ahead,Vision
-interpret this view,Vision
-scan the object,Vision
-look at what Im showing,Vision
-show me your perspective,Vision
-take a closer look,Vision
-look here and explain,Vision
-can you make sense of this,Vision
-analyze this frame,Vision
-identify whats in the picture,Vision
-spot this for me,Vision
-can you recognize whats here,Vision
-observe and describe,Vision
-give me a visual analysis,Vision
-tell me what you detect here,Vision
-use the camera to explain,Vision
-check the scene,Vision
-take a snapshot,Vision
-whats in the viewfinder,Vision
-look at this angle,Vision
-tell me about this object,Vision
-focus your lens on this,Vision
-describe what you capture,Vision
-what can you make out,Vision
-detect and explain this,Vision
-whats visible around here,Vision
-survey this for me,Vision
 what am i holding,Vision
 hey tars what am i holding?,Vision
 hey tars be quiet,Mute
@@ -288,4 +235,3 @@ tarsMute please,Mute
 go to sleep,Mute
 be quiet,Mute
 goto sleep,Mute
-can you tell me a funny joke,chat

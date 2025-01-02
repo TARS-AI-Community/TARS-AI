@@ -101,6 +101,9 @@ def check_for_module(user_input):
         elif predicted_class == "Goodbye":
             return "*User is leaving the chat politely*"
 
+        elif predicted_class == "Chat":
+            return "No_Tool"
+        
         elif predicted_class == "Mute":
             return "Mute"
 
