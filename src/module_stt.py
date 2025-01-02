@@ -23,6 +23,10 @@ import wave
 import numpy as np
 import json
 from typing import Callable, Optional
+from vosk import SetLogLevel
+
+# Suppress Vosk logs by setting the log level to 0 (ERROR and above)
+SetLogLevel(-1)  # Adjust to 0 for minimal output or -1 to suppress all logs
 
 #needed to supress warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -126,14 +130,17 @@ class STTManager:
                 dtype="int16",
                 blocksize=8000,  # Larger block size
                 latency='high',  # High latency to reduce underruns
-            ) as stream:                    
+            ) as stream:
                 for i in range(total_frames):
                     data, _ = stream.read(4000)
-                    data = self.amplify_audio(data)  # Apply amplification here
-                    if data.size == 0 or not np.isfinite(data).all():
+
+                    # Ensure data is valid and clean up if necessary
+                    if data.size == 0 or not np.isfinite(data).all() or not isinstance(data, np.ndarray):
                         rms = 0  # Assign zero RMS for invalid or empty data
                     else:
-                        rms = np.sqrt(np.mean(np.square(data)))
+                        data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)  # Replace invalid values
+                        rms = np.sqrt(np.mean(np.square(data)))  # Calculate RMS
+
                     background_rms_values.append(rms)
 
                     # Display spinner animation
@@ -142,7 +149,11 @@ class STTManager:
                     time.sleep(0.1)  # Simulate processing time for smooth animation
 
             # Calculate the threshold
-            background_noise = np.mean(background_rms_values)
+            if background_rms_values:  # Ensure the list is not empty
+                background_noise = np.mean(background_rms_values)
+            else:
+                background_noise = 0  # Fallback if no valid values are collected
+
             self.silence_threshold = max(background_noise * silence_margin, 10)  # Avoid setting a very low threshold
 
             # Clear the spinner and print the result
@@ -151,6 +162,7 @@ class STTManager:
 
         except Exception as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Failed to measure background noise: {e}")
+
 
     def set_wake_word_callback(self, callback: Callable[[str], None]):
         """

@@ -17,7 +17,6 @@ import os
 import sys
 import threading
 from datetime import datetime
-import concurrent.futures
 
 # === Custom Modules ===
 from module_config import load_config
@@ -27,6 +26,7 @@ from module_stt import STTManager
 from module_tts import update_tts_settings
 from module_btcontroller import *
 from module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread
+from module_vision import initialize_blip
 
 # === Constants and Globals ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -77,6 +77,9 @@ if __name__ == "__main__":
     bt_controller_thread = threading.Thread(target=start_bt_controller_thread, name="BTControllerThread", daemon=True)
     bt_controller_thread.start()
 
+    # Initilize BLIP to speed up initial image capture
+    initialize_blip()
+    
     try:
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Main program running. Press Ctrl+C to stop.")
 

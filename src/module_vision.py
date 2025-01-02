@@ -17,6 +17,7 @@ import requests
 import torch
 import base64
 from datetime import datetime
+from pathlib import Path
 
 # === Custom Modules ===
 from module_config import load_config
@@ -24,29 +25,33 @@ from module_config import load_config
 # === Constants and Globals ===
 CONFIG = load_config()
 
-# Device configuration
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+MODEL_NAME = "Salesforce/blip-image-captioning-base"
 
-# BLIP model initialization (only for on-device)
-processor = None
-model = None
+# Cache directory for model
+CACHE_DIR = Path("./vision")
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+# Globals for processor and model
+PROCESSOR = None
+MODEL = None
 
 # === Helper Functions ===
 
-def initialize_blip_model():
+def initialize_blip():
     """
-    Initialize the BLIP model and processor for on-device vision processing.
+    Initialize BLIP model and processor for detailed captions.
+    Ensures the model is loaded from the cache directory.
     """
-    global processor, model
-    if processor is None or model is None:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Initializing BLIP model and processor...")
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-        model.to(device)
-        model = torch.quantization.quantize_dynamic(
-            model, {torch.nn.Linear}, dtype=torch.qint8
+    global PROCESSOR, MODEL
+    if not PROCESSOR or not MODEL:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Initializing BLIP model...")
+        PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
+        MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
+        MODEL = torch.quantization.quantize_dynamic(
+            MODEL, {torch.nn.Linear}, dtype=torch.qint8
         )
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: BLIP model and processor initialized.")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: BLIP model initialized.")
 
 
 def capture_image() -> BytesIO:
@@ -57,26 +62,31 @@ def capture_image() -> BytesIO:
     - BytesIO: Captured image in memory.
     """
     try:
-        # Adjust resolution based on whether the server is hosted or on-device
-        width = "2592" if CONFIG['VISION']['server_hosted'] == 'True' else "320"
-        height = "1944" if CONFIG['VISION']['server_hosted'] == 'True' else "240"
-        
-        # Capture the image directly to stdout
+        # Determine resolution from CONFIG
+        if CONFIG['VISION']['server_hosted']:
+            width, height = "2592", "1944"  # High resolution for server processing
+        else:
+            width, height = "320", "240"   # Low resolution for on-device processing
+
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Capturing image at resolution {width}x{height}.")
+
+        # Capture the image using libcamera-still
         command = [
             "libcamera-still",
             "--output", "-",  # Output to stdout
-            "--timeout", "300",  # 0.3-second timeout for capture
+            "--timeout", "300",  # Short timeout
             "--width", width,
-            "--height", height
+            "--height", height,
         ]
-        process = subprocess.run(command, stdout=subprocess.PIPE, check=True)
-        #print(height)
-        return BytesIO(process.stdout)  # Return image as BytesIO
+        process = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,  # Capture standard output (image data)
+            stderr=subprocess.DEVNULL,  # Suppress standard error (libcamera logs)
+            check=True
+        )
+        return BytesIO(process.stdout)  # Return the captured image as BytesIO
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error capturing image: {e}")
-    except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Image capture failed:", traceback.format_exc())
-        raise e
+        raise RuntimeError(f"Error capturing image: {e}")
 
 def send_image_to_server(image_bytes: BytesIO) -> str:
     """
@@ -88,8 +98,14 @@ def send_image_to_server(image_bytes: BytesIO) -> str:
     Returns:
     - str: Generated caption from the server.
     """
+    # Ensure the BytesIO object is rewound before sending
+    image_bytes.seek(0)
+
     try:
-        files = {'image': ('image.jpg', image_bytes, 'image/jpeg')}
+        # Properly send the image as a file
+        files = {'image': ('image.jpg', image_bytes.getvalue(), 'image/jpeg')}
+        #print(f"DEBUG: Sending image to {CONFIG['VISION']['base_url']}/caption")
+
         response = requests.post(f"{CONFIG['VISION']['base_url']}/caption", files=files)
 
         if response.status_code == 200:
@@ -98,8 +114,9 @@ def send_image_to_server(image_bytes: BytesIO) -> str:
             error_message = response.json().get('error', 'Unknown error')
             raise RuntimeError(f"Server error ({response.status_code}): {error_message}")
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Failed to send image to server:", traceback.format_exc())
-        raise e
+        print(f"[{datetime.now()}] ERROR: Failed to send image to server:", traceback.format_exc())
+        raise
+
 
 def get_image_caption_from_base64(base64_str):
     """
@@ -117,11 +134,11 @@ def get_image_caption_from_base64(base64_str):
         raw_image = Image.open(BytesIO(img_bytes)).convert('RGB')
 
         # Prepare inputs for the BLIP model
-        inputs = processor(raw_image, return_tensors="pt")
-        outputs = model.generate(**inputs, max_new_tokens=100)
+        inputs = PROCESSOR(raw_image, return_tensors="pt")
+        outputs = MODEL.generate(**inputs, max_new_tokens=100)
 
         # Decode and return the generated caption
-        caption = processor.decode(outputs[0], skip_special_tokens=True)
+        caption = PROCESSOR.decode(outputs[0], skip_special_tokens=True)
         return caption
     except Exception as e:
         raise RuntimeError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error generating caption from base64: {e}")
@@ -138,21 +155,18 @@ def describe_camera_view() -> str:
         # Capture the image
         image_bytes = capture_image()
 
-        if CONFIG['VISION']['server_hosted'] == 'True':
+        if CONFIG['VISION']['server_hosted']:
             # Use server-hosted vision processing
             return send_image_to_server(image_bytes)
         else:
             # Use on-device BLIP model for captioning
-            initialize_blip_model()
+            initialize_blip()
             image = Image.open(image_bytes)
-            inputs = processor(image, return_tensors="pt").to(device)
+            inputs = PROCESSOR(image, return_tensors="pt").to(DEVICE)
 
-            outputs = model.generate(**inputs, max_new_tokens=50, num_beams=5)
-            caption = processor.decode(outputs[0], skip_special_tokens=True)
+            outputs = MODEL.generate(**inputs, max_new_tokens=50, num_beams=5)
+            caption = PROCESSOR.decode(outputs[0], skip_special_tokens=True)
             return caption
     except Exception as e:
         print(f"TARS is uable to see right now")
         return f"Error: {e}"
-    
-
-
