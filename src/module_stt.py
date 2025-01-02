@@ -418,9 +418,12 @@ class STTManager:
                 background_noise = 0  # Fallback if no valid values are collected
             self.silence_threshold = max(background_noise * silence_margin, 10)  # Avoid setting a very low threshold
 
+            #convert the threshold to dbz for easy of reading
+            db = 20 * np.log10(self.silence_threshold)  # Convert RMS to decibels
+
             # Clear the spinner and print the result
             print(f"\r{' ' * 40}\r", end="", flush=True)  # Clear the line
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Silence threshold set to: {self.silence_threshold:.2f}")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Silence threshold set to: {db:.2f} dB")
 
         except Exception as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Failed to measure background noise: {e}")
