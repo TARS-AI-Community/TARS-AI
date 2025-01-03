@@ -15,6 +15,10 @@ from datetime import datetime
 from module_servoctl import *
 from evdev import InputDevice, categorize, ecodes, list_devices
 import Adafruit_PCA9685
+from module_config import load_config
+
+config = load_config()
+controller_name = config["CONTROLS"]["controller_name"]
 
 global posevar
 
@@ -430,7 +434,6 @@ def start_controls():
     # Clean up
     gamepad.close()
 
-controller_name = "8BitDo"  # Replace with part of your controller's name
 device = find_controller(controller_name)
 
 #Delete this is for testing
