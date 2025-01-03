@@ -14,7 +14,7 @@ This project includes:
 - **Related content**
 
 The primary repository is maintained by pyrater: [TARS-AI on GitHub](https://github.com/pyrater/TARS-AI).
-Join us in discord https://discord.gg/UfQpGXPW #repo for related questions and discussions.
+Join us in discord https://discord.gg/uXkqkz3mJJ #repo for related questions and discussions.
 ---
 
 ## **For Experienced GitHub Users**
