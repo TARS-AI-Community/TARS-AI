@@ -2,7 +2,7 @@
 
 <p align="center">
     <a href="https://discord.gg/uXkqkz3mJJ">
-      <img alt="discord invitation link" src="https://dcbadge.vercel.app/api/server/H3DYmnjz?style=flat" align="center" />
+      <img alt="discord invitation link" src="https://dcbadge.vercel.app/api/server/uXkqkz3mJJ?style=flat" align="center" />
     </a>
     <a href="https://www.youtube.com/@TARS-AI.py.youtube">
         <img src="https://img.shields.io/badge/YouTube-red?style=flat-square&logo=youtube&logoColor=white" alt="YouTube" align="center" />
