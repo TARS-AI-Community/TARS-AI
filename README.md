@@ -137,9 +137,9 @@ Interact with the desktop to ensure accurate touch. If needed, rerun the calibra
 
 
 **Additional Notes**
-Enable SPI and I2S interfaces via sudo raspi-config under Interfacing Options.
-Refer to the [Adafruit MAX98357 guide](https://cdn-learn.adafruit.com/downloads/pdf/adafruit-max98357-i2s-class-d-mono-amp.pdf) for detailed amplifier setup.
-Test the audio and touchscreen thoroughly after setup.
+- Enable SPI and I2S interfaces via sudo raspi-config under Interfacing Options.
+- Refer to the [Adafruit MAX98357 guide](https://cdn-learn.adafruit.com/downloads/pdf/adafruit-max98357-i2s-class-d-mono-amp.pdf) for detailed amplifier setup.
+- Test the audio and touchscreen thoroughly after setup.
 
 ## Software Stack
 
