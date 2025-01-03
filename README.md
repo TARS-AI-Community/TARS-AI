@@ -66,9 +66,8 @@ The buck converter and USB power modules are the most important power components
 | | M3 Asstd Grub Screws | Mounting (6-8 needed) | [Buy](https://www.amazon.com/dp/B07N7C6HKP/) |
 | | M2.x self tapping | Pi and servo controller mounts (8 needed) | [Buy](https://www.amazon.com/gp/product/B0BLY1MPLR/) |
 
-## Wiring Guide for GPIO LCD Screen (if not using HDMI)
-# Raspberry Pi LCD and I2S Amplifier Wiring Guide & Calibration
-This guide provides detailed instructions on how to wire an LCD display and an I2S amplifier to a Raspberry Pi, along with steps to calibrate the touchscreen and fine-tune the display. It assumes you are using an SPI-based LCD screen and an I2S amplifier for audio output.
+## Wiring Guide for GPIO LCD Screen (if not using HDMI) and I2S Amplifier Wiring Guide & Calibration
+This section provides detailed instructions on how to wire an LCD display and an I2S amplifier to a Raspberry Pi, along with steps to calibrate the touchscreen and fine-tune the display. It assumes you are using an SPI-based LCD screen and an I2S amplifier for audio output.
 
 ---
 

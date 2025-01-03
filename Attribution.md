@@ -1,4 +1,5 @@
-Attribution ```### TARS Project Attribution Guidelines
+Attribution 
+### TARS Project Attribution Guidelines
 As we continue to build and expand upon the TARS project, below are the guidelines for attribution and best practices when sharing or publishing work related to the TARS project:
 
 #### General Attribution
@@ -26,4 +27,4 @@ As we continue to build and expand upon the TARS project, below are the guidelin
 - Encourage contributors to follow these attribution guidelines when making modifications or additions to the project.
 - Foster an open and respectful community by maintaining transparency in crediting the work of all contributors.
 
-These guidelines ensure that the TARS project respects the intellectual property of the original creators while fostering a collaborative and innovative community. Let’s work together to keep this project thriving and inspiring!```
+These guidelines ensure that the TARS project respects the intellectual property of the original creators while fostering a collaborative and innovative community. Let’s work together to keep this project thriving and inspiring!
