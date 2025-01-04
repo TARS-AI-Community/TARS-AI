@@ -25,10 +25,10 @@ try:
     pwm = Adafruit_PCA9685.PCA9685(busnum=1)
     pwm.set_pwm_freq(60)  # Set frequency to 60 Hz for servos
 except FileNotFoundError as e:
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
+    print(f"ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
     pwm = None  # Fallback if hardware is unavailable
 except Exception as e:
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Unexpected error during PCA9685 initialization: {e}")
+    print(f"ERROR: Unexpected error during PCA9685 initialization: {e}")
     pwm = None  # Fallback if hardware is unavailable
 
 # Servo Configuration Mapping with Integer Casting

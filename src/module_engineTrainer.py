@@ -30,7 +30,7 @@ def delete_existing_files(nb_classifier_path=DEFAULT_MODEL_PATH, vectorizer_path
     for file_path in [nb_classifier_path, vectorizer_path]:
         if os.path.exists(file_path):
             os.remove(file_path)
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: {file_path} deleted successfully.")
+            print(f"LOAD: {file_path} deleted successfully.")
 
 def sort_and_save_data(df):
     """
@@ -41,7 +41,7 @@ def sort_and_save_data(df):
     """
     sorted_df = df.sort_values(by='label')
     sorted_df.to_csv('engine/training/sorted_training_data.csv', index=False)
-    # print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Data sorted and saved as 'sorted_training_data.csv'.")
+    # print(f"LOAD: Data sorted and saved as 'sorted_training_data.csv'.")
 
 def train_and_validate_model(df_train, nb_classifier_path, vectorizer_path):
     """
@@ -78,12 +78,12 @@ def train_and_validate_model(df_train, nb_classifier_path, vectorizer_path):
     # Validate the model
     val_predictions = calibrated_classifier.predict(val_vectors)
     accuracy = accuracy_score(val_df['label'], val_predictions)
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Validation Accuracy: {accuracy:.2%}")
+    print(f"LOAD: Validation Accuracy: {accuracy:.2%}")
 
     # Save the model and vectorizer
     joblib.dump(nb_classifier, nb_classifier_path)
     joblib.dump(vectorizer, vectorizer_path)
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Model and vectorizer saved successfully.")
+    print(f"LOAD: Model and vectorizer saved successfully.")
 
     return accuracy
 
@@ -105,11 +105,11 @@ def clean_data(train_df, val_df):
     # Check for data leakage
     common_queries = set(train_df['query']).intersection(set(val_df['query']))
     if common_queries:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Training data leaked into validation data!")
+        print(f"LOAD: Training data leaked into validation data!")
         val_df = val_df[~val_df['query'].isin(common_queries)]
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Validation data cleaned.")
+        print(f"LOAD: Validation data cleaned.")
     else:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: No data leakage detected.")
+        print(f"LOAD: No data leakage detected.")
 
     return train_df, val_df
 

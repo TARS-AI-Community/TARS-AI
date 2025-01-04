@@ -42,8 +42,8 @@ def init_app():
     Performs initial setup for the application
     """
     
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Script running from: {BASE_DIR}")
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] DEBUG: init_app() called")
+    print(f"LOAD: Script running from: {BASE_DIR}")
+    #print(f"DEBUG: init_app() called")
     
     # Load the configuration
     CONFIG = load_config()
@@ -80,8 +80,7 @@ if __name__ == "__main__":
         initialize_blip()
     
     try:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Main program running. Press Ctrl+C to stop.")
-
+        print(f"LOAD: TARS-AI v1.00 running.")
         # Start the STT thread
         stt_manager.start()
 
@@ -89,11 +88,11 @@ if __name__ == "__main__":
             time.sleep(0.1) # Sleep to reduce CPU usage
 
     except KeyboardInterrupt:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Stopping all threads and shutting down executor...")
+        print(f"INFO: Stopping all threads and shutting down executor...")
         shutdown_event.set()  # Signal global threads to shutdown
         # executor.shutdown(wait=True)
 
     finally:
         stt_manager.stop()
         bt_controller_thread.join()
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: All threads and executor stopped gracefully.")
+        print(f"INFO: All threads and executor stopped gracefully.")

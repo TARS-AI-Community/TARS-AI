@@ -44,11 +44,11 @@ def start_bt_controller_thread():
     Wrapper to start the BT Controller functionality in a thread.
     """
     try:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Starting BT Controller thread...")
+        print(f"LOAD: Starting BT Controller thread...")
         while not stop_event.is_set():
             start_controls()
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error in BT Controller thread: {e}")
+        print(f"ERROR: {e}")
 
 # === Core Functions ===
 def extract_text(json_response, picture):
@@ -111,7 +111,7 @@ def set_emotion(text_to_read):
             model_outputs = classifier(text_to_read)
             emotion = max(model_outputs[0], key=lambda x: x['score'])['label']
             
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Emotion {emotion}")
+            print(f"Emotion {emotion}")
 
 def llm_process(userinput, botresponse):
     """
@@ -295,7 +295,7 @@ def get_completion(prompt, istext):
     try:
         response.raise_for_status()  # Handle HTTP errors
     except requests.exceptions.RequestException as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: LLM request failed: {e}")
+        print(f"ERROR: LLM request failed: {e}")
         return None  # Return None for failed requests
 
     # Check if the response is successful
@@ -344,29 +344,29 @@ def utterance_callback(message):
         # Parse the user message
         message_dict = json.loads(message)
         if not message_dict.get('text'):  # Handles cases where text is "" or missing
-            #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: Going Idle...")
+            #print(f"TARS: Going Idle...")
             return
         #Print the response
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] USER: {message_dict['text']}")
+        print(f"USER: {message_dict['text']}")
 
         # Check for shutdown command
         if "shutdown pc" in message_dict['text'].lower():
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] SHUTDOWN: Shutting down the PC...")
+            print(f"SHUTDOWN: Shutting down the PC...")
             os.system('shutdown /s /t 0')
             return  # Exit function after issuing shutdown command
         
         # Process the message using process_completion
         reply = process_completion(message_dict['text'])  # Process the message
 
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: {reply}")
+        print(f"TARS: {reply}")
         # Stream TTS audio to speakers
         #print("Fetching TTS audio...")
         generate_tts_audio(reply, CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
 
     except json.JSONDecodeError:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Invalid JSON format. Could not process user message.")
+        print(f"ERROR: Invalid JSON format. Could not process user message.")
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: {e}")
+        print(f"ERROR: {e}")
 
 def post_utterance_callback():
     """

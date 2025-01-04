@@ -45,13 +45,13 @@ def initialize_blip():
     """
     global PROCESSOR, MODEL
     if not PROCESSOR or not MODEL:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Initializing BLIP model...")
+        print(f"INFO: Initializing BLIP model...")
         PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
         MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
         MODEL = torch.quantization.quantize_dynamic(
             MODEL, {torch.nn.Linear}, dtype=torch.qint8
         )
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: BLIP model initialized.")
+        print(f"INFO: BLIP model initialized.")
 
 
 def capture_image() -> BytesIO:
@@ -68,7 +68,7 @@ def capture_image() -> BytesIO:
         else:
             width, height = "320", "240"   # Low resolution for on-device processing
 
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Capturing image at resolution {width}x{height}.")
+        print(f"INFO: Capturing image at resolution {width}x{height}.")
 
         # Capture the image using libcamera-still
         command = [

@@ -38,15 +38,15 @@ class MemoryManager:
         Initialize dynamic memory from the database file.
         """
         if os.path.exists(self.memory_db_path):
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Found existing memory database: {self.memory_db_path}")
+            print(f"LOAD: Found existing memory: {self.char_name}.pickle.gz")
             loaded_successfully = self.hyper_db.load(self.memory_db_path)
             if not loaded_successfully or self.hyper_db.vectors is None:
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Memory load failed or database is empty. Initializing new memory.")
+                print(f"LOAD: Memory load failed. Initializing new memory.")
                 self.hyper_db.vectors = np.empty((0, 0), dtype=np.float32)
             else:
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Memory loaded successfully")
+                print(f"LOAD: Memory loaded successfully")
         else:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: No memory DB found. Creating new one: {self.memory_db_path}")
+            print(f"LOAD: No memory DB found. Creating new one: {self.memory_db_path}")
             self.hyper_db.add_document({"text": f'{self.char_name}: {self.char_greeting}'})
             self.hyper_db.save(self.memory_db_path)
 
@@ -104,7 +104,7 @@ class MemoryManager:
             else:
                 return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARN: No memories found for the query."
         except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error retrieving related memories: {e}")
+            print(f"ERROR: Error retrieving related memories: {e}")
             return "Error retrieving related memories."
     
     def get_longterm_memory(self, user_input: str) -> str:
@@ -124,7 +124,7 @@ class MemoryManager:
                 return str(past) if past else "No relevant memories found."
             return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARN: Long-term memory is disabled."
         except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error retrieving long-term memory: {e}")
+            print(f"ERROR: Error retrieving long-term memory: {e}")
             return "Error retrieving long-term memory."
 
     def get_shortterm_memories_recent(self, max_entries: int) -> List[str]:
@@ -198,7 +198,7 @@ class MemoryManager:
         - json_file_path (str): Path to the JSON file.
         """
         if os.path.exists(json_file_path):
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Injecting memories from JSON.")
+            print(f"LOAD: Injecting memories from JSON.")
             with open(json_file_path, 'r') as file:
                 memories = json.load(file)
 
@@ -248,5 +248,5 @@ class MemoryManager:
         if response.status_code == 200:
             return response.json()
         else:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: ", response.status_code, response.text)
+            print(f"ERROR: ", response.status_code, response.text)
             return None

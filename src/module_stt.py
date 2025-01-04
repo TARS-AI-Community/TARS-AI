@@ -92,7 +92,7 @@ class STTManager:
         file_name = url.split("/")[-1]
         dest_path = os.path.join(dest_folder, file_name)
 
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Downloading Vosk model from {url}...")
+        print(f"INFO: Downloading Vosk model from {url}...")
         response = requests.get(url, stream=True)
         response.raise_for_status()
 
@@ -112,8 +112,8 @@ class STTManager:
             with zipfile.ZipFile(dest_path, 'r') as zip_ref:
                 zip_ref.extractall(dest_folder)
             os.remove(dest_path)
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Zip file deleted.")
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Extraction complete.")
+            print(f"INFO: Zip file deleted.")
+        print(f"INFO: Extraction complete.")
 
     def _load_vosk_model(self):
         """
@@ -122,15 +122,15 @@ class STTManager:
         if not self.config['STT']['use_server']:
             vosk_model_path = os.path.join(os.getcwd(), "stt", self.config['STT']['vosk_model'])
             if not os.path.exists(vosk_model_path):
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Vosk model not found. Downloading...")
+                print(f"ERROR: Vosk model not found. Downloading...")
                 download_url = f"https://alphacephei.com/vosk/models/{self.config['STT']['vosk_model']}.zip"  # Example URL
                 self._download_vosk_model(download_url, os.path.join(os.getcwd(), "stt"))
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Restarting model loading...")
+                print(f"INFO: Restarting model loading...")
                 self._load_vosk_model()
                 return
 
             self.vosk_model = Model(vosk_model_path)
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Vosk model loaded successfully.")
+            print(f"INFO: Vosk model loaded successfully.")
 
 #Main Loop
     def _stt_processing_loop(self):
@@ -145,9 +145,9 @@ class STTManager:
                     # If wake word detected, transcribe the user utterance
                     self._transcribe_utterance()
         except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error in STT processing loop: {e}")
+            print(f"ERROR: Error in STT processing loop: {e}")
         finally:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: STT Manager stopped.")
+            print(f"INFO: STT Manager stopped.")
 
 #Detect Wake
     def _detect_wake_word(self) -> bool:
@@ -158,7 +158,7 @@ class STTManager:
         # Listening State
         if self.config['STT']['use_indicators']:
             self.play_beep(400, 0.1, 44100, 0.6) #sleeping tone
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: Sleeping...")
+        print(f"TARS: Sleeping...")
         try:
             kws_threshold = 1e-5  # Stricter keyword threshold
 
@@ -175,7 +175,7 @@ class STTManager:
                         if self.config['STT']['use_indicators']:
                             self.play_beep(1200, 0.1, 44100, 0.8) #wake tone
                         wake_response = random.choice(self.TARS_RESPONSES)
-                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TARS: {wake_response}")
+                        print(f"TARS: {wake_response}")
 
                         # If a callback is set, send the wake_response
                         if self.wake_word_callback:
@@ -183,7 +183,7 @@ class STTManager:
                         return True
 
         except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Wake word detection failed: {e}")
+            print(f"ERROR: Wake word detection failed: {e}")
         return False
 
 #Transcripe functions
@@ -191,7 +191,7 @@ class STTManager:
         """
         Process a user utterance after wake word detection.
         """
-        #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Listening...")
+        #print(f"STAT: Listening...")
         try:
             if self.config['STT']['use_server']:
                 result = self._transcribe_with_server()
@@ -212,7 +212,7 @@ class STTManager:
                 self.post_utterance_callback()
 
         except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Utterance transcription failed: {e}")
+            print(f"ERROR: Utterance transcription failed: {e}")
 
     def _transcribe_with_vosk(self):
         """
@@ -246,7 +246,7 @@ class STTManager:
                         self.utterance_callback(result)
                     return result
 
-        #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: No transcription within duration limit.")
+        #print(f"INFO: No transcription within duration limit.")
         return None
 
     def _transcribe_with_server(self):
@@ -259,7 +259,7 @@ class STTManager:
             silent_frames = 0
             max_silent_frames = 3  # ~1.25 seconds of silence
 
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Starting audio recording...")
+            print(f"STAT: Starting audio recording...")
             with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
                 with wave.open(audio_buffer, "wb") as wf:
                     wf.setnchannels(1)
@@ -280,10 +280,10 @@ class STTManager:
             # Ensure the audio buffer is not empty
             audio_buffer.seek(0)
             if audio_buffer.getbuffer().nbytes == 0:
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Audio buffer is empty. No audio recorded.")
+                print(f"ERROR: Audio buffer is empty. No audio recorded.")
                 return None
 
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Sending audio to server...")
+            print(f"STAT: Sending audio to server...")
             files = {"audio": ("audio.wav", audio_buffer, "audio/wav")}
             response = requests.post(f"{self.config['STT']['server_url']}/save_audio", files=files, timeout=10)
 
@@ -303,7 +303,7 @@ class STTManager:
                     return formatted_result
 
         except requests.RequestException as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Server request failed: {e}")
+            print(f"ERROR: Server request failed: {e}")
         return None
 
 #MISC
@@ -322,13 +322,13 @@ class STTManager:
 
         if rms > self.silence_threshold:  # Voice detected
             #if not detected_speech:
-                #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Speech detected.")
+                #print(f"STAT: Speech detected.")
             detected_speech = True
             silent_frames = 0  # Reset silent frames
         else:  # Silence detected
             silent_frames += 1
             if silent_frames > max_silent_frames:
-                #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Silence detected.")
+                #print(f"STAT: Silence detected.")
                 return True, detected_speech, silent_frames
 
         return False, detected_speech, silent_frames
@@ -347,7 +347,7 @@ class STTManager:
         - Optional[float]: RMS value of the audio data, or None if the data is invalid.
         """
         if data.size == 0:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARNING: Received empty audio data.")
+            print(f"WARNING: Received empty audio data.")
             return None  # Invalid data
 
         # Flatten and sanitize audio data
@@ -357,7 +357,7 @@ class STTManager:
 
         # Check for invalid or silent data
         if np.all(data == 0):
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARNING: Audio data is all zeros or silent.")
+            print(f"WARNING: Audio data is all zeros or silent.")
             return None  # Invalid data
 
         # Calculate RMS (Root Mean Square)
@@ -365,7 +365,7 @@ class STTManager:
             rms = np.sqrt(np.mean(np.square(data)))
             return rms
         except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Failed to calculate RMS: {e}")
+            print(f"ERROR: Failed to calculate RMS: {e}")
             return None  # Error during RMS calculation
 
     def amplify_audio(self, data: np.ndarray) -> np.ndarray:
@@ -385,7 +385,7 @@ class STTManager:
         Measure the background noise level for 2-3 seconds and set the silence threshold.
         """
         silence_margin = 2.5  # Add a 250% margin to background noise level
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Measuring background noise...")
+        print(f"INFO: Measuring background noise...")
 
         spinner = ['|', '/', '-', '\\']  # Spinner symbols
         try:
@@ -402,14 +402,17 @@ class STTManager:
                 for i in range(total_frames):
                     data, _ = stream.read(4000)
 
-                    #prepare and amp the data stream
+                    # Prepare and amplify the data stream
                     rms = self.prepare_audio_data(self.amplify_audio(data))
                     background_rms_values.append(rms)
 
-                    # Display spinner animation
+                    # Display spinner animation with clear line
                     spinner_frame = spinner[i % len(spinner)]  # Rotate spinner symbol
-                    print(f"\r[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] STAT: Measuring Noise Level... {spinner_frame}", end="", flush=True)
+                    print(f"\rSTAT: Measuring Noise Level... {spinner_frame}", end="", flush=True)
                     time.sleep(0.1)  # Simulate processing time for smooth animation
+
+                # Clear the spinner and print the final result
+                print("\r", end="", flush=True)  # Clear spinner line
 
             # Calculate the threshold
             if background_rms_values:  # Ensure the list is not empty
@@ -423,10 +426,10 @@ class STTManager:
 
             # Clear the spinner and print the result
             print(f"\r{' ' * 40}\r", end="", flush=True)  # Clear the line
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Silence threshold set to: {db:.2f} dB")
+            print(f"INFO: Silence threshold set to: {db:.2f} dB")
 
         except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Failed to measure background noise: {e}")
+            print(f"ERROR: Failed to measure background noise: {e}")
 
     def play_beep(self, frequency, duration, sample_rate, volume):
         """

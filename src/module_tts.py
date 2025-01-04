@@ -48,12 +48,12 @@ def update_tts_settings(ttsurl):
     try:
         response = requests.post(url, headers=headers, json=payload)
         if response.status_code == 200:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: TTS Settings updated successfully.")
+            print(f"LOAD: TTS Settings updated successfully.")
         else:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Failed to update TTS settings. Status code: {response.status_code}")
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Response: {response.text}")
+            print(f"ERROR: Failed to update TTS settings. Status code: {response.status_code}")
+            print(f"INFO: Response: {response.text}")
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: TTS update failed: {e}")
+        print(f"ERROR: TTS update failed: {e}")
 
 def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normalize=False):
     """
@@ -85,9 +85,9 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
                     # Write the adjusted audio data to the stream
                     stream.write(audio_data)
                 else:
-                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Received empty chunk.")
+                    print(f"ERROR: Received empty chunk.")
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error during audio playback: {e}")
+        print(f"ERROR: Error during audio playback: {e}")
 
 def azure_tts(text, azure_api_key, azure_region, tts_voice):
     """
@@ -126,11 +126,11 @@ def azure_tts(text, azure_api_key, azure_region, tts_voice):
             pass
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Speech synthesis canceled: {cancellation_details.reason}")
+            print(f"ERROR: Speech synthesis canceled: {cancellation_details.reason}")
             if cancellation_details.error_details:
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error details: {cancellation_details.error_details}")
+                print(f"ERROR: Error details: {cancellation_details.error_details}")
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Azure TTS generation failed: {e}")
+        print(f"ERROR: Azure TTS generation failed: {e}")
 
 def alltalk_tts(text, ttsurl, tts_voice):
     try:
@@ -193,7 +193,7 @@ def local_tts(text):
         )
         os.system(command)
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Local TTS generation failed: {e}")
+        print(f"ERROR: Local TTS generation failed: {e}")
 
 def server_tts(text, ttsurl, tts_voice):
     """
@@ -226,7 +226,7 @@ def server_tts(text, ttsurl, tts_voice):
 
         play_audio_stream(tts_stream())
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Server TTS generation failed: {e}")
+        print(f"ERROR: Server TTS generation failed: {e}")
 
 
 def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
@@ -269,5 +269,5 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
             raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Invalid TTS option or character voice flag.")
 
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Text-to-speech generation failed: {e}")
+        print(f"ERROR: Text-to-speech generation failed: {e}")
 

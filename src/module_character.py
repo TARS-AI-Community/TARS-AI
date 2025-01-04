@@ -52,8 +52,8 @@ class CharacterManager:
                                     f"\nWorld Scenario: {self.world_scenario}\n"\
                                     f"\nExample Dialog:\n{self.example_dialogue}\n"
 
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Character loaded: {self.char_name}")
+            print(f"LOAD: Character loaded: {self.char_name}")
         except FileNotFoundError:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Character file '{self.character_card_path}' not found.")
+            print(f"ERROR: Character file '{self.character_card_path}' not found.")
         except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error while loading character attributes: {e}")
+            print(f"ERROR: Error while loading character attributes: {e}")

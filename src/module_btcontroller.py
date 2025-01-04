@@ -26,10 +26,10 @@ try:
     pwm = Adafruit_PCA9685.PCA9685(busnum=1)  # Specify I2C bus 1
     pwm.set_pwm_freq(60)  # Set frequency to 60 Hz
 except FileNotFoundError as e:
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
+    print(f"ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
     pwm = None  # Fallback if hardware is unavailable
 except Exception as e:
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Unexpected error during PCA9685 initialization: {e}")
+    print(f"ERROR: Unexpected error during PCA9685 initialization: {e}")
     pwm = None  # Fallback if hardware is unavailable
 
 
@@ -80,10 +80,10 @@ def find_controller(controller_name):
     devices = [InputDevice(path) for path in list_devices()]
     for device in devices:
         if controller_name.lower() in device.name.lower():
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Controller found: {device.name} at {device.path}")
+            print(f"LOAD: Controller found: {device.name} at {device.path}")
             gamepad_path = device.path
             return device
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: {controller_name} Not found, Searching...")
+    print(f"LOAD: {controller_name} Not found, Searching...")
     return None
 
 def check_secret_code(button_name):
@@ -132,11 +132,11 @@ def unposeaction():
         
 # D-Pad Actions (pressed and released)
 def action_dpad_up_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: D-Pad Up pressed! Let's move up!")
+    #print(f"CTRL: D-Pad Up pressed! Let's move up!")
     stepForward()
 
 def action_dpad_down_pressed():
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: D-Pad Down pressed! Let's move down!")
+    print(f"CTRL: D-Pad Down pressed! Let's move down!")
     global posevar
     
     if posevar == False:
@@ -147,41 +147,41 @@ def action_dpad_down_pressed():
         posevar = False
 
 def action_dpad_left_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: D-Pad Left pressed! Moving left!")
+    #print(f"CTRL: D-Pad Left pressed! Moving left!")
     turnLeft()
 
 def action_dpad_right_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: D-Pad Right pressed! Moving right!")
+    #print(f"CTRL: D-Pad Right pressed! Moving right!")
     turnRight()
 
 def action_dpad_up_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: D-Pad Up released! Stopping move up.")
+    #print(f"CTRL: D-Pad Up released! Stopping move up.")
     pass
 
 def action_dpad_down_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: D-Pad Down released! Stopping move down.")
+    #print(f"CTRL: D-Pad Down released! Stopping move down.")
     pass
 
 def action_dpad_left_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: D-Pad Left released! Stopping move left.")
+    #print(f"CTRL: D-Pad Left released! Stopping move left.")
     pass
 
 def action_dpad_right_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: D-Pad Right released! Stopping move right.")
+    #print(f"CTRL: D-Pad Right released! Stopping move right.")
     pass
 
 # Joystick Actions (show values when moved)
 def action_left_stick_move(x_value, y_value):
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Left Stick moved to X: {x_value}, Y: {y_value}")
+    #print(f"CTRL: Left Stick moved to X: {x_value}, Y: {y_value}")
     pass
 
 def action_right_stick_move(x_value, y_value):
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Right Stick moved to X: {x_value}, Y: {y_value}")
+    #print(f"CTRL: Right Stick moved to X: {x_value}, Y: {y_value}")
     pass
 
 # Define custom actions for specific buttons (pressed)
 def action_a_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: A Button? Are you trying to jump?")
+    #print(f"CTRL: A Button? Are you trying to jump?")
     global toggle
     if toggle == True:
         starHandPlus()
@@ -189,7 +189,7 @@ def action_a_button_pressed():
         starHandMinus()
 
 def action_b_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Oh no, the B! Self-destruct initiated... just kidding!")
+    #print(f"CTRL: Oh no, the B! Self-destruct initiated... just kidding!")
     global toggle
     if toggle == True:
         portHandPlus()
@@ -197,7 +197,7 @@ def action_b_button_pressed():
         portHandMinus()
 
 def action_x_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Hey, stop pushing my X Button!")
+    #print(f"CTRL: Hey, stop pushing my X Button!")
     global toggle
     if toggle == True:
         starForarmPlus()
@@ -205,7 +205,7 @@ def action_x_button_pressed():
         starForarmMinus()
 
 def action_y_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Y Button? I hope you know what youre doing!")
+    #print(f"CTRL: Y Button? I hope you know what youre doing!")
     global toggle
     if toggle == True:
         portForarmPlus()
@@ -213,7 +213,7 @@ def action_y_button_pressed():
         portForarmMinus()
 
 def action_r1_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: R1 Button pressed! Thats the turbo button!")
+    #print(f"CTRL: R1 Button pressed! Thats the turbo button!")
     global toggle
     if toggle == True:
         starMainPlus()
@@ -221,7 +221,7 @@ def action_r1_button_pressed():
         starMainMinus()
 
 def action_l1_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: L1 Button activated! Shields up!")
+    #print(f"CTRL: L1 Button activated! Shields up!")
     global toggle
     if toggle == True:
         portMainPlus()
@@ -229,88 +229,88 @@ def action_l1_button_pressed():
         portMainMinus()
 
 def action_r2_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: R2 Button? Are we accelerating now?")
+    #print(f"CTRL: R2 Button? Are we accelerating now?")
     pass
 
 def action_l2_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: L2 Button pressed! Steady... dont crash!")
+    #print(f"CTRL: L2 Button pressed! Steady... dont crash!")
     pass
 
 def action_bottom_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Bottom Button? What kind of mischief is this?")
+    #print(f"CTRL: Bottom Button? What kind of mischief is this?")
     pass
 
 def action_select_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Select Button pressed. Are you opening a menu?")
+    #print(f"CTRL: Select Button pressed. Are you opening a menu?")
     pass
 
 def action_start_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Start Button pressed. Game on!")
+    #print(f"CTRL: Start Button pressed. Game on!")
     pass
 
 def LJoyStick_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: L JoyStick Pressed. HAHAHAHAHA")
+    #print(f"CTRL: L JoyStick Pressed. HAHAHAHAHA")
     pass
 
 def RJoyStick_button_pressed():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: R JoyStick Pressed. Be Careful!")
+    #print(f"CTRL: R JoyStick Pressed. Be Careful!")
     pass
 
 # Define custom actions for specific buttons (released)
 def action_a_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Okay, you stopped jumping. Good!")
+    #print(f"CTRL: Okay, you stopped jumping. Good!")
     pass
 
 def action_b_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: B released. Crisis averted!")
+    #print(f"CTRL: B released. Crisis averted!")
     pass
 
 def action_x_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Thats better. Leave my X Button alone!")
+    #print(f"CTRL: Thats better. Leave my X Button alone!")
     pass
 
 def action_y_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Y Button released. Thank you for being cautious!")
+    #print(f"CTRL: Y Button released. Thank you for being cautious!")
     pass
 
 def action_r1_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Turbo disengaged. R1 Button safe!")
+    #print(f"CTRL: Turbo disengaged. R1 Button safe!")
     pass
 
 def action_l1_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Shields down. L1 Button released!")
+    #print(f"CTRL: Shields down. L1 Button released!")
     pass
 
 def action_r2_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: R2 Button released. No more speeding!")
+    #print(f"CTRL: R2 Button released. No more speeding!")
     global toggle
     print("+")
     toggle = True
 
 def action_l2_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: L2 Button released. Smooth landing!")
+    #print(f"CTRL: L2 Button released. Smooth landing!")
     global toggle
     print("-")
     toggle = False
 
 def action_bottom_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Bottom Button released. Mischief managed!")
+    #print(f"CTRL: Bottom Button released. Mischief managed!")
     pass
 
 def action_select_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Select Button released. Menu closed!")
+    #print(f"CTRL: Select Button released. Menu closed!")
     pass
 
 def action_start_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: Start Button released. Lets pause for a moment.")
+    #print(f"CTRL: Start Button released. Lets pause for a moment.")
     pass
 
 def LJoyStick_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: L JoyStick released. That tickled.")
+    #print(f"CTRL: L JoyStick released. That tickled.")
     pass
 
 def RJoyStick_button_released():
-    #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] CTRL: R JoyStick released. Whew!.")
+    #print(f"CTRL: R JoyStick released. Whew!.")
     pass
 
 def start_controls():
@@ -323,7 +323,7 @@ def start_controls():
         try:
             # Try to connect to the gamepad
             gamepad = evdev.InputDevice(gamepad_path)
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: {gamepad.name} connected.")
+            print(f"LOAD: {gamepad.name} connected.")
         except FileNotFoundError:
             time.sleep(5)  # Wait before retrying
 
@@ -355,7 +355,7 @@ def start_controls():
         9: "Trigger Axis",  # Example label for Unknown Axis 9
     }
 
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] LOAD: Controls Listening...")
+    print(f"LOAD: Controls Listening...")
     try:
         dpad_state = {"up": False, "down": False, "left": False, "right": False}
         
@@ -370,9 +370,9 @@ def start_controls():
                     elif event.value == 0:  # Button released
                         button_action_released()  # Call the associated released action
                 else:
-                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MOVE: Unknown Button {event.code}")
+                    print(f"MOVE: Unknown Button {event.code}")
             elif event.type == evdev.ecodes.EV_ABS:  # Analog stick or D-pad movement
-                #print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MOVE: Event Code: {event.code}, Event Value: {event.value}")
+                #print(f"MOVE: Event Code: {event.code}, Event Value: {event.value}")
 
                 if event.code == evdev.ecodes.ABS_HAT0Y:
                     if event.value < 0 and not dpad_state["up"]:  # Up pressed
