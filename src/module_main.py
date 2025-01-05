@@ -26,6 +26,7 @@ from module_engine import check_for_module
 from module_tts import generate_tts_audio
 from module_vision import get_image_caption_from_base64
 from module_stt import STTManager
+from module_stablediffusion import get_base64_encoded_image_generate
 
 # === Constants and Globals ===
 character_manager = None
@@ -162,18 +163,11 @@ def build_prompt(user_prompt):
     if module_engine != "No_Tool":
         #if "*User is leaving the chat politely*" in module_engine:
             #stop_idle() #StopAFK mssages
+        pass
 
-        if "Sends a picture***" in module_engine:
-            sdpicture = module_engine.split('***', 1)[-1]
-            #module_engine = f"*Sends a picture*. You will inform user that this is the image as requested, do not describe the image."
-            
-            pattern = r'data:image\/[a-zA-Z]+;base64,([^"]+)'
-            match = re.search(pattern, sdpicture)
-            if match:
-                base64_data = match.group(1)
-                module_engine = f"*Sends a picture of: {get_image_caption_from_base64(base64_data)}*"
-            else:
-                module_engine = f"*Cannot send a picture something went wrong, inform user*"
+    if module_engine == "sdmodule-generate":
+        get_base64_encoded_image_generate(user_prompt)
+        module_engine = f"*Sends user a picture*. You will inform user that this is the image as requested, do not describe the image."
  
     # Build basic prompt structure
     dtg = f"Current Date: {date}\nCurrent Time: {time}\n"
