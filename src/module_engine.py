@@ -3,7 +3,7 @@ module_engine.py
 
 Core module for TARS-AI responsible for:
 - Predicting user intents and determining required modules.
-- Executing tool-specific functions like web searches and vision analysis.
+- Executing tool-specific functions like web searches, vision analysis, and volume control.
 
 This is achieved using a pre-trained Naive Bayes classifier and TF-IDF vectorizer.
 """
@@ -12,10 +12,13 @@ This is achieved using a pre-trained Naive Bayes classifier and TF-IDF vectorize
 import os
 import joblib
 from datetime import datetime
+import subprocess
+import re
 
 # === Custom Modules ===
 from module_websearch import search_google, search_google_news
 from module_vision import describe_camera_view
+from module_volume import RaspbianVolumeManager  # Import the volume manager
 
 # === Constants ===
 MODEL_FILENAME = 'engine/pickles/naive_bayes_model.pkl'
@@ -39,7 +42,6 @@ except FileNotFoundError as e:
         tfidf_vectorizer = joblib.load(VECTORIZER_FILENAME)
     except Exception as retry_exception:
         raise RuntimeError("Critical error while loading models.") from retry_exception
-
 
 # === Functions ===
 def predict_class(user_input):
@@ -103,9 +105,43 @@ def check_for_module(user_input):
 
         elif predicted_class == "Chat":
             return "No_Tool"
-        
+
+        # Volume control intent
+        elif predicted_class == "Volume":
+            volume_manager = RaspbianVolumeManager()  # Create volume manager instance
+
+            if "increase" in user_input.lower():
+                current_volume = volume_manager.get_volume()
+                if current_volume is not None:
+                    new_volume = min(current_volume + 10, 100)
+                    volume_manager.set_volume(new_volume)
+                    return f"Volume increased to {new_volume}%. "
+            
+            elif "decrease" in user_input.lower():
+                current_volume = volume_manager.get_volume()
+                if current_volume is not None:
+                    new_volume = max(current_volume - 10, 0)
+                    volume_manager.set_volume(new_volume)
+                    return f"Volume decreased to {new_volume}%. "
+            
+            elif "set" in user_input.lower():
+                # Extract volume percentage from user input
+                match = re.search(r'(\d{1,3})%', user_input)
+                if match:
+                    volume = int(match.group(1))
+                    if 0 <= volume <= 100:
+                        volume_manager.set_volume(volume)
+                        return f"Volume set to {volume}%. "
+                    else:
+                        return "Please provide a valid volume between 0 and 100."
+                else:
+                    return "Please specify the volume percentage."
+            
+            else:
+                return "Volume control not recognized."
+
         elif predicted_class == "Mute":
             return "Mute"
 
     # Default response if no suitable module is found
-    return "No_Tool"
+    return "I couldn't find a module for your request."
