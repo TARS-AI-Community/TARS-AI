@@ -8,6 +8,10 @@ import re
 import os
 import ctypes
 
+# === Custom Modules ===
+from module_config import load_config
+CONFIG = load_config()
+
 # Define the error handler function type
 ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(
     None, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p
@@ -26,7 +30,9 @@ asound = ctypes.cdll.LoadLibrary('libasound.so')
 # Load the Piper model globally
 script_dir = os.path.dirname(__file__)
 model_path = os.path.join(script_dir, 'tts/TARS.onnx')
-voice = PiperVoice.load(model_path)
+
+if CONFIG['TTS']['ttsoption'] == 'piper':
+    voice = PiperVoice.load(model_path)
 
 async def synthesize(voice, chunk):
     """

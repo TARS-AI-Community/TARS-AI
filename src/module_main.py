@@ -53,7 +53,8 @@ def start_bt_controller_thread():
     except Exception as e:
         print(f"ERROR: {e}")
 
-def stream_text_nonblocking(text, delay=0.05):
+
+def stream_text_nonblocking(text, delay=0.03):
     """
     Streams text character by character in a non-blocking way.
 
@@ -66,11 +67,15 @@ def stream_text_nonblocking(text, delay=0.05):
             sys.stdout.write(char)  # Write one character at a time
             sys.stdout.flush()      # Ensure the text is shown immediately
             time.sleep(delay)
-        sys.stdout.write("\n")
-        sys.stdout.flush()
+        
+        # Explicitly add only one newline
+        if not text.endswith("\n"):
+            sys.stdout.write("\n")
+            sys.stdout.flush()
 
     # Run the streaming function in a separate thread
     threading.Thread(target=stream, daemon=True).start()
+
 
 # === Core Functions ===
 def extract_text(json_response, picture):
