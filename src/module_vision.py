@@ -66,7 +66,7 @@ def capture_image() -> BytesIO:
         if CONFIG['VISION']['server_hosted']:
             width, height = "2592", "1944"  # High resolution for server processing
         else:
-            width, height = "160", "120"   # Low resolution for on-device processing
+            width, height = "1920", "1080"   # Low resolution for on-device processing
 
         print(f"INFO: Capturing image at resolution {width}x{height}.")
 
@@ -74,7 +74,7 @@ def capture_image() -> BytesIO:
         command = [
             "libcamera-still",
             "--output", "-",  # Output to stdout
-            "--timeout", "300",  # Short timeout
+            "--timeout", "50",  # Short timeout
             "--width", width,
             "--height", height,
         ]
@@ -84,10 +84,10 @@ def capture_image() -> BytesIO:
             stderr=subprocess.DEVNULL,  # Suppress standard error (libcamera logs)
             check=True
         )
-        save_captured_image()
         return BytesIO(process.stdout)  # Return the captured image as BytesIO
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Error capturing image: {e}")
+
 
 def send_image_to_server(image_bytes: BytesIO) -> str:
     """
@@ -153,30 +153,35 @@ def describe_camera_view() -> str:
     - str: Caption describing the captured image.
     """
     try:
-        # Capture the image
+        # Capture the image once
         image_bytes = capture_image()
+
+        # Save the image before processing
+        save_captured_image(image_bytes)  # Pass image_bytes as an argument
 
         if CONFIG['VISION']['server_hosted']:
             # Use server-hosted vision processing
             return send_image_to_server(image_bytes)
         else:
             # Use on-device BLIP model for captioning
-            initialize_blip()
             image = Image.open(image_bytes)
             inputs = PROCESSOR(image, return_tensors="pt").to(DEVICE)
 
-            outputs = MODEL.generate(**inputs, max_new_tokens=50, num_beams=5)
+            outputs = MODEL.generate(**inputs, max_new_tokens=50, num_beams=2)
             caption = PROCESSOR.decode(outputs[0], skip_special_tokens=True)
             return caption
     except Exception as e:
-        print(f"TARS is uable to see right now")
+        print(f"TARS is unable to see right now")
         return f"Error: {e}"
 
-def save_captured_image():
-    try:
-        # Capture the image
-        image_bytes = capture_image()
+def save_captured_image(image_bytes: BytesIO):
+    """
+    Save the captured image to the 'vision/images' directory.
 
+    Parameters:
+    - image_bytes (BytesIO): The image to save.
+    """
+    try:
         # Create the output directory if it doesn't exist
         output_dir = Path("vision/images")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -187,7 +192,7 @@ def save_captured_image():
 
         # Save the image to the file path
         with Image.open(image_bytes) as img:
-            img.save(file_path, format="JPEG")
+            img.save(file_path, format="JPEG", optimize=True, quality=85)
 
         print(f"Image saved to {file_path}")
         return file_path

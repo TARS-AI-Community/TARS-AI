@@ -21,11 +21,3 @@ adafruit-pca9685
 azure-cognitiveservices-speech #needed for azure TTS
 soundfile #needed for alltalk tts
 piper-tts #needed for local TTS with voice clone
-
-
-#tiktoken #needed for ollama
-#opencv-python 
-#opencv-python-headless
-
-
-#sudo apt install libopencv-dev python3-opencv
