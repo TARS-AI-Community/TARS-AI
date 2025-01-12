@@ -66,7 +66,7 @@ def capture_image() -> BytesIO:
         if CONFIG['VISION']['server_hosted']:
             width, height = "2592", "1944"  # High resolution for server processing
         else:
-            width, height = "320", "240"   # Low resolution for on-device processing
+            width, height = "160", "120"   # Low resolution for on-device processing
 
         print(f"INFO: Capturing image at resolution {width}x{height}.")
 
@@ -84,6 +84,7 @@ def capture_image() -> BytesIO:
             stderr=subprocess.DEVNULL,  # Suppress standard error (libcamera logs)
             check=True
         )
+        save_captured_image()
         return BytesIO(process.stdout)  # Return the captured image as BytesIO
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Error capturing image: {e}")
@@ -170,3 +171,26 @@ def describe_camera_view() -> str:
     except Exception as e:
         print(f"TARS is uable to see right now")
         return f"Error: {e}"
+
+def save_captured_image():
+    try:
+        # Capture the image
+        image_bytes = capture_image()
+
+        # Create the output directory if it doesn't exist
+        output_dir = Path("vision/images")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Define the file name with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_path = output_dir / f"captured_image_{timestamp}.jpg"
+
+        # Save the image to the file path
+        with Image.open(image_bytes) as img:
+            img.save(file_path, format="JPEG")
+
+        print(f"Image saved to {file_path}")
+        return file_path
+    except Exception as e:
+        print(f"Error saving image: {e}")
+        return None
