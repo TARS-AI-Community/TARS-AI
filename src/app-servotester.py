@@ -13,7 +13,7 @@ pwm.set_pwm_freq(60)
 print("Auto calibrate is in internal testing DO NOT USE / risk it unless you know what your doing!!!!")
 
 MIN_PULSE = 0  # Calibrate these values
-MAX_PULSE = 1000  # Calibrate these values
+MAX_PULSE = 600  # Calibrate these values
 
 def set_servo_pulse(channel, pulse):
     if MIN_PULSE <= pulse <= MAX_PULSE:

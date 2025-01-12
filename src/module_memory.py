@@ -17,6 +17,9 @@ import numpy as np
 
 # === Custom Modules ===
 from memory.hyperdb import *
+from module_config import load_config
+
+CONFIG = load_config()
 
 class MemoryManager:
     """
@@ -221,32 +224,57 @@ class MemoryManager:
         - dict: Dictionary with token count.
         """
         llm_backend = self.config['LLM']['llm_backend']
+        # Cache for already logged fallback warnings
+        if not hasattr(self, '_fallback_warning_logged'):
+            self._fallback_warning_logged = False
 
-        # Check the LLM backend and set the URL accordingly
+        # Check the LLM backend and handle token counting
         if llm_backend == "openai":
-            # OpenAI doesn’t have a direct token count endpoint; you must estimate using tiktoken or similar tools.
-            # This implementation assumes you calculate the token count locally.
-            from tiktoken import encoding_for_model
-            enc = encoding_for_model(self.config['LLM']['openai_model'])
-            length = {"length": len(enc.encode(text))}
-            return length
-        elif llm_backend == "ooba":
-            url = f"{self.config['LLM']['base_url']}/v1/internal/token-count"
-        elif llm_backend == "tabby":
-            url = f"{self.config['LLM']['base_url']}/v1/token/encode"
+            # Use tiktoken for OpenAI models
+            try:
+                import tiktoken
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.config['LLM']['api_key']}"
-        }
-        data = {
-            "text": text
-        }
+                # Explicitly map encoding for models that fail automatic detection
+                openai_model = self.config['LLM'].get('openai_model', None)
+                override_encoding_model = self.config['LLM'].get('override_encoding_model', "cl100k_base")
+                try:
+                    enc = tiktoken.encoding_for_model(openai_model)
+                except KeyError:
+                    if not hasattr(self, '_fallback_warning_logged'):
+                        print(f"INFO: Automatic mapping failed '{openai_model}'. Using '{override_encoding_model}'.")
+                        self._fallback_warning_logged = True
+                    enc = tiktoken.get_encoding(override_encoding_model)
 
-        response = requests.post(url, headers=headers, json=data)
+                length = {"length": len(enc.encode(text))}
+                return length
+            
+            except Exception as e:
+                if not hasattr(self, '_token_error_logged'):
+                    print(f"ERROR: Failed to calculate tokens using tiktoken: {e}")
+                    self._token_error_logged = True
+                return {"length": 0}
 
-        if response.status_code == 200:
-            return response.json()
+
+        elif llm_backend in ["ooba", "tabby"]:
+            # Handle token counting for other backends via API
+            url = f"{self.config['LLM']['base_url']}/v1/internal/token-count" if llm_backend == "ooba" else f"{self.config['LLM']['base_url']}/v1/token/encode"
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.config['LLM']['api_key']}"
+            }
+            data = {
+                "text": text
+            }
+
+            try:
+                response = requests.post(url, headers=headers, json=data)
+                response.raise_for_status()
+                return response.json()
+            except requests.exceptions.RequestException as e:
+                print(f"ERROR: Request to {llm_backend} token count API failed: {e}")
+                return {"length": 0}
+
         else:
-            print(f"ERROR: ", response.status_code, response.text)
-            return None
+            print(f"ERROR: Unsupported LLM backend: {llm_backend}")
+            return {"length": 0}

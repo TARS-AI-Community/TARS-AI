@@ -28,6 +28,12 @@ base_url = https://api.openai.com
 # URL for the LLM backend API [OpenAI: https://api.openai.com]
 openai_model = gpt-4o-mini
 # OpenAI model to use for LLM if backend = openai
+override_encoding_model = cl100k_base
+#Model to use for counting tokens this is a override feature if automatic isnt working. 
+#cl100k_base,GPT-4, GPT-3.5-turbo,Modern encoding with large context windows; default for newer OpenAI models
+#p50k_base,text-davinci-003, code-davinci-002,Older InstructGPT models and code generation tasks
+#r50k_base,text-curie-001, text-babbage-001, text-ada-001,Legacy GPT-3 models with smaller token limits
+#gpt2,GPT-2,Used by early OpenAI models; the default for backward compatibility
 contextsize = 4096
 # Maximum token context size for LLM
 max_tokens = 1000
@@ -76,6 +82,34 @@ is_talking = False
 # Tracks whether the system is currently speaking
 global_timer_paused = False
 # Pauses global timers
+
+[STABLE_DIFFUSION] # Stable Diffusion Image Generation Module
+enabled = False
+# If set to False, the Stable Diffusion module will be disabled.
+url = http://192.168.2.64:5002
+# URL of the Automatic1111 Install. This is where requests to generate images are sent..
+prompt_prefix = in the style of midjourney
+# The prefix is used to help create a specific aesthetic for the images.
+prompt_postfix = clearly defined, high def, (detailed scene and background), key visual, vibrant, highly detailed
+# Used for defining the visual quality and characteristics of the generated image.
+seed = -1
+# A value of -1 means a random seed will be used each time, ensuring unique results on every generation, Set to a fixed number for reproducibility.
+sampler_name = Euler a
+# "Euler a" is a commonly used sampler, but other options may be available depending on the implementation.
+denoising_strength = 0.5
+# Higher values result in less noise but may make the image less detailed.
+steps = 20
+# More steps generally produce better results but take longer to complete.
+cfg_scale = 7
+# The Classifier-Free Guidance scale. Higher values give more weight to the prompt, resulting in images more closely aligned with the prompt.
+width = 480
+# The width of the generated image in pixels. Adjust this based on your desired resolution.
+height = 320
+# The height of the generated image in pixels. Adjust this based on your desired resolution.
+restore_faces = False
+# Set to True if you want better face rendering in the generated image.
+negative_prompt = deformed, black and white, disfigured, low contrast, extra limbs, bad anatomy, bad hands
+# The model will attempt to avoid creating images with these characteristics.
 
 [DISCORD] # Discord bot integration
 enabled = False
