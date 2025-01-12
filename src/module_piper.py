@@ -27,6 +27,9 @@ script_dir = os.path.dirname(__file__)
 model_path = os.path.join(script_dir, 'tts/TARS.onnx')
 model_path = os.path.normpath(model_path)
 
+# Load the Piper model
+voice = PiperVoice.load(model_path)
+
 async def synthesize(voice, chunk):
     """
     Synthesize a chunk of text into a BytesIO buffer.
@@ -56,8 +59,6 @@ async def text_to_speech_with_pipelining(text):
     """
     Converts text to speech using the specified Piper model and streams audio playback with pipelining.
     """
-    # Load the Piper model
-    voice = PiperVoice.load(model_path)
 
     # Split text into smaller chunks
     chunks = re.split(r'(?<=\.)\s', text)  # Split at sentence boundaries
