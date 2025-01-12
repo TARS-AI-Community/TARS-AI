@@ -18,6 +18,8 @@ import requests
 import re
 from datetime import datetime
 import concurrent.futures
+import sys
+import time
 
 # === Custom Modules ===
 from module_config import load_config
@@ -50,6 +52,25 @@ def start_bt_controller_thread():
             start_controls()
     except Exception as e:
         print(f"ERROR: {e}")
+
+def stream_text_nonblocking(text, delay=0.05):
+    """
+    Streams text character by character in a non-blocking way.
+
+    Parameters:
+    - text (str): The text to stream.
+    - delay (float): Delay (in seconds) between each character.
+    """
+    def stream():
+        for char in text:
+            sys.stdout.write(char)  # Write one character at a time
+            sys.stdout.flush()      # Ensure the text is shown immediately
+            time.sleep(delay)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
+    # Run the streaming function in a separate thread
+    threading.Thread(target=stream, daemon=True).start()
 
 # === Core Functions ===
 def extract_text(json_response, picture):
@@ -340,8 +361,10 @@ def utterance_callback(message):
         if not message_dict.get('text'):  # Handles cases where text is "" or missing
             #print(f"TARS: Going Idle...")
             return
-        #Print the response
-        print(f"USER: {message_dict['text']}")
+        
+        #Print or stream the response
+        #print(f"USER: {message_dict['text']}")
+        stream_text_nonblocking(f"USER: {message_dict['text']}")
 
         # Check for shutdown command
         if "shutdown pc" in message_dict['text'].lower():
@@ -352,7 +375,8 @@ def utterance_callback(message):
         # Process the message using process_completion
         reply = process_completion(message_dict['text'])  # Process the message
 
-        print(f"TARS: {reply}")
+        #print(f"TARS: {reply}")
+        stream_text_nonblocking(f"TARS: {reply}")
         # Stream TTS audio to speakers
         #print("Fetching TTS audio...")
         generate_tts_audio(reply, CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
