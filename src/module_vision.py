@@ -194,7 +194,7 @@ def save_captured_image(image_bytes: BytesIO):
         with Image.open(image_bytes) as img:
             img.save(file_path, format="JPEG", optimize=True, quality=85)
 
-        print(f"Image saved to {file_path}")
+        #print(f"Image saved to {file_path}")
         return file_path
     except Exception as e:
         print(f"Error saving image: {e}")
