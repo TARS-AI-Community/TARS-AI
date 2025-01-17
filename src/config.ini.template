@@ -116,8 +116,6 @@ enabled = False
 # Enable or disable Discord integration
 channel_id = 1311295891512098920
 # ID of the Discord channel for communication
-TOKEN = ''
-# Discord bot token for authentication
 
 [SERVO]
 # Port for the main servo

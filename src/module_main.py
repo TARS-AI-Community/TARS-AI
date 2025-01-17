@@ -29,6 +29,7 @@ from module_tts import generate_tts_audio
 from module_vision import get_image_caption_from_base64
 from module_stt import STTManager
 from module_stablediffusion import get_base64_encoded_image_generate
+from module_discord import *
 
 # === Constants and Globals ===
 character_manager = None
@@ -344,6 +345,39 @@ def process_completion(text):
     return reply
 
 # === Callback Functions ===
+def process_discord_message_callback(user_message):
+    """
+    Processes the user's message and generates a response.
+
+    Parameters:
+    - user_message (str): The message content sent by the user.
+
+    Returns:
+    - str: The bot's response.
+    """
+    try:
+        # Parse the user message
+        #print(user_message)
+
+        match = re.match(r"<@(\d+)> ?(.*)", user_message)
+        if match:
+            mentioned_user_id = match.group(1)  # Extracted user ID
+            message_content = match.group(2).strip()  # Extracted message content (trim leading/trailing spaces)
+
+        #stream_text_nonblocking(f"{mentioned_user_id}: {message_content}")
+        #print(message_content)
+
+        # Process the message using process_completion
+        reply = process_completion(message_content)  # Process the message
+
+        #print(f"TARS: {reply}")
+        #stream_text_nonblocking(f"TARS: {reply}")
+        
+    except Exception as e:
+        print(f"ERROR: {e}")
+
+    return reply
+
 def wake_word_callback(wake_response):
     """
     Play initial response when wake word is detected.

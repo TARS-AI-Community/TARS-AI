@@ -53,7 +53,7 @@ def load_config():
         'VISION': ['server_hosted', 'base_url'],
         'EMOTION': ['enabled', 'emotion_model', 'storepath'],
         'TTS': ['ttsoption', 'azure_region', 'ttsurl', 'toggle_charvoice', 'tts_voice', 'voice_only', 'is_talking_override', 'is_talking', 'global_timer_paused'],
-        'DISCORD': ['TOKEN', 'channel_id', 'enabled'],
+        'DISCORD': ['channel_id', 'enabled'],
         'SERVO': ['portMain', 'portForarm', 'portHand', 'starMain', 'starForarm', 'starHand', 'upHeight', 'neutralHeight', 'downHeight', 'forwardPort', 'neutralPort', 'backPort', 'perfectportoffset', 'forwardStarboard', 'neutralStarboard', 'backStarboard', 'perfectStaroffset'],
         'STABLE_DIFFUSION': ['enabled', 'url', 'prompt_prefix', 'prompt_postfix', 'seed', 'sampler_name', 'denoising_strength', 'steps', 'cfg_scale', 'width', 'height', 'restore_faces', 'negative_prompt']
     }
@@ -122,7 +122,7 @@ def load_config():
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
         },
         "DISCORD": {
-            "TOKEN": config['DISCORD']['TOKEN'],
+            "TOKEN": os.getenv('DISCORD_TOKEN'),
             "channel_id": config['DISCORD']['channel_id'],
             "enabled": config['DISCORD']['enabled'],
         },
