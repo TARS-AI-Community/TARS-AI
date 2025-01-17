@@ -5,6 +5,8 @@ controller_name = 8BitDo
 [STT] # Speech-to-Text configuration
 wake_word = hey tar
 # Wake word for activating the system
+sensitivity = 3
+# Lower threshold (e.g., 1) is lenient; higher (e.g., 6) is strict for wake word detection. 
 use_server = false
 # Use an external STT server if True
 server_url = http://192.168.2.68:5678

@@ -47,7 +47,7 @@ def load_config():
 
     required_keys = {
         'CONTROLS': ['controller_name'],
-        'STT': ['wake_word', 'use_server', 'server_url', 'vosk_model', 'use_indicators'],
+        'STT': ['wake_word', 'sensitivity', 'use_server', 'server_url', 'vosk_model', 'use_indicators'],
         'CHAR': ['character_card_path', 'user_name', 'user_details'],
         'LLM': ['llm_backend', 'base_url', 'openai_model', 'override_encoding_model', 'contextsize', 'max_tokens', 'temperature', 'top_p', 'seed', 'systemprompt', 'instructionprompt'],
         'VISION': ['server_hosted', 'base_url'],
@@ -76,6 +76,7 @@ def load_config():
         },
         "STT": {
             "wake_word": config['STT']['wake_word'],
+            "sensitivity": config['STT']['sensitivity'],
             "use_server": config.getboolean('STT', 'use_server'),
             "server_url": config['STT']['server_url'],
             "vosk_model": config['STT']['vosk_model'],

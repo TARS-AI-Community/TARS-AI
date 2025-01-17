@@ -160,7 +160,17 @@ class STTManager:
             self.play_beep(400, 0.1, 44100, 0.6) #sleeping tone
         print(f"TARS: Sleeping...")
         try:
-            kws_threshold = 1e-5  # Stricter keyword threshold
+
+            threshold_map = {
+                1: 1e-2,  # Very Lenient
+                2: 5e-3,  # Lenient
+                3: 1e-3,  # Moderate Leniency
+                4: 5e-5,  # Moderate Strictness
+                5: 1e-6,  # Strict
+                6: 1e-8   # Very Strict
+            }
+
+            kws_threshold = threshold_map.get(int(self.config['STT']['sensitivity']), "Invalid level")
 
             with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
                 speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
