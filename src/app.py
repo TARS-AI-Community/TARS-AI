@@ -27,6 +27,7 @@ from module_tts import update_tts_settings
 from module_btcontroller import *
 from module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread, start_discord_bot, process_discord_message_callback
 from module_vision import initialize_blip
+from module_llm import initialize_manager_llm
 
 # === Constants and Globals ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -69,7 +70,7 @@ if __name__ == "__main__":
     # Initialize CharacterManager, MemoryManager
     char_manager = CharacterManager(config=CONFIG)
     memory_manager = MemoryManager(config=CONFIG, char_name=char_manager.char_name, char_greeting=char_manager.char_greeting)
-
+   
     # Initialize STTManager
     stt_manager = STTManager(config=CONFIG, shutdown_event=shutdown_event)
     stt_manager.set_wake_word_callback(wake_word_callback)
@@ -82,6 +83,7 @@ if __name__ == "__main__":
 
     # Pass managers to main module
     initialize_managers(memory_manager, char_manager, stt_manager)
+    initialize_manager_llm(memory_manager, char_manager)
 
     # Start necessary threads
     bt_controller_thread = threading.Thread(target=start_bt_controller_thread, name="BTControllerThread", daemon=True)

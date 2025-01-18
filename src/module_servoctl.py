@@ -60,12 +60,12 @@ perfectStaroffset = int(config["SERVO"]["perfectStaroffset"])  # Use this to fin
 # moves the torso from a neutral position upwards, allowing the torso to pivot forwards or backwards
 def height_neutral_to_up():
 	height = neutralHeight
-	print('setting center servo (0) Neutral --> Up position')
+	#print('setting center servo (0) Neutral --> Up position')
 	while (height > upHeight):
 		height = height - 1
 		pwm.set_pwm(0, 0, height)
 		time.sleep(0.001)
-	print('center servo (0) set to: Up position\n ')
+	#print('center servo (0) set to: Up position\n ')
 
 # rotates the torso outwards, enough so that when TARS pivots and lands, the bottom of the torso is 
 # flush with the ground. Making the torso flush with the ground is an intentional improvement from
@@ -75,42 +75,42 @@ def height_neutral_to_up():
 def torso_neutral_to_forwards():
 	port = neutralPort
 	starboard = neutralStarboard
-	print('setting port and starboard servos (1)(2) Neutral --> Forward')
+	#print('setting port and starboard servos (1)(2) Neutral --> Forward')
 	while (port < forwardPort):
 		port = port + 1
 		starboard = starboard - 1
 		pwm.set_pwm(1, 1, port)
 		pwm.set_pwm(2, 2, starboard)
 		time.sleep(0.0001)
-	print('port and starboard servos (1)(2) set to: Forward position\n ')
+	#print('port and starboard servos (1)(2) set to: Forward position\n ')
 
 def torso_neutral_to_backwards():
 	port = neutralPort
 	starboard = neutralStarboard
-	print('setting port and starboard servos (1)(2) Neutral --> Forward')
+	#print('setting port and starboard servos (1)(2) Neutral --> Forward')
 	while (port > backPort):
 		port = port - 1
 		starboard = starboard + 1
 		pwm.set_pwm(1, 1, port)
 		pwm.set_pwm(2, 2, starboard)
 		time.sleep(0.0001)
-	print('port and starboard servos (1)(2) set to: Forward position\n ')
+	#print('port and starboard servos (1)(2) set to: Forward position\n ')
 
 # rapidly shifts the torso height from UP --> DOWN and then returns --> UP, which should cause TARS 
 # to pivot and land on it's torso
 def torso_bump():
 	height = upHeight
-	print('performing a torso bump\nsetting center servo (0) Up --> Down position FAST')
+	#print('performing a torso bump\nsetting center servo (0) Up --> Down position FAST')
 	while (height < downHeight):
 		height = height + 2
 		pwm.set_pwm(0, 0, height)
 		time.sleep(0.000001)
-	print('setting center servo (0) Down --> Up position FAST')
+	#print('setting center servo (0) Down --> Up position FAST')
 	while (height > upHeight):
 		height = height - 1
 		pwm.set_pwm(0, 0, height)
 		time.sleep(0.0001)
-	print('center servo (0) returned to Up position\n')
+	#print('center servo (0) returned to Up position\n')
 	
 # returns the torso's vertical height and rotation to centered values from up height and forward 
 # rotation. Activates two external functions so movement in both axes can occur in parallel.
@@ -125,19 +125,19 @@ def torso_return():
 def torso_return_rotation():
 	port = forwardPort
 	starboard = forwardStarboard
-	print('setting port and starboard servos (1)(2) Forward --> Neutral position')
+	#print('setting port and starboard servos (1)(2) Forward --> Neutral position')
 	while (port > neutralPort):
 		port = port - 1
 		starboard = starboard + 1
 		pwm.set_pwm(1, 1, port)
 		pwm.set_pwm(2, 2, starboard)
 		time.sleep(0.005)
-	print('port and starboard servos (1)(2) set to: Neutral position\n ')
+	#print('port and starboard servos (1)(2) set to: Neutral position\n ')
 
 # returns torso's vertical to neutral from up	
 def torso_return_vertical():
 	height = upHeight
-	print('setting center servo (0) Up --> Down position')
+	#print('setting center servo (0) Up --> Down position')
 	# moving the torso down to create clearance for the rotation of the legs
 	while (height < downHeight):
 		height = height + 1
@@ -149,7 +149,7 @@ def torso_return_vertical():
 		height = height - 1
 		pwm.set_pwm(0, 0, height)
 		time.sleep(0.00001)
-	print('center servo (0) set to: Neutral position\n ')
+	#print('center servo (0) set to: Neutral position\n ')
 
 def torso_return2():
 	t1 = Thread(target = torso_return_rotation2)
@@ -162,19 +162,19 @@ def torso_return2():
 def torso_return_rotation2():
 	port = backPort
 	starboard = backStarboard
-	print('setting port and starboard servos (1)(2) Forward --> Neutral position')
+	#print('setting port and starboard servos (1)(2) Forward --> Neutral position')
 	while (port < neutralPort):
 		port = port + 1
 		starboard = starboard - 1
 		pwm.set_pwm(1, 1, port)
 		pwm.set_pwm(2, 2, starboard)
 		time.sleep(0.01)
-	print('port and starboard servos (1)(2) set to: Neutral position\n ')
+	#print('port and starboard servos (1)(2) set to: Neutral position\n ')
 
 # returns torso's vertical to neutral from up	
 def torso_return_vertical2():
 	height = upHeight
-	print('setting center servo (0) Up --> Down position')
+	#print('setting center servo (0) Up --> Down position')
 	# moving the torso down to create clearance for the rotation of the legs
 	while (height < downHeight):
 		height = height + 1
@@ -186,13 +186,13 @@ def torso_return_vertical2():
 		height = height - 1
 		pwm.set_pwm(0, 0, height)
 		time.sleep(0.001)
-	print('center servo (0) set to: Neutral position\n ')
+	#print('center servo (0) set to: Neutral position\n ')
 
 
 # moves the torso from neutral position to down
 def neutral_to_down():
     height = neutralHeight
-    print('setting center servo (0) Neutral --> Down position')
+    #print('setting center servo (0) Neutral --> Down position')
     while (height < downHeight):
         height = height + 1
         pwm.set_pwm(0, 0, height)
@@ -200,7 +200,7 @@ def neutral_to_down():
         
 def down_to_up():
     height = downHeight
-    print('setting center servo (0) Down --> Neutral position')
+    #print('setting center servo (0) Down --> Neutral position')
     while (height > upHeight):
         height = height - 1
         pwm.set_pwm(0, 0, height)
@@ -208,7 +208,7 @@ def down_to_up():
 
 def down_to_neutral():
     height = downHeight
-    print('setting center servo (0) Down --> Neutral position')
+    #print('setting center servo (0) Down --> Neutral position')
     while (height > neutralHeight):
         height = height - 1
         pwm.set_pwm(0, 0, height)
@@ -216,7 +216,7 @@ def down_to_neutral():
 
 def neutral_to_down():
     height = neutralHeight
-    print('setting center servo (0) Down --> Neutral position')
+    #print('setting center servo (0) Down --> Neutral position')
     while (height < downHeight):
         height = height + 1
         pwm.set_pwm(0, 0, height)

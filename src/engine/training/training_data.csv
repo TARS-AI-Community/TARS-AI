@@ -46,6 +46,7 @@ Is there a chance of thunderstorms today?,Weather
 What's the current dew point in degrees Celsius?,Weather
 What's the sunset time today?,Weather
 What's the UV index today?,Weather
+search google for the weather in el paso tomorrow,Weather
 Should I bring an umbrella tomorrow?,Weather
 Check the current traffic conditions on the I-95 highway,Search
 Whats the live score of the New York Yankees baseball game,Search
@@ -235,78 +236,180 @@ tarsMute please,Mute
 go to sleep,Mute
 be quiet,Mute
 goto sleep,Mute
-can you draw me a photo of a dog in a park,sdmodule-generate
-can you create me a photo of a dog in a park,sdmodule-generate
-create me a photo of a dog in a park,sdmodule-generate
-create an abstract painting of emotions,sdmodule-generate
-design a character for a fantasy novel,sdmodule-generate
-generate a landscape with a waterfall and forest,sdmodule-generate
-illustrate a children's book about space,sdmodule-generate
-make a digital portrait of a celebrity,sdmodule-generate
-render an architectural design of a modern house,sdmodule-generate
-sketch a comic strip about a superhero,sdmodule-generate
-compose a visual representation of a poem,sdmodule-generate
-create a graphic design for a music festival poster,sdmodule-generate
-draw an animal in a cartoon style,sdmodule-generate
-develop concept art for a dystopian city,sdmodule-generate
-illustrate a scene from a historical event,sdmodule-generate
-generate a picture of a mythical creature,sdmodule-generate
-design a cover for a science fiction novel,sdmodule-generate
-create a logo for a tech startup,sdmodule-generate
-sketch a fashion design for a futuristic outfit,sdmodule-generate
-render a 3D landscape of an alien planet,sdmodule-generate
-illustrate a board game concept art,sdmodule-generate
-compose a digital painting of a famous landmark,sdmodule-generate
-make a graphic interpretation of a jazz song,sdmodule-generate
-draw me a picture of a dog,sdmodule-generate
-can you draw me a picture of pizza please,sdmodule-generate
-Create a captivating abstract painting representing emotions,sdmodule-generate
-Design a unique character for an epic fantasy novel,sdmodule-generate
-Generate a breathtaking landscape featuring a cascading waterfall and lush forest,sdmodule-generate
-Illustrate an enchanting children's book about outer space,sdmodule-generate
-Craft a stunning digital portrait of a renowned celebrity,sdmodule-generate
-Render an architectural masterpiece of a modern house design,sdmodule-generate
-Sketch an action-packed comic strip featuring a heroic superhero,sdmodule-generate
-Compose a visually striking representation of a thought-provoking poem,sdmodule-generate
-Create a vibrant graphic design for an upcoming music festival poster,sdmodule-generate
-Draw a cute and whimsical cartoon-style animal,sdmodule-generate
-Develop captivating concept art for a dystopian cityscape,sdmodule-generate
-Illustrate a pivotal scene from a significant historical event,sdmodule-generate
-Generate an imaginative image of a mythical creature,sdmodule-generate
-Design an eye-catching cover for a cutting-edge science fiction novel,sdmodule-generate
-Create a memorable logo for an innovative tech startup,sdmodule-generate
-Sketch a futuristic fashion design for an avant-garde outfit,sdmodule-generate
-Render a breathtaking 3D landscape of an alien planet,sdmodule-generate
-Illustrate captivating concept art for an exciting board game,sdmodule-generate
-Compose a captivating digital painting of a renowned landmark,sdmodule-generate
-Make a graphic interpretation of a soulful jazz song,sdmodule-generate
-Draw an adorable picture of a playful dog,sdmodule-generate
-Craft a mouthwatering image of a delicious pizza,sdmodule-generate
-Design an abstract masterpiece reflecting a whirlwind of emotions,sdmodule-generate
-Create a whimsical character for a fantastical novel,sdmodule-generate
-Generate a serene landscape with a cascading waterfall and a serene forest,sdmodule-generate
-Illustrate a magical children's book about the wonders of space,sdmodule-generate
-Craft a digital portrait capturing the essence of a famous celebrity,sdmodule-generate
-Render an innovative architectural design for a contemporary residence,sdmodule-generate
-Sketch an action-packed comic strip featuring a valiant superhero,sdmodule-generate
-Compose a visual interpretation of an evocative poem,sdmodule-generate
-Design a dynamic graphic for a music festival's vibrant poster,sdmodule-generate
-Draw an endearing cartoon-style portrayal of an animal,sdmodule-generate
-Develop concept art for a dystopian metropolis,sdmodule-generate
-Illustrate a poignant moment from a significant historical event,sdmodule-generate
-Generate an image of a mythical creature shrouded in mystery,sdmodule-generate
-Design a captivating cover for a cutting-edge sci-fi novel,sdmodule-generate
-Craft a logo that embodies the spirit of a tech startup,sdmodule-generate
-Sketch an avant-garde fashion design for a futuristic outfit,sdmodule-generate
-Render an otherworldly 3D landscape of an alien planet's wonders,sdmodule-generate
-Create intriguing concept art for an innovative board game,sdmodule-generate
-Compose a digital painting capturing the essence of a renowned landmark,sdmodule-generate
-Transform the soul of a jazz song into a mesmerizing graphic,sdmodule-generate
-Send me a photo of the goose in the bottle in the story,sdmodule-generate
-Draw a heartwarming portrait of a loyal dog,sdmodule-generate
-Craft a mouthwatering image of a delectable pizza,sdmodule-generate
-im sorry draw me a picture of a dnd ogre,sdmodule-generate
-sorry draw me a picture of a dnd ogre,sdmodule-generate
-can you draw me a picture of a dog please,sdmodule-generate
-draw me a picture of a cool airplane,sdmodule-generate
-draw me a photo of a stealth airplane,sdmodule-generate
+can you draw me a photo of a dog in a park,SDmodule-Generate
+can you create me a photo of a dog in a park,SDmodule-Generate
+create me a photo of a dog in a park,SDmodule-Generate
+create an abstract painting of emotions,SDmodule-Generate
+design a character for a fantasy novel,SDmodule-Generate
+generate a landscape with a waterfall and forest,SDmodule-Generate
+illustrate a children's book about space,SDmodule-Generate
+make a digital portrait of a celebrity,SDmodule-Generate
+render an architectural design of a modern house,SDmodule-Generate
+sketch a comic strip about a superhero,SDmodule-Generate
+compose a visual representation of a poem,SDmodule-Generate
+create a graphic design for a music festival poster,SDmodule-Generate
+draw an animal in a cartoon style,SDmodule-Generate
+develop concept art for a dystopian city,SDmodule-Generate
+illustrate a scene from a historical event,SDmodule-Generate
+generate a picture of a mythical creature,SDmodule-Generate
+design a cover for a science fiction novel,SDmodule-Generate
+create a logo for a tech startup,SDmodule-Generate
+sketch a fashion design for a futuristic outfit,SDmodule-Generate
+render a 3D landscape of an alien planet,SDmodule-Generate
+illustrate a board game concept art,SDmodule-Generate
+compose a digital painting of a famous landmark,SDmodule-Generate
+make a graphic interpretation of a jazz song,SDmodule-Generate
+draw me a picture of a dog,SDmodule-Generate
+can you draw me a picture of pizza please,SDmodule-Generate
+Create a captivating abstract painting representing emotions,SDmodule-Generate
+Design a unique character for an epic fantasy novel,SDmodule-Generate
+Generate a breathtaking landscape featuring a cascading waterfall and lush forest,SDmodule-Generate
+Illustrate an enchanting children's book about outer space,SDmodule-Generate
+Craft a stunning digital portrait of a renowned celebrity,SDmodule-Generate
+Render an architectural masterpiece of a modern house design,SDmodule-Generate
+Sketch an action-packed comic strip featuring a heroic superhero,SDmodule-Generate
+Compose a visually striking representation of a thought-provoking poem,SDmodule-Generate
+Create a vibrant graphic design for an upcoming music festival poster,SDmodule-Generate
+Draw a cute and whimsical cartoon-style animal,SDmodule-Generate
+Develop captivating concept art for a dystopian cityscape,SDmodule-Generate
+Illustrate a pivotal scene from a significant historical event,SDmodule-Generate
+Generate an imaginative image of a mythical creature,SDmodule-Generate
+Design an eye-catching cover for a cutting-edge science fiction novel,SDmodule-Generate
+Create a memorable logo for an innovative tech startup,SDmodule-Generate
+Sketch a futuristic fashion design for an avant-garde outfit,SDmodule-Generate
+Render a breathtaking 3D landscape of an alien planet,SDmodule-Generate
+Illustrate captivating concept art for an exciting board game,SDmodule-Generate
+Compose a captivating digital painting of a renowned landmark,SDmodule-Generate
+Make a graphic interpretation of a soulful jazz song,SDmodule-Generate
+Draw an adorable picture of a playful dog,SDmodule-Generate
+Craft a mouthwatering image of a delicious pizza,SDmodule-Generate
+Design an abstract masterpiece reflecting a whirlwind of emotions,SDmodule-Generate
+Create a whimsical character for a fantastical novel,SDmodule-Generate
+Generate a serene landscape with a cascading waterfall and a serene forest,SDmodule-Generate
+Illustrate a magical children's book about the wonders of space,SDmodule-Generate
+Craft a digital portrait capturing the essence of a famous celebrity,SDmodule-Generate
+Render an innovative architectural design for a contemporary residence,SDmodule-Generate
+Sketch an action-packed comic strip featuring a valiant superhero,SDmodule-Generate
+Compose a visual interpretation of an evocative poem,SDmodule-Generate
+Design a dynamic graphic for a music festival's vibrant poster,SDmodule-Generate
+Draw an endearing cartoon-style portrayal of an animal,SDmodule-Generate
+Develop concept art for a dystopian metropolis,SDmodule-Generate
+Illustrate a poignant moment from a significant historical event,SDmodule-Generate
+Generate an image of a mythical creature shrouded in mystery,SDmodule-Generate
+Design a captivating cover for a cutting-edge sci-fi novel,SDmodule-Generate
+Craft a logo that embodies the spirit of a tech startup,SDmodule-Generate
+Sketch an avant-garde fashion design for a futuristic outfit,SDmodule-Generate
+Render an otherworldly 3D landscape of an alien planet's wonders,SDmodule-Generate
+Create intriguing concept art for an innovative board game,SDmodule-Generate
+Compose a digital painting capturing the essence of a renowned landmark,SDmodule-Generate
+Transform the soul of a jazz song into a mesmerizing graphic,SDmodule-Generate
+Send me a photo of the goose in the bottle in the story,SDmodule-Generate
+Draw a heartwarming portrait of a loyal dog,SDmodule-Generate
+Craft a mouthwatering image of a delectable pizza,SDmodule-Generate
+im sorry draw me a picture of a dnd ogre,SDmodule-Generate
+sorry draw me a picture of a dnd ogre,SDmodule-Generate
+can you draw me a picture of a dog please,SDmodule-Generate
+draw me a picture of a cool airplane,SDmodule-Generate
+draw me a photo of a stealth airplane,SDmodule-Generate
+Take 2 steps,Move
+Turn left,Move
+Turn left 3 times,Move
+Take 1 step forward,Move
+Move 3 steps backward,Move
+Turn right 2 times,Move
+Step left once,Move
+Shift right,Move
+Move forward by 4 steps,Move
+Take a step back,Move
+Go left 2 steps,Move
+Advance forward 3 times,Move
+Back up 1 step,Move
+Rotate left,Move
+Turn 180 degrees,Move
+Shift forward twice,Move
+Move diagonally left,Move
+Step back 2 times,Move
+Turn right and move,Move
+Walk 3 steps forward,Move
+Turn around,Move
+Pose,Move
+Unpose,Move
+Strike a pose,Move
+Get up,Move
+Sit down,Move
+Crouch,Move
+Jump forward,Move
+Hop back,Move
+Step right 3 times,Move
+Shuffle left twice,Move
+Spin left,Move
+Spin right,Move
+Take a giant step forward,Move
+Move backward 4 steps,Move
+Run forward 2 steps,Move
+Walk slowly backward,Move
+Lean left,Move
+Lean right,Move
+Climb up 2 steps,Move
+Descend 1 step,Move
+March forward,Move
+Turn left and step forward,Move
+Step right diagonally,Move
+Move in a circle,Move
+Step forward,Move
+Step backward,Move
+Advance 5 steps,Move
+Pivot right,Move
+Move to the left side,Move
+Step to the right,Move
+Shift backward by 2 steps,Move
+Scoot forward,Move
+Step to the left twice,Move
+Step backward twice,Move
+Turn left sharply,Move
+Move forward quickly,Move
+Walk forward 10 steps,Move
+Reverse 4 steps,Move
+Step right once,Move
+Step left once,Move
+Go forward in small steps,Move
+Step back cautiously,Move
+Spin around,Move
+Twirl left,Move
+Twirl right,Move
+Glide forward,Move
+Walk sideways to the left,Move
+Step back and pause,Move
+Step forward and turn,Move
+Take a half-step forward,Move
+Take a half-step back,Move
+Pivot left and step forward,Move
+Move forward and stop,Move
+Turn slightly right,Move
+Turn slightly left,Move
+Slide right,Move
+Slide left,Move
+Shuffle forward,Move
+Shuffle backward,Move
+Step to the side,Move
+Take two giant steps forward,Move
+Step forward and wave,Move
+Take a step back and pose,Move
+Pose and move,Move
+Unpose and continue,Move
+Move forward confidently,Move
+Turn 90 degrees right,Move
+Turn 90 degrees left,Move
+Walk forward briskly,Move
+Step back in a curve,Move
+Move forward in a zigzag,Move
+Walk backward slowly,Move
+Take one careful step forward,Move
+Shift left diagonally,Move
+Shift right diagonally,Move
+Take two quick steps forward,Move
+Step back quickly,Move
+Move left cautiously,Move
+Move right cautiously,Move
+Take a deliberate step forward,Move
+turn one hundred and eighty degrees,Move
