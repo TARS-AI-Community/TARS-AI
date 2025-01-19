@@ -18,6 +18,7 @@ from module_websearch import search_google, search_google_news
 from module_vision import describe_camera_view
 from module_config import load_config
 from module_stablediffusion import get_base64_encoded_image_generate
+from module_volume import handle_volume_command
 
 # Load configuration
 config = load_config()
@@ -142,7 +143,7 @@ Only output one line that is the most likly, do not combine multiple movements. 
 
 
 def call_function(module_name, *args, **kwargs):
-    print(f"[DEBUG] Calling module: {module_name}")
+    #print(f"[DEBUG] Calling module: {module_name}")
     if module_name not in FUNCTION_REGISTRY:
         #print(f"[DEBUG] No function registered for module: {module_name}")
         return
@@ -192,7 +193,7 @@ def predict_class(user_input):
     max_probability = max(predicted_probabilities[0])
     # Return None if confidence is below threshold
 
-    print(f"TOOL: Using Tool {predicted_class} ({max_probability})")
+    #print(f"TOOL: Using Tool {predicted_class} ({max_probability})")
 
     if max_probability < 0.75:
         return None, max_probability
@@ -209,5 +210,6 @@ FUNCTION_REGISTRY = {
     "Move": movement_llmcall,
     "Vision": describe_camera_view,
     "Search": search_google,
-    "SDmodule-Generate": get_base64_encoded_image_generate
+    "SDmodule-Generate": get_base64_encoded_image_generate,
+    "Volume": handle_volume_command
 }

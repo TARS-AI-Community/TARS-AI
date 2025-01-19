@@ -208,34 +208,6 @@ look around and show me,Vision
 use Vision to check this,Vision
 what am i holding,Vision
 hey tars what am i holding?,Vision
-hey tars be quiet,Mute
-can you stop talking,Mute
-tars zip it,Mute
-shush,Mute
-tars pleaseMute,Mute
-quiet down,Mute
-silence yourself,Mute
-enoughMute,Mute
-stop talking,Mute
-mute yourself,Mute
-hush tars,Mute
-cease talking,Mute
-go silent,Mute
-tars no more talking,Mute
-mute mode on,Mute
-shut your mouth,Mute
-pipe down,Mute
-halt speech,Mute
-be quite,Mute
-tars go quiet,Mute
-keep it down,Mute
-youre too loud,Mute
-stop listening,Mute
-stop responding,Mute
-tarsMute please,Mute
-go to sleep,Mute
-be quiet,Mute
-goto sleep,Mute
 can you draw me a photo of a dog in a park,SDmodule-Generate
 can you create me a photo of a dog in a park,SDmodule-Generate
 create me a photo of a dog in a park,SDmodule-Generate
@@ -413,3 +385,74 @@ Move left cautiously,Move
 Move right cautiously,Move
 Take a deliberate step forward,Move
 turn one hundred and eighty degrees,Move
+mute mode on,Volume
+shut your mouth,Volume
+pipe down,Volume
+halt speech,Volume
+be quiet,Volume
+tars go quiet,Volume
+keep it down,Volume
+you're too loud,Volume
+stop listening,Volume
+stop responding,Volume
+tars mute please,Volume
+volume up,Volume
+turn up the volume,Volume
+increase sound,Volume
+raise the volume,Volume
+crank it up,Volume
+make it louder,Volume
+pump up the volume,Volume
+volume down,Volume
+turn down the volume,Volume
+decrease sound,Volume
+lower the volume,Volume
+quiet down,Volume
+make it softer,Volume
+reduce the volume,Volume
+tars increase volume by 10,Volume
+tars decrease volume by 15,Volume
+tars set volume to 50,Volume
+set volume to fifty percent,Volume
+volume at fifty percent,Volume
+max out volume,Volume
+max the volume,Volume
+set volume to maximum,Volume
+mute,Volume
+unmute,Volume
+tars mute,Volume
+tars unmute,Volume
+silence please,Volume
+volume mute,Volume
+full volume please,Volume
+lower sound,Volume
+higher volume,Volume
+decrease to minimum,Volume
+increase to maximum,Volume
+sound off,Volume
+sound on,Volume
+tars increase sound by 20,Volume
+tars decrease sound by 5,Volume
+set sound to 30%,Volume
+volume fifty percent,Volume
+blast the volume,Volume
+soften the sound,Volume
+kill the volume,Volume
+shush,Volume
+cut the volume,Volume
+blast it,Volume
+whisper mode,Volume
+drop the volume,Volume
+bring up the volume,Volume
+bring down the volume,Volume
+volume at zero,Volume
+zero volume,Volume
+hundred percent volume,Volume
+turn the sound up,Volume
+turn the sound down,Volume
+sound on maximum,Volume
+volume minimum,Volume
+adjust sound to 70%,Volume
+volume adjust to 40,Volume
+volume up,Volume
+volume down,Volume
