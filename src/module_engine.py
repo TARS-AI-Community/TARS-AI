@@ -136,7 +136,7 @@ Only output one line that is the most likly, do not combine multiple movements. 
             execute_movement(data)  # Ensure single execution
         return data
     except Exception as e:
-        print(f"[DEBUG] Error in movement_llmcall: {e}")
+        #print(f"[DEBUG] Error in movement_llmcall: {e}")
         return f"Error processing the movement command: {e}"
 
 
@@ -144,7 +144,7 @@ Only output one line that is the most likly, do not combine multiple movements. 
 def call_function(module_name, *args, **kwargs):
     print(f"[DEBUG] Calling module: {module_name}")
     if module_name not in FUNCTION_REGISTRY:
-        print(f"[DEBUG] No function registered for module: {module_name}")
+        #print(f"[DEBUG] No function registered for module: {module_name}")
         return
     func = FUNCTION_REGISTRY[module_name]
     try:

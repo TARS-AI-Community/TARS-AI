@@ -81,6 +81,7 @@ def build_prompt(user_prompt, character_manager, memory_manager, config):
     prompt = prompt.replace("{user}", config['CHAR']['user_name']) 
     prompt = prompt.replace("{char}", os.path.splitext(os.path.basename(config['CHAR']['character_card_path']))[0])
     prompt = clean_text(prompt)
+    #print(f"DEBUG: {prompt}")
     return prompt
 
 
