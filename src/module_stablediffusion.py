@@ -46,9 +46,10 @@ def get_image_from_dalle_v3(prompt):
         # Decode the image data into a PIL image
         image = Image.open(BytesIO(image_response.content))
 
-        # Save the image to a temporary file
+        # Save the image to a temporary file after resizing to 512x512
         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_png_file:
-            image.save(temp_png_file, format='PNG')
+            resized_image = image.resize((512, 512))  # Resize the image
+            resized_image.save(temp_png_file, format='PNG')  # Save the resized image
             temp_png_file_path = temp_png_file.name
 
         # Display the image in fullscreen using a thread
@@ -112,7 +113,7 @@ def get_image_from_automatic1111(sdpromptllm):
     return f"Image generated and displayed in fullscreen."
   
 def display_image_fullscreen(image_path):
-    """Function to display image in fullscreen for 8 seconds."""
+    """Function to display an image in fullscreen, scaled to fit the screen, for 8 seconds."""
     # Initialize Pygame
     pygame.init()
 
@@ -122,11 +123,32 @@ def display_image_fullscreen(image_path):
     # Allow time for the Pygame window to be fully initialized
     time.sleep(0.1)  # Give a slight delay to ensure it's on top
 
+    # Get the screen dimensions
+    screen_width, screen_height = screen.get_size()
+
     # Load the image using Pygame
     pygame_img = pygame.image.load(image_path)
 
+    # Get the original image dimensions
+    img_width, img_height = pygame_img.get_width(), pygame_img.get_height()
+
+    # Calculate the scaling factor to maintain aspect ratio
+    scale_factor = min(screen_width / img_width, screen_height / img_height)
+
+    # Compute the new dimensions
+    new_width = int(img_width * scale_factor)
+    new_height = int(img_height * scale_factor)
+
+    # Scale the image
+    scaled_img = pygame.transform.smoothscale(pygame_img, (new_width, new_height))
+
+    # Calculate position to center the image on the screen
+    x_pos = (screen_width - new_width) // 2
+    y_pos = (screen_height - new_height) // 2
+
     # Display the image on the screen
-    screen.blit(pygame_img, (0, 0))
+    screen.fill((0, 0, 0))  # Fill the screen with black
+    screen.blit(scaled_img, (x_pos, y_pos))
     pygame.display.update()
 
     # Start a timer for 8 seconds but keep the event loop running
@@ -138,7 +160,7 @@ def display_image_fullscreen(image_path):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:  # If the window is closed, exit
                 running = False
-        
+
         # Check if 8 seconds have passed
         if pygame.time.get_ticks() - start_ticks > 8000:
             running = False
