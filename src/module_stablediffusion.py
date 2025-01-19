@@ -5,49 +5,64 @@ import tempfile
 import time
 import pygame
 import threading
+from io import BytesIO
+
 from module_config import load_config
 
 # Load configuration
 config = load_config()
 
-def display_image_fullscreen(image_path):
-    """Function to display image in fullscreen for 8 seconds."""
-    # Initialize Pygame
-    pygame.init()
+def generate_image(prompt):
+    result = "Image Tool not enabled"
+    if config['STABLE_DIFFUSION']['enabled'] == "True":
+        if config['STABLE_DIFFUSION']['service'] == "openai":
+            result = get_image_from_dalle_v3(prompt)
+        if config['STABLE_DIFFUSION']['service'] == "automatic1111":
+            result = get_image_from_automatic1111(prompt)
+    return result 
 
-    # Set the Pygame window to fullscreen
-    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+def get_image_from_dalle_v3(prompt):
+    # Initialize the OpenAI client
+    from openai import OpenAI
+    client = OpenAI(api_key=config['LLM']['api_key'])  # Replace with your API key
 
-    # Allow time for the Pygame window to be fully initialized
-    time.sleep(0.1)  # Give a slight delay to ensure it's on top
+    try:
+        # Generate the image using the updated client method
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1,  # Number of images
+        )
 
-    # Load the image using Pygame
-    pygame_img = pygame.image.load(image_path)
+        # Extract the image URL
+        image_url = response.data[0].url
 
-    # Display the image on the screen
-    screen.blit(pygame_img, (0, 0))
-    pygame.display.update()
+        # Fetch the image data from the URL
+        image_response = requests.get(image_url)
+        image_response.raise_for_status()
 
-    # Start a timer for 8 seconds but keep the event loop running
-    start_ticks = pygame.time.get_ticks()  # Get the current time (milliseconds)
-    running = True
+        # Decode the image data into a PIL image
+        image = Image.open(BytesIO(image_response.content))
 
-    # Event loop to keep the window open and allow other events to be handled
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:  # If the window is closed, exit
-                running = False
-        
-        # Check if 8 seconds have passed
-        if pygame.time.get_ticks() - start_ticks > 8000:
-            running = False
+        # Save the image to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_png_file:
+            image.save(temp_png_file, format='PNG')
+            temp_png_file_path = temp_png_file.name
 
-        pygame.display.update()
+        # Display the image in fullscreen using a thread
+        display_thread = threading.Thread(target=display_image_fullscreen, args=(temp_png_file_path,))
+        display_thread.start()
 
-    # Close Pygame and exit
-    pygame.quit()
+        # Return a success message
+        return f"Image generated and displayed in fullscreen."
 
-def get_base64_encoded_image_generate(sdpromptllm):
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+
+def get_image_from_automatic1111(sdpromptllm):
     # Create the payload with the necessary parameters for the API request
     payload = {
         "prompt": sdpromptllm,
@@ -87,11 +102,48 @@ def get_base64_encoded_image_generate(sdpromptllm):
         display_thread.start()
 
         # Continue with the rest of the program (non-blocking)
-        return f"Picture is displayed in fullscreen for 8 seconds. The program continues."
+        return f"The image has been created and displayed on screen."
 
     except requests.exceptions.HTTPError as err:
         print(f"HTTP error occurred: {err}")
     except requests.exceptions.RequestException as e:
         print(f"Error: {e}")
 
-    return None
+    return f"Image generated and displayed in fullscreen."
+  
+def display_image_fullscreen(image_path):
+    """Function to display image in fullscreen for 8 seconds."""
+    # Initialize Pygame
+    pygame.init()
+
+    # Set the Pygame window to fullscreen
+    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+
+    # Allow time for the Pygame window to be fully initialized
+    time.sleep(0.1)  # Give a slight delay to ensure it's on top
+
+    # Load the image using Pygame
+    pygame_img = pygame.image.load(image_path)
+
+    # Display the image on the screen
+    screen.blit(pygame_img, (0, 0))
+    pygame.display.update()
+
+    # Start a timer for 8 seconds but keep the event loop running
+    start_ticks = pygame.time.get_ticks()  # Get the current time (milliseconds)
+    running = True
+
+    # Event loop to keep the window open and allow other events to be handled
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:  # If the window is closed, exit
+                running = False
+        
+        # Check if 8 seconds have passed
+        if pygame.time.get_ticks() - start_ticks > 8000:
+            running = False
+
+        pygame.display.update()
+
+    # Close Pygame and exit
+    pygame.quit()

@@ -17,7 +17,7 @@ from datetime import datetime
 from module_websearch import search_google, search_google_news
 from module_vision import describe_camera_view
 from module_config import load_config
-from module_stablediffusion import get_base64_encoded_image_generate
+from module_stablediffusion import generate_image
 from module_volume import handle_volume_command
 
 # Load configuration
@@ -140,13 +140,11 @@ Only output one line that is the most likly, do not combine multiple movements. 
         #print(f"[DEBUG] Error in movement_llmcall: {e}")
         return f"Error processing the movement command: {e}"
 
-
-
 def call_function(module_name, *args, **kwargs):
     #print(f"[DEBUG] Calling module: {module_name}")
     if module_name not in FUNCTION_REGISTRY:
         #print(f"[DEBUG] No function registered for module: {module_name}")
-        return
+        return "Not a Function"
     func = FUNCTION_REGISTRY[module_name]
     try:
         # Check if the function requires arguments
@@ -164,16 +162,11 @@ def check_for_module(user_input):
     """
     predicted_class, probability = predict_class(user_input)
     if not predicted_class:
-        return ""
+        return "None"
     
     # Call the function associated with the predicted class
-    result = call_function(predicted_class, user_input)
+    return call_function(predicted_class, user_input)
 
-    if result:
-        return result
-
-    # Default response if no action is taken
-    return
 
 def predict_class(user_input):
     """
@@ -210,6 +203,6 @@ FUNCTION_REGISTRY = {
     "Move": movement_llmcall,
     "Vision": describe_camera_view,
     "Search": search_google,
-    "SDmodule-Generate": get_base64_encoded_image_generate,
+    "SDmodule-Generate": generate_image,
     "Volume": handle_volume_command
 }

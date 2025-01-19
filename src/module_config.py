@@ -55,7 +55,7 @@ def load_config():
         'TTS': ['ttsoption', 'azure_region', 'ttsurl', 'toggle_charvoice', 'tts_voice', 'voice_only', 'is_talking_override', 'is_talking', 'global_timer_paused'],
         'DISCORD': ['channel_id', 'enabled'],
         'SERVO': ['portMain', 'portForarm', 'portHand', 'starMain', 'starForarm', 'starHand', 'upHeight', 'neutralHeight', 'downHeight', 'forwardPort', 'neutralPort', 'backPort', 'perfectportoffset', 'forwardStarboard', 'neutralStarboard', 'backStarboard', 'perfectStaroffset'],
-        'STABLE_DIFFUSION': ['enabled', 'url', 'prompt_prefix', 'prompt_postfix', 'seed', 'sampler_name', 'denoising_strength', 'steps', 'cfg_scale', 'width', 'height', 'restore_faces', 'negative_prompt']
+        'STABLE_DIFFUSION': ['enabled', 'service', 'url', 'prompt_prefix', 'prompt_postfix', 'seed', 'sampler_name', 'denoising_strength', 'steps', 'cfg_scale', 'width', 'height', 'restore_faces', 'negative_prompt']
     }
 
     missing_keys = []
@@ -148,6 +148,7 @@ def load_config():
         },
         "STABLE_DIFFUSION": {
             "enabled": config['STABLE_DIFFUSION']['enabled'],
+            "service": config['STABLE_DIFFUSION']['service'],
             "url": config['STABLE_DIFFUSION']['url'],
             "prompt_prefix": config['STABLE_DIFFUSION']['prompt_prefix'],
             "prompt_postfix": config['STABLE_DIFFUSION']['prompt_postfix'],

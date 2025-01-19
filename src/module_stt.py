@@ -43,7 +43,7 @@ class STTManager:
         """
         self.config = config
         self.shutdown_event = shutdown_event
-        self.SAMPLE_RATE = 16000
+        self.SAMPLE_RATE = STTManager.find_default_mic_sample_rate()
         self.running = False
         self.wake_word_callback: Optional[Callable[[str], None]] = None
         self.utterance_callback: Optional[Callable[[str], None]] = None
@@ -440,6 +440,22 @@ class STTManager:
 
         except Exception as e:
             print(f"ERROR: Failed to measure background noise: {e}")
+
+    def find_default_mic_sample_rate():
+        """Finds the sample rate (in Hz) of the actual default microphone, rounded to an integer."""
+        try:
+            # Get the default input device index
+            default_device_index = sd.default.device[0]  # Input device index
+            if default_device_index is None:
+                return "No default microphone detected."
+
+            # Query the device info
+            device_info = sd.query_devices(default_device_index, kind='input')
+            sample_rate = int(device_info['default_samplerate'])  # Convert to integer
+
+            return sample_rate
+        except Exception as e:
+            return f"Error: {e}"
 
     def play_beep(self, frequency, duration, sample_rate, volume):
         """

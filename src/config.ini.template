@@ -88,6 +88,8 @@ global_timer_paused = False
 [STABLE_DIFFUSION] # Stable Diffusion Image Generation Module
 enabled = False
 # If set to False, the Stable Diffusion module will be disabled.
+service = automatic1111
+# You can pick from openai (requires paid account) and stablediffusion(requires setup).
 url = http://192.168.2.64:5002
 # URL of the Automatic1111 Install. This is where requests to generate images are sent..
 prompt_prefix = in the style of midjourney
