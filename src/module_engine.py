@@ -3,7 +3,7 @@ module_engine.py
 
 Core module for TARS-AI responsible for:
 - Predicting user intents and determining required modules.
-- Executing tool-specific functions like web searches and vision analysis.
+- Executing tool-specific functions like web searches, vision analysis, and volume control.
 
 This is achieved using a pre-trained Naive Bayes classifier and TF-IDF vectorizer.
 """
@@ -16,6 +16,7 @@ from datetime import datetime
 # === Custom Modules ===
 from module_websearch import search_google, search_google_news
 from module_vision import describe_camera_view
+from module_volume import handle_volume_command  # Import the centralized volume handler
 
 # === Constants ===
 MODEL_FILENAME = 'engine/pickles/naive_bayes_model.pkl'
@@ -39,7 +40,6 @@ except FileNotFoundError as e:
         tfidf_vectorizer = joblib.load(VECTORIZER_FILENAME)
     except Exception as retry_exception:
         raise RuntimeError("Critical error while loading models.") from retry_exception
-
 
 # === Functions ===
 def predict_class(user_input):
@@ -103,7 +103,10 @@ def check_for_module(user_input):
 
         elif predicted_class == "Chat":
             return "No_Tool"
-        
+
+        elif predicted_class == "Volume":
+            return handle_volume_command(user_input)
+
         elif predicted_class == "Mute":
             return "Mute"
 
