@@ -267,7 +267,7 @@ class STTManager:
             audio_buffer = BytesIO()
             detected_speech = False
             silent_frames = 0
-            max_silent_frames = 3  # ~1.25 seconds of silence
+            max_silent_frames = 8  # ~1.25 seconds of silence
 
             print(f"STAT: Starting audio recording...")
             with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
@@ -276,7 +276,7 @@ class STTManager:
                     wf.setsampwidth(2)
                     wf.setframerate(self.SAMPLE_RATE)
 
-                    for _ in range(50):  # Limit maximum recording duration (~12.5 seconds)
+                    for _ in range(100):  # Limit maximum recording duration (~12.5 seconds)
                         data, _ = stream.read(4000)
                         data = self.amplify_audio(data)  # Apply amplification
                         wf.writeframes(data.tobytes())
