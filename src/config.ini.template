@@ -122,6 +122,8 @@ channel_id = 1311295891512098920
 # ID of the Discord channel for communication
 
 [SERVO]
+#Enable or disable movement via voice control
+voicemovement = True
 # Port for the main servo
 portMain = 610
 # Port for the forearm servo
