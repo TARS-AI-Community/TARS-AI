@@ -79,7 +79,7 @@ To wire the LCD display to your Raspberry Pi, use the following pinout configura
 |--------------------|---------------------------|------------------------------------------------------|
 | 1, 17             | 3.3V (Pin 1 or 17)        | 3.3V power supply.                                   |
 | 2, 4              | 5V (Pin 2 or 4)           | 5V power supply for the backlight (if required).     |
-| 6, 9, 14, 20, 25  | GND (Pin 6, 9, etc.)       | Ground connections.                                  |
+| 6, 9, 14, 20, 25  | GND (Pin 6, 9, etc.)      | Ground connections.                                  |
 | 11                | GPIO17 (Pin 11)           | Touch IRQ (optional, for touch input).              |
 | 18                | GPIO24 (Pin 18)           | LCD Register Select (DC/RS).                        |
 | 19                | GPIO10 (Pin 19, SPI MOSI) | SPI MOSI (data sent to the LCD).                    |
@@ -95,17 +95,29 @@ To wire the LCD display to your Raspberry Pi, use the following pinout configura
 
 For audio output, connect an I2S amplifier to the Raspberry Pi’s I2S (PCM) pins as follows:
 
-| **Raspberry Pi Pin** | **GPIO Pin** | **Function**                          | **Connect to Amplifier**               |
-|-----------------------|--------------|---------------------------------------|----------------------------------------|
-| Pin 12               | GPIO18       | I2S Bit Clock (BCLK)                  | BCLK                                   |
-| Pin 35               | GPIO19       | I2S Left/Right Clock (LRCLK)          | LRCLK                                  |
-| Pin 40               | GPIO21       | I2S Data Out (DOUT)                   | DIN (Audio Data Input to Amplifier)    |
-| Pin 6                | GND          | Ground                                | GND (Amplifier Ground)                 |
-| Pin 2 or 4           | 5V           | Power Supply                          | VIN (Amplifier Power Input)            |
+| **Raspberry Pi Pin** | **GPIO Pin** | **Function**               | **Connect to Amplifier**            |
+|-----------------------|--------------|----------------------------|--------------------------------------|
+| Pin 12               | GPIO18       | I2S Bit Clock (BCLK)       | BCLK                                 |
+| Pin 35               | GPIO19       | I2S Left/Right Clock (LRCLK) | LRCLK                              |
+| Pin 40               | GPIO21       | I2S Data Out (DOUT)        | DIN (Audio Data Input to Amplifier) |
+| Pin 6                | GND          | Ground                     | GND (Amplifier Ground)              |
+| Pin 2 or 4           | 5V           | Power Supply               | VIN (Amplifier Power Input)         |
 
 **Note**: Enable the I2S interface on the Raspberry Pi by following the instructions in the [Adafruit MAX98357 guide](https://learn.adafruit.com/adafruit-max98357-i2s-class-d-mono-amp/pi-i2s-tweaks).
 
 ---
+
+## Connecting the 12CH PWM Servo Controller
+
+| **Controller Pin** | **Raspberry Pi GPIO Pin** | **Description**                                   |
+|---------------------|---------------------------|---------------------------------------------------|
+| GND                | GND (Pin 6, etc.)         | Ground connection.                                |
+| SCL                | SCL (Pin 5)               | Serial Clock Line for I2C communication.          |
+| SDA                | SDA (Pin 3)               | Serial Data Line for I2C communication.           |
+| VCC                | 3.3V (Pin 1 or 17)        | Power for the I2C logic.                          |
+
+**Note**: Ensure I2C is enabled on your Raspberry Pi using `raspi-config`. If you need help setting that up, let me know!
+
 
 ## Touchscreen Calibration
 To calibrate the touchscreen, follow these steps:
