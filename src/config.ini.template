@@ -5,12 +5,14 @@ controller_name = 8BitDo
 [STT] # Speech-to-Text configuration
 wake_word = hey tar
 # Wake word for activating the system
-sensitivity = 3
+sensitivity = 1
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 6) is strict for wake word detection. 
-use_server = false
-# Use an external STT server if True
-server_url = http://192.168.2.68:5678
+stt_processor = vosk
+# Vosk Onboard / FAST, whisper Onboard / Accurate, External server hosted, Accurate and Fast (pick vosk, whisper, or external)
+external_url = http://192.168.2.64:5678
 # URL for the STT server (if enabled)
+whisper_model = tiny
+# Which whisper model to use for onboard whisper transcription tiny, base, small, medium, large
 vosk_model = vosk-model-small-en-us-0.15
 # Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15)
 use_indicators = True

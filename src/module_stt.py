@@ -24,6 +24,8 @@ import numpy as np
 import json
 from typing import Callable, Optional
 from vosk import SetLogLevel
+import whisper
+import tempfile
 
 # Suppress Vosk logs by setting the log level to 0 (ERROR and above)
 SetLogLevel(-1)  # Adjust to 0 for minimal output or -1 to suppress all logs
@@ -66,6 +68,11 @@ class STTManager:
         ]
         self._load_vosk_model()
         self._measure_background_noise()
+        # Initialize Whisper model if configured
+        self.whisper_model = None
+        if self.config['STT'].get('stt_processor') == 'whisper':
+            print("INFO: Loading Whisper model...")
+            self._load_whisper_model()
 
 #Main Thread Calls
     def start(self):
@@ -85,6 +92,41 @@ class STTManager:
         self.running = False
         self.shutdown_event.set()
         self.thread.join()
+
+#Whisper INIT       
+    def _load_whisper_model(self):
+        """
+        Load the Whisper model for local transcription.
+        """
+        try:
+            import torch
+            import warnings
+
+            # Suppress future warnings from torch
+            warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
+
+            # Monkey patch torch.load for Whisper only
+            _original_torch_load = torch.load
+
+            def _patched_torch_load(fp, map_location, *args, **kwargs):
+                return _original_torch_load(fp, map_location=map_location, weights_only=True, *args, **kwargs)
+
+            torch.load = _patched_torch_load
+
+            # Load the Whisper model
+            whisper_model_size = self.config['STT'].get('whisper_model', 'base')
+            print(f"INFO: Attempting to load Whisper model '{whisper_model_size}'...")
+            self.whisper_model = whisper.load_model(whisper_model_size)
+
+            if not hasattr(self.whisper_model, 'device'):
+                raise ValueError("Whisper model did not load correctly.")
+            print("INFO: Whisper model loaded successfully.")
+        except Exception as e:
+            print(f"ERROR: Failed to load Whisper model: {e}")
+            self.whisper_model = None
+        finally:
+            # Restore the original torch.load after Whisper model is loaded
+            torch.load = _original_torch_load
 
 #Vosk INIT
     def _download_vosk_model(self, url, dest_folder):
@@ -119,7 +161,7 @@ class STTManager:
         """
         Initialize the Vosk model for local STT transcription.
         """
-        if not self.config['STT']['use_server']:
+        if self.config['STT']['stt_processor'] == 'vosk':
             vosk_model_path = os.path.join(os.getcwd(), "stt", self.config['STT']['vosk_model'])
             if not os.path.exists(vosk_model_path):
                 print(f"ERROR: Vosk model not found. Downloading...")
@@ -203,11 +245,13 @@ class STTManager:
         """
         #print(f"STAT: Listening...")
         try:
-            if self.config['STT']['use_server']:
+            if self.config['STT']['stt_processor'] == 'whisper':
+                result = self._transcribe_with_whisper()
+            elif self.config['STT']['stt_processor'] == 'external':
                 result = self._transcribe_with_server()
             else:
                 result = self._transcribe_with_vosk()
-            
+                
             # Call post-utterance callback if utterance was detected recently, otherwise return to wake word detection
             if self.post_utterance_callback and result:
                 if not hasattr(self, 'loopcheck'):
@@ -259,6 +303,76 @@ class STTManager:
         #print(f"INFO: No transcription within duration limit.")
         return None
 
+    def _transcribe_with_whisper(self):
+            """
+            Transcribe audio using the Whisper model.
+            """
+            if not self.whisper_model:
+                print("ERROR: Whisper model not loaded. Transcription cannot proceed.")
+                return None
+
+            try:
+                audio_buffer = BytesIO()
+                detected_speech = False
+                silent_frames = 0
+                max_silent_frames = 12  # ~1.25 seconds of silence
+
+                #print(f"STAT: Starting audio recording...")
+                with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+                    with wave.open(audio_buffer, "wb") as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(self.SAMPLE_RATE)
+
+                        for _ in range(100):  # Limit maximum recording duration (~12.5 seconds)
+                            data, _ = stream.read(4000)
+                            data = self.amplify_audio(data)  # Apply amplification
+                            wf.writeframes(data.tobytes())
+
+                            is_silence, detected_speech, silent_frames = self._is_silence_detected(
+                                data, detected_speech, silent_frames, max_silent_frames
+                            )
+                            if is_silence:
+                                break
+
+                # Ensure the audio buffer is not empty
+                audio_buffer.seek(0)
+                if audio_buffer.getbuffer().nbytes == 0:
+                    print(f"ERROR: Audio buffer is empty. No audio recorded.")
+                    return None
+
+                # Save audio to a temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio_file:
+                    temp_audio_file.write(audio_buffer.read())
+                    temp_audio_path = temp_audio_file.name
+
+                # Transcribe using Whisper
+                try:
+                    audio = whisper.load_audio(temp_audio_path)
+                    audio = whisper.pad_or_trim(audio)
+                    mel = whisper.log_mel_spectrogram(audio).to(self.whisper_model.device)
+                    options = whisper.DecodingOptions(fp16=False)
+                    result = whisper.decode(self.whisper_model, mel, options)
+                    
+                    # Format result as JSON
+                    if hasattr(result, "text") and result.text:
+                        transcribed_text = result.text.strip()
+                        formatted_result = {"text": transcribed_text}
+                        if self.utterance_callback:
+                            self.utterance_callback(json.dumps(formatted_result))  # Send JSON string to the callback
+                        return formatted_result
+                    else:
+                        print("ERROR: No transcribed text received from Whisper.")
+                        return None
+                finally:
+                    # Clean up temporary file
+                    if os.path.exists(temp_audio_path):
+                        os.unlink(temp_audio_path)
+
+            except Exception as e:
+                print(f"ERROR: Whisper transcription failed: {e}")
+                return None
+ 
     def _transcribe_with_server(self):
         """
         Transcribe audio by sending it to a server for processing.
@@ -295,7 +409,7 @@ class STTManager:
 
             print(f"STAT: Sending audio to server...")
             files = {"audio": ("audio.wav", audio_buffer, "audio/wav")}
-            response = requests.post(f"{self.config['STT']['server_url']}/save_audio", files=files, timeout=10)
+            response = requests.post(f"{self.config['STT']['external_url']}/save_audio", files=files, timeout=10)
 
             if response.status_code == 200:
                 transcription = response.json().get("transcription", [])

@@ -71,8 +71,9 @@ def load_config():
         "STT": {
             "wake_word": config['STT']['wake_word'],
             "sensitivity": config['STT']['sensitivity'],
-            "use_server": config.getboolean('STT', 'use_server'),
-            "server_url": config['STT']['server_url'],
+            "stt_processor": config['STT']['stt_processor'],
+            "external_url": config['STT']['external_url'],
+            "whisper_model": config['STT']['whisper_model'],
             "vosk_model": config['STT']['vosk_model'],
             "use_indicators": config.getboolean('STT', 'use_indicators'),
         },
