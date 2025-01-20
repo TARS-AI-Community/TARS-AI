@@ -174,3 +174,4 @@ captured_image.jpg
 config.ini
 output.wav
 memory/initial_memory.json
+memory/initial_memory.json.loaded
