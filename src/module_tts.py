@@ -228,7 +228,6 @@ def server_tts(text, ttsurl, tts_voice):
     except Exception as e:
         print(f"ERROR: Server TTS generation failed: {e}")
 
-
 def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
     """
     Generate TTS audio for the given text using the specified TTS system.
