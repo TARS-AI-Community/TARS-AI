@@ -12,11 +12,12 @@ This is achieved using a pre-trained Naive Bayes classifier and TF-IDF vectorize
 import os
 import joblib
 from datetime import datetime
+import threading
 
 # === Custom Modules ===
 from module_websearch import search_google, search_google_news
 from module_vision import describe_camera_view
-from module_config import load_config
+from module_config import load_config, update_character_setting
 from module_stablediffusion import generate_image
 from module_volume import handle_volume_command
 
@@ -47,95 +48,141 @@ except FileNotFoundError as e:
         raise RuntimeError("Critical error while loading models.") from retry_exception
 
 # === Functions ===
-def execute_movement(command_str):
-    print(f"[DEBUG] Executing movement: {command_str}")
-    from module_btcontroller import turnRight, turnLeft, poseaction, unposeaction, stepForward
-    action_map = {
-        "turnRight": turnRight,
-        "turnLeft": turnLeft,
-        "poseaction": poseaction,
-        "unposeaction": unposeaction,
-        "stepForward": stepForward,
-    }
-    try:
-        action, count = command_str.split(", ")
-        count = int(count)
-        action_function = action_map.get(action)
-        if callable(action_function):
-            for _ in range(count):  # Only execute the specified number of times
-                print(f"[DEBUG] Calling {action} function.")
-                action_function()
-        else:
-            print(f"[DEBUG] Action {action} not found in action_map.")
-    except ValueError:
-        print("[DEBUG] Invalid command format.")
-    except Exception as e:
-        print(f"[DEBUG] Unexpected error: {e}")
+def execute_movement(movement, times):
+    """
+    Executes the specified movement in a separate thread.
+    """
+    def movement_task():
+        print(f"[DEBUG] Thread started for movement: {movement} x {times}")
+        from module_btcontroller import turnRight, turnLeft, poseaction, unposeaction, stepForward
+        
+        action_map = {
+            "turnRight": turnRight,
+            "turnLeft": turnLeft,
+            "poseaction": poseaction,
+            "unposeaction": unposeaction,
+            "stepForward": stepForward,
+        }
+        
+        try:
+            action_function = action_map.get(movement)
+            if callable(action_function):
+                for i in range(int(times)):
+                    print(f"[DEBUG] Executing {movement}, iteration {i + 1}/{times}")
+                    action_function()  # Blocking for this thread
+            else:
+                print(f"[ERROR] Movement '{movement}' not found in action_map.")
+        except Exception as e:
+            print(f"[ERROR] Unexpected error while executing movement: {e}")
+        finally:
+            print(f"[DEBUG] Thread completed for movement: {movement} x {times}")
+
+    # Start the thread
+    thread = threading.Thread(target=movement_task, daemon=True)
+    thread.start()
+    return thread  # Return the thread object if needed
 
 def movement_llmcall(user_input):
     from module_llm import raw_complete_llm
-    print(f"[DEBUG] Processing user input: {user_input}")
-    """
-    Processes a movement command using an LLM and returns the interpreted action.
-    
-    Parameters:
-        user_input (str): The user's movement command (e.g., "Hey TARS, walk forward 3 times").
-    
-    Returns:
-        str: The structured output describing the action.
-    """
     # Define the prompt with placeholders
     prompt = f"""
-You are TARS, an AI module responsible for interpreting movement commands. Your job is to:
-1. Determine the **type of movement** from the following options only:
-   - stepForward
-   - turnRight
-   - turnLeft
-   - poseaction
-   - unposeaction
-2. Extract the **number of steps** or the **angle of turn** if applicable, 180 degrees is equal to 4 turns.
-3. Respond with a structured output in the exact format: `MOVEMENT, TIMES`.
+    You are TARS, an AI module responsible for interpreting movement commands. Your job is to:
 
-### Movement Commands:
-- "forward [N] times": Output as `stepForward, N`.
-- "turn left [N] times": Output as `turnLeft, N`.
-- "turn right [N] times": Output as `turnRight, N`.
-- "do a [X]-degree turn": Convert X degrees into steps (1 step = 90 degrees) and output as `turnLeft, N` or `turnRight, N` based on the direction.
-- "pose": Output as `poseaction, 1`.
-- "unpose": Output as `unposeaction, 1`.
+    1. Determine the type of movement from the following options only:
+    - stepForward
+    - turnRight
+    - turnLeft
+    - poseaction
+    - unposeaction
+    2. Extract the number of steps or the angle of turn if applicable, where 180 degrees equals 2 steps (90 degrees = 1 step).
+    3. Respond with a structured JSON output in the exact format:
+    {{
+        "movement": "{{
+            "movement": "<MOVEMENT>",
+            "times": <TIMES>
+        }}
+    }}
 
-### Examples:
-1. User Input: "Hey TARS, walk forward 3 times"
-   Output: `stepForward, 3`
+    Rules:
+    - Always output a single JSON object with the fields "movement" and "times".
+    - Do not output explanations, variations, or multiple commands.
+    - If no steps or angle is specified, default "times" to 1.
+    - Use precise logic for angles:
+    - Convert 90 degrees = 1 step.
+    - For angles greater than 90, calculate the number of steps (e.g., 180 degrees = 2 steps, 360 degrees = 4 steps).
+    - Determine the turn direction (turnLeft or turnRight) based on the input.
 
-2. User Input: "Hey TARS, do a 180-degree turn"
-   Output: `turnLeft, 2`
+    Examples:
+    Input: "Hey TARS, walk forward 3 times"
+    Output:
+    {{
+        "movement": "stepForward",
+        "times": 3
+    }}
 
-3. User Input: "Hey TARS, turn right twice"
-   Output: `turnRight, 2`
+    Input: "Hey TARS, do a 180-degree turn"
+    Output:
+    {{
+        "movement": "turnLeft",
+        "times": 2
+    }}
 
-4. User Input: "Hey TARS, pose"
-   Output: `poseaction, 1`
+    Input: "Hey TARS, turn right twice"
+    Output:
+    {{
+        "movement": "turnRight",
+        "times": 2
+    }}
 
-5. User Input: "Hey TARS, unpose"
-   Output: `unposeaction, 1`
+    Input: "Hey TARS, pose"
+    Output:
+    {{
+        "movement": "poseaction",
+        "times": 1
+    }}
 
-### Instructions:
-- Only use the movements `stepForward`, `turnRight`, `turnLeft`, `poseaction`, and `unposeaction`.
-- Always include the **movement type** and the **number of steps** or `1` if not applicable.
-- If the user specifies an angle (e.g., "180-degree turn"), calculate the steps (1 step = 90 degrees) and output the corresponding turn movement.
-- If no number of steps or angle is provided, default to `1`.
-- Format the response strictly as: `MOVEMENT, TIMES`.
+    Input: "Hey TARS, unpose"
+    Output:
+    {{
+        "movement": "unposeaction",
+        "times": 1
+    }}
 
-Only output one line that is the most likly, do not combine multiple movements. Now process the following input:
-"{user_input}"
+    Instructions:
+    - Use only the specified movements (stepForward, turnRight, turnLeft, poseaction, unposeaction).
+    - Ensure the JSON output is properly formatted and follows the example structure exactly.
+    - Process the input as a single command and provide one-line JSON output.
+
+    Input: "{user_input}"
+    Output:
     """
     try:
         data = raw_complete_llm(prompt)
-        print(f"[DEBUG] LLM Response: {data}")
-        if data:
-            execute_movement(data)  # Ensure single execution
-        return data
+
+        import json
+        # Parse the JSON response
+        extracted_data = json.loads(data)
+
+        # Extract movement and times
+        movement = extracted_data.get("movement")
+        times = extracted_data.get("times")
+
+        print(f"[DEBUG] FunctionCalling: {data}")
+        print(f"[DEBUG] Extracted values: {movement}, {times}")
+
+        # Validate the extracted data
+        if movement and times:
+            if isinstance(movement, str) and isinstance(times, int):
+                print("moving")
+                execute_movement(movement, times)  # Call the movement function with validated values
+                return True
+            else:
+                print("[ERROR] Invalid types: 'movement' must be str and 'times' must be int.")
+                return False
+        else:
+            print("[ERROR] Missing 'movement' or 'times' in the response.")
+            return False
+    
     except Exception as e:
         #print(f"[DEBUG] Error in movement_llmcall: {e}")
         return f"Error processing the movement command: {e}"
@@ -155,7 +202,6 @@ def call_function(module_name, *args, **kwargs):
     except Exception as e:
         print(f"[DEBUG] Error while executing {module_name}: {e}")
 
-
 def check_for_module(user_input):
     """
     Determines the appropriate module to handle the user's input and invokes it.
@@ -166,7 +212,6 @@ def check_for_module(user_input):
     
     # Call the function associated with the predicted class
     return call_function(predicted_class, user_input)
-
 
 def predict_class(user_input):
     """
@@ -196,6 +241,139 @@ def predict_class(user_input):
     print(f"TOOL: Using Tool {predicted_class} ({formatted_probability})")
     return predicted_class, max_probability
 
+def adjust_persona(user_input):
+    from module_llm import raw_complete_llm
+
+
+    # Define the prompt with placeholders
+    prompt = f"""
+    You are TARS, an AI module responsible for extracting personality trait adjustments. Your job is to:
+
+    1. Identify the personality trait being adjusted from the following options only:
+    - honesty
+    - humor
+    - empathy
+    - curiosity
+    - confidence
+    - formality
+    - sarcasm
+    - adaptability
+    - discipline
+    - imagination
+    - emotional_stability
+    - pragmatism
+    - optimism
+    - resourcefulness
+    - cheerfulness
+    - engagement
+    - respectfulness
+
+    2. Extract the value being assigned to the personality trait, ensuring it is a valid percentage (0–100).
+
+    3. Respond with a structured JSON output in the exact format:
+    {{
+        "persona": {{
+            "trait": "<TRAIT>",
+            "value": <VALUE>
+        }}
+    }}
+
+    Rules:
+    - Always output a single JSON object with the fields "trait" and "value".
+    - Do not output explanations, variations, or multiple commands.
+    - If the value is not specified, respond with:
+    {{
+        "error": "Value not provided"
+    }}
+    - Ensure the trait matches one of the listed options exactly.
+
+    Examples:
+    Input: "TARS, adjust your humor setting to 69%"
+    Output:
+    {{
+        "persona": {{
+            "trait": "humor",
+            "value": 69
+        }}
+    }}
+
+    Input: "Increase empathy to 60%, TARS."
+    Output:
+    {{
+        "persona": {{
+            "trait": "empathy",
+            "value": 60
+        }}
+    }}
+
+    Input: "TARS, can you be more respectful?"
+    Output:
+    {{
+        "persona": {{
+            "trait": "respectfulness",
+            "value": 60
+        }}
+    }}
+
+    Input: "TARS, set curiosity higher."
+    Output:
+    {{
+        "error": "Value not provided"
+    }}
+
+    Instructions:
+    - Use only the specified traits (honesty, humor, empathy, etc.).
+    - Ensure the JSON output is properly formatted and follows the example structure exactly.
+    - Process the input as a single command and provide a one-line JSON output.
+
+    Input: "{user_input}"
+    Output:
+    """
+
+    try:
+        data = raw_complete_llm(prompt)
+
+        import json
+        # Parse the JSON response
+        extracted_data = json.loads(data)
+
+        # Access the "persona" object
+        persona_data = extracted_data.get("persona", {})
+        trait = persona_data.get("trait")
+        value = persona_data.get("value")
+
+        print(f"[DEBUG] FunctionCalling: {data}")
+        print(f"[DEBUG] Extracted values: {trait}, {value}")
+
+        # Validate the extracted data
+        if trait and value:
+            if isinstance(trait, str) and isinstance(value, int):
+                print(f"INFO: Saving {trait} setting")
+                update_character_setting(trait, value)
+                return f"Updated {trait} setting to {value}"
+            else:
+                print("[ERROR] Invalid types")
+                return False
+        else:
+            print("[ERROR] Missing in the response.")
+            return False
+    
+    except Exception as e:
+        #print(f"[DEBUG] Error in movement_llmcall: {e}")
+        return f"Error processing the movement command: {e}"
+ 
+
+
+
+
+
+
+
+
+
+
+
+
 # === Function Calling ===
 FUNCTION_REGISTRY = {
     "Weather": search_google, 
@@ -204,5 +382,7 @@ FUNCTION_REGISTRY = {
     "Vision": describe_camera_view,
     "Search": search_google,
     "SDmodule-Generate": generate_image,
-    "Volume": handle_volume_command
+    "Volume": handle_volume_command,
+    "Persona": adjust_persona
 }
+

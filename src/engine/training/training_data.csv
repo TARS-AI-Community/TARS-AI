@@ -307,6 +307,8 @@ Turn around,Move
 Pose,Move
 Unpose,Move
 Strike a pose,Move
+stand up straight,Move
+unpose,Move
 Get up,Move
 Sit down,Move
 Crouch,Move
@@ -456,3 +458,54 @@ adjust sound to 70%,Volume
 volume adjust to 40,Volume
 volume up,Volume
 volume down,Volume
+TARS adjust your honesty setting to 90%,Persona
+Make TARS more honest,Persona
+TARS lower your honesty level,Persona
+TARS adjust your humor setting to 69%,Persona
+Increase your humor level,Persona
+Dial down the humor,Persona
+TARS can you increase your empathy to 60%?,Persona
+Make TARS more empathetic,Persona
+Reduce empathy to 40%,Persona
+TARS adjust your curiosity to 70%,Persona
+Can you be more curious TARS?,Persona
+Lower your curiosity setting,Persona
+TARS increase your confidence to 95%,Persona
+Can you boost your confidence level?,Persona
+Reduce confidence slightly,Persona
+Set your formality to 50% TARS,Persona
+TARS be less formal,Persona
+Increase your formality to 80%,Persona
+TARS lower sarcasm to 85%,Persona
+Dial up sarcasm slightly,Persona
+Can you be more sarcastic TARS?,Persona
+Adjust adaptability to 80%,Persona
+TARS make yourself more adaptable,Persona
+Lower adaptability settings,Persona
+Set discipline to 100%,Persona
+Can you be more disciplined TARS?,Persona
+Reduce discipline slightly,Persona
+Adjust imagination to 40%,Persona
+Can you be more imaginative TARS?,Persona
+Lower imagination settings,Persona
+TARS set emotional stability to 100%,Persona
+Increase your emotional stability,Persona
+TARS can you calm down?,Persona
+TARS adjust your pragmatism to 95%,Persona
+Make TARS more pragmatic,Persona
+Reduce pragmatism slightly,Persona
+Increase optimism to 70%,Persona
+TARS be more optimistic,Persona
+Lower your optimism setting,Persona
+Set resourcefulness to 90%,Persona
+Can you be more resourceful TARS?,Persona
+Dial down resourcefulness,Persona
+Adjust cheerfulness to 50%,Persona
+Can you make TARS more cheerful?,Persona
+Reduce your cheerfulness,Persona
+Increase engagement to 75%,Persona
+TARS can you be more engaged?,Persona
+Lower your engagement level,Persona
+Adjust respectfulness to 60%,Persona
+TARS be more respectful,Persona
+Lower your respectfulness,Persona

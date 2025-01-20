@@ -23,3 +23,5 @@ soundfile #needed for alltalk tts
 piper-tts #needed for local TTS with voice clone
 discord.py[voice] #needed to voice chat with tars on discord
 #sudo apt install ffmpeg
+configobj #needed to keep comments in the config.ini when updating
+

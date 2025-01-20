@@ -19,7 +19,7 @@ load_dotenv() # Load environment variables from .env file
 
 def load_config():
     """
-    Load configuration settings from 'config.ini' and return them as a dictionary.
+    Load configuration settings from 'config.ini' and 'persona.ini' and return them as a dictionary.
     This function will print an error and exit if any configuration is invalid or missing.
     
     Returns:
@@ -31,11 +31,20 @@ def load_config():
     sys.path.insert(0, base_dir)
     sys.path.append(os.getcwd())
 
-    # Parse the config file
+    # Parse the main config.ini file
     config = configparser.ConfigParser()
     config.read('config.ini')
 
-    # Ensure required sections and keys exist
+    # Parse the persona.ini file
+    persona_config = configparser.ConfigParser()
+    persona_path = os.path.join(base_dir, 'character', 'persona.ini')
+    if not os.path.exists(persona_path):
+        print(f"ERROR: {persona_path} not found.")
+        sys.exit(1)  # Exit if persona.ini is missing
+
+    persona_config.read(persona_path)
+
+    # Ensure required sections and keys exist in config.ini
     required_sections = [
         'CONTROLS', 'STT', 'CHAR', 'LLM', 'VISION', 'EMOTION', 'TTS', 'DISCORD', 'SERVO', 'STABLE_DIFFUSION'
     ]
@@ -43,32 +52,17 @@ def load_config():
 
     if missing_sections:
         print(f"ERROR: Missing sections in config.ini: {', '.join(missing_sections)}")
-        sys.exit(1)  # Exit the program if sections are missing
+        sys.exit(1)
 
-    required_keys = {
-        'CONTROLS': ['controller_name'],
-        'STT': ['wake_word', 'sensitivity', 'use_server', 'server_url', 'vosk_model', 'use_indicators'],
-        'CHAR': ['character_card_path', 'user_name', 'user_details'],
-        'LLM': ['llm_backend', 'base_url', 'openai_model', 'override_encoding_model', 'contextsize', 'max_tokens', 'temperature', 'top_p', 'seed', 'systemprompt', 'instructionprompt'],
-        'VISION': ['server_hosted', 'base_url'],
-        'EMOTION': ['enabled', 'emotion_model', 'storepath'],
-        'TTS': ['ttsoption', 'azure_region', 'ttsurl', 'toggle_charvoice', 'tts_voice', 'voice_only', 'is_talking_override', 'is_talking', 'global_timer_paused'],
-        'DISCORD': ['channel_id', 'enabled'],
-        'SERVO': ['portMain', 'portForarm', 'portHand', 'starMain', 'starForarm', 'starHand', 'upHeight', 'neutralHeight', 'downHeight', 'forwardPort', 'neutralPort', 'backPort', 'perfectportoffset', 'forwardStarboard', 'neutralStarboard', 'backStarboard', 'perfectStaroffset'],
-        'STABLE_DIFFUSION': ['enabled', 'service', 'url', 'prompt_prefix', 'prompt_postfix', 'seed', 'sampler_name', 'denoising_strength', 'steps', 'cfg_scale', 'width', 'height', 'restore_faces', 'negative_prompt']
-    }
+    # Extract persona traits
+    persona_traits = {}
+    if 'PERSONA' in persona_config:
+        persona_traits = {key: int(value) for key, value in persona_config['PERSONA'].items()}
+    else:
+        print("ERROR: [PERSONA] section missing in persona.ini.")
+        sys.exit(1)
 
-    missing_keys = []
-    for section, keys in required_keys.items():
-        for key in keys:
-            if key not in config[section]:
-                missing_keys.append(f"{section} -> {key}")
-
-    if missing_keys:
-        print(f"ERROR: Missing keys in config.ini: {', '.join(missing_keys)}")
-        sys.exit(1)  # Exit the program if keys are missing
-
-    # Extract and return configuration variables with manual type conversion
+    # Extract and return combined configurations
     return {
         "BASE_DIR": base_dir,
         "CONTROLS": {
@@ -86,6 +80,7 @@ def load_config():
             "character_card_path": config['CHAR']['character_card_path'],
             "user_name": config['CHAR']['user_name'],
             "user_details": config['CHAR']['user_details'],
+            "traits": persona_traits,  # Include the traits from persona.ini
         },
         "LLM": {
             "llm_backend": config['LLM']['llm_backend'],
@@ -164,6 +159,7 @@ def load_config():
         },
     }
 
+
 def get_api_key(llm_backend: str) -> str:
     """
     Retrieves the API key for the specified LLM backend.
@@ -191,3 +187,44 @@ def get_api_key(llm_backend: str) -> str:
         raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: API key not found for LLM backend: {llm_backend}")
     
     return api_key
+
+
+def update_character_setting(setting, value):
+    """
+    Update a specific setting in the [CHAR] section of the config.ini file.
+
+    Parameters:
+    - setting (str): The setting to update (e.g., 'humor', 'honesty').
+    - value (int): The new value for the setting.
+
+    Returns:
+    - bool: True if the update is successful, False otherwise.
+    """
+    # Determine the path to config.ini in the same folder as this script
+
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'character', 'persona.ini')
+
+    config = configparser.ConfigParser()
+
+    try:
+        # Read the config file
+        config.read(config_path)
+
+        # Check if [CHAR] section exists
+        if 'PERSONA' not in config:
+            print("Error: [PERSONA] section not found in the config file.")
+            return False
+
+        # Update the setting
+        config['PERSONA'][setting] = str(value)
+
+        # Write the changes back to the file
+        with open(config_path, 'w') as config_file:
+            config.write(config_file)
+
+        print(f"Updated {setting} to {value} in [PERSONA] section.")
+        return True
+
+    except Exception as e:
+        print(f"Error updating setting: {e}")
+        return False
