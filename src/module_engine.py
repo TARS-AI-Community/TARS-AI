@@ -20,12 +20,14 @@ from module_vision import describe_camera_view
 from module_stablediffusion import generate_image
 from module_volume import handle_volume_command
 from module_homeassistant import send_prompt_to_homeassistant
-
+from module_tts import generate_tts_audio
+from module_config import load_config
 
 # === Constants ===
 MODEL_FILENAME = 'engine/pickles/naive_bayes_model.pkl'
 VECTORIZER_FILENAME = 'engine/pickles/module_engine_model.pkl'
 
+CONFIG = load_config()
 # === Load Models ===
 try:
     if not os.path.exists(VECTORIZER_FILENAME):
@@ -237,6 +239,8 @@ def predict_class(user_input):
     # Format the value as a percentage with 2 decimal places
     formatted_probability = "{:.2f}%".format(max_probability * 100)
     print(f"TOOL: Using Tool {predicted_class} ({formatted_probability})")
+    generate_tts_audio("processing, processing, processing", CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
+
     return predicted_class, max_probability
 
 def adjust_persona(user_input):
