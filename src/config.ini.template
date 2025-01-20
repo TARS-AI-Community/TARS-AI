@@ -151,6 +151,12 @@ restore_faces = False
 negative_prompt = deformed, black and white, disfigured, low contrast, extra limbs, bad anatomy, bad hands
 # The model will attempt to avoid creating images with these characteristics.
 
+[HOME_ASSISTANT] # HA Module
+enabled = False
+# If set to False, the Stable Diffusion module will be disabled.
+url = http://192.168.2.5:8123
+# Url to acccess HA from (set Token in .env file!).
+
 [DISCORD] # Discord bot integration
 enabled = False
 # Enable or disable Discord integration

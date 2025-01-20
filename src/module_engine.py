@@ -17,12 +17,10 @@ import threading
 # === Custom Modules ===
 from module_websearch import search_google, search_google_news
 from module_vision import describe_camera_view
-from module_config import load_config, update_character_setting
 from module_stablediffusion import generate_image
 from module_volume import handle_volume_command
+from module_homeassistant import send_prompt_to_homeassistant
 
-# Load configuration
-config = load_config()
 
 # === Constants ===
 MODEL_FILENAME = 'engine/pickles/naive_bayes_model.pkl'
@@ -243,8 +241,6 @@ def predict_class(user_input):
 
 def adjust_persona(user_input):
     from module_llm import raw_complete_llm
-
-
     # Define the prompt with placeholders
     prompt = f"""
     You are TARS, an AI module responsible for extracting personality trait adjustments. Your job is to:
@@ -362,18 +358,6 @@ def adjust_persona(user_input):
         #print(f"[DEBUG] Error in movement_llmcall: {e}")
         return f"Error processing the movement command: {e}"
  
-
-
-
-
-
-
-
-
-
-
-
-
 # === Function Calling ===
 FUNCTION_REGISTRY = {
     "Weather": search_google, 
@@ -383,6 +367,6 @@ FUNCTION_REGISTRY = {
     "Search": search_google,
     "SDmodule-Generate": generate_image,
     "Volume": handle_volume_command,
-    "Persona": adjust_persona
+    "Persona": adjust_persona,
+    "Home_Assistant": send_prompt_to_homeassistant
 }
-

@@ -118,6 +118,11 @@ def load_config():
             "is_talking": config.getboolean('TTS', 'is_talking'),
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
         },
+        "HOME_ASSISTANT": {
+            "enabled": config['HOME_ASSISTANT']['enabled'],
+            "url": config['HOME_ASSISTANT']['url'],
+            "HA_TOKEN": os.getenv('HA_TOKEN'),
+        },
         "DISCORD": {
             "TOKEN": os.getenv('DISCORD_TOKEN'),
             "channel_id": config['DISCORD']['channel_id'],
