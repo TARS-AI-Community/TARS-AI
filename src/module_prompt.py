@@ -9,7 +9,7 @@ import os
 from module_engine import check_for_module
 
 
-def build_prompt(user_prompt, character_manager, memory_manager, config, debug=True):
+def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
     """
     Build a dynamically optimized prompt for the LLM backend.
 
