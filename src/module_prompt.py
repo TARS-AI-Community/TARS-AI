@@ -34,6 +34,7 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
         [f"- {trait}: {value}" for trait, value in character_manager.traits.items()]
     )
 
+    
     # Build the base prompt
     base_prompt = (
         f"System: {config['LLM']['systemprompt']}\n\n"
@@ -44,7 +45,6 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
         f"{dtg}\n---\n\n"
         f"### Character Details:\n---\n{character_manager.character_card}\n---\n\n"
         f"### {char_name} Settings:\n{persona_traits}\n---\n\n"
-        f"### Function Calling Tool:\nTool Used: {functioncall}\n"
     )
 
     # Dynamically append memory and examples
@@ -103,6 +103,7 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     base_prompt,
     f"### Memory:\n---\nLong-Term Context:\n{past_memory}\n---\n",
     f"### Interaction:\n{config['CHAR']['user_name']}: {user_prompt}\n\n",
+    f"### Function Calling Tool:\nResult: {functioncall}\n"
     f"### Response:\n{character_manager.char_name}: "
     ])
 
@@ -134,6 +135,7 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         f"### Memory:\n---\nLong-Term Context:\n{past_memory}\n---\n"
         f"Recent Conversation:\n{short_term_memory}\n---\n"
         f"### Interaction:\n{config['CHAR']['user_name']}: {user_prompt}\n\n"
+        f"### Function Calling Tool:\nResult: {functioncall}\n"
         f"### Response:\n{character_manager.char_name}: "
     )
 
