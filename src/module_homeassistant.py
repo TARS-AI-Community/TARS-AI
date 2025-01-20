@@ -9,7 +9,7 @@ HEADERS = {
 }
 
 def send_prompt_to_homeassistant(prompt):
-    if config['HOME_ASSISTANT']['url'] == "True":
+    if config['HOME_ASSISTANT']['enabled'] == "True":
         url = f"{config['HOME_ASSISTANT']['url']}/api/conversation/process"
         data = {"text": prompt}
 
