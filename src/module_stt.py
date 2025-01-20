@@ -332,8 +332,12 @@ class STTManager:
                             is_silence, detected_speech, silent_frames = self._is_silence_detected(
                                 data, detected_speech, silent_frames, max_silent_frames
                             )
+                            #print(f"is_silence {is_silence}, detected_speech {detected_speech}, silent_frames {silent_frames}")
                             if is_silence:
-                                break
+                                if not detected_speech:
+                                    #print("INFO: Silence detected without speech. Returning to wake word detection.")
+                                    return None  # Stop transcription and return to wake word detection
+                                break  # End recording if silence follows detected speech
 
                 # Ensure the audio buffer is not empty
                 audio_buffer.seek(0)
