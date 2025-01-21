@@ -21,7 +21,7 @@ from module_stablediffusion import generate_image
 from module_volume import handle_volume_command
 from module_homeassistant import send_prompt_to_homeassistant
 from module_tts import generate_tts_audio
-from module_config import load_config
+from module_config import load_config, update_character_setting
 
 # === Constants ===
 MODEL_FILENAME = 'engine/pickles/naive_bayes_model.pkl'
