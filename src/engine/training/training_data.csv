@@ -537,3 +537,24 @@ Dim the lights in the hallway,Home_Assistant
 Change the color of the lights to purple,Home_Assistant
 Set the brightness level to 70%,Home_Assistant
 Set the brightness level to 50%,Home_Assistant
+Turn off the floor lamp,Home_Assistant
+Lock the front door,Home_Assistant
+Unlock the garage door,Home_Assistant
+Check the air quality sensor,Home_Assistant
+Turn on the coffee maker,Home_Assistant
+Turn off the bedroom lights,Home_Assistant
+Set the blinds to 50% open,Home_Assistant
+Start the vacuum cleaner,Home_Assistant
+Stop the dishwasher,Home_Assistant
+Open the garage door,Home_Assistant
+Arm the security system,Home_Assistant
+Disarm the security system,Home_Assistant
+Set the thermostat to eco mode,Home_Assistant
+Start playing a movie on the living room TV,Home_Assistant
+Turn off the outdoor string lights,Home_Assistant
+Set the water heater to 55 degrees,Home_Assistant
+Turn on the garden lights,Home_Assistant
+Check the current power usage,Home_Assistant
+Turn off all the lights in the house,Home_Assistant
+Start the washing machine,Home_Assistant
+Announce "Dinner is ready" on all speakers,Home_Assistant
