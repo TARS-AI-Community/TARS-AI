@@ -141,14 +141,37 @@ def utterance_callback(message):
         # Process the message using process_completion
         reply = process_completion(message_dict['text'])  # Process the message
 
-        #print(f"TARS: {reply}")
+        # Extract the <think> block if present
+        try:
+            match = re.search(r"<think>(.*?)</think>", reply, re.DOTALL)
+            thoughts = match.group(1).strip() if match else ""
+            
+            # Remove the <think> block and clean up trailing whitespace/newlines
+            reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
+        except Exception:
+            thoughts = ""
+
+        # Debug output for thoughts
+        if thoughts:
+            #print(f"DEBUG: Thoughts\n{thoughts}")
+            pass
+
+        # Stream the AI's reply
         stream_text_nonblocking(f"TARS: {reply}")
+
         # Stream TTS audio to speakers
-        #print("Fetching TTS audio...")
-        generate_tts_audio(reply, CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
+        generate_tts_audio(
+            reply,
+            CONFIG['TTS']['ttsoption'],
+            CONFIG['TTS']['azure_api_key'],
+            CONFIG['TTS']['azure_region'],
+            CONFIG['TTS']['ttsurl'],
+            CONFIG['TTS']['toggle_charvoice'],
+            CONFIG['TTS']['tts_voice']
+        )
 
     except json.JSONDecodeError:
-        print(f"ERROR: Invalid JSON format. Could not process user message.")
+        print("ERROR: Invalid JSON format. Could not process user message.")
     except Exception as e:
         print(f"ERROR: {e}")
 
