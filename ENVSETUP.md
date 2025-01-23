@@ -233,3 +233,37 @@ For more details, refer to the official [XTTS API Server Installation Guide](htt
    ```
 6. Click **"Execute"** to send the request.
 7. Check the response for a generated audio file. You should see a download field where you can download and listen to the audio output.
+
+# Home Assistant Integration for TARS
+This documentation outlines the integration of the TARS AI Assistant with Home Assistant, enabling automated voice-activated function calls.
+
+## Overview
+The integration allows TARS to communicate with your Home Assistant setup to automatically process voice commands. It leverages Home Assistant's "Assistant" functionality to send prompts and execute corresponding actions.
+
+## Prerequisites
+1. Ensure that Home Assistant is installed and accessible on your network.
+2. Have TARS set up in your environment.
+3. A long-lived access token generated from Home Assistant.
+
+## Configuration Steps
+Step 1. **Update your `config.ini` file:**
+   
+   Ensure the Home Assistant module is enabled and configure the URL:
+   ```ini
+   [HOME_ASSISTANT] # HA Module
+   enabled = True
+   # If set to False, the Home Assistant module will be disabled.
+   url = http://homeassistant.local:8123
+   # http://192.168.2.5:8123
+   # Url to acccess HA from (set Token in .env file!).
+   ```
+   Adjust the URL if your Home Assistant is accessible via a different address.
+
+Step 2. **Add HA_TOKEN to `.env`:**
+   - Log into Home Assistant.
+   - Select your user profile (bottom left).
+   - In the Security menu, scroll down to "Long-lived access tokens".
+   - Create a new token, name it, and **copy the token**.
+   - Add this token to your `.env` file as `HA_TOKEN="INSERT TOKEN HERE"`.
+
+**Note:** Verify the token works before closing the creation dialog.
