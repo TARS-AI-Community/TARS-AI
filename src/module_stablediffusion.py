@@ -13,6 +13,15 @@ from module_config import load_config
 config = load_config()
 
 def generate_image(prompt):
+    """
+    Generate an image based on the provided prompt using the configured image generation service.
+
+    Parameters:
+    - prompt (str): A textual description of the image to be generated.
+
+    Returns:
+    - str: The result of the image generation process. If the tool is disabled, returns "Image Tool not enabled."
+    """
     result = "Image Tool not enabled"
     if config['STABLE_DIFFUSION']['enabled'] == "True":
         if config['STABLE_DIFFUSION']['service'] == "openai":

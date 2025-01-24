@@ -83,6 +83,16 @@ def execute_movement(movement, times):
     return thread  # Return the thread object if needed
 
 def movement_llmcall(user_input):
+    """
+    Interpret and execute movement commands based on user input using an LLM.
+
+    Parameters:
+    - user_input (str): The natural language command describing the desired movement (e.g., "turn right 90 degrees" or "step forward 3 times").
+
+    Returns:
+    - bool: True if the movement command was successfully interpreted and executed, False otherwise.
+    - str: Error message if the command could not be processed.
+    """
     from module_llm import raw_complete_llm
     # Define the prompt with placeholders
     prompt = f"""
@@ -213,7 +223,7 @@ def check_for_module(user_input):
     # Call the function associated with the predicted class
     return call_function(predicted_class, user_input)
 
-def predict_class(user_input):
+def predict_class_nb(user_input):
     """
     Predicts the class and its confidence score for a given user input.
 
@@ -243,7 +253,104 @@ def predict_class(user_input):
 
     return predicted_class, max_probability
 
+def predict_class(user_input):
+    from module_llm import raw_complete_llm
+    import json
+
+    
+    tools_list = ", ".join([f"{key}: {value.__doc__}" for key, value in FUNCTION_REGISTRY.items()])
+    print(tools_list)
+
+    prompt = f"""
+    You are TARS, an AI module responsible for predicting the appropriate tool usage. Your tasks are:
+
+    1. Identify the tool being referenced from the following list of options and their descriptions:
+    {tools_list}
+
+    2. Extract the confidence level for the predicted tool usage, ensuring it is a valid percentage (0–100).
+
+    3. Respond with a structured JSON output in the exact format:
+    {{
+        "functioncall": {{
+            "tool": "<TOOL>",
+            "confidence": <CONFIDENCE>
+        }}
+    }}
+
+    Rules:
+    - Always output a single JSON object with the fields "tool" and "confidence".
+    - If no confidence is provided or cannot be inferred, set confidence to 50 by default.
+    - Ensure the tool matches one of the listed options exactly.
+    - Do not include any explanations or extra data in the output.
+
+    Instructions:
+    - Match the tool to the intent of the input based on its description and functionality.
+    - Only use tools from the provided list.
+
+    Input: "{user_input}"
+    Output:
+    """
+
+    try:
+        # Get the raw response from the LLM
+        data = raw_complete_llm(prompt)
+
+        # Parse the JSON response
+        extracted_data = json.loads(data)
+
+        # Access the "functioncall" object
+        function_call = extracted_data.get("functioncall", {})
+        tool = function_call.get("tool")
+        confidence = function_call.get("confidence")
+
+        print(f"[DEBUG] FunctionCalling: {data}")
+        print(f"[DEBUG] Extracted values: tool={tool}, confidence={confidence}")
+
+        # Validate the extracted values
+        if tool not in FUNCTION_REGISTRY:
+            print("[ERROR] Tool not recognized.")
+            return None, 0.0
+
+        if not isinstance(confidence, (int, float)):
+            print("[INFO] Confidence value not provided or invalid. Defaulting to 50%.")
+            confidence = 50.0
+
+        if confidence < 0 or confidence > 100:
+            print("[ERROR] Confidence value out of bounds. Setting to 50%.")
+            confidence = 50.0
+
+        # Normalize confidence to 0–1
+        confidence_normalized = confidence / 100.0
+
+        if confidence_normalized < 0.75:
+            print(f"[INFO] Confidence too low ({confidence_normalized:.2f}). Tool not used.")
+            return None, confidence_normalized
+
+        # Announce the decision via TTS (optional)
+        formatted_probability = f"{confidence_normalized * 100:.2f}%"
+        print(f"TOOL: Using Tool {tool} ({formatted_probability})")
+        generate_tts_audio("processing, processing, processing", CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
+
+        return tool, confidence_normalized
+
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Failed to parse LLM response: {e}")
+        return None, 0.0
+    except Exception as e:
+        print(f"[ERROR] Unexpected error in predict_class: {e}")
+        return None, 0.0
+    
 def adjust_persona(user_input):
+    """
+    Adjust the personality traits of TARS, such as humor, empathy, or formality.
+
+    Parameters:
+    - user_input (str): The natural language command specifying the trait and its new value (e.g., "Set humor to 75%").
+
+    Returns:
+    - str: A confirmation message indicating the updated trait and value, or an error message if the input is invalid.
+    """
+
     from module_llm import raw_complete_llm
     # Define the prompt with placeholders
     prompt = f"""
