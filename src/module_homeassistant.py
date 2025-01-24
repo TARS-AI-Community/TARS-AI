@@ -23,7 +23,7 @@ def clean_prompt(prompt):
 
 def send_prompt_to_homeassistant(prompt):
     """
-    Perform an action in Home Assistant, such as retrieving the state of a device or setting a value.
+    Perform an action in Home Assistant, such as retrieving the state of a device or setting a value, for example turn off the living room lights.
 
     Parameters:
     - prompt (str): The natural language query describing the desired action or device state.

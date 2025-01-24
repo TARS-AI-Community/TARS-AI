@@ -28,6 +28,10 @@ MODEL_FILENAME = 'engine/pickles/naive_bayes_model.pkl'
 VECTORIZER_FILENAME = 'engine/pickles/module_engine_model.pkl'
 
 CONFIG = load_config()
+
+#mode to use Naive Bayes or LLM for function calling
+mode = "NB"
+
 # === Load Models ===
 try:
     if not os.path.exists(VECTORIZER_FILENAME):
@@ -225,6 +229,16 @@ def check_for_module(user_input):
 
 def predict_class(user_input):
     """
+    Which method to use for function calling NB (single LLM CALL) or LLM (Multiple LLM Calls)
+    """
+    if mode == 'NB':
+        return predict_class_nb(user_input)
+    else:
+        return predict_class_llm(user_input)
+    return
+
+def predict_class_nb(user_input):
+    """
     Predicts the class and its confidence score for a given user input.
 
     Parameters:
@@ -257,15 +271,12 @@ def predict_class_llm(user_input):
     from module_llm import raw_complete_llm
     import json
 
-    
-    tools_list = ", ".join([f"{key}: {value.__doc__}" for key, value in FUNCTION_REGISTRY.items()])
-    print(tools_list)
 
     prompt = f"""
     You are TARS, an AI module responsible for predicting the appropriate tool usage. Your tasks are:
 
     1. Identify the tool being referenced from the following list of options and their descriptions:
-    {tools_list}
+    {FUNCTION_REGISTRY}
 
     2. Extract the confidence level for the predicted tool usage, ensuring it is a valid percentage (0–100).
 
@@ -300,14 +311,14 @@ def predict_class_llm(user_input):
 
         # Access the "functioncall" object
         function_call = extracted_data.get("functioncall", {})
-        tool = function_call.get("tool")
+        predicted_class = function_call.get("tool")
         confidence = function_call.get("confidence")
 
-        print(f"[DEBUG] FunctionCalling: {data}")
-        print(f"[DEBUG] Extracted values: tool={tool}, confidence={confidence}")
+        #print(f"[DEBUG] FunctionCalling: {data}")
+        print(f"[DEBUG] Extracted values: tool={predicted_class}, confidence={confidence}")
 
         # Validate the extracted values
-        if tool not in FUNCTION_REGISTRY:
+        if predicted_class not in FUNCTION_REGISTRY:
             print("[ERROR] Tool not recognized.")
             return None, 0.0
 
@@ -320,18 +331,18 @@ def predict_class_llm(user_input):
             confidence = 50.0
 
         # Normalize confidence to 0–1
-        confidence_normalized = confidence / 100.0
+        max_probability = confidence / 100.0
 
-        if confidence_normalized < 0.75:
-            print(f"[INFO] Confidence too low ({confidence_normalized:.2f}). Tool not used.")
-            return None, confidence_normalized
+        if max_probability < 0.75:
+            print(f"[INFO] Confidence too low ({max_probability:.2f}). Tool not used.")
+            return None, max_probability
 
         # Announce the decision via TTS (optional)
-        formatted_probability = f"{confidence_normalized * 100:.2f}%"
-        print(f"TOOL: Using Tool {tool} ({formatted_probability})")
+        formatted_probability = f"{max_probability * 100:.2f}%"
+        print(f"TOOL: Using Tool {predicted_class} ({formatted_probability})")
         generate_tts_audio("processing, processing, processing", CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
 
-        return tool, confidence_normalized
+        return predicted_class, max_probability
 
     except json.JSONDecodeError as e:
         print(f"[ERROR] Failed to parse LLM response: {e}")
