@@ -176,7 +176,8 @@ def llm_process(user_input, bot_response):
         #print(f"Memory updated with user input: {user_input} and bot response: {bot_response}")
 
     if CONFIG['EMOTION']['enabled']:
-        threading.Thread(target=detect_emotion, args=(bot_response,)).start()
+        emotionvalue = threading.Thread(target=detect_emotion, args=(bot_response,)).start()
+        #do something with emotionvalue (IE SAD, ANGRY)
 
     return bot_response
 

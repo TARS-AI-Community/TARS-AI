@@ -3,12 +3,6 @@ module_main.py
 
 Core logic module for the TARS-AI application.
 
-Integrates modules and manages key functionalities, including:
-- Text-to-Speech (TTS) playback and configuration
-- Interaction with Large Language Model (LLM) backends
-- Prompt building and AI response processing
-- Wake word handling and user interaction workflows
-- Emotion detection and system threading
 """
 # === Standard Libraries ===
 import os
