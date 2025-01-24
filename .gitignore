@@ -178,3 +178,4 @@ output.wav
 memory/initial_memory.json
 memory/initial_memory.loaded
 ./tars.sh
+character/persona.ini

@@ -8,7 +8,6 @@ from datetime import datetime
 import os
 from module_engine import check_for_module
 
-
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=True):
     """
     Build a dynamically optimized prompt for the LLM backend.
@@ -58,7 +57,6 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=T
         print(f"DEBUG PROMPT:\n{final_prompt}")
 
     return clean_text(final_prompt)
-
 
 def clean_text(text):
     """
@@ -138,7 +136,6 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         f"### Function Calling Tool:\nResult: {functioncall}\n"
         f"### Response:\n{character_manager.char_name}: "
     )
-
 
 def inject_dynamic_values(template, user_name, char_name):
     """
