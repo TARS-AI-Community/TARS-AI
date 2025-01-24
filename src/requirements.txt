@@ -15,14 +15,14 @@ python-dotenv
 pygame
 moviepy  # Python library for video editing / playing videos.
 sox
-#espeak-ng
-#alsa-utils
 adafruit-pca9685
 azure-cognitiveservices-speech #needed for azure TTS
 soundfile #needed for alltalk tts
 piper-tts #needed for local TTS with voice clone
 discord.py[voice] #needed to voice chat with tars on discord
-#sudo apt install ffmpeg
 configobj #needed to keep comments in the config.ini when updating
 openai
 
+#espeak-ng
+#alsa-utils
+#sudo apt install ffmpeg
