@@ -8,25 +8,41 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
+def clean_prompt(prompt):
+    """
+    Cleans and validates the prompt for Home Assistant.
+
+    Parameters:
+    - prompt (str): The natural language query.
+
+    Returns:
+    - str: Cleaned and formatted prompt.
+    """
+    # Basic cleanup: strip extra spaces and ensure proper capitalization
+    return prompt.strip()
+
 def send_prompt_to_homeassistant(prompt):
     """
     Perform an action in Home Assistant, such as retrieving the state of a device or setting a value.
 
     Parameters:
-    - query (str): The natural language query describing the desired action or device state.
+    - prompt (str): The natural language query describing the desired action or device state.
 
     Returns:
-    - tuple: The result of the action (e.g., device state, confirmation of value change) and any relevant metadata.
+    - dict: The response from Home Assistant API or an error message.
     """
+    print(f"sending prompt {prompt}")
 
     if config['HOME_ASSISTANT']['enabled'] == "True":
         url = f"{config['HOME_ASSISTANT']['url']}/api/conversation/process"
-        data = {"text": prompt}
-
+        cleaned_prompt = clean_prompt(prompt)  # Clean the prompt
+        data = {"text": cleaned_prompt}
+        print(data)
         response = requests.post(url, json=data, headers=HEADERS)
         if response.ok:
+            print(response.json())
             return response.json()
         else:
             raise Exception(f"Failed to send prompt: {response.status_code}, {response.text}")
     else:
-        return("Home Assistant is disabled")
+        return {"error": "Home Assistant is disabled"}

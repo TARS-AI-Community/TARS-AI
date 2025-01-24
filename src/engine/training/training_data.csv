@@ -545,6 +545,8 @@ Turn on the coffee maker,Home_Assistant
 Turn off the bedroom lights,Home_Assistant
 Set the blinds to 50% open,Home_Assistant
 Start the vacuum cleaner,Home_Assistant
+What is the downstairs thermostat temperature?,Home_Assistant
+What is the thermostat set to?,Home_Assistant
 Stop the dishwasher,Home_Assistant
 Open the garage door,Home_Assistant
 Arm the security system,Home_Assistant

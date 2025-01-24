@@ -223,7 +223,7 @@ def check_for_module(user_input):
     # Call the function associated with the predicted class
     return call_function(predicted_class, user_input)
 
-def predict_class_nb(user_input):
+def predict_class(user_input):
     """
     Predicts the class and its confidence score for a given user input.
 
@@ -253,7 +253,7 @@ def predict_class_nb(user_input):
 
     return predicted_class, max_probability
 
-def predict_class(user_input):
+def predict_class_llm(user_input):
     from module_llm import raw_complete_llm
     import json
 
