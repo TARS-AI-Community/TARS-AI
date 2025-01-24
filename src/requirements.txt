@@ -13,6 +13,7 @@ hyperdb-python  # High-performance database library.
 tiktoken 
 python-dotenv
 pygame
+openai  #Python package necessary for interacting with the OpenAI API
 moviepy  # Python library for video editing / playing videos.
 sox
 #espeak-ng
