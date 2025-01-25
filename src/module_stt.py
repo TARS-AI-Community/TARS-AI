@@ -204,12 +204,16 @@ class STTManager:
         try:
 
             threshold_map = {
-                1: 1e-2,  # Very Lenient
-                2: 5e-3,  # Lenient
-                3: 1e-3,  # Moderate Leniency
-                4: 5e-5,  # Moderate Strictness
-                5: 1e-6,  # Strict
-                6: 1e-8   # Very Strict
+                1: 5e-1,      # Extremely Lenient (0.5)
+                2: 1e-1,      # Very Lenient (0.1)
+                3: 5e-2,      # Lenient (0.05)
+                4: 1e-2,      # Moderately Lenient (0.01)
+                5: 1e-3,      # Moderate (0.001)
+                6: 5e-4,      # Slightly Strict (0.0005)
+                7: 1e-4,      # Strict (0.0001)
+                8: 5e-5,      # Very Strict (0.00005)
+                9: 1e-8,      # Extremely Strict (0.000001)
+                10: 1e-10      # Maximum Strictness (0.00000001)
             }
 
             kws_threshold = threshold_map.get(int(self.config['STT']['sensitivity']), "Invalid level")

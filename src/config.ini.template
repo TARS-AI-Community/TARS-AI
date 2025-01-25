@@ -6,7 +6,7 @@ controller_name = 8BitDo
 wake_word = hey tar
 # Wake word for activating the system
 sensitivity = 1
-# Lower threshold (e.g., 1) is lenient; higher (e.g., 6) is strict for wake word detection. 
+# Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection. 
 stt_processor = vosk
 # Vosk Onboard / FAST, whisper Onboard / Accurate, External server hosted, Accurate and Fast (pick vosk, whisper, or external)
 external_url = http://192.168.2.64:5678
