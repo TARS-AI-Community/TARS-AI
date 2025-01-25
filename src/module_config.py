@@ -70,6 +70,7 @@ def load_config():
         },
         "STT": {
             "wake_word": config['STT']['wake_word'],
+            "wake_word_detection": config['STT']['wake_word_detection'],
             "sensitivity": config['STT']['sensitivity'],
             "stt_processor": config['STT']['stt_processor'],
             "external_url": config['STT']['external_url'],

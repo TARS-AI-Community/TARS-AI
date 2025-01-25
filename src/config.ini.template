@@ -5,6 +5,8 @@ controller_name = 8BitDo
 [STT] # Speech-to-Text configuration
 wake_word = hey tar
 # Wake word for activating the system
+wake_word_detection = openwakeword
+# Method to determine wake word vosk or openwakeword
 sensitivity = 1
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection. 
 stt_processor = vosk

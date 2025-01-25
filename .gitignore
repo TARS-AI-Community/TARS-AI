@@ -169,7 +169,8 @@ TARS.wav
 /llm
 llm/
 vision/
-stt/
+stt/vosk-model-small-en-us-0.15/
+stt/vosk-model-small-en-us-0.15
 captured_image.jpg
 config.ini
 output.wav

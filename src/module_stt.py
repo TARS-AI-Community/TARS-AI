@@ -27,6 +27,8 @@ from vosk import SetLogLevel
 import whisper
 import tempfile
 
+from module_openwake import start_openwakeword
+
 # Suppress Vosk logs by setting the log level to 0 (ERROR and above)
 SetLogLevel(-1)  # Adjust to 0 for minimal output or -1 to suppress all logs
 
@@ -183,9 +185,17 @@ class STTManager:
             while self.running:
                 if self.shutdown_event.is_set():
                     break
-                if self._detect_wake_word():
-                    # If wake word detected, transcribe the user utterance
-                    self._transcribe_utterance()
+
+                detect_wakeword = self.config['STT']['wake_word_detection']
+
+                if detect_wakeword == "vosk":
+                    if self._detect_wake_word():
+                        self._transcribe_utterance()
+
+                if detect_wakeword == "openwakeword":
+                    if start_openwakeword():
+                        self._transcribe_utterance()
+
         except Exception as e:
             print(f"ERROR: Error in STT processing loop: {e}")
         finally:
