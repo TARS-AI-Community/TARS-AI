@@ -26,6 +26,9 @@ from typing import Callable, Optional
 from vosk import SetLogLevel
 import whisper
 import tempfile
+import librosa
+import soundfile as sf
+
 
 # Suppress Vosk logs by setting the log level to 0 (ERROR and above)
 SetLogLevel(-1)  # Adjust to 0 for minimal output or -1 to suppress all logs
@@ -205,7 +208,7 @@ class STTManager:
         try:
 
             threshold_map = {
-                1: 1,      # Extremely Lenient (1)
+                1: 2,         # Extremely Lenient (1)
                 2: 1e-1,      # Very Lenient (0.1)
                 3: 5e-2,      # Lenient (0.05)
                 4: 1e-2,      # Moderately Lenient (0.01)
@@ -308,7 +311,7 @@ class STTManager:
         #print(f"INFO: No transcription within duration limit.")
         return None
 
-    def _transcribe_with_whisper(self):
+    def _transcribe_with_whisper_og(self):
             """
             Transcribe audio using the Whisper model.
             """
@@ -382,6 +385,87 @@ class STTManager:
                 print(f"ERROR: Whisper transcription failed: {e}")
                 return None
  
+    def _transcribe_with_whisper(self):
+        """
+        Transcribe audio using the Whisper model with optimized preprocessing and error handling.
+        """
+        if not self.whisper_model:
+            print("ERROR: Whisper model not loaded. Transcription cannot proceed.")
+            return None
+
+        try:
+            # Initialize audio buffer
+            audio_buffer = BytesIO()
+            detected_speech = False
+            silent_frames = 0
+            max_silent_frames = 20  # ~1.25 seconds of silence
+
+            # Record audio stream
+            with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+                with wave.open(audio_buffer, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(self.SAMPLE_RATE)
+
+                    for _ in range(100):  # Limit maximum recording duration (~12.5 seconds)
+                        data, _ = stream.read(4000)
+                        wf.writeframes(data.tobytes())
+
+                        # Check for silence
+                        is_silence, detected_speech, silent_frames = self._is_silence_detected(
+                            data, detected_speech, silent_frames, max_silent_frames
+                        )
+                        if is_silence:
+                            if not detected_speech:
+                                print("INFO: Silence detected without speech. Exiting transcription.")
+                                return None  # Return to wake word detection
+                            break  # End recording if silence follows speech
+
+            # Validate audio buffer
+            audio_buffer.seek(0)
+            if audio_buffer.getbuffer().nbytes == 0:
+                print("ERROR: Audio buffer is empty. No audio recorded.")
+                return None
+
+            # Decode and preprocess audio data
+            audio_buffer.seek(0)
+            audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
+            #print(f"DEBUG: Audio data shape: {audio_data.shape}, Sample rate: {sample_rate}")
+
+            # Normalize and resample audio if necessary
+            audio_data = np.clip(audio_data, -1.0, 1.0)
+            if sample_rate != 16000:
+                #print("DEBUG: Resampling audio to 16 kHz.")
+                audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=16000)
+
+            # Trim or pad audio to Whisper's requirements
+            audio_data = whisper.pad_or_trim(audio_data)
+
+            # Generate Mel spectrogram
+            mel = whisper.log_mel_spectrogram(audio_data).to(self.whisper_model.device)
+
+            # Perform transcription
+            options = whisper.DecodingOptions(fp16=False)  # Disable fp16 for CPU inference
+            result = whisper.decode(self.whisper_model, mel, options)
+
+            # Process and return transcription
+            if hasattr(result, "text") and result.text:
+                transcribed_text = result.text.strip()
+                formatted_result = {"text": transcribed_text}
+                print(f"INFO: Transcription completed: {transcribed_text}")
+
+                # Trigger callback if available
+                if self.utterance_callback:
+                    self.utterance_callback(json.dumps(formatted_result))  # Send JSON string to the callback
+                return formatted_result
+            else:
+                print("ERROR: No transcribed text received from Whisper.")
+                return None
+
+        except Exception as e:
+            print(f"ERROR: Whisper transcription failed: {e}")
+            return None
+
     def _transcribe_with_server(self):
         """
         Transcribe audio by sending it to a server for processing.
@@ -616,4 +700,3 @@ class STTManager:
         Set a callback to execute after the utterance is handled.
         """
         self.post_utterance_callback = callback
-
