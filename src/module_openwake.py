@@ -73,6 +73,9 @@ def process_audio(interpreter, audio_data):
     return output_data
 
 def start_openwakeword():
+    
+    #play_beep(400, 0.1, 44100, 0.6) #sleeping tone
+
     relative_path = os.path.join("stt", "openwake", "hey_tars.tflite")
     model_path = os.path.join(os.getcwd(), relative_path)
     print("Loading model...")
@@ -102,7 +105,8 @@ def start_openwakeword():
                 if confidence > WAKE_WORD_THRESHOLD:
                     #play_beep(1200, 0.1, 44100, 0.8) #wake tone
                     print(f"Wake word detected! (Confidence: {confidence:.2f})")
-                    #time.sleep(1)  # Avoid immediate re-triggering
+                    #play_beep(1200, 0.1, 44100, 0.8) #wake tone
+                    time.sleep(1)  # Avoid immediate re-triggering
                     return True
             
 
@@ -111,21 +115,3 @@ def start_openwakeword():
                 break
             except Exception as e:
                 print(f"Error: {e}")
-
-def play_beep(frequency, duration, sample_rate, volume):
-    """
-    Play a beep sound to indicate the system is listening.
-
-    Parameters:
-    - frequency (int): Frequency of the beep in Hz (e.g., 1000 for 1kHz).
-    - duration (float): Duration of the beep in seconds.
-    - sample_rate (int): Sample rate in Hz (default: 44100).
-    - volume (float): Volume of the beep (0.0 to 1.0).
-    """
-    # Generate a sine wave
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    wave = volume * np.sin(2 * np.pi * frequency * t)
-    
-    # Play the sine wave
-    sd.play(wave, samplerate=sample_rate)
-    sd.wait()  # Wait until the sound finishes playing

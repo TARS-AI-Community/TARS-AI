@@ -625,3 +625,4 @@ class STTManager:
         Set a callback to execute after the utterance is handled.
         """
         self.post_utterance_callback = callback
+
