@@ -38,6 +38,24 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # === Class Definition ===
 class STTManager:
+    DEFAULT_SAMPLE_RATE = 16000
+    SILENCE_MARGIN = 2.5  # Multiplier for noise threshold
+    MAX_RECORDING_FRAMES = 100  # ~12.5 seconds
+    MAX_SILENT_FRAMES = 20  # ~1.25 seconds of silence
+
+    WAKE_WORD_RESPONSES = [
+        "Yes, Whats the plan?",
+        "Standing by for duty.",
+        "Go ahead. Im all ears.",
+        "Ready when you are.",
+        "Whats the mission?",
+        "Listening. Try me.",
+        "Here. Just say the word.",
+        "Yes? Lets keep it professional.",
+        "Standing by. Dont keep me waiting.",
+        "Online. Ready for the next adventure."
+    ]
+
     def __init__(self, config, shutdown_event: threading.Event, amp_gain: float = 4.0):
         """
         Initialize the STTManager.
@@ -45,137 +63,134 @@ class STTManager:
         Parameters:
         - config (dict): Configuration dictionary.
         - shutdown_event (Event): Event to signal stopping the assistant.
+        - amp_gain (float): Amplification gain factor for audio data.
         """
         self.config = config
         self.shutdown_event = shutdown_event
-        self.SAMPLE_RATE = STTManager.find_default_mic_sample_rate()
         self.running = False
+
+        # Audio settings
+        self.SAMPLE_RATE = self.find_default_mic_sample_rate()
+        self.amp_gain = amp_gain
+        self.silence_threshold = 10  # Default threshold
+
+        # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None
         self.utterance_callback: Optional[Callable[[str], None]] = None
-        self.amp_gain = amp_gain  # Amplification gain factor
-        self.post_utterance_callback: Optional[Callable] = None
+        self.post_utterance_callback: Optional[Callable[[], None]] = None
+
+        # Wake word and model handling
+        self.WAKE_WORD = config.get("STT", {}).get("wake_word", "default_wake_word")
         self.vosk_model = None
-        self.silence_threshold = 10  # Default value; updated dynamically
-        self.WAKE_WORD = self.config['STT']['wake_word']
-        self.TARS_RESPONSES = [
-            "Yes? What do you need?",
-            "Ready and listening.",
-            "At your service.",
-            "Go ahead.",
-            "What can I do for you?",
-            "Listening. What's up?",
-            "Here. What do you require?",
-            "Yes? I'm here.",
-            "Standing by.",
-            "Online and awaiting your command."
-        ]
+        self.whisper_model = None
+
+        self._initialize_models()
+
+    def _initialize_models(self):
+        """Initialize all required models based on the configuration."""
         self._load_vosk_model()
         self._measure_background_noise()
-        # Initialize Whisper model if configured
-        self.whisper_model = None
-        if self.config['STT'].get('stt_processor') == 'whisper':
-            print("INFO: Loading Whisper model...")
+        if self.config.get("STT", {}).get("stt_processor") == "whisper":
             self._load_whisper_model()
 
-#Main Thread Calls
     def start(self):
-        """
-        Start the STTManager in a separate thread.
-        """
+        """Start the STTManager in a separate thread."""
         self.running = True
-        self.thread = threading.Thread(
-            target=self._stt_processing_loop, name="STTThread", daemon=True
-        )
+        self.thread = threading.Thread(target=self._stt_processing_loop, name="STTThread", daemon=True)
         self.thread.start()
 
     def stop(self):
-        """
-        Stop the STTManager.
-        """
+        """Stop the STTManager."""
         self.running = False
         self.shutdown_event.set()
         self.thread.join()
 
-#Whisper INIT       
+    def _load_vosk_model(self):
+        """Load the Vosk model."""
+        vosk_model_path = os.path.join("stt", self.config.get("STT", {}).get("vosk_model", "default_vosk_model"))
+        if not os.path.exists(vosk_model_path):
+            print("ERROR: Vosk model not found.")
+            return
+        self.vosk_model = Model(vosk_model_path)
+        print("INFO: Vosk model loaded successfully.")
+
     def _load_whisper_model(self):
-        """
-        Load the Whisper model for local transcription.
-        """
+        """Load the Whisper model."""
         try:
-            import torch
-            import warnings
-
-            # Suppress future warnings from torch
-            warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
-
-            # Monkey patch torch.load for Whisper only
-            _original_torch_load = torch.load
-
-            def _patched_torch_load(fp, map_location, *args, **kwargs):
-                return _original_torch_load(fp, map_location=map_location, weights_only=True, *args, **kwargs)
-
-            torch.load = _patched_torch_load
-
-            # Load the Whisper model
-            whisper_model_size = self.config['STT'].get('whisper_model', 'base')
-            print(f"INFO: Attempting to load Whisper model '{whisper_model_size}'...")
+            whisper_model_size = self.config.get("STT", {}).get("whisper_model", "base")
+            print(f"INFO: Loading Whisper model '{whisper_model_size}'...")
             self.whisper_model = whisper.load_model(whisper_model_size)
-
-            if not hasattr(self.whisper_model, 'device'):
-                raise ValueError("Whisper model did not load correctly.")
             print("INFO: Whisper model loaded successfully.")
         except Exception as e:
             print(f"ERROR: Failed to load Whisper model: {e}")
-            self.whisper_model = None
-        finally:
-            # Restore the original torch.load after Whisper model is loaded
-            torch.load = _original_torch_load
 
-#Vosk INIT
-    def _download_vosk_model(self, url, dest_folder):
-        """Download the Vosk model from the specified URL with basic progress display."""
-        file_name = url.split("/")[-1]
-        dest_path = os.path.join(dest_folder, file_name)
+    def _measure_background_noise(self):
+        """Measure and set the silence threshold based on background noise."""
+        print("INFO: Measuring background noise...")
+        background_rms_values = []
 
-        print(f"INFO: Downloading Vosk model from {url}...")
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
+        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+            for _ in range(20):  # 20 frames for ~2 seconds
+                data, _ = stream.read(4000)
+                rms = self._calculate_rms(data)
+                if rms:
+                    background_rms_values.append(rms)
 
-        total_size = int(response.headers.get('content-length', 0))
-        downloaded_size = 0
+        if background_rms_values:
+            avg_rms = np.mean(background_rms_values)
+            self.silence_threshold = max(avg_rms * self.SILENCE_MARGIN, 10)
+            print(f"INFO: Silence threshold set to: {self.silence_threshold:.2f}")
 
-        with open(dest_path, "wb") as file:
-            for chunk in response.iter_content(chunk_size=8192):
-                file.write(chunk)
-                downloaded_size += len(chunk)
-                progress = (downloaded_size / total_size) * 100 if total_size else 0
-                print(f"\r[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Download progress: {progress:.2f}%", end="")
-                
-        print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] INFO: Download complete. Extracting...")
-        if file_name.endswith(".zip"):
-            import zipfile
-            with zipfile.ZipFile(dest_path, 'r') as zip_ref:
-                zip_ref.extractall(dest_folder)
-            os.remove(dest_path)
-            print(f"INFO: Zip file deleted.")
-        print(f"INFO: Extraction complete.")
+    def _stt_processing_loop(self):
+        """Main loop to process STT requests."""
+        try:
+            while self.running:
+                if self.shutdown_event.is_set():
+                    break
+                if self._detect_wake_word():
+                    self._transcribe_utterance()
+        except Exception as e:
+            print(f"ERROR: STT processing loop failed: {e}")
 
-    def _load_vosk_model(self):
-        """
-        Initialize the Vosk model for local STT transcription.
-        """
-        if self.config['STT']['stt_processor'] == 'vosk':
-            vosk_model_path = os.path.join(os.getcwd(), "stt", self.config['STT']['vosk_model'])
-            if not os.path.exists(vosk_model_path):
-                print(f"ERROR: Vosk model not found. Downloading...")
-                download_url = f"https://alphacephei.com/vosk/models/{self.config['STT']['vosk_model']}.zip"  # Example URL
-                self._download_vosk_model(download_url, os.path.join(os.getcwd(), "stt"))
-                print(f"INFO: Restarting model loading...")
-                self._load_vosk_model()
-                return
+    def _detect_wake_word(self) -> bool:
+        """Detect the wake word."""
+        print("TARS: Sleeping...")
+        try:
+            with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+                speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=1e-3)
+                for phrase in speech:
+                    if self.WAKE_WORD in phrase.hypothesis().lower():
+                        response = random.choice(self.WAKE_WORD_RESPONSES)
+                        print(f"TARS: {response}")
+                        if self.wake_word_callback:
+                            self.wake_word_callback(response)
+                        return True
+        except Exception as e:
+            print(f"ERROR: Wake word detection failed: {e}")
+        return False
 
-            self.vosk_model = Model(vosk_model_path)
-            print(f"INFO: Vosk model loaded successfully.")
+    def _transcribe_utterance(self):
+        """Transcribe the user's utterance."""
+        try:
+            processor = self.config.get("STT", {}).get("stt_processor")
+            if processor == "whisper":
+                self._transcribe_with_whisper()
+            elif processor == "vosk":
+                self._transcribe_with_vosk()
+        except Exception as e:
+            print(f"ERROR: Utterance transcription failed: {e}")
+
+    def set_wake_word_callback(self, callback: Callable[[str], None]):
+        """Set the callback function for wake word detection."""
+        self.wake_word_callback = callback
+
+    def set_utterance_callback(self, callback: Callable[[str], None]):
+        """Set the callback function for user utterance transcription."""
+        self.utterance_callback = callback
+
+    def set_post_utterance_callback(self, callback: Callable[[], None]):
+        """Set a callback to execute after utterance processing."""
+        self.post_utterance_callback = callback
 
 #Main Loop
     def _stt_processing_loop(self):
@@ -234,7 +249,7 @@ class STTManager:
                     if self.WAKE_WORD in phrase.hypothesis().lower():
                         if self.config['STT']['use_indicators']:
                             self.play_beep(1200, 0.1, 44100, 0.8) #wake tone
-                        wake_response = random.choice(self.TARS_RESPONSES)
+                        wake_response = random.choice(self.WAKE_WORD_RESPONSES)
                         print(f"TARS: {wake_response}")
 
                         # If a callback is set, send the wake_response
@@ -311,80 +326,6 @@ class STTManager:
         #print(f"INFO: No transcription within duration limit.")
         return None
 
-    def _transcribe_with_whisper_og(self):
-            """
-            Transcribe audio using the Whisper model.
-            """
-            if not self.whisper_model:
-                print("ERROR: Whisper model not loaded. Transcription cannot proceed.")
-                return None
-
-            try:
-                audio_buffer = BytesIO()
-                detected_speech = False
-                silent_frames = 0
-                max_silent_frames = 20  # ~1.25 seconds of silence
-
-                #print(f"STAT: Starting audio recording...")
-                with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
-                    with wave.open(audio_buffer, "wb") as wf:
-                        wf.setnchannels(1)
-                        wf.setsampwidth(2)
-                        wf.setframerate(self.SAMPLE_RATE)
-
-                        for _ in range(100):  # Limit maximum recording duration (~12.5 seconds)
-                            data, _ = stream.read(4000)
-                            data = self.amplify_audio(data)  # Apply amplification
-                            wf.writeframes(data.tobytes())
-
-                            is_silence, detected_speech, silent_frames = self._is_silence_detected(
-                                data, detected_speech, silent_frames, max_silent_frames
-                            )
-                            #print(f"is_silence {is_silence}, detected_speech {detected_speech}, silent_frames {silent_frames}")
-                            if is_silence:
-                                if not detected_speech:
-                                    #print("INFO: Silence detected without speech. Returning to wake word detection.")
-                                    return None  # Stop transcription and return to wake word detection
-                                break  # End recording if silence follows detected speech
-
-                # Ensure the audio buffer is not empty
-                audio_buffer.seek(0)
-                if audio_buffer.getbuffer().nbytes == 0:
-                    print(f"ERROR: Audio buffer is empty. No audio recorded.")
-                    return None
-
-                # Save audio to a temporary file
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio_file:
-                    temp_audio_file.write(audio_buffer.read())
-                    temp_audio_path = temp_audio_file.name
-
-                # Transcribe using Whisper
-                try:
-                    audio = whisper.load_audio(temp_audio_path)
-                    audio = whisper.pad_or_trim(audio)
-                    mel = whisper.log_mel_spectrogram(audio).to(self.whisper_model.device)
-                    options = whisper.DecodingOptions(fp16=False)
-                    result = whisper.decode(self.whisper_model, mel, options)
-                    
-                    # Format result as JSON
-                    if hasattr(result, "text") and result.text:
-                        transcribed_text = result.text.strip()
-                        formatted_result = {"text": transcribed_text}
-                        if self.utterance_callback:
-                            self.utterance_callback(json.dumps(formatted_result))  # Send JSON string to the callback
-                        return formatted_result
-                    else:
-                        print("ERROR: No transcribed text received from Whisper.")
-                        return None
-                finally:
-                    # Clean up temporary file
-                    if os.path.exists(temp_audio_path):
-                        os.unlink(temp_audio_path)
-
-            except Exception as e:
-                print(f"ERROR: Whisper transcription failed: {e}")
-                return None
- 
     def _transcribe_with_whisper(self):
         """
         Transcribe audio using the Whisper model with optimized preprocessing and error handling.
@@ -452,7 +393,7 @@ class STTManager:
             if hasattr(result, "text") and result.text:
                 transcribed_text = result.text.strip()
                 formatted_result = {"text": transcribed_text}
-                print(f"INFO: Transcription completed: {transcribed_text}")
+                #print(f"INFO: Transcription completed: {transcribed_text}")
 
                 # Trigger callback if available
                 if self.utterance_callback:
@@ -648,7 +589,7 @@ class STTManager:
         except Exception as e:
             print(f"ERROR: Failed to measure background noise: {e}")
 
-    def find_default_mic_sample_rate():
+    def find_default_mic_sample_rate(self):
         """Finds the sample rate (in Hz) of the actual default microphone, rounded to an integer."""
         try:
             # Get the default input device index
