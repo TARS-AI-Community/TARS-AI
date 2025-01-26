@@ -54,7 +54,7 @@ def get_completion(user_prompt, istext=True):
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
         bot_reply = _extract_text(response.json(), istext)
-
+        
         llm_process(user_prompt, bot_reply)
         return bot_reply
     

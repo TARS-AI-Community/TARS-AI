@@ -81,6 +81,7 @@ def process_discord_message_callback(user_message):
         #print(user_message)
 
         match = re.match(r"<@(\d+)> ?(.*)", user_message)
+
         if match:
             mentioned_user_id = match.group(1)  # Extracted user ID
             message_content = match.group(2).strip()  # Extracted message content (trim leading/trailing spaces)
@@ -153,6 +154,9 @@ def utterance_callback(message):
         # Stream the AI's reply
         stream_text_nonblocking(f"TARS: {reply}")
 
+        # Strip special chars so he doesnt say them
+        reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-]', '', reply)
+        
         # Stream TTS audio to speakers
         generate_tts_audio(
             reply,
