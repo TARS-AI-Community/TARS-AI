@@ -152,23 +152,6 @@ class STTManager:
         except Exception as e:
             print(f"ERROR: STT processing loop failed: {e}")
 
-    def _detect_wake_word(self) -> bool:
-        """Detect the wake word."""
-        print("TARS: Sleeping...")
-        try:
-            with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
-                speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=1e-3)
-                for phrase in speech:
-                    if self.WAKE_WORD in phrase.hypothesis().lower():
-                        response = random.choice(self.WAKE_WORD_RESPONSES)
-                        print(f"TARS: {response}")
-                        if self.wake_word_callback:
-                            self.wake_word_callback(response)
-                        return True
-        except Exception as e:
-            print(f"ERROR: Wake word detection failed: {e}")
-        return False
-
     def _transcribe_utterance(self):
         """Transcribe the user's utterance."""
         try:
@@ -213,7 +196,7 @@ class STTManager:
 #Detect Wake
     def _detect_wake_word(self) -> bool:
         """
-        Detect the wake word using Pocketsphinx with enhanced false-positive filtering.
+        Detect the wake word using enhanced false-positive filtering.
         """
         
         # Listening State
@@ -223,16 +206,16 @@ class STTManager:
         try:
 
             threshold_map = {
-                1: 2,         # Extremely Lenient (1)
-                2: 1e-1,      # Very Lenient (0.1)
-                3: 5e-2,      # Lenient (0.05)
-                4: 1e-2,      # Moderately Lenient (0.01)
-                5: 1e-3,      # Moderate (0.001)
-                6: 5e-4,      # Slightly Strict (0.0005)
-                7: 1e-4,      # Strict (0.0001)
-                8: 5e-5,      # Very Strict (0.00005)
-                9: 1e-8,      # Extremely Strict (0.000001)
-                10: 1e-10      # Maximum Strictness (0.00000001)
+                1: 2,            # Extremely Lenient (2)
+                2: 1e-1,         # Very Lenient (0.1)
+                3: 1e-2,         # Lenient (0.01)
+                4: 1e-3,         # Moderately Lenient (0.001)
+                5: 1e-4,         # Moderate (0.0001)
+                6: 1e-5,         # Slightly Strict (0.00001)
+                7: 1e-6,         # Strict (0.000001)
+                8: 1e-7,         # Very Strict (0.0000001)
+                9: 1e-8,         # Extremely Strict (0.00000001)
+                10: 1e-10        # Maximum Strictness (0.0000000001)
             }
 
             kws_threshold = threshold_map.get(int(self.config['STT']['sensitivity']), "Invalid level")
@@ -358,7 +341,7 @@ class STTManager:
                         )
                         if is_silence:
                             if not detected_speech:
-                                print("INFO: Silence detected without speech. Exiting transcription.")
+                                #print("INFO: Silence detected without speech. Exiting transcription.")
                                 return None  # Return to wake word detection
                             break  # End recording if silence follows speech
 
@@ -465,28 +448,35 @@ class STTManager:
         return None
 
 #MISC
-    def _is_silence_detected(self, data, detected_speech, silent_frames, max_silent_frames):
+    def _is_silence_detected(self, data: np.ndarray, detected_speech: bool, silent_frames: int, max_silent_frames: int) -> tuple[bool, bool, int]:
         """
-        Check if silence has been detected in the audio data.
+        Determine if silence is detected based on RMS threshold.
+
+        Args:
+            data (np.ndarray): Audio data for analysis.
+            detected_speech (bool): Whether speech has been detected.
+            silent_frames (int): Consecutive frames detected as silent.
+            max_silent_frames (int): Maximum allowable silent frames before concluding silence.
+
+        Returns:
+            tuple[bool, bool, int]: 
+                - `True` if silence exceeds the max allowed silent frames.
+                - Updated `detected_speech` state.
+                - Updated count of `silent_frames`.
         """
+        # Calculate the RMS value of the audio data
         rms = self.prepare_audio_data(data)
 
-        # Silence detection logic
-        #if rms < self.silence_threshold:
-            #print(f"Silence {rms} rms | {self.silence_threshold} threshold")  # Voice detected
-        #else:
-            #print(f"SOUND__ {rms} rms | {self.silence_threshold} threshold")
+        if rms is None:  # Handle invalid RMS calculation
+            return False, detected_speech, silent_frames
 
-
-        if rms > self.silence_threshold:  # Voice detected
-            #if not detected_speech:
-                #print(f"STAT: Speech detected.")
+        # Check if the current frame is silent
+        if rms > self.silence_threshold:  # Speech detected
             detected_speech = True
-            silent_frames = 0  # Reset silent frames
+            silent_frames = 0  # Reset silent frame counter
         else:  # Silence detected
             silent_frames += 1
-            if silent_frames > max_silent_frames:
-                #print(f"STAT: Silence detected.")
+            if silent_frames > max_silent_frames:  # Exceeds max silent frames
                 return True, detected_speech, silent_frames
 
         return False, detected_speech, silent_frames
