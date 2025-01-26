@@ -159,15 +159,27 @@ class STTManager:
             print(f"INFO: Silence threshold set to: {self.silence_threshold:.2f}")
 
     def _stt_processing_loop(self):
-        """Main loop to process STT requests."""
+        """
+        Main loop to detect wake words and process utterances with continuous stream processing.
+        """
         try:
-            while self.running:
-                if self.shutdown_event.is_set():
-                    break
-                if self._detect_wake_word():
-                    self._transcribe_utterance()
+            print("INFO: Starting continuous stream processing...")
+            with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+                while self.running:
+                    if self.shutdown_event.is_set():
+                        break
+
+                    # Read audio data
+                    data, _ = stream.read(4000)
+                    rms = self.prepare_audio_data(self.amplify_audio(data))
+
+                    if rms > self.silence_threshold:
+                        if self._detect_wake_word():
+                            self._transcribe_utterance()
         except Exception as e:
-            print(f"ERROR: STT processing loop failed: {e}")
+            print(f"ERROR: Error in STT processing loop: {e}")
+        finally:
+            print("INFO: STT Manager stopped.")
 
     def _transcribe_utterance(self):
         """Transcribe the user's utterance."""
@@ -220,6 +232,9 @@ class STTManager:
         if self.config['STT']['use_indicators']:
             self.play_beep(400, 0.1, 44100, 0.6) #sleeping tone
         print(f"TARS: Sleeping...")
+        detected_speech = False  # Initialize state
+        silent_frames = 0  # Initialize state
+
         try:
 
             threshold_map = {
@@ -245,10 +260,21 @@ class STTManager:
                     data, _ = stream.read(4000)
                     rms = self.prepare_audio_data(self.amplify_audio(data))
 
+                    if rms > self.silence_threshold:  # Speech detected
+                        detected_speech = True
+                        silent_frames = 0  # Reset silent frames
+                    else:
+                        silent_frames += 1
+
                     # Process wake word
                     if self.WAKE_WORD in phrase.hypothesis().lower():
+                        # Reset states before returning
+                        detected_speech = False
+                        silent_frames = 0
+
                         if self.config['STT']['use_indicators']:
                             self.play_beep(1200, 0.1, 44100, 0.8) #wake tone
+
                         wake_response = random.choice(self.WAKE_WORD_RESPONSES)
                         print(f"TARS: {wake_response}")
 
