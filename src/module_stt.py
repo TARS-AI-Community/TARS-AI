@@ -239,14 +239,14 @@ class STTManager:
 
             threshold_map = {
                 1: 2,            # Extremely Lenient (2)
-                2: 1e-1,         # Very Lenient (0.1)
-                3: 1e-2,         # Lenient (0.01)
-                4: 1e-3,         # Moderately Lenient (0.001)
-                5: 1e-4,         # Moderate (0.0001)
-                6: 1e-5,         # Slightly Strict (0.00001)
-                7: 1e-6,         # Strict (0.000001)
-                8: 1e-7,         # Very Strict (0.0000001)
-                9: 1e-8,         # Extremely Strict (0.00000001)
+                2: 1,            # Very Lenient (1)
+                3: 0,            # Lenient (0)
+                4: 1e-1,         # Moderately Lenient (0.1)
+                5: 1e-2,         # Moderate (0.01)
+                6: 1e-3,         # Slightly Strict (0.001)
+                7: 1e-4,         # Strict (0.0001)
+                8: 1e-5,         # Very Strict (0.00001)
+                9: 1e-6,         # Extremely Strict (0.000001)
                 10: 1e-10        # Maximum Strictness (0.0000000001)
             }
 
