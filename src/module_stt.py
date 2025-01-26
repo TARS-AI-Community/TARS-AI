@@ -441,35 +441,42 @@ class STTManager:
             audio_buffer = BytesIO()
             detected_speech = False
             silent_frames = 0
-            max_silent_frames = 20  # ~1.25 seconds of silence
+            max_silent_frames = self.MAX_SILENT_FRAMES  # Use the configured silent frame threshold
 
-            print(f"STAT: Starting audio recording...")
+            #print(f"STAT: Starting audio recording...")
             with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
                 with wave.open(audio_buffer, "wb") as wf:
                     wf.setnchannels(1)
                     wf.setsampwidth(2)
                     wf.setframerate(self.SAMPLE_RATE)
 
-                    for _ in range(100):  # Limit maximum recording duration (~12.5 seconds)
+                    for _ in range(self.MAX_RECORDING_FRAMES):  # Limit maximum recording duration
                         data, _ = stream.read(4000)
-                        data = self.amplify_audio(data)  # Apply amplification
-                        wf.writeframes(data.tobytes())
+                        rms = self.prepare_audio_data(self.amplify_audio(data))
 
-                        is_silence, detected_speech, silent_frames = self._is_silence_detected(
-                            data, detected_speech, silent_frames, max_silent_frames
-                        )
-                        if is_silence:
-                            break
+                        # Check if audio data exceeds the silence threshold
+                        if rms > self.silence_threshold:
+                            detected_speech = True
+                            silent_frames = 0  # Reset silent frames
+                            wf.writeframes(data.tobytes())
+                        else:
+                            silent_frames += 1
+                            if silent_frames > max_silent_frames and not detected_speech:
+                                #print("INFO: No significant audio detected, stopping recording.")
+                                break
 
-            # Ensure the audio buffer is not empty
-            audio_buffer.seek(0)
-            if audio_buffer.getbuffer().nbytes == 0:
-                print(f"ERROR: Audio buffer is empty. No audio recorded.")
-                return None
+                # Ensure the audio buffer is not empty
+                audio_buffer.seek(0)
+                if audio_buffer.getbuffer().nbytes == 0:
+                    print(f"ERROR: Audio buffer is empty. No audio recorded.")
+                    return None
 
-            print(f"STAT: Sending audio to server...")
+            # Send the audio to the server
+            #print(f"STAT: Sending audio to server...")
             files = {"audio": ("audio.wav", audio_buffer, "audio/wav")}
-            response = requests.post(f"{self.config['STT']['external_url']}/save_audio", files=files, timeout=10)
+            response = requests.post(
+                f"{self.config['STT']['external_url']}/save_audio", files=files, timeout=10
+            )
 
             if response.status_code == 200:
                 transcription = response.json().get("transcription", [])
@@ -478,7 +485,12 @@ class STTManager:
                     formatted_result = {
                         "text": raw_text,
                         "result": [
-                            {"conf": 1.0, "start": seg.get("start", 0), "end": seg.get("end", 0), "word": seg.get("text", "")}
+                            {
+                                "conf": 1.0,
+                                "start": seg.get("start", 0),
+                                "end": seg.get("end", 0),
+                                "word": seg.get("text", ""),
+                            }
                             for seg in transcription
                         ],
                     }
@@ -489,6 +501,7 @@ class STTManager:
         except requests.RequestException as e:
             print(f"ERROR: Server request failed: {e}")
         return None
+
 
 #MISC
     def _is_silence_detected(self, data: np.ndarray, detected_speech: bool, silent_frames: int, max_silent_frames: int) -> tuple[bool, bool, int]:
