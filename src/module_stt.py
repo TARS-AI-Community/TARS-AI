@@ -439,7 +439,6 @@ class STTManager:
         """
         try:
             audio_buffer = BytesIO()
-            detected_speech = False
             silent_frames = 0
             max_silent_frames = self.MAX_SILENT_FRAMES  # Use the configured silent frame threshold
 
@@ -456,12 +455,11 @@ class STTManager:
 
                         # Check if audio data exceeds the silence threshold
                         if rms > self.silence_threshold:
-                            detected_speech = True
                             silent_frames = 0  # Reset silent frames
                             wf.writeframes(data.tobytes())
                         else:
                             silent_frames += 1
-                            if silent_frames > max_silent_frames and not detected_speech:
+                            if silent_frames > max_silent_frames:
                                 #print("INFO: No significant audio detected, stopping recording.")
                                 break
 
