@@ -16,7 +16,6 @@ from vosk import Model, KaldiRecognizer
 from pocketsphinx import LiveSpeech
 import threading
 import requests
-from datetime import datetime
 from io import BytesIO
 import time
 import wave
@@ -24,11 +23,9 @@ import numpy as np
 import json
 from typing import Callable, Optional
 from vosk import SetLogLevel
-import whisper
-import tempfile
 import librosa
 import soundfile as sf
-
+import whisper
 
 # Suppress Vosk logs by setting the log level to 0 (ERROR and above)
 SetLogLevel(-1)  # Adjust to 0 for minimal output or -1 to suppress all logs
@@ -83,7 +80,6 @@ class STTManager:
         self.WAKE_WORD = config.get("STT", {}).get("wake_word", "default_wake_word")
         self.vosk_model = None
         self.whisper_model = None
-
         self._initialize_models()
 
     def _initialize_models(self):
@@ -115,14 +111,35 @@ class STTManager:
         print("INFO: Vosk model loaded successfully.")
 
     def _load_whisper_model(self):
-        """Load the Whisper model."""
+        """
+        Load the Whisper model for local transcription.
+        """
         try:
-            whisper_model_size = self.config.get("STT", {}).get("whisper_model", "base")
-            print(f"INFO: Loading Whisper model '{whisper_model_size}'...")
+            import torch
+            import warnings
+            # Suppress future warnings from torch
+            warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
+            # Monkey patch torch.load for Whisper only
+            _original_torch_load = torch.load
+            def _patched_torch_load(fp, map_location, *args, **kwargs):
+                return _original_torch_load(fp, map_location=map_location, weights_only=True, *args, **kwargs)
+
+            torch.load = _patched_torch_load
+
+            # Load the Whisper model
+            whisper_model_size = self.config['STT'].get('whisper_model', 'base')
+            print(f"INFO: Attempting to load Whisper model '{whisper_model_size}'...")
             self.whisper_model = whisper.load_model(whisper_model_size)
+
+            if not hasattr(self.whisper_model, 'device'):
+                raise ValueError("Whisper model did not load correctly.")
             print("INFO: Whisper model loaded successfully.")
         except Exception as e:
             print(f"ERROR: Failed to load Whisper model: {e}")
+            self.whisper_model = None
+        finally:
+            # Restore the original torch.load after Whisper model is loaded
+            torch.load = _original_torch_load
 
     def _measure_background_noise(self):
         """Measure and set the silence threshold based on background noise."""
