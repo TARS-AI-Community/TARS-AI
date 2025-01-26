@@ -222,21 +222,22 @@ class STTManager:
         finally:
             print(f"INFO: STT Manager stopped.")
 
-#Detect Wake
+    # Detect Wake
     def _detect_wake_word(self) -> bool:
         """
         Detect the wake word using enhanced false-positive filtering.
         """
-        
-        # Listening State
+
+        # Play the "sleeping" tone if indicators are enabled
         if self.config['STT']['use_indicators']:
-            self.play_beep(400, 0.1, 44100, 0.6) #sleeping tone
-        print(f"TARS: Sleeping...")
-        detected_speech = False  # Initialize state
-        silent_frames = 0  # Initialize state
+            self.play_beep(400, 0.1, 44100, 0.6)
+        print("TARS: Sleeping...")
+
+        detected_speech = False
+        silent_frames = 0
+        max_iterations = 100  # Prevent infinite loops
 
         try:
-
             threshold_map = {
                 1: 2,            # Extremely Lenient (2)
                 2: 1,            # Very Lenient (1)
@@ -250,12 +251,18 @@ class STTManager:
                 10: 1e-10        # Maximum Strictness (0.0000000001)
             }
 
-            kws_threshold = threshold_map.get(int(self.config['STT']['sensitivity']), "Invalid level")
+            # Use default sensitivity of 2 if misconfigured
+            kws_threshold = threshold_map.get(int(self.config['STT']['sensitivity']), 2)
+
+            # Initialize LiveSpeech for detection
+            speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
 
             with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
-                speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
+                for iteration, phrase in enumerate(speech):
+                    if iteration >= max_iterations:
+                        print("DEBUG: Maximum iterations reached for wake word detection.")
+                        break
 
-                for phrase in speech:
                     # Convert raw audio to RMS
                     data, _ = stream.read(4000)
                     rms = self.prepare_audio_data(self.amplify_audio(data))
@@ -266,6 +273,10 @@ class STTManager:
                     else:
                         silent_frames += 1
 
+                    if silent_frames > self.MAX_SILENT_FRAMES:  # Too much silence
+                        print("DEBUG: Exiting due to extended silence.")
+                        break
+
                     # Process wake word
                     if self.WAKE_WORD in phrase.hypothesis().lower():
                         # Reset states before returning
@@ -273,18 +284,23 @@ class STTManager:
                         silent_frames = 0
 
                         if self.config['STT']['use_indicators']:
-                            self.play_beep(1200, 0.1, 44100, 0.8) #wake tone
+                            self.play_beep(1200, 0.1, 44100, 0.8)  # Wake tone
 
                         wake_response = random.choice(self.WAKE_WORD_RESPONSES)
                         print(f"TARS: {wake_response}")
 
-                        # If a callback is set, send the wake_response
+                        #clear the variable if it matters...
+                        speech = ''
+
+                        # Trigger callback if defined
                         if self.wake_word_callback:
                             self.wake_word_callback(wake_response)
+
                         return True
 
         except Exception as e:
             print(f"ERROR: Wake word detection failed: {e}")
+
         return False
 
 #Transcripe functions
