@@ -179,7 +179,6 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for instructions on contributing to t
 Inspirations + Credits to:
 - [@charliediaz](https://www.hackster.io/charlesdiaz/how-to-build-your-own-replica-of-tars-from-interstellar-224833)
 - [@gptars](https://www.youtube.com/@gptars)
-- [@wizard.py](https://www.instagram.com/wizard.py/)
 - [@poboisvert](https://github.com/poboisvert/GPTARS_Interstellar)
 
 ## Attribution 
