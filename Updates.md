@@ -1,6 +1,6 @@
 ### TARS-AI 2.0 Development Branch Update
 
-The TARS-AI 2.0 development branch introduces several enhancements over the 1.0 release, including:
+The TARS-AI 2.0 development branch introduces several enhancements over the inital 1.0 release, including:
 
 ---
 
