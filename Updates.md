@@ -27,8 +27,8 @@ The TARS-AI 2.0 development branch introduces several enhancements over the init
 - Integrated **DALL·E** and **Stable Diffusion** for AI-powered image creation.  
 
 **Volume Control:**  
-- Fine-tuned volume adjustments through both voice commands and external configurations. Credit: @mskull
-
+- Fine-tuned volume adjustments through both voice commands and external configurations. **Credit: @mskull**
+  
 **Home Assistant Integration:**  
 - Seamless connection with smart home systems for enhanced interaction and automation.  
 
