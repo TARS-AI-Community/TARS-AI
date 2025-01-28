@@ -1,10 +1,10 @@
 ### TARS-AI 2.0 Development Branch Update
 
-The TARS-AI 2.0 development branch introduces several enhancements over the inital 1.0 release, including:
+The TARS-AI 2.0 development branch introduces several enhancements over the initial 1.0 release, including:
 
 ---
 
-#### 🚀 **Core Additions**  
+#### :rocket: **Core Additions**  
 
 **Speech-to-Text (STT) Enhancements:**  
 - Integrated **Whisper** for local STT alongside **Vosk** and external server options.  
@@ -27,24 +27,28 @@ The TARS-AI 2.0 development branch introduces several enhancements over the init
 - Integrated **DALL·E** and **Stable Diffusion** for AI-powered image creation.  
 
 **Volume Control:**  
-- Fine-tuned volume adjustments through both voice commands and external configurations. **Credit: @mskull**
-  
+- Fine-tuned volume adjustments through both voice commands and external configurations. **Credit: @mskull**  
+
 **Home Assistant Integration:**  
-- Seamless connection with smart home systems for enhanced interaction and automation.  
+- Seamless connection with smart home systems.  
 
 ---
 
-#### ⚙️ **Technical Improvements**
+#### :gear: **Technical Improvements**
 
 - **Reworked LLM function** into its own module.  
+- **Reworked LLM function** to be compatible with thinking models (Deepseek R1).  
 - **Reworked build prompt function** for easy importing.  
 - **Reworked memory module** to ensure correct prompt and memory management.  
 - **Reworked tokenization** for proper counts.  
+- **Renamed STL files** for better readability.  
+- **Many fixes and tweaks** for better usability.  
+- Over **196 commits**.  
 
 **Override Encoding Model:**  
-- Enhanced compatibility with OpenAI's Whisper models using `override_encoding_model`.  
+- Enhanced compatibility with models using `override_encoding_model`.  
 
 **TTS Fixes:**  
-- Resolved issues with special characters in Text-to-Speech (TTS), improving playback accuracy.  
+- Resolved issues with special characters in Text-to-Speech.  
 
 ---
