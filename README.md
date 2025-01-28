@@ -161,21 +161,29 @@ See [`ENVSETUP.md`](./ENVSETUP.md) for instructions on setting up the software e
 
 - **LLM**: Choice of:
   - OpenAI (Recommended)
-  - Oobabooga
+  - OpenAI compatibility API (LM Studio, Oobabooga, etc)
   - Tabby ([tabbyAPI](https://github.com/theroyallab/tabbyAPI))
-  - Ollama (Soon)
+  - Ollama
 - **Text-to-Speech**: Choice of:
   - Azure TTS
   - Local (E-speak)
   - Local (Piper TTS with custom Voice model) (Recommended)
   - XTTSv2 with voice cloning ([xtts-api-server](https://github.com/daswer123/xtts-api-server))
+  - Alltalk
 - **Speech-to-Text**:
   - Vosk
   - Whisper
+  - Externally hosted Whisper
 - **Vision Handling**:
   - Saleforce Blip
 - **Tool Utilization**:
-  - Custom Module Engine
+  - Custom Module Engine 
+  - Function Calling (two methods)
+  - Stable Diffusion
+  - Dall-e
+  - Home Assistant
+  - Volume Control
+  - Persona Settings
 
 ## Build Modifications
 ![print](./media/PrintComplete.jpg)
