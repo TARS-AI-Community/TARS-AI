@@ -200,6 +200,7 @@ Inspirations + Credits to:
 - [@charliediaz](https://www.hackster.io/charlesdiaz/how-to-build-your-own-replica-of-tars-from-interstellar-224833)
 - [@gptars](https://www.youtube.com/@gptars)
 - [@poboisvert](https://github.com/poboisvert/GPTARS_Interstellar)
+- [@Expl0dingCat](https://github.com/Expl0dingCat/Ame) 
 
 ## Attribution 
 ### TARS Project Attribution Guidelines
