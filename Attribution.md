@@ -23,6 +23,8 @@ As we continue to build and expand upon the TARS project, below are the guidelin
 #### Legal Considerations
 - Monetization is strictly prohibited.
 
+- This project includes code/inspiration (module engine and memory functions) from AME by exploding cat, licensed under the MIT License. The original license and copyright notice are included in the source code. The remainder of the project is licensed under CC-BY-NC.
+
 #### Community Contribution
 - Encourage contributors to follow these attribution guidelines when making modifications or additions to the project.
 - Foster an open and respectful community by maintaining transparency in crediting the work of all contributors.
