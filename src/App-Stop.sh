@@ -1,0 +1,1 @@
+killall lxterminal xterm gnome-terminal konsole mate-terminal xfce4-terminal
