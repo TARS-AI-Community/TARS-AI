@@ -1,3 +1,5 @@
+""" Created by mskull """
+
 import subprocess
 import re
 
@@ -12,23 +14,23 @@ class RaspbianVolumeManager:
                 ['amixer', 'get', self.control],
                 stderr=subprocess.STDOUT
             ).decode('utf-8')
-            
+
             # Search for volume percentages in the output for both channels
             left_match = re.search(r'Front Left: Playback \d+ \[(\d+)%\]', output)
             right_match = re.search(r'Front Right: Playback \d+ \[(\d+)%\]', output)
-            
+
             if left_match and right_match:
                 # Calculate the average volume of both channels
                 left_volume = int(left_match.group(1))
                 right_volume = int(right_match.group(1))
                 return (left_volume + right_volume) // 2
-            
+
             elif left_match:  # If only the left channel is present
                 return int(left_match.group(1))
-            
+
             elif right_match:  # If only the right channel is present
                 return int(right_match.group(1))
-            
+
             raise RuntimeError("Volume percentage not found in amixer output.")
         except subprocess.CalledProcessError as e:
             print(f"Error getting volume: {e}")
@@ -53,10 +55,8 @@ class RaspbianVolumeManager:
 def correct_transcription(transcribed_text):
     """
     Corrects common misinterpretations of volume commands by the STT module.
-
     Parameters:
         transcribed_text (str): The transcribed user input.
-
     Returns:
         str: The corrected user input.
     """
@@ -82,10 +82,8 @@ def correct_transcription(transcribed_text):
 def handle_volume_command(user_input):
     """
     Interprets and handles volume-related commands from the user input.
-
     Parameters:
         user_input (str): The user's command.
-
     Returns:
         str: A response describing the result of the volume action.
     """
@@ -99,7 +97,7 @@ def handle_volume_command(user_input):
     if current_volume is None:
         return "Unable to retrieve the current volume level. Please try again."
 
-    print(f"TOOL: Using Tool Volume at {current_volume / 100:.2f}")  # Report the correct volume value
+    #print(f"TOOL: Current Volume {current_volume / 100:.2f}")  # Report the correct volume value
 
     # Handle specific volume commands
     if "increase" in user_input.lower() or "raise" in user_input.lower():

@@ -185,6 +185,74 @@ def search_duckduckgo(query):
         '[data-result="snippet"]'
     )
 
+def search_mojeek(query):
+    """
+    Perform a search on Mojeek and extract results.
+
+    Parameters:
+    - query (str): The search query.
+
+    Returns:
+    - tuple: Extracted content and links.
+    """
+    print(f"INFO: Searching Mojeek for: {query}")
+    base_url = "https://www.mojeek.com/search?q="
+    full_url = base_url + query
+
+    # Load the page
+    driver.get(full_url)
+    wait_for_element("results")  # Wait for results container to load
+
+    # Extract search result snippets
+    content = extract_text(".result-title, .result-desc")  # Titles and descriptions
+    links = extract_links(".result-title > a")  # Result links
+
+    return content
+
+def search_mojeek_summary(query):
+    """
+    Perform a search on Mojeek and extract the summary text. Includes debugging information.
+
+    Parameters:
+    - query (str): The search query.
+
+    Returns:
+    - str: The extracted summary text, or an error message if not found.
+    """
+    print(f"INFO: Searching Mojeek for: {query}")
+    base_url = "https://www.mojeek.com/search?q="
+    full_url = base_url + query
+
+    try:
+        # Load the Mojeek search results page
+        driver.get(full_url)
+
+        # Save page source for debugging
+        save_debug()
+
+        # Print all elements with 'id=kalid' for verification
+        elements = driver.find_elements(By.ID, "kalid")
+        if not elements:
+            print("DEBUG: No elements with ID 'kalid' found.")
+        else:
+            for el in elements:
+                print("DEBUG: Found element with ID 'kalid':", el.get_attribute("outerHTML"))
+
+        # Wait for the summary box to load
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div#kalid.infobox-right.llm-ib"))
+        )
+
+        # Extract the summary content
+        summary = extract_text("div#kalid.infobox-right.llm-ib div.content")
+        print("INFO: Summary extracted successfully.")
+        return summary
+
+    except Exception as e:
+        print(f"ERROR: Unable to extract summary. {e}")
+        return "Summary not found. Check debug.html for details."
+
+
 # === Initialize and Cleanup ===
 driver = initialize_driver()
 atexit.register(quit_driver)

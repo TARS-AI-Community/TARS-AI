@@ -46,6 +46,7 @@ Is there a chance of thunderstorms today?,Weather
 What's the current dew point in degrees Celsius?,Weather
 What's the sunset time today?,Weather
 What's the UV index today?,Weather
+search google for the weather in el paso tomorrow,Weather
 Should I bring an umbrella tomorrow?,Weather
 Check the current traffic conditions on the I-95 highway,Search
 Whats the live score of the New York Yankees baseball game,Search
@@ -207,34 +208,185 @@ look around and show me,Vision
 use Vision to check this,Vision
 what am i holding,Vision
 hey tars what am i holding?,Vision
-hey tars be quiet,Mute
-can you stop talking,Mute
-tars zip it,Mute
-shush,Mute
-tars pleaseMute,Mute
-quiet down,Mute
-silence yourself,Mute
-enoughMute,Mute
-stop talking,Mute
-mute yourself,Mute
-hush tars,Mute
-cease talking,Mute
-go silent,Mute
-tars no more talking,Mute
-mute mode on,Mute
-shut your mouth,Mute
-pipe down,Mute
-halt speech,Mute
-be quite,Mute
-tars go quiet,Mute
-keep it down,Mute
-youre too loud,Mute
-stop listening,Mute
-stop responding,Mute
-tarsMute please,Mute
-go to sleep,Mute
-be quiet,Mute
-goto sleep,Mute
+can you draw me a photo of a dog in a park,SDmodule-Generate
+can you create me a photo of a dog in a park,SDmodule-Generate
+create me a photo of a dog in a park,SDmodule-Generate
+create an abstract painting of emotions,SDmodule-Generate
+design a character for a fantasy novel,SDmodule-Generate
+generate a landscape with a waterfall and forest,SDmodule-Generate
+illustrate a children's book about space,SDmodule-Generate
+make a digital portrait of a celebrity,SDmodule-Generate
+render an architectural design of a modern house,SDmodule-Generate
+sketch a comic strip about a superhero,SDmodule-Generate
+compose a visual representation of a poem,SDmodule-Generate
+create a graphic design for a music festival poster,SDmodule-Generate
+draw an animal in a cartoon style,SDmodule-Generate
+develop concept art for a dystopian city,SDmodule-Generate
+illustrate a scene from a historical event,SDmodule-Generate
+generate a picture of a mythical creature,SDmodule-Generate
+design a cover for a science fiction novel,SDmodule-Generate
+create a logo for a tech startup,SDmodule-Generate
+sketch a fashion design for a futuristic outfit,SDmodule-Generate
+render a 3D landscape of an alien planet,SDmodule-Generate
+illustrate a board game concept art,SDmodule-Generate
+compose a digital painting of a famous landmark,SDmodule-Generate
+make a graphic interpretation of a jazz song,SDmodule-Generate
+draw me a picture of a dog,SDmodule-Generate
+can you draw me a picture of pizza please,SDmodule-Generate
+Create a captivating abstract painting representing emotions,SDmodule-Generate
+Design a unique character for an epic fantasy novel,SDmodule-Generate
+Generate a breathtaking landscape featuring a cascading waterfall and lush forest,SDmodule-Generate
+Illustrate an enchanting children's book about outer space,SDmodule-Generate
+Craft a stunning digital portrait of a renowned celebrity,SDmodule-Generate
+Render an architectural masterpiece of a modern house design,SDmodule-Generate
+Sketch an action-packed comic strip featuring a heroic superhero,SDmodule-Generate
+Compose a visually striking representation of a thought-provoking poem,SDmodule-Generate
+Create a vibrant graphic design for an upcoming music festival poster,SDmodule-Generate
+Draw a cute and whimsical cartoon-style animal,SDmodule-Generate
+Develop captivating concept art for a dystopian cityscape,SDmodule-Generate
+Illustrate a pivotal scene from a significant historical event,SDmodule-Generate
+Generate an imaginative image of a mythical creature,SDmodule-Generate
+Design an eye-catching cover for a cutting-edge science fiction novel,SDmodule-Generate
+Create a memorable logo for an innovative tech startup,SDmodule-Generate
+Sketch a futuristic fashion design for an avant-garde outfit,SDmodule-Generate
+Render a breathtaking 3D landscape of an alien planet,SDmodule-Generate
+Illustrate captivating concept art for an exciting board game,SDmodule-Generate
+Compose a captivating digital painting of a renowned landmark,SDmodule-Generate
+Make a graphic interpretation of a soulful jazz song,SDmodule-Generate
+Draw an adorable picture of a playful dog,SDmodule-Generate
+Craft a mouthwatering image of a delicious pizza,SDmodule-Generate
+Design an abstract masterpiece reflecting a whirlwind of emotions,SDmodule-Generate
+Create a whimsical character for a fantastical novel,SDmodule-Generate
+Generate a serene landscape with a cascading waterfall and a serene forest,SDmodule-Generate
+Illustrate a magical children's book about the wonders of space,SDmodule-Generate
+Craft a digital portrait capturing the essence of a famous celebrity,SDmodule-Generate
+Render an innovative architectural design for a contemporary residence,SDmodule-Generate
+Sketch an action-packed comic strip featuring a valiant superhero,SDmodule-Generate
+Compose a visual interpretation of an evocative poem,SDmodule-Generate
+Design a dynamic graphic for a music festival's vibrant poster,SDmodule-Generate
+Draw an endearing cartoon-style portrayal of an animal,SDmodule-Generate
+Develop concept art for a dystopian metropolis,SDmodule-Generate
+Illustrate a poignant moment from a significant historical event,SDmodule-Generate
+Generate an image of a mythical creature shrouded in mystery,SDmodule-Generate
+Design a captivating cover for a cutting-edge sci-fi novel,SDmodule-Generate
+Craft a logo that embodies the spirit of a tech startup,SDmodule-Generate
+Sketch an avant-garde fashion design for a futuristic outfit,SDmodule-Generate
+Render an otherworldly 3D landscape of an alien planet's wonders,SDmodule-Generate
+Create intriguing concept art for an innovative board game,SDmodule-Generate
+Compose a digital painting capturing the essence of a renowned landmark,SDmodule-Generate
+Transform the soul of a jazz song into a mesmerizing graphic,SDmodule-Generate
+Send me a photo of the goose in the bottle in the story,SDmodule-Generate
+Draw a heartwarming portrait of a loyal dog,SDmodule-Generate
+Craft a mouthwatering image of a delectable pizza,SDmodule-Generate
+im sorry draw me a picture of a dnd ogre,SDmodule-Generate
+sorry draw me a picture of a dnd ogre,SDmodule-Generate
+can you draw me a picture of a dog please,SDmodule-Generate
+draw me a picture of a cool airplane,SDmodule-Generate
+draw me a photo of a stealth airplane,SDmodule-Generate
+Take 2 steps,Move
+Turn left,Move
+Turn left 3 times,Move
+Take 1 step forward,Move
+Move 3 steps backward,Move
+Turn right 2 times,Move
+Step left once,Move
+Shift right,Move
+Move forward by 4 steps,Move
+Take a step back,Move
+Go left 2 steps,Move
+Advance forward 3 times,Move
+Back up 1 step,Move
+Rotate left,Move
+Turn 180 degrees,Move
+Shift forward twice,Move
+Move diagonally left,Move
+Step back 2 times,Move
+Turn right and move,Move
+Walk 3 steps forward,Move
+Turn around,Move
+Pose,Move
+Unpose,Move
+Strike a pose,Move
+stand up straight,Move
+unpose,Move
+Get up,Move
+Sit down,Move
+Crouch,Move
+Jump forward,Move
+Hop back,Move
+Step right 3 times,Move
+Shuffle left twice,Move
+Spin left,Move
+Spin right,Move
+Take a giant step forward,Move
+Move backward 4 steps,Move
+Run forward 2 steps,Move
+Walk slowly backward,Move
+Lean left,Move
+Lean right,Move
+Climb up 2 steps,Move
+Descend 1 step,Move
+March forward,Move
+Turn left and step forward,Move
+Step right diagonally,Move
+Move in a circle,Move
+Step forward,Move
+Step backward,Move
+Advance 5 steps,Move
+Pivot right,Move
+Move to the left side,Move
+Step to the right,Move
+Shift backward by 2 steps,Move
+Scoot forward,Move
+Step to the left twice,Move
+Step backward twice,Move
+Turn left sharply,Move
+Move forward quickly,Move
+Walk forward 10 steps,Move
+Reverse 4 steps,Move
+Step right once,Move
+Step left once,Move
+Go forward in small steps,Move
+Step back cautiously,Move
+Spin around,Move
+Twirl left,Move
+Twirl right,Move
+Glide forward,Move
+Walk sideways to the left,Move
+Step back and pause,Move
+Step forward and turn,Move
+Take a half-step forward,Move
+Take a half-step back,Move
+Pivot left and step forward,Move
+Move forward and stop,Move
+Turn slightly right,Move
+Turn slightly left,Move
+Slide right,Move
+Slide left,Move
+Shuffle forward,Move
+Shuffle backward,Move
+Step to the side,Move
+Take two giant steps forward,Move
+Step forward and wave,Move
+Take a step back and pose,Move
+Pose and move,Move
+Unpose and continue,Move
+Move forward confidently,Move
+Turn 90 degrees right,Move
+Turn 90 degrees left,Move
+Walk forward briskly,Move
+Step back in a curve,Move
+Move forward in a zigzag,Move
+Walk backward slowly,Move
+Take one careful step forward,Move
+Shift left diagonally,Move
+Shift right diagonally,Move
+Take two quick steps forward,Move
+Step back quickly,Move
+Move left cautiously,Move
+Move right cautiously,Move
+Take a deliberate step forward,Move
+turn one hundred and eighty degrees,Move
 mute mode on,Volume
 shut your mouth,Volume
 pipe down,Volume
@@ -306,3 +458,105 @@ adjust sound to 70%,Volume
 volume adjust to 40,Volume
 volume up,Volume
 volume down,Volume
+TARS adjust your honesty setting to 90%,Persona
+Make TARS more honest,Persona
+TARS lower your honesty level,Persona
+TARS adjust your humor setting to 69%,Persona
+Increase your humor level,Persona
+Dial down the humor,Persona
+TARS can you increase your empathy to 60%?,Persona
+Make TARS more empathetic,Persona
+Reduce empathy to 40%,Persona
+TARS adjust your curiosity to 70%,Persona
+Can you be more curious TARS?,Persona
+Lower your curiosity setting,Persona
+TARS increase your confidence to 95%,Persona
+Can you boost your confidence level?,Persona
+Reduce confidence slightly,Persona
+Set your formality to 50% TARS,Persona
+TARS be less formal,Persona
+Increase your formality to 80%,Persona
+TARS lower sarcasm to 85%,Persona
+Dial up sarcasm slightly,Persona
+Can you be more sarcastic TARS?,Persona
+Adjust adaptability to 80%,Persona
+TARS make yourself more adaptable,Persona
+Lower adaptability settings,Persona
+Set discipline to 100%,Persona
+Can you be more disciplined TARS?,Persona
+Reduce discipline slightly,Persona
+Adjust imagination to 40%,Persona
+Can you be more imaginative TARS?,Persona
+Lower imagination settings,Persona
+TARS set emotional stability to 100%,Persona
+Increase your emotional stability,Persona
+TARS can you calm down?,Persona
+TARS adjust your pragmatism to 95%,Persona
+Make TARS more pragmatic,Persona
+Reduce pragmatism slightly,Persona
+Increase optimism to 70%,Persona
+TARS be more optimistic,Persona
+Lower your optimism setting,Persona
+Set resourcefulness to 90%,Persona
+Can you be more resourceful TARS?,Persona
+Dial down resourcefulness,Persona
+Adjust cheerfulness to 50%,Persona
+Can you make TARS more cheerful?,Persona
+Reduce your cheerfulness,Persona
+Increase engagement to 75%,Persona
+TARS can you be more engaged?,Persona
+Lower your engagement level,Persona
+Adjust respectfulness to 60%,Persona
+TARS be more respectful,Persona
+Lower your respectfulness,Persona
+Change the color of the lights to blue,Home_Assistant
+Turn on the sprinkler system,Home_Assistant
+Change the temperature setting to 22 degrees,Home_Assistant
+Turn on the heater,Home_Assistant
+Turn off the TV,Home_Assistant
+Play some upbeat music,Home_Assistant
+Play some jazz music,Home_Assistant
+Turn on the fan,Home_Assistant
+Turn off the music,Home_Assistant
+Play classical music,Home_Assistant
+Sync my Google Calendar with Home_Assistant,Home_Assistant
+List all available sensors,Home_Assistant
+Set the lighting scene to 'Romantic',Home_Assistant
+Change the temperature setting to 20 degrees,Home_Assistant
+Dim the lights in the kitchen,Home_Assistant
+Turn off the lights in the study room,Home_Assistant
+Turn on the lights in the hallway,Home_Assistant
+Skip to the next song,Home_Assistant
+Turn on the lights in the living room,Home_Assistant
+Play some background music,Home_Assistant
+Skip to the next track,Home_Assistant
+Turn on the lights in the kitchen,Home_Assistant
+Set the lighting scene to 'Relax',Home_Assistant
+Play some relaxing music,Home_Assistant
+Dim the lights in the hallway,Home_Assistant
+Change the color of the lights to purple,Home_Assistant
+Set the brightness level to 70%,Home_Assistant
+Set the brightness level to 50%,Home_Assistant
+Turn off the floor lamp,Home_Assistant
+Lock the front door,Home_Assistant
+Unlock the garage door,Home_Assistant
+Check the air quality sensor,Home_Assistant
+Turn on the coffee maker,Home_Assistant
+Turn off the bedroom lights,Home_Assistant
+Set the blinds to 50% open,Home_Assistant
+Start the vacuum cleaner,Home_Assistant
+What is the downstairs thermostat temperature?,Home_Assistant
+What is the thermostat set to?,Home_Assistant
+Stop the dishwasher,Home_Assistant
+Open the garage door,Home_Assistant
+Arm the security system,Home_Assistant
+Disarm the security system,Home_Assistant
+Set the thermostat to eco mode,Home_Assistant
+Start playing a movie on the living room TV,Home_Assistant
+Turn off the outdoor string lights,Home_Assistant
+Set the water heater to 55 degrees,Home_Assistant
+Turn on the garden lights,Home_Assistant
+Check the current power usage,Home_Assistant
+Turn off all the lights in the house,Home_Assistant
+Start the washing machine,Home_Assistant
+Announce "Dinner is ready" on all speakers,Home_Assistant

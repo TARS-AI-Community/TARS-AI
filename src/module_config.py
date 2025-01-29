@@ -19,8 +19,9 @@ load_dotenv() # Load environment variables from .env file
 
 def load_config():
     """
-    Load configuration settings from 'config.ini' and return them as a dictionary.
-
+    Load configuration settings from 'config.ini' and 'persona.ini' and return them as a dictionary.
+    This function will print an error and exit if any configuration is invalid or missing.
+    
     Returns:
     - CONFIG (dict): Dictionary containing configuration settings.
     """
@@ -30,11 +31,38 @@ def load_config():
     sys.path.insert(0, base_dir)
     sys.path.append(os.getcwd())
 
-    # Parse the config file
+    # Parse the main config.ini file
     config = configparser.ConfigParser()
     config.read('config.ini')
 
-    # Extract and return configuration variables
+    # Parse the persona.ini file
+    persona_config = configparser.ConfigParser()
+    persona_path = os.path.join(base_dir, 'character', 'persona.ini')
+    if not os.path.exists(persona_path):
+        print(f"ERROR: {persona_path} not found.")
+        sys.exit(1)  # Exit if persona.ini is missing
+
+    persona_config.read(persona_path)
+
+    # Ensure required sections and keys exist in config.ini
+    required_sections = [
+        'CONTROLS', 'STT', 'CHAR', 'LLM', 'VISION', 'EMOTION', 'TTS', 'DISCORD', 'SERVO', 'STABLE_DIFFUSION'
+    ]
+    missing_sections = [section for section in required_sections if section not in config]
+
+    if missing_sections:
+        print(f"ERROR: Missing sections in config.ini: {', '.join(missing_sections)}")
+        sys.exit(1)
+
+    # Extract persona traits
+    persona_traits = {}
+    if 'PERSONA' in persona_config:
+        persona_traits = {key: int(value) for key, value in persona_config['PERSONA'].items()}
+    else:
+        print("ERROR: [PERSONA] section missing in persona.ini.")
+        sys.exit(1)
+
+    # Extract and return combined configurations
     return {
         "BASE_DIR": base_dir,
         "CONTROLS": {
@@ -42,26 +70,30 @@ def load_config():
         },
         "STT": {
             "wake_word": config['STT']['wake_word'],
-            "use_server": config.getboolean('STT', 'use_server'),
-            "server_url": config['STT']['server_url'],
+            "sensitivity": config['STT']['sensitivity'],
+            "stt_processor": config['STT']['stt_processor'],
+            "external_url": config['STT']['external_url'],
+            "whisper_model": config['STT']['whisper_model'],
             "vosk_model": config['STT']['vosk_model'],
-            "use_indicators": config['STT']['use_indicators'],
+            "use_indicators": config.getboolean('STT', 'use_indicators'),
         },
         "CHAR": {
             "character_card_path": config['CHAR']['character_card_path'],
             "user_name": config['CHAR']['user_name'],
             "user_details": config['CHAR']['user_details'],
+            "traits": persona_traits,  # Include the traits from persona.ini
         },
         "LLM": {
             "llm_backend": config['LLM']['llm_backend'],
             "base_url": config['LLM']['base_url'],
             "api_key": get_api_key(config['LLM']['llm_backend']),
             "openai_model": config['LLM']['openai_model'],
-            "contextsize": config.getint('LLM', 'contextsize'),
-            "max_tokens": config.getint('LLM', 'max_tokens'),
-            "temperature": config.getfloat('LLM', 'temperature'),
-            "top_p": config.getfloat('LLM', 'top_p'),
-            "seed": config.getint('LLM', 'seed'),
+            "override_encoding_model": config['LLM']['override_encoding_model'],
+            "contextsize": int(config['LLM']['contextsize']),
+            "max_tokens": int(config['LLM']['max_tokens']),
+            "temperature": float(config['LLM']['temperature']),
+            "top_p": float(config['LLM']['top_p']),
+            "seed": int(config['LLM']['seed']),
             "systemprompt": config['LLM']['systemprompt'],
             "instructionprompt": config['LLM']['instructionprompt'],
         },
@@ -86,8 +118,13 @@ def load_config():
             "is_talking": config.getboolean('TTS', 'is_talking'),
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
         },
+        "HOME_ASSISTANT": {
+            "enabled": config['HOME_ASSISTANT']['enabled'],
+            "url": config['HOME_ASSISTANT']['url'],
+            "HA_TOKEN": os.getenv('HA_TOKEN'),
+        },
         "DISCORD": {
-            "TOKEN": config['DISCORD']['TOKEN'],
+            "TOKEN": os.getenv('DISCORD_TOKEN'),
             "channel_id": config['DISCORD']['channel_id'],
             "enabled": config['DISCORD']['enabled'],
         },
@@ -110,7 +147,24 @@ def load_config():
             "backStarboard": config['SERVO']['backStarboard'],
             "perfectStaroffset": config['SERVO']['perfectStaroffset'],
         },
+        "STABLE_DIFFUSION": {
+            "enabled": config['STABLE_DIFFUSION']['enabled'],
+            "service": config['STABLE_DIFFUSION']['service'],
+            "url": config['STABLE_DIFFUSION']['url'],
+            "prompt_prefix": config['STABLE_DIFFUSION']['prompt_prefix'],
+            "prompt_postfix": config['STABLE_DIFFUSION']['prompt_postfix'],
+            "seed": int(config['STABLE_DIFFUSION']['seed']),
+            "sampler_name": config['STABLE_DIFFUSION']['sampler_name'].strip('"'),
+            "denoising_strength": float(config['STABLE_DIFFUSION']['denoising_strength']),
+            "steps": int(config['STABLE_DIFFUSION']['steps']),
+            "cfg_scale": float(config['STABLE_DIFFUSION']['cfg_scale']),
+            "width": int(config['STABLE_DIFFUSION']['width']),
+            "height": int(config['STABLE_DIFFUSION']['height']),
+            "restore_faces": config.getboolean('STABLE_DIFFUSION', 'restore_faces'),
+            "negative_prompt": config['STABLE_DIFFUSION']['negative_prompt'],
+        },
     }
+
 
 def get_api_key(llm_backend: str) -> str:
     """
@@ -140,3 +194,43 @@ def get_api_key(llm_backend: str) -> str:
     
     return api_key
 
+
+def update_character_setting(setting, value):
+    """
+    Update a specific setting in the [CHAR] section of the config.ini file.
+
+    Parameters:
+    - setting (str): The setting to update (e.g., 'humor', 'honesty').
+    - value (int): The new value for the setting.
+
+    Returns:
+    - bool: True if the update is successful, False otherwise.
+    """
+    # Determine the path to config.ini in the same folder as this script
+
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'character', 'persona.ini')
+
+    config = configparser.ConfigParser()
+
+    try:
+        # Read the config file
+        config.read(config_path)
+
+        # Check if [CHAR] section exists
+        if 'PERSONA' not in config:
+            print("Error: [PERSONA] section not found in the config file.")
+            return False
+
+        # Update the setting
+        config['PERSONA'][setting] = str(value)
+
+        # Write the changes back to the file
+        with open(config_path, 'w') as config_file:
+            config.write(config_file)
+
+        print(f"Updated {setting} to {value} in [PERSONA] section.")
+        return True
+
+    except Exception as e:
+        print(f"Error updating setting: {e}")
+        return False

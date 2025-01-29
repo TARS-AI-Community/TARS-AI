@@ -25,8 +25,9 @@ from module_memory import MemoryManager
 from module_stt import STTManager
 from module_tts import update_tts_settings
 from module_btcontroller import *
-from module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread
+from module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread, start_discord_bot, process_discord_message_callback
 from module_vision import initialize_blip
+from module_llm import initialize_manager_llm
 
 # === Constants and Globals ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -50,6 +51,14 @@ def init_app():
     if CONFIG['TTS']['ttsoption'] == 'xttsv2':
         update_tts_settings(CONFIG['TTS']['ttsurl'])
 
+def start_discord_in_thread():
+    """
+    Start the Discord bot in a separate thread to prevent blocking.
+    """
+    discord_thread = threading.Thread(target=start_discord_bot, args=(process_discord_message_callback,), daemon=True)
+    discord_thread.start()
+    print("INFO: Discord bot started in a separate thread.")
+
 # === Main Application Logic ===
 if __name__ == "__main__":
     # Perform initial setup
@@ -61,15 +70,20 @@ if __name__ == "__main__":
     # Initialize CharacterManager, MemoryManager
     char_manager = CharacterManager(config=CONFIG)
     memory_manager = MemoryManager(config=CONFIG, char_name=char_manager.char_name, char_greeting=char_manager.char_greeting)
-
+   
     # Initialize STTManager
     stt_manager = STTManager(config=CONFIG, shutdown_event=shutdown_event)
     stt_manager.set_wake_word_callback(wake_word_callback)
     stt_manager.set_utterance_callback(utterance_callback)
     stt_manager.set_post_utterance_callback(post_utterance_callback)
 
+    #DISCORD Callback
+    if CONFIG['DISCORD']['enabled'] == 'True':
+        start_discord_in_thread()
+
     # Pass managers to main module
     initialize_managers(memory_manager, char_manager, stt_manager)
+    initialize_manager_llm(memory_manager, char_manager)
 
     # Start necessary threads
     bt_controller_thread = threading.Thread(target=start_bt_controller_thread, name="BTControllerThread", daemon=True)
@@ -80,7 +94,7 @@ if __name__ == "__main__":
         initialize_blip()
     
     try:
-        print(f"LOAD: TARS-AI v1.00 running.")
+        print(f"LOAD: TARS-AI v1.01 running.")
         # Start the STT thread
         stt_manager.start()
 

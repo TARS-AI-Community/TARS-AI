@@ -104,29 +104,34 @@ def check_secret_code(button_name):
 
 #functions to move
 def stepForward():
-	height_neutral_to_up()
-	torso_neutral_to_forwards()
-	torso_bump()
-	torso_return()
+    print("MOVE: FWD")
+    height_neutral_to_up()
+    torso_neutral_to_forwards()
+    torso_bump()
+    torso_return()
 
 def turnRight():
-	neutral_to_down()
-	turn_right()
-	down_to_neutral()
-	neutral_from_right()
+    print("MOVE: TurnRight")
+    neutral_to_down()
+    turn_right()
+    down_to_neutral()
+    neutral_from_right()
 
 def turnLeft():
-	neutral_to_down()
-	turn_left()
-	down_to_neutral()
-	neutral_from_left()
+    print("MOVE: TurnLeft")
+    neutral_to_down()
+    turn_left()
+    down_to_neutral()
+    neutral_from_left()
 
 def poseaction():
+    print("MOVE: Pose")
     neutral_to_down()
     torso_neutral_to_backwards()
     down_to_up()
 
 def unposeaction():
+    print("MOVE: UnPose")
     torso_return2()  
         
         

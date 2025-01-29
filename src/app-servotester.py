@@ -13,7 +13,7 @@ pwm.set_pwm_freq(60)
 print("Auto calibrate is in internal testing DO NOT USE / risk it unless you know what your doing!!!!")
 
 MIN_PULSE = 0  # Calibrate these values
-MAX_PULSE = 1000  # Calibrate these values
+MAX_PULSE = 600  # Calibrate these values
 
 def set_servo_pulse(channel, pulse):
     if MIN_PULSE <= pulse <= MAX_PULSE:
@@ -46,7 +46,7 @@ def auto_calibrate_servo(channel, is_center_servo=False):
 
     # Find minimum PWM value using a curved approach
     print("Finding minimum PWM value...")
-    step = 50  # Initial large step
+    step = 150  # Initial large step
     pwm_value = MAX_PULSE  # Start at the high end
     min_pulse = None
     while step >= 1:
@@ -129,8 +129,9 @@ while True:
     print("2. Manually set servo 0 pulse width")
     print("3. Manually set servo 1 pulse width")
     print("4. Manually set servo 2 pulse width")
-    print("5. Auto-calibrate servo")
-    print("6. Exit")
+    print("5. Manually set servo 15 pulse width")
+    print("6. Auto-calibrate servo")
+    print("7. Exit")
 
     choice = input("> ")
 
@@ -143,12 +144,14 @@ while True:
     elif choice == '4':
         set_single_servo(2)
     elif choice == '5':
+        set_single_servo(15)
+    elif choice == '6':
         try:
-            print("WARNING: This auto-calibration will only work on channel 12 for safety reasons.")
-            print("Before continuing, ensure you have a servo connected to channel 12 that is NOT attached or installed to anything!")
+            print("WARNING: This auto-calibration will only work on channel 15 for safety reasons.")
+            print("Before continuing, ensure you have a servo connected to channel 15 that is NOT attached or installed to anything!")
             confirmation = input("Type 'confirm' to proceed: ").strip().lower()
             if confirmation == "confirm":
-                channel = 12
+                channel = 15
                 print(f"Proceeding with auto-calibration for channel {channel}...")
                 auto_calibrate_servo(channel)
             else:

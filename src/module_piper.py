@@ -8,6 +8,10 @@ import re
 import os
 import ctypes
 
+# === Custom Modules ===
+from module_config import load_config
+CONFIG = load_config()
+
 # Define the error handler function type
 ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(
     None, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p
@@ -23,12 +27,12 @@ c_error_handler = ERROR_HANDLER_FUNC(py_error_handler)
 # Load the ALSA library
 asound = ctypes.cdll.LoadLibrary('libasound.so')
 
+# Load the Piper model globally
 script_dir = os.path.dirname(__file__)
 model_path = os.path.join(script_dir, 'tts/TARS.onnx')
-model_path = os.path.normpath(model_path)
 
-# Load the Piper model
-voice = PiperVoice.load(model_path)
+if CONFIG['TTS']['ttsoption'] == 'piper':
+    voice = PiperVoice.load(model_path)
 
 async def synthesize(voice, chunk):
     """
@@ -39,7 +43,10 @@ async def synthesize(voice, chunk):
         wav_file.setnchannels(1)  # Mono
         wav_file.setsampwidth(2)  # 16-bit samples
         wav_file.setframerate(voice.config.sample_rate)
-        voice.synthesize(chunk, wav_file)
+        try:
+            voice.synthesize(chunk, wav_file)
+        except TypeError as e:
+            print(f"ERROR: {e}")
     wav_buffer.seek(0)
     return wav_buffer
 
@@ -59,7 +66,6 @@ async def text_to_speech_with_pipelining(text):
     """
     Converts text to speech using the specified Piper model and streams audio playback with pipelining.
     """
-
     # Split text into smaller chunks
     chunks = re.split(r'(?<=\.)\s', text)  # Split at sentence boundaries
 
@@ -68,7 +74,3 @@ async def text_to_speech_with_pipelining(text):
         if chunk.strip():  # Ignore empty chunks
             wav_buffer = await synthesize(voice, chunk.strip())
             await play_audio(wav_buffer)
-
-# Example usage:
-# testtext = "Your text here."
-# asyncio.run(text_to_speech_with_pipelining(testtext))
