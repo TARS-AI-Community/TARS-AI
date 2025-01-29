@@ -3,7 +3,7 @@ module_engine.py
 
 Core module for TARS-AI responsible for:
 - Predicting user intents and determining required modules.
-- Executing tool-specific functions like web searches and vision analysis.
+- Executing tool-specific functions like web searches, vision analysis, and volume control.
 
 This is achieved using a pre-trained Naive Bayes classifier and TF-IDF vectorizer.
 """
