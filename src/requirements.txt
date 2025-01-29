@@ -23,7 +23,7 @@ piper-tts #needed for local TTS with voice clone
 discord.py[voice] #needed to voice chat with tars on discord
 configobj #needed to keep comments in the config.ini when updating
 openai
-
+librosa
 #espeak-ng
 #alsa-utils
 #sudo apt install ffmpeg
