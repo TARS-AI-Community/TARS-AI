@@ -15,6 +15,7 @@ sox --version
 #make the venv for python
 python -m venv venv
 source venv/bin/activate
+pip install git+https://github.com/openai/whisper.git
 #install pre requisites
 pip install -r requirements.txt
 #edit src/config.ini.example and save as config.ini
