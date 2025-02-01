@@ -39,6 +39,7 @@ The buck converter and USB power modules are the most important power components
 | | TPU Filament (Alternative) | Overture TPU filament | [Buy](https://www.amazon.com/Overture-Filament-Flexible-Consumables-Dimensional/dp/B07VDP2S3P/) |
 | | PETG Filament | For all non-Flexor parts | [Buy](https://us.store.bambulab.com/products/petg-hf) |
 | | PLA Filament | Optional - for rapid prototyping | - |
+| | Files | Easy Import into Bambu Studio | [Print](https://makerworld.com/en/models/1059952?from=search#profileId-1047970) |
 | **Core Components** | Raspberry Pi 5 | Main computing unit | [Buy](https://www.amazon.com/Raspberry-Pi-Quad-core-Cortex-A76-Processor/dp/B0CTQ3BQLS/) |
 | | 3.5" LCD Display | Interface display | [Buy](https://www.amazon.com/OSOYOO-3-5inch-Display-Protective-Raspberry/dp/B09CD9W6NQ/) |
 | | 16-Channel PWM Servo Driver | I2C Interface | [Buy](https://www.amazon.com/gp/product/B00EIB0U7A/) |
