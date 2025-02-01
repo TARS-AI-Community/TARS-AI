@@ -83,11 +83,12 @@ class STTManager:
         self._initialize_models()
 
     def _initialize_models(self):
-        """Initialize all required models based on the configuration."""
-        self._load_vosk_model()
+        """Initialize all required models based on the configuration."""        
         self._measure_background_noise()
         if self.config.get("STT", {}).get("stt_processor") == "whisper":
             self._load_whisper_model()
+        if self.config.get("STT", {}).get("stt_processor") == "vosk":
+            self._load_vosk_model()
 
     def start(self):
         """Start the STTManager in a separate thread."""

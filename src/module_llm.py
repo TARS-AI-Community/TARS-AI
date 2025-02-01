@@ -192,8 +192,8 @@ def raw_complete_llm(user_prompt, istext=True):
     Returns:
     - str: The generated completion.
     """
-    if memory_manager is None or character_manager is None:
-        raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
+    #if memory_manager is None or character_manager is None:
+        #raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
 
     headers = {
         "Content-Type": "application/json",
