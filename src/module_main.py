@@ -107,7 +107,7 @@ def wake_word_callback(wake_response):
     Parameters:
     - wake_response (str): The response to the wake word.
     """
-    generate_tts_audio(wake_response, CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
+    generate_tts_audio(wake_response, CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'], CONFIG['TTS']['voice_id'], CONFIG['TTS']['model_id'])
 
 def utterance_callback(message):
     """
