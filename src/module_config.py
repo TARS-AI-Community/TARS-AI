@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 # === Initialization ===
-load_dotenv() # Load environment variables from .env file
+load_dotenv()  # Load environment variables from .env file
 
 def load_config():
     """
@@ -180,7 +180,8 @@ def get_api_key(llm_backend: str) -> str:
     backend_to_env_var = {
         "openai": "OPENAI_API_KEY",
         "ooba": "OOBA_API_KEY",
-        "tabby": "TABBY_API_KEY"
+        "tabby": "TABBY_API_KEY",
+        "deepinfra": "DEEPINFRA_API_KEY"
     }
 
     # Check if the backend is supported
@@ -207,9 +208,7 @@ def update_character_setting(setting, value):
     - bool: True if the update is successful, False otherwise.
     """
     # Determine the path to config.ini in the same folder as this script
-
     config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'character', 'persona.ini')
-
     config = configparser.ConfigParser()
 
     try:

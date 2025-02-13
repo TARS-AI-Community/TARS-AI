@@ -20,6 +20,11 @@ import sounddevice as sd
 import soundfile as sf
 from io import BytesIO
 from module_piper import *
+from elevenlabs.client import ElevenLabs
+from elevenlabs import play
+
+elevenlabs_api_key = os.getenv('ELEVENLABS_API_KEY')
+client = ElevenLabs(api_key=elevenlabs_api_key)
 
 def update_tts_settings(ttsurl):
     """
@@ -131,6 +136,27 @@ def azure_tts(text, azure_api_key, azure_region, tts_voice):
                 print(f"ERROR: Error details: {cancellation_details.error_details}")
     except Exception as e:
         print(f"ERROR: Azure TTS generation failed: {e}")
+
+def elevenlabs_tts(text, voice_id="JBFqnCBsd6RMkjVDRZzb", model_id="eleven_multilingual_v2", output_format="mp3_44100_128"):
+    """
+    Generate TTS audio using ElevenLabs.
+    
+    Parameters:
+    - text (str): The text to convert into speech.
+    - voice_id (str): Voice ID for ElevenLabs.
+    - model_id (str): Model ID for ElevenLabs.
+    - output_format (str): Output format for the audio.
+    """
+    try:
+        audio = client.text_to_speech.convert(
+            text=text,
+            voice_id="CwhRBWXzGAHq8TQ4Fs17",
+            model_id="eleven_flash_v2_5",
+            output_format=output_format,
+        )
+        play(audio)
+    except Exception as e:
+        print(f"ERROR: ElevenLabs TTS generation failed: {e}")
 
 def alltalk_tts(text, ttsurl, tts_voice):
     try:
@@ -245,6 +271,10 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
             if not azure_api_key or not azure_region:
                 raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Azure API key and region must be provided for ttsoption 'azure'.")
             azure_tts(text, azure_api_key, azure_region, tts_voice)
+
+        # ElevenLabs TTS generation
+        elif ttsoption == "elevenlabs":
+            elevenlabs_tts(text, tts_voice)
 
         # Local TTS generation using `espeak-ng`
         elif ttsoption == "local" and toggle_charvoice:

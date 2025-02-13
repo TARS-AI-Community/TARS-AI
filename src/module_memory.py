@@ -142,7 +142,7 @@ class MemoryManager:
         """
         # Get the memory dictionary
         memory_dict = self.hyper_db.dict()
-        return [entry['document'] for entry in memory_dict[-max_entries:]] # Retrieve the most recent entries
+        return [entry['document'] for entry in memory_dict[-max_entries:]]  # Retrieve the most recent entries
     
     def get_shortterm_memories_tokenlimit(self, token_limit: int) -> str:
         """
@@ -228,37 +228,33 @@ class MemoryManager:
         if not hasattr(self, '_fallback_warning_logged'):
             self._fallback_warning_logged = False
 
-        # Check the LLM backend and handle token counting
-        if llm_backend == "openai":
-            # Use tiktoken for OpenAI models
+        # Support both openai and deepinfra using tiktoken
+        if llm_backend in ["openai", "deepinfra"]:
             try:
                 import tiktoken
 
-                # Explicitly map encoding for models that fail automatic detection
                 openai_model = self.config['LLM'].get('openai_model', None)
                 override_encoding_model = self.config['LLM'].get('override_encoding_model', "cl100k_base")
                 try:
                     enc = tiktoken.encoding_for_model(openai_model)
                 except KeyError:
-                    if not hasattr(self, '_fallback_warning_logged'):
+                    if not self._fallback_warning_logged:
                         print(f"INFO: Automatic mapping failed '{openai_model}'. Using '{override_encoding_model}'.")
                         self._fallback_warning_logged = True
                     enc = tiktoken.get_encoding(override_encoding_model)
 
                 length = {"length": len(enc.encode(text))}
                 return length
-            
+
             except Exception as e:
                 if not hasattr(self, '_token_error_logged'):
                     print(f"ERROR: Failed to calculate tokens using tiktoken: {e}")
                     self._token_error_logged = True
                 return {"length": 0}
 
-
         elif llm_backend in ["ooba", "tabby"]:
             # Handle token counting for other backends via API
             url = f"{self.config['LLM']['base_url']}/v1/internal/token-count" if llm_backend == "ooba" else f"{self.config['LLM']['base_url']}/v1/token/encode"
-
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.config['LLM']['api_key']}"
