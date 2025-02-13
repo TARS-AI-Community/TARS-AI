@@ -60,7 +60,7 @@ def update_tts_settings(ttsurl):
     try:
         response = requests.post(url, headers=headers, json=payload)
         if response.status_code == 200:
-            print(f"LOAD: TTS Settings updated successfully.")
+            print("LOAD: TTS Settings updated successfully.")
         else:
             print(f"ERROR: Failed to update TTS settings. Status code: {response.status_code}")
             print(f"INFO: Response: {response.text}")
@@ -97,7 +97,7 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
                     # Write the adjusted audio data to the stream
                     stream.write(audio_data)
                 else:
-                    print(f"ERROR: Received empty chunk.")
+                    print("ERROR: Received empty chunk.")
     except Exception as e:
         print(f"ERROR: Error during audio playback: {e}")
 
@@ -275,12 +275,13 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
         elif ttsoption == "local" and toggle_charvoice:
             local_tts(text)
 
-        # Local TTS generation using `espeak-ng`
+        # Local TTS generation using `alltalk`
         elif ttsoption == "alltalk" and toggle_charvoice:
             alltalk_tts(text, ttsurl, tts_voice)
 
         # Local TTS generation using local onboard PIPER TTS
         elif ttsoption == "piper" and toggle_charvoice:
+            import asyncio
             asyncio.run(text_to_speech_with_pipelining(text))
 
         # Server-based TTS generation using `xttsv2`

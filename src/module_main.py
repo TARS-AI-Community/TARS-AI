@@ -165,7 +165,10 @@ def utterance_callback(message):
             CONFIG['TTS']['azure_region'],
             CONFIG['TTS']['ttsurl'],
             CONFIG['TTS']['toggle_charvoice'],
-            CONFIG['TTS']['tts_voice']
+            CONFIG['TTS']['tts_voice'],
+	    CONFIG['TTS']['elevenlabs_api_key'],
+	    CONFIG['TTS']['voice_id'],
+	    CONFIG['TTS']['model_id']
         )
 
     except json.JSONDecodeError:
