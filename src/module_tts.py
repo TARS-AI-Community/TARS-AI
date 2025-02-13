@@ -7,7 +7,6 @@ Handles TTS functionality to convert text into audio using:
 - Azure Speech SDK
 - Local tools (e.g., espeak-ng)
 - Server-based TTS systems
-
 """
 
 # === Standard Libraries ===
@@ -23,6 +22,19 @@ from module_piper import *
 from elevenlabs.client import ElevenLabs
 from elevenlabs import play
 
+elevenlabs_client = None
+def init_elevenlabs_client(api_key):
+    """
+    Initializes the global ElevenLabs client instance with the provided API key.
+    
+    Parameters:
+    - api_key (str): The ElevenLabs API key.
+    """
+    global elevenlabs_client
+    if not api_key:
+        raise ValueError("ElevenLabs API key must be provided for initialization.")
+    elevenlabs_client = ElevenLabs(api_key=api_key)
+
 def update_tts_settings(ttsurl):
     """
     Updates TTS settings using a POST request to the specified server.
@@ -30,7 +42,6 @@ def update_tts_settings(ttsurl):
     Parameters:
     - ttsurl: The URL of the TTS server.
     """
-
     url = f"{ttsurl}/set_tts_settings"
     headers = {
         'Accept': 'application/json',
@@ -46,7 +57,6 @@ def update_tts_settings(ttsurl):
         "top_k": 50,
         "enable_text_splitting": True
     }
-
     try:
         response = requests.post(url, headers=headers, json=payload)
         if response.status_code == 200:
@@ -145,7 +155,7 @@ def elevenlabs_tts(text, voice_id="JBFqnCBsd6RMkjVDRZzb", model_id="eleven_multi
     - output_format (str): Output format for the audio.
     """
     try:
-        audio = client.text_to_speech.convert(
+        audio = elevenlabs_client.text_to_speech.convert(
             text=text,
             voice_id=voice_id,
             model_id=model_id,
@@ -172,33 +182,18 @@ def alltalk_tts(text, ttsurl, tts_voice):
             "autoplay": "false",
             "autoplay_volume": 0.8,
         }
-
-        #print("Generating audio on the server...")
         response = requests.post(url, data=data)
         response.raise_for_status()
-
         wav_url = response.json().get("output_file_url")
         if not wav_url:
             print("Error: No WAV file URL provided.")
             return
-
-        #print(f"Audio generated. WAV file URL: {wav_url}")
-
-        # Download the audio file into memory
-        #print("Downloading WAV file...")
         response = requests.get(wav_url)
         response.raise_for_status()
-
         wav_data = BytesIO(response.content)
-
-        # Read and play the audio using sounddevice
-        #print("Playing audio...")
         data, samplerate = sf.read(wav_data, dtype='float32')
         sd.play(data, samplerate)
-        sd.wait()  # Wait for playback to finish
-
-        #print("Audio playback complete.")
-
+        sd.wait()
     except Exception as e:
         print(f"An error occurred: {e}")
 
@@ -226,11 +221,9 @@ def server_tts(text, ttsurl, tts_voice):
     - text (str): The text to convert into speech.
     - ttsurl (str): The base URL of the TTS server.
     - tts_voice (str): Speaker/voice configuration for the TTS.
-    - play_audio_stream (Callable): Function to play the audio stream.
     """
     try:
         chunk_size = 1024
-
         full_url = f"{ttsurl}/tts_stream"
         params = {
             'text': text,
@@ -238,20 +231,16 @@ def server_tts(text, ttsurl, tts_voice):
             'language': "en"
         }
         headers = {'accept': 'audio/x-wav'}
-
         response = requests.get(full_url, params=params, headers=headers, stream=True)
         response.raise_for_status()
-
-        # Pass the response content to play_audio_stream
         def tts_stream():
             for chunk in response.iter_content(chunk_size=chunk_size):
                 yield chunk
-
         play_audio_stream(tts_stream())
     except Exception as e:
         print(f"ERROR: Server TTS generation failed: {e}")
 
-def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None, voice_id=None, model_id=None):
+def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None, elevenlabs_api_key=None, voice_id=None, model_id=None):
     """
     Generate TTS audio for the given text using the specified TTS system.
 
@@ -261,8 +250,11 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
     - ttsurl (str): The base URL of the TTS server (for server-based TTS).
     - toggle_charvoice (bool): Flag indicating whether to use character voice for TTS.
     - tts_voice (str): The TTS speaker/voice configuration.
-    - voice_id (str): Voice ID for ElevenLabs
-    - model_id (str) : Model ID for ElevenLabs
+    - azure_api_key (str): Azure API key for authentication (if using Azure TTS).
+    - azure_region (str): Azure region for TTS service (if using Azure TTS).
+    - elevenlabs_api_key (str): ElevenLabs API key for authentication (if using ElevenLabs).
+    - voice_id (str): Voice ID for ElevenLabs.
+    - model_id (str): Model ID for ElevenLabs.
     """
     try:
         # Azure TTS generation
@@ -275,7 +267,8 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
         elif ttsoption == "elevenlabs":
             if not elevenlabs_api_key:
                 raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: ElevenLabs API key must be provided for ttsoption 'elevenlabs'.")
-            client = ElevenLabs(api_key=elevenlabs_api_key)
+            if not elevenlabs_client:
+                init_elevenlabs_client(elevenlabs_api_key)
             elevenlabs_tts(text, voice_id, model_id)
 
         # Local TTS generation using `espeak-ng`
@@ -293,12 +286,10 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
         # Server-based TTS generation using `xttsv2`
         elif ttsoption == "xttsv2" and toggle_charvoice:
             if not ttsurl:
-                raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: TTS URL and play_audio_stream function must be provided for 'xttsv2'.")
+                raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: TTS URL must be provided for 'xttsv2'.")
             server_tts(text, ttsurl, tts_voice)
 
         else:
             raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Invalid TTS option or character voice flag.")
-
     except Exception as e:
         print(f"ERROR: Text-to-speech generation failed: {e}")
-
