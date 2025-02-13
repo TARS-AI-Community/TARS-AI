@@ -78,6 +78,10 @@ toggle_charvoice = True
 # Use character-specific voice settings
 tts_voice = en-US-Steffan:DragonHDLatestNeural
 # Name of the cloned voice to use (e.g., TARS2)
+voice_id = "JBFqnCBsd6RMkjVDRZzb"
+# Voice ID of ElevenLabs (e.g.,JBFqnCBsd6RMkjVDRZzb)
+model_id = "eleven_multilingual_v2"
+# Model ID of ElevenLabs (e.g.,eleven_multilingual_v2)
 voice_only = False
 # If True, only generate voice responses (no text)
 is_talking_override = False
