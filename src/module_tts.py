@@ -23,9 +23,6 @@ from module_piper import *
 from elevenlabs.client import ElevenLabs
 from elevenlabs import play
 
-elevenlabs_api_key = os.getenv('ELEVENLABS_API_KEY')
-client = ElevenLabs(api_key=elevenlabs_api_key)
-
 def update_tts_settings(ttsurl):
     """
     Updates TTS settings using a POST request to the specified server.
@@ -150,8 +147,8 @@ def elevenlabs_tts(text, voice_id="JBFqnCBsd6RMkjVDRZzb", model_id="eleven_multi
     try:
         audio = client.text_to_speech.convert(
             text=text,
-            voice_id="CwhRBWXzGAHq8TQ4Fs17",
-            model_id="eleven_flash_v2_5",
+            voice_id=voice_id,
+            model_id=model_id,
             output_format=output_format,
         )
         play(audio)
@@ -276,6 +273,9 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
 
         # ElevenLabs TTS generation
         elif ttsoption == "elevenlabs":
+            if not elevenlabs_api_key:
+                raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: ElevenLabs API key must be provided for ttsoption 'elevenlabs'.")
+            client = ElevenLabs(api_key=elevenlabs_api_key)
             elevenlabs_tts(text, voice_id, model_id)
 
         # Local TTS generation using `espeak-ng`
