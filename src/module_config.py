@@ -109,10 +109,13 @@ def load_config():
         "TTS": {
             "ttsoption": config['TTS']['ttsoption'],
             "azure_api_key": os.getenv('AZURE_API_KEY'),
+            "elevenlabs_api_key": os.getenv('ELEVENLABS_API_KEY'),
             "azure_region": config['TTS']['azure_region'],
             "ttsurl": config['TTS']['ttsurl'],
             "toggle_charvoice": config.getboolean('TTS', 'toggle_charvoice'),
             "tts_voice": config['TTS']['tts_voice'],
+            "voice_id": config['TTS']['voice_id'],
+            "model_id": config['TTS']['model_id'],
             "voice_only": config.getboolean('TTS', 'voice_only'),
             "is_talking_override": config.getboolean('TTS', 'is_talking_override'),
             "is_talking": config.getboolean('TTS', 'is_talking'),
