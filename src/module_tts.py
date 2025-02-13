@@ -254,7 +254,7 @@ def server_tts(text, ttsurl, tts_voice):
     except Exception as e:
         print(f"ERROR: Server TTS generation failed: {e}")
 
-def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
+def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None, voice_id=None, model_id=None):
     """
     Generate TTS audio for the given text using the specified TTS system.
 
@@ -264,6 +264,8 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
     - ttsurl (str): The base URL of the TTS server (for server-based TTS).
     - toggle_charvoice (bool): Flag indicating whether to use character voice for TTS.
     - tts_voice (str): The TTS speaker/voice configuration.
+    - voice_id (str): Voice ID for ElevenLabs
+    - model_id (str) : Model ID for ElevenLabs
     """
     try:
         # Azure TTS generation
@@ -274,7 +276,7 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
 
         # ElevenLabs TTS generation
         elif ttsoption == "elevenlabs":
-            elevenlabs_tts(text, tts_voice)
+            elevenlabs_tts(text, voice_id, model_id)
 
         # Local TTS generation using `espeak-ng`
         elif ttsoption == "local" and toggle_charvoice:
