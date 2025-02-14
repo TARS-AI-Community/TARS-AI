@@ -105,6 +105,7 @@ For audio output, connect an I2S amplifier to the Raspberry Pi’s I2S (PCM) pin
 | Pin 2 or 4           | 5V           | Power Supply               | VIN (Amplifier Power Input)         |
 
 **Note**: Enable the I2S interface on the Raspberry Pi by following the instructions in the [Adafruit MAX98357 guide](https://learn.adafruit.com/adafruit-max98357-i2s-class-d-mono-amp/pi-i2s-tweaks).
+**Note**: For a comprehensive layout of the Raspberry Pi 5’s GPIO pins, check out the detailed diagram here: [![Raspberry Pi 5 GPIO Pinout](https://www.hackatronic.com/wp-content/uploads/2024/03/Raspberry-Pi-5-Pinout-.jpg)
 
 ---
 
