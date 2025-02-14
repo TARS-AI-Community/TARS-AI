@@ -67,6 +67,7 @@ class STTManager:
         self.running = False
 
         # Audio settings
+        self.DEFAULT_SAMPLE_RATE = 16000
         self.SAMPLE_RATE = self.find_default_mic_sample_rate()
         self.amp_gain = amp_gain
         self.silence_margin = 3.5  # Multiplier for noise floor
