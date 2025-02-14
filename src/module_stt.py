@@ -391,7 +391,17 @@ class STTManager:
 
     def _transcribe_with_vosk(self):
         """Transcribe audio using the local Vosk model."""
-        recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
+        # Make sure the Vosk model is loaded
+        if self.vosk_model is None:
+            print("ERROR: Vosk model is not loaded.")
+            return None
+
+        try:
+            recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
+        except Exception as e:
+            print(f"ERROR: Failed to initialize KaldiRecognizer: {e}")
+            return None
+
         recognizer.SetWords(False)  # Disable word-level output for speed
         recognizer.SetPartialWords(False)  # Disable partial results
 
@@ -648,7 +658,6 @@ class STTManager:
         if self.silero_vad_model is not None and self.get_speech_timestamps is not None:
             audio_norm = data.astype(np.float32) / 32768.0
             audio_tensor = torch.from_numpy(audio_norm).squeeze()  # shape: (samples,)
-            # Use get_speech_timestamps (not get_speech_ts) to detect speech segments.
             speech_ts = self.get_speech_timestamps(audio_tensor, self.SAMPLE_RATE, threshold=0.5)
             if len(speech_ts) > 0:
                 detected_speech = True
@@ -684,7 +693,7 @@ class STTManager:
             if self.config["STT"].get("stt_processor") != "vosk":
                 progress = int((silent_frames / max_silent_frames) * bar_length)
                 bar = "#" * progress + "-" * (bar_length - progress)
-                sys.stdout.write(f"\r[SILENCE: {bar}] {silent_frames}/{max_silent_frames}")
+                sys.stdout.write(f"\r[SILENCE: {bar}] {silent_frames}/{max_silent_frames}\n")
                 sys.stdout.flush()
             if silent_frames > max_silent_frames:
                 if self.config["STT"].get("stt_processor") != "vosk":
