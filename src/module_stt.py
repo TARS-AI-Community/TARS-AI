@@ -31,6 +31,7 @@ import torch
 from vosk import Model, KaldiRecognizer, SetLogLevel
 from pocketsphinx import LiveSpeech
 import whisper
+from faster_whisper import WhisperModel
 import requests
 from silero_vad import load_silero_vad, get_speech_timestamps
 
