@@ -21,12 +21,14 @@ import json
 import sys
 from io import BytesIO
 from typing import Callable, Optional
+import torch
+import torchaudio  # Faster than librosa for resampling
+import torchaudio.functional as F
+import librosa
 
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-import librosa
-import torch
 
 from vosk import Model, KaldiRecognizer, SetLogLevel
 from pocketsphinx import LiveSpeech
@@ -84,7 +86,7 @@ class STTManager:
         self.post_utterance_callback: Optional[Callable[[], None]] = None
 
         # Wake word and model settings
-        self.WAKE_WORD = config.get("STT", {}).get("wake_word", "tars")
+        self.WAKE_WORD = config.get("STT", {}).get("wake_word", "default_wake_word")
         self.vosk_model = None
         self.whisper_model = None
         self.silero_model = None  # For Silero STT (if used)
@@ -325,20 +327,20 @@ class STTManager:
             pass
 
         silent_frames = 0
-        max_iterations = 100
+        max_iterations = 100 # Prevent infinite loops
 
         try:
             threshold_map = {
-                1: 1e-20,
-                2: 1e-18,
-                3: 1e-16,
-                4: 1e-14,
-                5: 1e-12,
-                6: 1e-10,
-                7: 1e-8,
-                8: 1e-6,
-                9: 1e-4,
-                10: 1e-2
+                1: 1e-20,   # Extremely sensitive (lowest threshold)
+                2: 1e-18,   # Very sensitive
+                3: 1e-16,   # Sensitive
+                4: 1e-14,   # Moderately sensitive
+                5: 1e-12,   # Normal sensitivity
+                6: 1e-10,   # Slightly strict
+                7: 1e-8,    # Strict
+                8: 1e-6,    # Very strict
+                9: 1e-4,    # Extremely strict
+                10: 1e-2    # Maximum strictness (highest threshold)
             }
             kws_threshold = threshold_map.get(int(self.config['STT'].get('sensitivity', 2)), 1e-18)
             speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
@@ -347,7 +349,7 @@ class STTManager:
                 text = phrase.hypothesis().lower()
                 if self.WAKE_WORD.lower() in text:
                     silent_frames = 0
-                    if self.config["STT"].get("use_indicators"):
+                    if self.config['STT']['use_indicators']:
                         self.play_beep(1200, 0.1, 44100, 0.8)
                     try:
                         requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
@@ -371,17 +373,18 @@ class STTManager:
         return False
 
     def _transcribe_utterance(self):
-        """
-        Transcribe the user's utterance using the configured STT processor.
-        """
+        """Transcribe the user's utterance using the selected STT processor."""
         try:
-            processor = self.config.get("STT", {}).get("stt_processor", "vosk")
+            processor = self.config["STT"].get("stt_processor", "vosk")
             if processor == "whisper":
                 result = self._transcribe_with_whisper()
+            elif processor == "faster-whisper":
+                result = self._transcribe_with_faster_whisper()
+            elif processor == "silero":
+                result = self._transcribe_silero()
             elif processor == "external":
                 result = self._transcribe_with_server()
             else:
-                # Default to Vosk transcription
                 result = self._transcribe_with_vosk()
 
             if self.post_utterance_callback and result:
@@ -673,23 +676,23 @@ class STTManager:
 
         # Fallback to RMS-based detection.
         rms = self.prepare_audio_data(self.amplify_audio(data))
-        silence_threshold_margin = self.silence_threshold * self.silence_margin
+        self.silence_threshold_margin = self.silence_threshold * self.silence_margin
         bar_length = 20
 
         if rms is None:
             return False, detected_speech, silent_frames
-        if rms > silence_threshold_margin:
+        if rms > self.silence_threshold_margin:
             detected_speech = True
             silent_frames = 0
-            if self.config["STT"].get("debug", False):
-                print(f"AUDIO: {rms}/{self.silence_threshold}/{silence_threshold_margin}")
+            if self.DEBUG:
+                print(f"AUDIO: {rms}/{self.silence_threshold}/{self.silence_threshold_margin}")
             if self.config["STT"].get("stt_processor") != "vosk":
                 sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
                 sys.stdout.flush()
         else:
             silent_frames += 1
-            if self.config["STT"].get("debug", False):
-                print(f"SILENT: {rms}/{self.silence_threshold}/{silence_threshold_margin}")
+            if self.DEBUG:
+                print(f"SILENT: {rms}/{self.silence_threshold}/{self.silence_threshold_margin}")
             if self.config["STT"].get("stt_processor") != "vosk":
                 progress = int((silent_frames / max_silent_frames) * bar_length)
                 bar = "#" * progress + "-" * (bar_length - progress)
