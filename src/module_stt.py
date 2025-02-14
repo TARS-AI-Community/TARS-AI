@@ -108,7 +108,7 @@ class STTManager:
             self._load_vosk_model()
 
         # Use Silero VAD instead of RMS (if configured)
-        if self.config["STT"].get("use_silero_vad", False):
+        if self.config["STT"].get("vad_enabled", False):
             self._load_silero_vad()
 
     def start(self):
