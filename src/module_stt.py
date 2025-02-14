@@ -5,10 +5,13 @@ module_stt.py
 Speech-to-Text (STT) Module for TARS-AI Application.
 
 This module integrates both local and server-based transcription, wake word detection,
-and voice command handling. It supports custom callbacks to trigger actions upon
+and voice command handling. It supports custom callbacks to trigger actions upon 
 detecting speech or specific keywords.
+
+This version supports loading the Silero VAD model using its ONNX version when configured.
 """
 
+# === Standard Libraries ===
 import os
 import random
 import threading
@@ -18,22 +21,18 @@ import json
 import sys
 from io import BytesIO
 from typing import Callable, Optional
-import torch
-import torchaudio 
-import torchaudio.functional as F
-import librosa
 
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
+import librosa
+import torch
 
 from vosk import Model, KaldiRecognizer, SetLogLevel
 from pocketsphinx import LiveSpeech
 import whisper
-from faster_whisper import WhisperModel
-import onnxruntime
-from silero_vad import load_silero_vad, get_speech_timestamps
 import requests
+from silero_vad import load_silero_vad, get_speech_timestamps
 
 # Suppress Vosk logs and parallelism warnings
 SetLogLevel(-1)
@@ -41,7 +40,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class STTManager:
-    # Predefined responses to the wake word
     WAKE_WORD_RESPONSES = [
         "Oh! You called?",
         "Took you long enough. Yes?",
@@ -61,76 +59,37 @@ class STTManager:
 
         Args:
             config (dict): Configuration dictionary.
-            shutdown_event (threading.Event): Event to signal when to stop.
-            amp_gain (float): Amplification gain for audio data.
+            shutdown_event (threading.Event): Event to signal stopping the assistant.
+            amp_gain (float): Amplification gain factor for audio data.
         """
         self.config = config
         self.shutdown_event = shutdown_event
         self.running = False
 
         # Audio settings
-        self.DESIRED_SAMPLE_RATE = 16000  # Rate expected by Silero VAD and transcription models
-        self.DEFAULT_SAMPLE_RATE = self.DESIRED_SAMPLE_RATE
         self.SAMPLE_RATE = self.find_default_mic_sample_rate()
-        self.amp_gain = amp_gain  # Multiplier for mic
+        self.amp_gain = amp_gain
         self.silence_margin = 3.5  # Multiplier for noise floor
         self.wake_silence_threshold = None
         self.silence_threshold = None  # Updated after measuring background noise
-        self.MAX_RECORDING_FRAMES = 100   # ~12.5 seconds
-        self.MAX_SILENT_FRAMES = 20       # ~1.25 seconds of silence
-        self.speech_buffer_frames = 20    # Buffer for natural speech pauses
-        self.vad_threshold = 0.3          # Lower threshold for more sensitive speech detection
+        self.DEFAULT_SAMPLE_RATE = 16000
+        self.MAX_RECORDING_FRAMES = 100  # ~12.5 seconds
+        self.MAX_SILENT_FRAMES = 20      # ~1.25 seconds of silence
 
-        # Callbacks
+        # Callbacks for wake word detection and utterance processing
         self.wake_word_callback: Optional[Callable[[str], None]] = None
         self.utterance_callback: Optional[Callable[[str], None]] = None
         self.post_utterance_callback: Optional[Callable[[], None]] = None
 
         # Wake word and model settings
-        self.WAKE_WORD = config.get("STT", {}).get("wake_word", "default_wake_word")
+        self.WAKE_WORD = config.get("STT", {}).get("wake_word", "tars")
         self.vosk_model = None
         self.whisper_model = None
-        self.silero_model = None
+        self.silero_model = None  # For Silero STT (if used)
+        self.vad_model = None     # For Silero VAD
 
-        # Silero VAD settings
-        self.vad_model = None
-        self.speech_buffer = []  # Store recent speech detection results
-        self.init_silero_vad()
-        
+        # Initialize models and measure background noise
         self._initialize_models()
-
-    def set_wake_word_callback(self, callback: Callable[[str], None]):
-        """
-        Sets the callback function to be called when the wake word is detected.
-        The callback receives a string response as its parameter.
-        """
-        self.wake_word_callback = callback
-        print("INFO: Wake word callback has been set.")
-
-    def set_utterance_callback(self, callback: Callable[[str], None]):
-        """
-        Sets the callback function to be called after an utterance is transcribed.
-        The callback receives the transcription result as a JSON string.
-        """
-        self.utterance_callback = callback
-        print("INFO: Utterance callback has been set.")
-
-    def set_post_utterance_callback(self, callback: Callable[[], None]):
-        """
-        Sets a post-utterance callback to be executed once transcription is complete.
-        """
-        self.post_utterance_callback = callback
-        print("INFO: Post-utterance callback has been set.")
-
-    def init_silero_vad(self):
-        """Initialize Silero VAD."""
-        try:
-            torch.set_num_threads(1)
-            self.vad_model = load_silero_vad()
-            print("INFO: Silero VAD model loaded successfully")
-        except Exception as e:
-            print(f"ERROR: Failed to load Silero VAD model: {e}")
-            self.vad_model = None
 
     def _initialize_models(self):
         """Measure background noise and load the selected STT model(s)."""
@@ -144,6 +103,17 @@ class STTManager:
             self._load_silero_model()
         elif stt_processor == "vosk":
             self._load_vosk_model()
+
+        # Load Silero VAD model with option to use ONNX
+        use_onnx = True 
+        try:
+            torch.set_num_threads(1)
+            # Pass the ONNX flag to load_silero_vad
+            self.vad_model = load_silero_vad(onnx=use_onnx)
+            print(f"INFO: Silero VAD model loaded successfully (ONNX={use_onnx}).")
+        except Exception as e:
+            print(f"ERROR: Failed to load Silero VAD model: {e}")
+            self.vad_model = None
 
     def start(self):
         """Start the STT processing loop in a separate thread."""
@@ -177,7 +147,9 @@ class STTManager:
     def _load_whisper_model(self):
         """Load the Whisper model for local transcription."""
         try:
+            import torch
             import warnings
+            # Suppress future warnings from torch
             warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
             _original_torch_load = torch.load
 
@@ -199,9 +171,11 @@ class STTManager:
             torch.load = _original_torch_load
 
     def _load_fasterwhisper_model(self):
-        """Load the Whisper model for local transcription using Faster-Whisper."""
+        """Load the Whisper model for local transcription."""
         try:
+            import torch
             import warnings
+            # Suppress future warnings from torch
             warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
             _original_torch_load = torch.load
 
@@ -214,9 +188,12 @@ class STTManager:
             print(f"INFO: Loading faster-Whisper model '{model_size}'...")
 
             if not hasattr(self, "faster_whisper_model"):
+                model_size = self.config["STT"].get("whisper_model", "tiny")
+
                 self.faster_whisper_model = WhisperModel(
                     model_size, device="cpu", compute_type="int8", num_workers=4
                 )
+             
             print("INFO: Whisper model loaded successfully.")
         except Exception as e:
             print(f"ERROR: Failed to load Whisper model: {e}")
@@ -225,7 +202,7 @@ class STTManager:
             torch.load = _original_torch_load
 
     def _measure_background_noise(self):
-        """Measure background noise and set the silence threshold."""
+        """Measure background noise over several frames and set the silence threshold."""
         print("INFO: Measuring background noise...")
         background_rms_values = []
         total_frames = 20  # ~2-3 seconds
@@ -233,28 +210,59 @@ class STTManager:
         with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
             for _ in range(total_frames):
                 data, _ = stream.read(4000)
-                rms = self.prepare_audio_data(data)  # No amplification applied here
+
+                # Option 1: Use raw data with a noise floor multiplier
+                #rms = self.prepare_audio_data(data) * self.silence_margin #(2.5%)
+
+                rms = self.prepare_audio_data(data) #no amp
+
+                # Option 2 (alternative): Apply amplification first and then compute RMS
+                # rms = self.prepare_audio_data(self.amplify_audio(data))
+                
                 if rms is not None:
                     background_rms_values.append(rms)
+                    #print("Current RMS values:", background_rms_values)
                 time.sleep(0.1)
 
         if background_rms_values:
+            # Convert the list to a NumPy array for further processing.
             background_rms_values = np.array(background_rms_values)
+
+            # Use the median to set a baseline for the silence threshold.
             median_rms = np.median(background_rms_values)
             self.silence_threshold = max(median_rms, 10)
+            #print(f"INFO: Silence threshold set to: {self.silence_threshold:.2f} (raw value)")
+
+            # Calculate the 25th (Q1) and 75th (Q3) percentiles.
             q1 = np.percentile(background_rms_values, 25)
             q3 = np.percentile(background_rms_values, 75)
             iqr = q3 - q1
+
+            # Define lower and upper bounds (using a multiplier of 1.5 is standard).
             lower_bound = q1 - 1.5 * iqr
             upper_bound = q3 + 1.5 * iqr
+            
+            debug = False
+            if debug == True:
+                print("Q1:", q1)
+                print("Q3:", q3)
+                print("IQR:", iqr)
+                print("Lower Bound:", lower_bound)
+                print("Upper Bound:", upper_bound)
 
+            # Filter out the outliers using the computed bounds.
             filtered_values = background_rms_values[
                 (background_rms_values >= lower_bound) & (background_rms_values <= upper_bound)
             ]
 
+            # Compute the maximum value from the filtered dataset.
             self.wake_silence_threshold = np.max(filtered_values)
-            self.silence_threshold = self.wake_silence_threshold * self.silence_margin
+            
+            self.silence_threshold = self.wake_silence_threshold * self.silence_margin #(2.5%)
 
+            #print("Maximum after removing outliers:", self.silence_threshold)
+
+            # Optionally, calculate the threshold in decibels.
             db = 20 * np.log10(self.silence_threshold)
             print(f"INFO: Silence threshold: {db:.2f} dB and {self.silence_threshold}")
         else:
@@ -270,114 +278,67 @@ class STTManager:
 
     def _detect_wake_word(self) -> bool:
         """
-        Detect the wake word with improved pause handling.
-        Uses Silero VAD if available.
+        Detect the wake word using a simple approach that combines the LiveSpeech engine
+        with Silero VAD-based detection.
         """
-        if self.config["STT"].get("use_indicators"):
-            # Placeholder for actual indicator logic (e.g., playing a beep)
-            pass
-        
-        character_name = os.path.splitext(os.path.basename(self.config.get("CHAR", {}).get("character_card_path", "character")))[0]
-        print(f"{character_name}: Sleeping...")
-
-        try:
-            requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
-        except Exception:
-            pass
-
+        print("TARS: Sleeping...")
         silent_frames = 0
-        continuous_speech_frames = 0
+        max_silent_frames = self.MAX_SILENT_FRAMES
+        kws_threshold = 2  # Default sensitivity setting
 
-        # Initialize LiveSpeech with a lenient threshold
-        threshold_map = {
-            1: 1e-20, 2: 1e-18, 3: 1e-16, 4: 1e-14, 5: 1e-12,
-            6: 1e-10, 7: 1e-8, 8: 1e-6, 9: 1e-4, 10: 1e-2
-        }
-        kws_threshold = threshold_map.get(int(self.config['STT']['sensitivity']), 1e-18)
-
+        # Initialize LiveSpeech for wake word detection
         speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
 
         try:
             with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
-                while not self.shutdown_event.is_set():
+                for phrase in speech:
                     data, _ = stream.read(4000)
+                    rms = self.prepare_audio_data(self.amplify_audio(data))
                     
-                    # Resample if mic's sample rate differs from the desired rate
-                    if self.SAMPLE_RATE != self.DESIRED_SAMPLE_RATE:
-                        data = librosa.resample(data.astype(np.float32), self.SAMPLE_RATE, self.DESIRED_SAMPLE_RATE)
-                        data = data.astype("int16")
-                    
+                    # Use Silero VAD if available to reset the silent frames counter
                     if self.vad_model:
                         float_data = data.astype(np.float32) / 32768.0
-                        float_data = np.squeeze(float_data)
-                        audio_tensor = torch.from_numpy(float_data)
-                        
-                        speech_timestamps = get_speech_timestamps(
-                            audio_tensor,
+                        timestamps = get_speech_timestamps(
+                            float_data,
                             self.vad_model,
-                            sampling_rate=self.DESIRED_SAMPLE_RATE,
-                            threshold=self.vad_threshold,
-                            min_speech_duration_ms=100,
-                            min_silence_duration_ms=200,
-                            return_seconds=True
+                            sampling_rate=self.SAMPLE_RATE,
+                            threshold=0.5
                         )
-                        
-                        self.speech_buffer.append(len(speech_timestamps) > 0)
-                        if len(self.speech_buffer) > self.speech_buffer_frames:
-                            self.speech_buffer.pop(0)
-                        
-                        recent_speech = any(self.speech_buffer)
-                        if recent_speech:
-                            silent_frames = max(0, silent_frames - 2)
-                            continuous_speech_frames += 1
+                        if timestamps:
+                            silent_frames = 0
                         else:
                             silent_frames += 1
-                            continuous_speech_frames = max(0, continuous_speech_frames - 1)
                     else:
-                        rms = self.prepare_audio_data(self.amplify_audio(data))
-                        if rms > self.silence_threshold * 0.8:
-                            silent_frames = max(0, silent_frames - 2)
-                            continuous_speech_frames += 1
+                        if rms and rms > self.silence_threshold:
+                            silent_frames = 0
                         else:
                             silent_frames += 1
-                            continuous_speech_frames = max(0, continuous_speech_frames - 1)
 
-                    for phrase in speech:
-                        if self.WAKE_WORD.lower() in phrase.hypothesis().lower():
-                            wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                            print(f"{character_name}: {wake_response}")
-                            if self.wake_word_callback:
-                                self.wake_word_callback(wake_response)
-                            return True
-
-                    if silent_frames > self.MAX_SILENT_FRAMES and continuous_speech_frames < 5:
+                    if silent_frames > max_silent_frames:
                         return False
 
-                    if self.config["STT"].get("show_silence_progress", True):
-                        bar_length = 20
-                        progress = int((silent_frames / self.MAX_SILENT_FRAMES) * bar_length)
-                        bar = "#" * progress + "-" * (bar_length - progress)
-                        sys.stdout.write(f"\r[SILENCE: {bar}] {silent_frames}/{self.MAX_SILENT_FRAMES}")
-                        sys.stdout.flush()
+                    if self.WAKE_WORD.lower() in phrase.hypothesis().lower():
+                        response = random.choice(self.WAKE_WORD_RESPONSES)
+                        print(f"TARS: {response}")
+                        if self.wake_word_callback:
+                            self.wake_word_callback(response)
+                        return True
         except Exception as e:
-            print(f"ERROR: Wake word detection failed: {e}")
-            return False
-
+            print(f"ERROR in wake word detection: {e}")
         return False
 
     def _transcribe_utterance(self):
-        """Transcribe the user's utterance using the selected STT processor."""
+        """
+        Transcribe the user's utterance using the configured STT processor.
+        """
         try:
-            processor = self.config["STT"].get("stt_processor", "vosk")
+            processor = self.config.get("STT", {}).get("stt_processor", "vosk")
             if processor == "whisper":
                 result = self._transcribe_with_whisper()
-            elif processor == "faster-whisper":
-                result = self._transcribe_with_faster_whisper()
-            elif processor == "silero":
-                result = self._transcribe_silero()
             elif processor == "external":
                 result = self._transcribe_with_server()
             else:
+                # Default to Vosk transcription
                 result = self._transcribe_with_vosk()
 
             if self.post_utterance_callback and result:
@@ -387,9 +348,9 @@ class STTManager:
 
     def _transcribe_with_vosk(self):
         """Transcribe audio using the local Vosk model."""
-        recognizer = KaldiRecognizer(self.vosk_model, self.DESIRED_SAMPLE_RATE)
-        recognizer.SetWords(False)
-        recognizer.SetPartialWords(False)
+        recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
+        recognizer.SetWords(False)  # Disable word-level output for speed
+        recognizer.SetPartialWords(False)  # Disable partial results
 
         detected_speech = False
         silent_frames = 0
@@ -398,12 +359,9 @@ class STTManager:
         with sd.InputStream(samplerate=self.SAMPLE_RATE,
                             channels=1, dtype="int16",
                             blocksize=4000, latency='high') as stream:
-            for _ in range(50):
+            for _ in range(50):  # Limit recording duration (~12.5 seconds)
                 data, _ = stream.read(4000)
                 data = self.amplify_audio(data)
-                if self.SAMPLE_RATE != self.DESIRED_SAMPLE_RATE:
-                    data = librosa.resample(data.astype(np.float32), self.SAMPLE_RATE, self.DESIRED_SAMPLE_RATE)
-                    data = data.astype("int16")
                 is_silence, detected_speech, silent_frames = self._is_silence_detected(
                     data, detected_speech, silent_frames, max_silent_frames
                 )
@@ -434,11 +392,8 @@ class STTManager:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
                 wf.setframerate(self.SAMPLE_RATE)
-                for _ in range(100):
+                for _ in range(100):  # Limit duration (~12.5 seconds)
                     data, _ = stream.read(4000)
-                    if self.SAMPLE_RATE != self.DESIRED_SAMPLE_RATE:
-                        data = librosa.resample(data.astype(np.float32), self.SAMPLE_RATE, self.DESIRED_SAMPLE_RATE)
-                        data = data.astype("int16")
                     wf.writeframes(data.tobytes())
                     is_silence, detected_speech, silent_frames = self._is_silence_detected(
                         data, detected_speech, silent_frames, max_silent_frames
@@ -455,8 +410,9 @@ class STTManager:
 
             audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
             audio_data = np.clip(audio_data, -1.0, 1.0)
-            if sample_rate != self.DESIRED_SAMPLE_RATE:
-                audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=self.DESIRED_SAMPLE_RATE)
+            if sample_rate != self.DEFAULT_SAMPLE_RATE:
+                #audio_data = F.resample(torch.tensor(audio_data), orig_freq=sample_rate, new_freq=16000).numpy()
+                audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=16000)
 
             audio_data = whisper.pad_or_trim(audio_data)
             mel = whisper.log_mel_spectrogram(audio_data).to(self.whisper_model.device)
@@ -483,17 +439,18 @@ class STTManager:
         silent_frames = 0
         max_silent_frames = self.MAX_SILENT_FRAMES
 
+
         with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream, \
             wave.open(audio_buffer, "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(self.SAMPLE_RATE)
-            for _ in range(self.MAX_RECORDING_FRAMES):
+
+            for _ in range(self.MAX_RECORDING_FRAMES):  # Limit recording duration
                 data, _ = stream.read(4000)
-                if self.SAMPLE_RATE != self.DESIRED_SAMPLE_RATE:
-                    data = librosa.resample(data.astype(np.float32), self.SAMPLE_RATE, self.DESIRED_SAMPLE_RATE)
-                    data = data.astype("int16")
                 wf.writeframes(data.tobytes())
+
+                # Check for silence before continuing
                 is_silence, detected_speech, silent_frames = self._is_silence_detected(
                     data, detected_speech, silent_frames, max_silent_frames
                 )
@@ -502,17 +459,24 @@ class STTManager:
                         return None
                     break
 
+        # Ensure audio buffer is valid
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
             print("ERROR: No audio recorded.")
             return None
 
+        # Read and preprocess audio
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
         audio_data = np.clip(audio_data, -1.0, 1.0)
-        if sample_rate != self.DESIRED_SAMPLE_RATE:
-            audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=self.DESIRED_SAMPLE_RATE)
 
+        if sample_rate != 16000:
+            #audio_data = F.resample(torch.tensor(audio_data), orig_freq=sample_rate, new_freq=16000).numpy()
+            audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=16000)
+
+        # Run Faster-Whisper transcription
+        #segments, _ = self.faster_whisper_model.transcribe(audio_data, beam_size=1)
         segments, _ = self.faster_whisper_model.transcribe(audio_data, temperature=0.0, beam_size=1, language="en")
+        
         transcribed_text = " ".join(segment.text for segment in segments).strip()
 
         if transcribed_text:
@@ -525,7 +489,7 @@ class STTManager:
             return None
 
     def _transcribe_silero(self):
-        """Transcribe audio using Silero STT."""
+        """Transcribe audio using Silero STT with optimized in-memory processing."""
         audio_buffer = BytesIO()
         detected_speech = False
         silent_frames = 0
@@ -535,12 +499,11 @@ class STTManager:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(self.SAMPLE_RATE)
+
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
-                if self.SAMPLE_RATE != self.DESIRED_SAMPLE_RATE:
-                    data = librosa.resample(data.astype(np.float32), self.SAMPLE_RATE, self.DESIRED_SAMPLE_RATE)
-                    data = data.astype("int16")
                 wf.writeframes(data.tobytes())
+
                 is_silence, detected_speech, silent_frames = self._is_silence_detected(
                     data, detected_speech, silent_frames, self.MAX_SILENT_FRAMES
                 )
@@ -554,10 +517,19 @@ class STTManager:
             print("ERROR: No audio recorded.")
             return None
 
+        # Read audio directly from BytesIO into a tensor
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
-        if sample_rate != self.DESIRED_SAMPLE_RATE:
-            audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=self.DESIRED_SAMPLE_RATE)
+
+        # Optimize resampling
+        if sample_rate != 16000:
+            #audio_data = torchaudio.functional.resample(torch.tensor(audio_data), orig_freq=sample_rate, new_freq=16000)
+            audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=16000)
+
+        # Prepare model input
         input_audio = self.prepare_model_input([torch.tensor(audio_data)], device="cpu")
+        
+
+        # Run STT
         silero_output = self.silero_model(input_audio)[0]
         decoded_text = self.decoder(silero_output.cpu())
         
@@ -623,83 +595,12 @@ class STTManager:
             print(f"ERROR: Server transcription request failed: {e}")
         return None
 
-    def _is_silence_detected(self, data, detected_speech, silent_frames, max_silent_frames):
-        """
-        Detect silence using Silero VAD if available,
-        and fall back to RMS-based detection otherwise.
-        """
-        if self.vad_model is not None:
-            try:
-                float_data = data.astype(np.float32) / 32768.0
-                float_data = np.squeeze(float_data)
-                speech_timestamps = get_speech_timestamps(
-                    float_data,
-                    self.vad_model,
-                    sampling_rate=self.DESIRED_SAMPLE_RATE,
-                    threshold=0.5,
-                    min_speech_duration_ms=250,
-                    min_silence_duration_ms=100
-                )
-                if speech_timestamps:
-                    detected_speech = True
-                    silent_frames = 0
-                else:
-                    silent_frames += 1
-
-                bar_length = 20
-                if self.config["STT"].get("stt_processor") != "vosk":
-                    progress = int((silent_frames / max_silent_frames) * bar_length)
-                    bar = "#" * progress + "-" * (bar_length - progress)
-                    sys.stdout.write(f"\r[SILENCE: {bar}] {silent_frames}/{max_silent_frames}\n")
-                    sys.stdout.flush()
-                
-                if silent_frames > max_silent_frames:
-                    sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
-                    sys.stdout.flush()
-                    return True, detected_speech, silent_frames
-                
-                return False, detected_speech, silent_frames
-                
-            except Exception as e:
-                print(f"WARNING: Silero VAD failed, falling back: {e}")
-                return self._is_silence_detected_rms(data, detected_speech, silent_frames, max_silent_frames)
-        else:
-            return self._is_silence_detected_rms(data, detected_speech, silent_frames, max_silent_frames)
-
-    def _is_silence_detected_rms(self, data, detected_speech, silent_frames, max_silent_frames):
-        rms = self.prepare_audio_data(self.amplify_audio(data))
-        silence_threshold_margin = self.silence_threshold * self.silence_margin
-        bar_length = 20
-        DEBUG = False
-
-        if rms is None:
-            return False, detected_speech, silent_frames
-        if rms > silence_threshold_margin:
-            detected_speech = True
-            silent_frames = 0
-            if DEBUG:
-                print(f"AUDIO: {rms}/{self.silence_threshold}/{silence_threshold_margin}")  
-            sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
-            sys.stdout.flush() 
-        else:
-            silent_frames += 1
-            if DEBUG:
-                print(f"SILENT: {rms}/{self.silence_threshold}/{silence_threshold_margin}")     
-            progress = int((silent_frames / max_silent_frames) * bar_length)
-            bar = "#" * progress + "-" * (bar_length - progress)
-            sys.stdout.write(f"\r[SILENCE: {bar}] {silent_frames}/{max_silent_frames}\n")
-            sys.stdout.flush()
-            
-            if silent_frames > max_silent_frames:
-                sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
-                sys.stdout.flush()
-                return True, detected_speech, silent_frames
-
-        return False, detected_speech, silent_frames
 
     def prepare_audio_data(self, data: np.ndarray) -> Optional[float]:
         """
-        Compute the RMS of the audio data.
+        Sanitize and compute the RMS of the audio data.
+        Returns:
+            float: RMS value or None if data is invalid.
         """
         if data.size == 0:
             print("WARNING: Empty audio data received.")
@@ -718,32 +619,55 @@ class STTManager:
 
     def amplify_audio(self, data: np.ndarray) -> np.ndarray:
         """
-        Amplify input audio data using the specified amplification gain.
+        Amplify the input audio data using the set amplification gain.
         """
         return np.clip(data * self.amp_gain, -32768, 32767).astype(np.int16)
 
     def find_default_mic_sample_rate(self):
         """
-        Retrieve the desired sample rate from configuration (if specified),
-        otherwise query the default microphone's sample rate.
+        Retrieve the default microphone's sample rate.
         Returns:
             int: The sample rate.
         """
-        sample_rate = self.config.get("STT", {}).get("sample_rate")
-        if sample_rate:
-            print(f"INFO: Using configured sample rate: {sample_rate}")
-            return int(sample_rate)
         try:
             default_index = sd.default.device[0]
             if default_index is None:
                 raise ValueError("No default microphone detected.")
             device_info = sd.query_devices(default_index, kind="input")
-            rate = int(device_info.get("default_samplerate", self.DEFAULT_SAMPLE_RATE))
-            if rate != 8000 and (rate % 16000) != 0:
-                print(f"WARNING: Reported sample rate {rate} not supported by Silero VAD. Falling back to {self.DEFAULT_SAMPLE_RATE}.")
-                rate = self.DEFAULT_SAMPLE_RATE
-            print(f"INFO: Using detected sample rate: {rate}")
-            return rate
+            return int(device_info.get("default_samplerate", self.DEFAULT_SAMPLE_RATE))
         except Exception as e:
-            print(f"ERROR: Unable to determine sample rate: {e}")
+            print(f"ERROR: {e}")
             return self.DEFAULT_SAMPLE_RATE
+
+    def play_beep(self, frequency: int, duration: float, sample_rate: int, volume: float):
+        """
+        Play a beep sound to indicate state changes.
+        """
+        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        sine_wave = volume * np.sin(2 * np.pi * frequency * t)
+        sd.play(sine_wave, samplerate=sample_rate)
+        sd.wait()
+
+    # === Callback Setters ===
+    def set_wake_word_callback(self, callback: Callable[[str], None]):
+        """
+        Sets the callback function to be called when the wake word is detected.
+        The callback receives a string response as its parameter.
+        """
+        self.wake_word_callback = callback
+        print("INFO: Wake word callback has been set.")
+
+    def set_utterance_callback(self, callback: Callable[[str], None]):
+        """
+        Sets the callback function to be called after an utterance is transcribed.
+        The callback receives the transcription result as a JSON string.
+        """
+        self.utterance_callback = callback
+        print("INFO: Utterance callback has been set.")
+
+    def set_post_utterance_callback(self, callback: Callable[[], None]):
+        """
+        Sets a post-utterance callback to be executed once transcription is complete.
+        """
+        self.post_utterance_callback = callback
+        print("INFO: Post-utterance callback has been set.")
