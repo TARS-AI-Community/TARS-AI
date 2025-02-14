@@ -32,7 +32,7 @@ from pocketsphinx import LiveSpeech
 import whisper
 from faster_whisper import WhisperModel
 import onnxruntime
-from silero_vad import load_silero_vad_onnx, get_speech_timestamps
+from silero_vad import load_silero_vad, get_speech_timestamps
 import requests
 
 # Suppress Vosk logs and parallelism warnings
@@ -77,6 +77,8 @@ class STTManager:
         self.DEFAULT_SAMPLE_RATE = 16000
         self.MAX_RECORDING_FRAMES = 100   # ~12.5 seconds
         self.MAX_SILENT_FRAMES = 20      # ~1.25 seconds of silence
+        self.speech_buffer_frames = 20     # Buffer for natural speech pauses
+        self.vad_threshold = 0.3          # Lower threshold for more sensitive speech detection
 
         # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None
@@ -91,18 +93,19 @@ class STTManager:
 
         # Silero VAD settings
         self.vad_model = None
+        self.speech_buffer = []  # Store recent speech detection results
         self.init_silero_vad()
         
         self._initialize_models()
 
     def init_silero_vad(self):
-        """Initialize Silero VAD using ONNX runtime"""
+        """Initialize Silero VAD"""
         try:
-            self.vad_model = load_silero_vad_onnx()
+            torch.set_num_threads(1)
+            self.vad_model = load_silero_vad()
             print("INFO: Silero VAD model loaded successfully")
         except Exception as e:
             print(f"ERROR: Failed to load Silero VAD model: {e}")
-            print("INFO: Falling back to basic RMS-based VAD")
             self.vad_model = None
 
     def _initialize_models(self):
@@ -281,98 +284,105 @@ class STTManager:
 
     def _detect_wake_word(self) -> bool:
         """
-        Detect the wake word using enhanced false-positive filtering.
+        Enhanced wake word detection with better pause handling
         """
-
-        # Play a "sleeping" tone if indicators are enabled.
         if self.config["STT"].get("use_indicators"):
             self.play_beep(400, 0.1, 44100, 0.6)
         
-        character_path = self.config.get("CHAR", {}).get("character_card_path")
-        character_name = os.path.splitext(os.path.basename(character_path))[0]
+        character_name = os.path.splitext(os.path.basename(self.config.get("CHAR", {}).get("character_card_path")))[0]
         print(f"{character_name}: Sleeping...")
 
-        # Notify external service to stop talking.
         try:
             requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
         except Exception:
             pass
 
         silent_frames = 0
-        max_iterations = 100  # Prevent infinite loops
+        speech_detected = False
+        continuous_speech_frames = 0
+
+        # Initialize LiveSpeech with more lenient threshold
+        threshold_map = {
+            1: 1e-20, 2: 1e-18, 3: 1e-16, 4: 1e-14, 5: 1e-12,
+            6: 1e-10, 7: 1e-8, 8: 1e-6, 9: 1e-4, 10: 1e-2
+        }
+        kws_threshold = threshold_map.get(int(self.config['STT']['sensitivity']), 1e-18)  # More sensitive default
+
+        speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
 
         try:
-            threshold_map = {
-                1: 1e-20,   # Extremely sensitive (lowest threshold)
-                2: 1e-18,   # Very sensitive
-                3: 1e-16,   # Sensitive
-                4: 1e-14,   # Moderately sensitive
-                5: 1e-12,   # Normal sensitivity
-                6: 1e-10,   # Slightly strict
-                7: 1e-8,    # Strict
-                8: 1e-6,    # Very strict
-                9: 1e-4,    # Extremely strict
-                10: 1e-2    # Maximum strictness (highest threshold)
-            }
-
-            # Use default sensitivity of 2 if misconfigured
-            kws_threshold = threshold_map.get(int(self.config['STT']['sensitivity']), 1)
-
-            # Initialize LiveSpeech for detection
-            speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
-
-            for phrase in speech:
-                text = phrase.hypothesis().lower()
-                if self.WAKE_WORD in text:
-                    #print("Keyword 'hey mori' detected!")
-                    silent_frames = 0
-
-                    if self.config['STT']['use_indicators']:
-                        self.play_beep(1200, 0.1, 44100, 0.8)  # Wake tone
-                        
-                    try:
-                        requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
-                    except Exception:
-                        pass
-
-                    wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-
-                    character_path = self.config.get("CHAR", {}).get("character_card_path")
-                    character_name = os.path.splitext(os.path.basename(character_path))[0]
-                    print(f"{character_name}: {wake_response}")
-
-                    #clear the variable if it matters...
-                    speech = ''
-
-                    # Trigger callback if defined
-                    if self.wake_word_callback:
-                        self.wake_word_callback(wake_response)
-
-                    return True
-                
             with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
-                for iteration, phrase in enumerate(speech):
-                    if iteration >= max_iterations:
-                        print("DEBUG: Maximum iterations reached for wake word detection.")
-                        break
-
-                    # Convert raw audio to RMS
+                while not self.shutdown_event.is_set():
+                    # Read audio data
                     data, _ = stream.read(4000)
-                    rms = self.prepare_audio_data(self.amplify_audio(data))
-
-                    if rms > self.silence_threshold:  # Speech detected
-                        detected_speech = True
-                        silent_frames = 0  # Reset silent frames
+                    
+                    if self.vad_model:
+                        # Use Silero VAD for speech detection
+                        float_data = data.astype(np.float32) / 32768.0
+                        audio_tensor = torch.from_numpy(float_data)
+                        
+                        # Get speech timestamps
+                        speech_timestamps = get_speech_timestamps(
+                            audio_tensor,
+                            self.vad_model,
+                            sampling_rate=self.SAMPLE_RATE,
+                            threshold=self.vad_threshold,
+                            min_speech_duration_ms=100,  # More sensitive to short speech segments
+                            min_silence_duration_ms=200,
+                            return_seconds=True
+                        )
+                        
+                        # Update speech buffer
+                        self.speech_buffer.append(len(speech_timestamps) > 0)
+                        if len(self.speech_buffer) > self.speech_buffer_frames:
+                            self.speech_buffer.pop(0)
+                        
+                        # Check for speech activity including recent history
+                        recent_speech = any(self.speech_buffer)
+                        
+                        if recent_speech:
+                            silent_frames = max(0, silent_frames - 2)  # Reduce silent frame count faster
+                            continuous_speech_frames += 1
+                        else:
+                            silent_frames += 1
+                            continuous_speech_frames = max(0, continuous_speech_frames - 1)
                     else:
-                        silent_frames += 1
+                        # Fallback to RMS-based detection with adjusted threshold
+                        rms = self.prepare_audio_data(self.amplify_audio(data))
+                        if rms > self.silence_threshold * 0.8:  # More sensitive threshold
+                            silent_frames = max(0, silent_frames - 2)
+                            continuous_speech_frames += 1
+                        else:
+                            silent_frames += 1
+                            continuous_speech_frames = max(0, continuous_speech_frames - 1)
 
-                    if silent_frames > self.MAX_SILENT_FRAMES:  # Too much silence
-                        #print("DEBUG: Exiting due to extended silence.")
-                        break
+                    # Check for wake word
+                    for phrase in speech:
+                        if self.WAKE_WORD.lower() in phrase.hypothesis().lower():
+                            wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                            print(f"{character_name}: {wake_response}")
+                            
+                            if self.wake_word_callback:
+                                self.wake_word_callback(wake_response)
+                            
+                            return True
 
+                    # Only go to sleep if we've been silent for a while AND 
+                    # there hasn't been significant speech activity recently
+                    if silent_frames > self.MAX_SILENT_FRAMES and continuous_speech_frames < 5:
+                        return False
+
+                    # Optional: Display silence progress
+                    if self.config["STT"].get("show_silence_progress", True):
+                        bar_length = 20
+                        progress = int((silent_frames / self.MAX_SILENT_FRAMES) * bar_length)
+                        bar = "#" * progress + "-" * (bar_length - progress)
+                        sys.stdout.write(f"\r[SILENCE: {bar}] {silent_frames}/{self.MAX_SILENT_FRAMES}")
+                        sys.stdout.flush()
 
         except Exception as e:
             print(f"ERROR: Wake word detection failed: {e}")
+            return False
 
         return False
 
