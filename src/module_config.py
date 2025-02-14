@@ -13,6 +13,8 @@ import sys
 import configparser
 from dotenv import load_dotenv
 from datetime import datetime
+from dataclasses import dataclass
+from typing import Optional
 
 # === Initialization ===
 load_dotenv()  # Load environment variables from .env file

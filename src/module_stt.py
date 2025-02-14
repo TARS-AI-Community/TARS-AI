@@ -74,7 +74,7 @@ class STTManager:
         self.silence_threshold = None  # This will be updated after measuring background noise
         self.DEFAULT_SAMPLE_RATE = 16000
         self.MAX_RECORDING_FRAMES = 100   # ~12.5 seconds
-        self.MAX_SILENT_FRAMES = 70       # ~1.25 seconds of silence
+        self.MAX_SILENT_FRAMES = 40       # ~1.25 seconds of silence
 
         # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None

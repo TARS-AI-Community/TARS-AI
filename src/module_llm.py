@@ -83,7 +83,6 @@ def _prepare_request_data(llm_backend, prompt):
             "top_p": CONFIG['LLM']['top_p']
         }
     elif llm_backend == "deepinfra":
-        # Using DeepInfra's API: endpoint is https://api.deepinfra.com/v1/openai/chat/completions
         url = f"{CONFIG['LLM']['base_url']}/v1/openai/chat/completions"
         data = {
             "model": CONFIG['LLM']['openai_model'],
