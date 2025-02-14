@@ -31,6 +31,8 @@ from vosk import Model, KaldiRecognizer, SetLogLevel
 from pocketsphinx import LiveSpeech
 import whisper
 from faster_whisper import WhisperModel
+import onnxruntime
+from silero_vad import load_silero_vad_onnx, get_speech_timestamps
 import requests
 
 # Suppress Vosk logs and parallelism warnings
@@ -74,7 +76,7 @@ class STTManager:
         self.silence_threshold = None  # This will be updated after measuring background noise
         self.DEFAULT_SAMPLE_RATE = 16000
         self.MAX_RECORDING_FRAMES = 100   # ~12.5 seconds
-        self.MAX_SILENT_FRAMES = 40       # ~1.25 seconds of silence
+        self.MAX_SILENT_FRAMES = 20      # ~1.25 seconds of silence
 
         # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None
@@ -86,8 +88,22 @@ class STTManager:
         self.vosk_model = None
         self.whisper_model = None
         self.silero_model = None
+
+        # Silero VAD settings
+        self.vad_model = None
+        self.init_silero_vad()
         
         self._initialize_models()
+
+    def init_silero_vad(self):
+        """Initialize Silero VAD using ONNX runtime"""
+        try:
+            self.vad_model = load_silero_vad_onnx()
+            print("INFO: Silero VAD model loaded successfully")
+        except Exception as e:
+            print(f"ERROR: Failed to load Silero VAD model: {e}")
+            print("INFO: Falling back to basic RMS-based VAD")
+            self.vad_model = None
 
     def _initialize_models(self):
         """Measure background noise and load the selected STT model(s)."""
@@ -628,8 +644,59 @@ class STTManager:
         except requests.RequestException as e:
             print(f"ERROR: Server transcription request failed: {e}")
         return None
-
+    
     def _is_silence_detected(self, data, detected_speech, silent_frames, max_silent_frames):
+        """
+        Enhanced silence detection using Silero VAD when available,
+        falling back to RMS-based detection if not available
+        """
+        if self.vad_model is not None:
+            try:
+                # Convert audio data to float32 and normalize
+                float_data = data.astype(np.float32) / 32768.0
+                
+                # Get speech timestamps using Silero VAD
+                speech_timestamps = get_speech_timestamps(
+                    float_data,
+                    self.vad_model,
+                    sampling_rate=self.SAMPLE_RATE,
+                    threshold=0.5,  # Adjust this threshold as needed
+                    min_speech_duration_ms=250,
+                    min_silence_duration_ms=100
+                )
+                
+                # If we have speech timestamps, update detection status
+                if speech_timestamps:
+                    detected_speech = True
+                    silent_frames = 0
+                else:
+                    silent_frames += 1
+                
+                # Display progress bar for silence
+                if self.config["STT"].get("stt_processor") != "vosk":
+                    bar_length = 20
+                    progress = int((silent_frames / max_silent_frames) * bar_length)
+                    bar = "#" * progress + "-" * (bar_length - progress)
+                    sys.stdout.write(f"\r[SILENCE: {bar}] {silent_frames}/{max_silent_frames}\n")
+                    sys.stdout.flush()
+                
+                if silent_frames > max_silent_frames:
+                    if self.config["STT"].get("stt_processor") != "vosk":
+                        sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
+                        sys.stdout.flush()
+                    return True, detected_speech, silent_frames
+                
+                return False, detected_speech, silent_frames
+                
+            except Exception as e:
+                print(f"WARNING: Silero VAD failed, falling back to RMS-based detection: {e}")
+                # Fall back to existing RMS-based detection
+                return self._is_silence_detected_rms(data, detected_speech, silent_frames, max_silent_frames)
+        else:
+            # Use existing RMS-based detection
+            return self._is_silence_detected_rms(data, detected_speech, silent_frames, max_silent_frames)
+
+    def _is_silence_detected_rms(self, data, detected_speech, silent_frames, max_silent_frames):
         rms = self.prepare_audio_data(self.amplify_audio(data))
 
         #add margin to prevent false positives
@@ -660,7 +727,7 @@ class STTManager:
                 bar_length = 20  # Length of the progress bar.
                 progress = int((silent_frames / max_silent_frames) * bar_length)
                 bar = "#" * progress + "-" * (bar_length - progress)
-                sys.stdout.write(f"\r[SILENCE: {bar}] {silent_frames}/{max_silent_frames}")
+                sys.stdout.write(f"\r[SILENCE: {bar}] {silent_frames}/{max_silent_frames}\n")
                 sys.stdout.flush()
             
             # If the silent frame count exceeds the maximum, clear the progress line and return.
