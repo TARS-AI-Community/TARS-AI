@@ -342,7 +342,7 @@ class STTManager:
                 9: 1e-4,    # Extremely strict
                 10: 1e-2    # Maximum strictness (highest threshold)
             }
-            kws_threshold = threshold_map.get(int(self.config['STT'].get('sensitivity', 2)), 1e-18)
+            kws_threshold = threshold_map.get(int(self.config['STT']['sensitivity']), 1)
             speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
 
             for phrase in speech:
@@ -694,6 +694,8 @@ class STTManager:
             if self.DEBUG:
                 print(f"SILENT: {rms}/{self.silence_threshold}/{self.silence_threshold_margin}")
             if self.config["STT"].get("stt_processor") != "vosk":
+                # Display a progress bar for the silent frames.
+                bar_length = 20  # Length of the progress bar.
                 progress = int((silent_frames / max_silent_frames) * bar_length)
                 bar = "#" * progress + "-" * (bar_length - progress)
                 sys.stdout.write(f"\r[SILENCE: {bar}] {silent_frames}/{max_silent_frames}\n")
