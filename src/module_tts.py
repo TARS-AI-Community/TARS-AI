@@ -240,57 +240,45 @@ def server_tts(text, ttsurl, tts_voice):
     except Exception as e:
         print(f"ERROR: Server TTS generation failed: {e}")
 
-def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None, elevenlabs_api_key=None, voice_id=None, model_id=None):
+def generate_tts_audio(text: str, config):
     """
     Generate TTS audio for the given text using the specified TTS system.
-
+    Handles both dictionary-style config and TTSConfig objects for backward compatibility.
+    
     Parameters:
-    - text (str): The text to convert into speech.
-    - ttsoption (str): The TTS system to use (Azure, server-based, or local).
-    - ttsurl (str): The base URL of the TTS server (for server-based TTS).
-    - toggle_charvoice (bool): Flag indicating whether to use character voice for TTS.
-    - tts_voice (str): The TTS speaker/voice configuration.
-    - azure_api_key (str): Azure API key for authentication (if using Azure TTS).
-    - azure_region (str): Azure region for TTS service (if using Azure TTS).
-    - elevenlabs_api_key (str): ElevenLabs API key for authentication (if using ElevenLabs).
-    - voice_id (str): Voice ID for ElevenLabs.
-    - model_id (str): Model ID for ElevenLabs.
+    - text (str): The text to convert into speech
+    - config: Either a TTSConfig object or a dictionary with TTS settings
     """
     try:
-        # Azure TTS generation
+        if not isinstance(config, dict) and not hasattr(config, '__getitem__'):
+            raise ValueError("Config must be either a dictionary or TTSConfig object")
+            
+        ttsoption = config['ttsoption']
+        toggle_charvoice = config['toggle_charvoice']
+        
         if ttsoption == "azure":
-            if not azure_api_key or not azure_region:
-                raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Azure API key and region must be provided for ttsoption 'azure'.")
-            azure_tts(text, azure_api_key, azure_region, tts_voice)
-
-        # ElevenLabs TTS generation
+            azure_tts(text, config['azure_api_key'], config['azure_region'], config['tts_voice'])
+            
         elif ttsoption == "elevenlabs":
-            if not elevenlabs_api_key:
-                raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: ElevenLabs API key must be provided for ttsoption 'elevenlabs'.")
             if not elevenlabs_client:
-                init_elevenlabs_client(elevenlabs_api_key)
-            elevenlabs_tts(text, voice_id, model_id)
-
-        # Local TTS generation using `espeak-ng`
+                init_elevenlabs_client(config['elevenlabs_api_key'])
+            elevenlabs_tts(text, config['voice_id'], config['model_id'])
+            
         elif ttsoption == "local" and toggle_charvoice:
             local_tts(text)
-
-        # Local TTS generation using `alltalk`
+            
         elif ttsoption == "alltalk" and toggle_charvoice:
-            alltalk_tts(text, ttsurl, tts_voice)
-
-        # Local TTS generation using local onboard PIPER TTS
+            alltalk_tts(text, config['ttsurl'], config['tts_voice'])
+            
         elif ttsoption == "piper" and toggle_charvoice:
             import asyncio
             asyncio.run(text_to_speech_with_pipelining(text))
-
-        # Server-based TTS generation using `xttsv2`
+            
         elif ttsoption == "xttsv2" and toggle_charvoice:
-            if not ttsurl:
-                raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: TTS URL must be provided for 'xttsv2'.")
-            server_tts(text, ttsurl, tts_voice)
-
+            server_tts(text, config['ttsurl'], config['tts_voice'])
+            
         else:
-            raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Invalid TTS option or character voice flag.")
+            raise ValueError(f"Invalid TTS option or character voice flag: {ttsoption}")
+            
     except Exception as e:
         print(f"ERROR: Text-to-speech generation failed: {e}")
