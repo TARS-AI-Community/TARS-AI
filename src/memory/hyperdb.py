@@ -183,9 +183,9 @@ class HyperDB:
         if rag_strategy == "hybrid":
             try:
                 self.reranker = CrossEncoder(
-                    'BAAI/bge-reranker-v2-m3',
-                    device='cuda' if torch.cuda.is_available() else 'cpu',
-                    max_length=512  
+                    'BAAI/bge-reranker-base',
+                    device='cuda' if torch.cuda.is_available() else 'cpu', 
+                    max_length=256,
                 )
                 print("INFO: BGE reranker model loaded successfully")
             except Exception as e:
@@ -455,7 +455,7 @@ class HyperDB:
                     text = str(doc)
                 # Format pairs for CrossEncoder
                 pairs.append([query, text])
-                
+
             scores = self.reranker.predict(pairs)
             
             # Ensure scores are in the right format
