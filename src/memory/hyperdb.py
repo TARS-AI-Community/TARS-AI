@@ -27,8 +27,9 @@ import requests
 from typing import List, Union
 import bm25s
 import Stemmer
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import CrossEncoder
 import configparser
+import torch
 
 from module_config import get_api_key
 
@@ -181,7 +182,11 @@ class HyperDB:
 
         if rag_strategy == "hybrid":
             try:
-                self.reranker = SentenceTransformer('BAAI/bge-reranker-v2-m3', device='cuda' if torch.cuda.is_available() else 'cpu')
+                self.reranker = CrossEncoder(
+                    'BAAI/bge-reranker-v2-m3',
+                    device='cuda' if torch.cuda.is_available() else 'cpu',
+                    max_length=512  
+                )
                 print("INFO: BGE reranker model loaded successfully")
             except Exception as e:
                 print(f"WARNING: Failed to load BGE reranker model: {e}")
@@ -448,18 +453,32 @@ class HyperDB:
                         text = " ".join(str(v) for v in doc.values() if isinstance(v, (str, int, float)))
                 else:
                     text = str(doc)
+                # Format pairs for CrossEncoder
                 pairs.append([query, text])
+                
+            scores = self.reranker.predict(pairs)
+            
+            # Ensure scores are in the right format
+            if isinstance(scores, (list, np.ndarray)):
+                rerank_scores = [float(score) for score in scores]
+            else:
+                rerank_scores = [float(scores)]
 
-            # Compute reranking scores
-            rerank_scores = self.reranker.predict(pairs)
+            # Safety check for scores
+            if len(rerank_scores) != len(candidate_docs):
+                print(f"WARNING: Mismatch between scores ({len(rerank_scores)}) and docs ({len(candidate_docs)})")
+                return candidate_docs
             
             # Sort documents by reranking scores
             reranked_results = list(zip(candidate_docs, rerank_scores))
             reranked_results.sort(key=lambda x: x[1], reverse=True)
             
             return reranked_results
+            
         except Exception as e:
             print(f"WARNING: Reranking failed: {e}. Returning original order.")
+            import traceback
+            traceback.print_exc()
             return candidate_docs
 
     def hybrid_query(
