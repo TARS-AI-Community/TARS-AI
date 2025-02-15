@@ -30,9 +30,18 @@ class MemoryManager:
         self.char_name = char_name
         self.char_greeting = char_greeting
         self.memory_db_path = os.path.abspath(f"memory/{self.char_name}.pickle.gz")
-        self.hyper_db = HyperDB()
+        
+        # Load RAG configuration from dictionary
+        rag_config = self.config.get('RAG', {})  # Get RAG section or empty dict if not exists
+        self.rag_strategy = rag_config.get('strategy', 'naive')  # Default to 'naive' if not specified
+        self.vector_weight = float(rag_config.get('vector_weight', 0.5))  # Default to 0.5 if not specified
+        self.top_k = int(rag_config.get('top_k', 5))  # Default to 5 if not specified
+        
+        # Initialize HyperDB with the RAG strategy
+        self.hyper_db = HyperDB(rag_strategy=self.rag_strategy)
         self.long_mem_use = True
         self.initial_memory_path = os.path.abspath("memory/initial_memory.json")
+        
         self.init_dynamic_memory()
         self.load_initial_memory(self.initial_memory_path)
 
@@ -81,8 +90,11 @@ class MemoryManager:
         - str: Relevant memories or a fallback message.
         """
         try:
-            # Query the memory database for relevant entries
-            results = self.hyper_db.query(query, top_k=1, return_similarities=False)
+            results = self.hyper_db.query(
+                query, 
+                top_k=self.top_k, 
+                return_similarities=False
+            )
             
             if results:
                 memory = results[0]

@@ -25,6 +25,8 @@ import numpy as np
 import random
 import requests
 from typing import List, Union
+import bm25s
+import Stemmer
 
 import configparser
 
@@ -155,7 +157,19 @@ class HyperDB:
         key=None,
         embedding_function=None,
         similarity_metric="cosine",
+        rag_strategy="naive",
     ):
+        """
+            Initialize HyperDB with configurable RAG strategy.
+
+            Parameters:
+            - documents: Initial documents to index
+            - vectors: Pre-computed vectors for documents
+            - key: Key to extract text from documents
+            - embedding_function: Function to compute embeddings
+            - similarity_metric: Metric for vector similarity
+            - rag_strategy: 'naive' for vector-only or 'hybrid' for vector+BM25
+        """
         self.documents = documents or []
         self.documents = []
         self.vectors = None
@@ -163,9 +177,26 @@ class HyperDB:
             #lambda docs: get_embedding(docs, key=key)
             lambda docs: get_embedding(docs)
         )
+        self.rag_strategy = rag_strategy
+
+        # Initialize BM25 components
+        print(f"INFO: Initializing HyperDB with {rag_strategy} RAG strategy")
+        if self.rag_strategy == "hybrid":
+            self.stemmer = Stemmer.Stemmer("english")
+            self.bm25_retriever = bm25s.BM25(method="lucene")
+            self.corpus_tokens = None
+            self.corpus_texts = []
+        else:
+            self.stemmer = None
+            self.bm25_retriever = None
+            self.corpus_tokens = None
+            self.corpus_texts = None
+
         if vectors is not None:
             self.vectors = vectors
             self.documents = documents
+            if self.rag_strategy == "hybrid" and documents:
+                self._init_bm25_index()
         else:
             self.add_documents(documents)
 
@@ -183,6 +214,28 @@ class HyperDB:
             raise Exception(
                 "Similarity metric not supported. Please use either 'dot', 'cosine', 'euclidean', 'adams', or 'derrida'."
             )
+
+    def _init_bm25_index(self):
+        """Initialize BM25 index with current documents"""
+        if self.rag_strategy != "hybrid":
+            return
+
+        self.corpus_texts = []
+        for doc in self.documents:
+            if isinstance(doc, dict):
+                text = ""
+                if "user_input" in doc:
+                    text += doc["user_input"] + " "
+                if "bot_response" in doc:
+                    text += doc["bot_response"]
+                if not text:  # If no specific fields found, use all text fields
+                    text = " ".join(str(v) for v in doc.values() if isinstance(v, (str, int, float)))
+            else:
+                text = str(doc)
+            self.corpus_texts.append(text.strip())
+            
+        self.corpus_tokens = bm25s.tokenize(self.corpus_texts, stopwords="en", stemmer=self.stemmer)
+        self.bm25_retriever.index(self.corpus_tokens)
 
     def dict(self, vectors=False):
         if vectors:
@@ -225,6 +278,7 @@ class HyperDB:
             self.vectors = np.empty((0, len(vector)), dtype=np.float32)
         elif len(vector) != self.vectors.shape[1]:
             raise ValueError("All vectors must have the same length.")
+
         self.vectors = np.vstack([self.vectors, vector]).astype(np.float32)
         self.documents.append(document)
 
@@ -245,6 +299,10 @@ class HyperDB:
         self.vectors = np.vstack([self.vectors, vector]).astype(np.float32)
         self.documents.append(document)
 
+        # Update BM25 index if using hybrid strategy
+        if self.rag_strategy == "hybrid":
+            self._init_bm25_index()
+
     def add_documents(self, documents, vectors=None):
         if not documents:
             return
@@ -255,11 +313,23 @@ class HyperDB:
             self.add_document(document, vector)
 
     def remove_document(self, index):
+        """Remove a document by its index"""
         self.vectors = np.delete(self.vectors, index, axis=0)
         self.documents.pop(index)
+        if self.rag_strategy == "hybrid":
+            self.corpus_texts.pop(index)
+            self._init_bm25_index()
 
-    def save(self, storage_file):
-        data = {"vectors": self.vectors, "documents": self.documents}
+    def save(self, storage_file: str):
+        """Save the database to a file"""
+        data = {
+            "vectors": self.vectors,
+            "documents": self.documents,
+        }
+        # Only save corpus_texts if they exist (for hybrid compatibility)
+        if hasattr(self, 'corpus_texts') and self.corpus_texts:
+            data["corpus_texts"] = self.corpus_texts
+
         if storage_file.endswith(".gz"):
             with gzip.open(storage_file, "wb") as f:
                 pickle.dump(data, f)
@@ -267,8 +337,8 @@ class HyperDB:
             with open(storage_file, "wb") as f:
                 pickle.dump(data, f)
 
-    def load(self, storage_file):
-        #print(f"loading {storage_file}")
+    def load(self, storage_file: str) -> bool:
+        """Load the database from a file"""
         try:
             if storage_file.endswith(".gz"):
                 with gzip.open(storage_file, "rb") as f:
@@ -283,15 +353,54 @@ class HyperDB:
                 self.vectors = None
 
             self.documents = data.get("documents", [])
-            return True  # Indicate successful loading
+            
+            # Load corpus_texts if they exist (for hybrid compatibility)
+            if "corpus_texts" in data:
+                self.corpus_texts = data["corpus_texts"]
+                
+            # Re-initialize BM25 if we're in hybrid mode and have documents
+            if self.rag_strategy == "hybrid" and self.documents:
+                self._init_bm25_index()
+                
+            return True
 
         except Exception as e:
             print(f"Error loading memory: {e}")
             import traceback
-            traceback.print_exc()  # Print detailed traceback for debugging
+            traceback.print_exc()
             return False
 
-    def query(self, query_text, top_k=5, return_similarities=True):
+    def query(self, query_text: str, top_k: int = 5, return_similarities: bool = True):
+        """
+        Query the database using the configured RAG strategy.
+        For backward compatibility, this uses either vector-only search or hybrid search
+        based on the configured rag_strategy.
+        
+        Parameters:
+            query_text (str): The text to search for
+            top_k (int): Number of results to return
+            return_similarities (bool): Whether to return similarity scores
+            
+        Returns:
+            List of documents or (document, score) tuples if return_similarities is True
+        """
+        if self.rag_strategy == "naive":
+            return self._vector_query(query_text, top_k, return_similarities)
+        else:  # hybrid
+            return self.hybrid_query(query_text, top_k, vector_weight=0.5, return_similarities=return_similarities)
+
+    def _vector_query(self, query_text: str, top_k: int = 5, return_similarities: bool = True):
+        """
+        Perform vector-only search.
+        
+        Parameters:
+            query_text (str): The text to search for
+            top_k (int): Number of results to return
+            return_similarities (bool): Whether to return similarity scores
+            
+        Returns:
+            List of documents or (document, score) tuples if return_similarities is True
+        """
         query_vector = self.embedding_function([query_text])[0]
         ranked_results, similarities = hyper_SVM_ranking_algorithm_sort(
             self.vectors, query_vector, top_k=top_k, metric=self.similarity_metric
@@ -301,3 +410,77 @@ class HyperDB:
                 zip([self.documents[index] for index in ranked_results], similarities)
             )
         return [self.documents[index] for index in ranked_results]
+
+    def hybrid_query(
+        self, 
+        query_text: str, 
+        top_k: int = 5, 
+        vector_weight: float = 0.5, 
+        return_similarities: bool = True
+    ):
+        """
+        The hybrid search combines vector similarity and BM25 scoring through these steps:
+        
+        1. Vector Search:
+        - Convert query to vector using embedding model
+        - Calculate similarity scores with document vectors
+        - Get top_k * 2 results to have a larger candidate pool
+        
+        2. BM25 Search:
+        - Tokenize query text
+        - Calculate BM25 scores for documents
+        - Get top_k * 2 results
+        
+        3. Score Normalization:
+        - Normalize both vector and BM25 scores to 0-1 range
+        - This makes scores comparable regardless of their original scales
+        
+        4. Score Combination:
+        - For each document found by either method:
+            * Final_Score = (vector_weight × Vector_Score) + 
+                            ((1 - vector_weight) × BM25_Score)
+        - This weighted sum combines both relevance signals
+        
+        5. Final Ranking:
+        - Sort documents by combined scores
+        - Return top_k results
+        """
+        if self.rag_strategy != "hybrid":
+            print("Warning: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
+            return self._vector_query(query_text, top_k, return_similarities)
+
+        # Get vector search results
+        query_vector = self.embedding_function([query_text])[0]
+        vector_results, vector_scores = hyper_SVM_ranking_algorithm_sort(
+            self.vectors, query_vector, top_k=top_k * 2, metric=self.similarity_metric
+        )
+        
+        # Get BM25 results
+        query_tokens = bm25s.tokenize([query_text], stopwords="en", stemmer=self.stemmer)
+        bm25_results, bm25_scores = self.bm25_retriever.retrieve(query_tokens, k=top_k * 2)
+        bm25_results = bm25_results[0]  # First query's results
+        bm25_scores = bm25_scores[0]    # First query's scores
+        
+        # Normalize scores to 0-1 range
+        if len(vector_scores) > 0:
+            vector_scores = (vector_scores - np.min(vector_scores)) / (np.max(vector_scores) - np.min(vector_scores) + 1e-6)
+        if len(bm25_scores) > 0:
+            bm25_scores = (bm25_scores - np.min(bm25_scores)) / (np.max(bm25_scores) - np.min(bm25_scores) + 1e-6)
+        
+        # Combine results
+        doc_scores = {}
+        for idx, score in zip(vector_results, vector_scores):
+            doc_scores[idx] = vector_weight * score
+            
+        for idx, score in zip(bm25_results, bm25_scores):
+            if idx in doc_scores:
+                doc_scores[idx] += (1 - vector_weight) * score
+            else:
+                doc_scores[idx] = (1 - vector_weight) * score
+                
+        # Sort and get top results
+        ranked_results = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        
+        if return_similarities:
+            return [(self.documents[idx], score) for idx, score in ranked_results]
+        return [self.documents[idx] for idx, score in ranked_results]

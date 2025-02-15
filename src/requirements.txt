@@ -25,6 +25,10 @@ configobj #needed to keep comments in the config.ini when updating
 openai
 librosa
 whisper
+silero-vad
+bm25s
+pystemmer
+elevenlabs
 #espeak-ng
 #alsa-utils
 #sudo apt install ffmpeg

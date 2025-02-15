@@ -186,6 +186,11 @@ def load_config():
             "is_talking": config.getboolean('TTS', 'is_talking'),
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
         }),
+        "RAG": {
+            "strategy": config.get('RAG', 'strategy', fallback='naive'),
+            "vector_weight": config.getfloat('RAG', 'vector_weight', fallback=0.5),
+            "top_k": config.getint('RAG', 'top_k', fallback=5),
+        },
         "HOME_ASSISTANT": {
             "enabled": config['HOME_ASSISTANT']['enabled'],
             "url": config['HOME_ASSISTANT']['url'],
