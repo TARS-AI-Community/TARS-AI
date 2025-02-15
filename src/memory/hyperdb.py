@@ -27,7 +27,7 @@ import requests
 from typing import List, Union
 import bm25s
 import Stemmer
-
+from sentence_transformers import SentenceTransformer
 import configparser
 
 from module_config import get_api_key
@@ -178,6 +178,14 @@ class HyperDB:
             lambda docs: get_embedding(docs)
         )
         self.rag_strategy = rag_strategy
+
+        if rag_strategy == "hybrid":
+            try:
+                self.reranker = SentenceTransformer('BAAI/bge-reranker-v2-m3', device='cuda' if torch.cuda.is_available() else 'cpu')
+                print("INFO: BGE reranker model loaded successfully")
+            except Exception as e:
+                print(f"WARNING: Failed to load BGE reranker model: {e}")
+                self.reranker = None
 
         # Initialize BM25 components
         print(f"INFO: Initializing HyperDB with {rag_strategy} RAG strategy")
@@ -387,7 +395,7 @@ class HyperDB:
         if self.rag_strategy == "naive":
             return self._vector_query(query_text, top_k, return_similarities)
         else:  # hybrid
-            return self.hybrid_query(query_text, top_k, vector_weight=0.5, return_similarities=return_similarities)
+            return self.hybrid_query(query_text, top_k, return_similarities=return_similarities)
 
     def _vector_query(self, query_text: str, top_k: int = 5, return_similarities: bool = True):
         """
@@ -411,39 +419,59 @@ class HyperDB:
             )
         return [self.documents[index] for index in ranked_results]
 
+    def _rerank_results(self, query: str, candidate_docs: list) -> list:
+        """
+        Rerank candidate documents using the BGE reranker model.
+        
+        Parameters:
+        - query: The search query
+        - candidate_docs: List of candidate documents to rerank
+        
+        Returns:
+        - List of (doc, score) tuples after reranking
+        """
+        if not hasattr(self, 'reranker') or not self.reranker or not candidate_docs:
+            return candidate_docs
+
+        try:
+            # Prepare pairs for reranking
+            pairs = []
+            for doc in candidate_docs:
+                # Extract text from document based on its type
+                if isinstance(doc, dict):
+                    text = ""
+                    if "user_input" in doc:
+                        text += doc["user_input"] + " "
+                    if "bot_response" in doc:
+                        text += doc["bot_response"]
+                    if not text:  # If no specific fields found, use all text fields
+                        text = " ".join(str(v) for v in doc.values() if isinstance(v, (str, int, float)))
+                else:
+                    text = str(doc)
+                pairs.append([query, text])
+
+            # Compute reranking scores
+            rerank_scores = self.reranker.predict(pairs)
+            
+            # Sort documents by reranking scores
+            reranked_results = list(zip(candidate_docs, rerank_scores))
+            reranked_results.sort(key=lambda x: x[1], reverse=True)
+            
+            return reranked_results
+        except Exception as e:
+            print(f"WARNING: Reranking failed: {e}. Returning original order.")
+            return candidate_docs
+
     def hybrid_query(
         self, 
         query_text: str, 
         top_k: int = 5, 
-        vector_weight: float = 0.5, 
-        return_similarities: bool = True
+        return_similarities: bool = True,
+        rrf_k: int = 60
     ):
         """
-        The hybrid search combines vector similarity and BM25 scoring through these steps:
-        
-        1. Vector Search:
-        - Convert query to vector using embedding model
-        - Calculate similarity scores with document vectors
-        - Get top_k * 2 results to have a larger candidate pool
-        
-        2. BM25 Search:
-        - Tokenize query text
-        - Calculate BM25 scores for documents
-        - Get top_k * 2 results
-        
-        3. Score Normalization:
-        - Normalize both vector and BM25 scores to 0-1 range
-        - This makes scores comparable regardless of their original scales
-        
-        4. Score Combination:
-        - For each document found by either method:
-            * Final_Score = (vector_weight × Vector_Score) + 
-                            ((1 - vector_weight) × BM25_Score)
-        - This weighted sum combines both relevance signals
-        
-        5. Final Ranking:
-        - Sort documents by combined scores
-        - Return top_k results
+        Hybrid search using RRF fusion and BGE reranker.
+        The pipeline: vector search -> BM25 -> RRF fusion -> BGE reranking.
         """
         if self.rag_strategy != "hybrid":
             print("Warning: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
@@ -458,29 +486,36 @@ class HyperDB:
         # Get BM25 results
         query_tokens = bm25s.tokenize([query_text], stopwords="en", stemmer=self.stemmer)
         bm25_results, bm25_scores = self.bm25_retriever.retrieve(query_tokens, k=top_k * 2)
-        bm25_results = bm25_results[0]  # First query's results
-        bm25_scores = bm25_scores[0]    # First query's scores
+        bm25_results = bm25_results[0]
+        bm25_scores = bm25_scores[0]
+
+        # Calculate RRF scores
+        vector_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(vector_results)}
+        bm25_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(bm25_results)}
         
-        # Normalize scores to 0-1 range
-        if len(vector_scores) > 0:
-            vector_scores = (vector_scores - np.min(vector_scores)) / (np.max(vector_scores) - np.min(vector_scores) + 1e-6)
-        if len(bm25_scores) > 0:
-            bm25_scores = (bm25_scores - np.min(bm25_scores)) / (np.max(bm25_scores) - np.min(bm25_scores) + 1e-6)
+        rrf_scores = {}
+        all_doc_ids = set(vector_ranks.keys()) | set(bm25_ranks.keys())
         
-        # Combine results
-        doc_scores = {}
-        for idx, score in zip(vector_results, vector_scores):
-            doc_scores[idx] = vector_weight * score
-            
-        for idx, score in zip(bm25_results, bm25_scores):
-            if idx in doc_scores:
-                doc_scores[idx] += (1 - vector_weight) * score
-            else:
-                doc_scores[idx] = (1 - vector_weight) * score
-                
-        # Sort and get top results
-        ranked_results = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        for doc_id in all_doc_ids:
+            vector_rank = vector_ranks.get(doc_id, len(self.documents) + 1)
+            bm25_rank = bm25_ranks.get(doc_id, len(self.documents) + 1)
+            rrf_score = (1 / (rrf_k + vector_rank)) + (1 / (rrf_k + bm25_rank))
+            rrf_scores[doc_id] = rrf_score
+
+        # Get top_k * 2 results after RRF to give reranker more candidates
+        rrf_ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[:top_k * 2]
+        candidate_docs = [self.documents[idx] for idx, _ in rrf_ranked]
+
+        # Apply reranking
+        reranked_results = self._rerank_results(query_text, candidate_docs)
         
-        if return_similarities:
-            return [(self.documents[idx], score) for idx, score in ranked_results]
-        return [self.documents[idx] for idx, score in ranked_results]
+        # Take top_k results
+        if isinstance(reranked_results[0], tuple):  # If reranking was successful
+            final_results = reranked_results[:top_k]
+            if return_similarities:
+                return final_results
+            return [doc for doc, _ in final_results]
+        else:  # If reranking failed, return RRF results
+            if return_similarities:
+                return [(doc, rrf_scores[idx]) for idx, doc in zip(rrf_ranked[:top_k], candidate_docs[:top_k])]
+            return candidate_docs[:top_k]
