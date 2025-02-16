@@ -21,6 +21,21 @@ body {
   width: 1ch;
 }
 
+#imagePreviewContainer {
+  display: none;
+  position: absolute;
+  bottom: 60px; /* Move the image up by 30px from the bottom */
+  right: 10%; /* Center the image horizontally */
+  transform: translateX(-50%); /* Ensures perfect centering */
+}
+
+#imagePreview {
+  width: 128px;  /* Set width to 128px */
+  height: 128px; /* Set height to 128px */
+  border-radius: 10px; /* Optional: Rounds corners */
+  object-fit: cover; /* Ensures the image scales properly without distortion */
+}
+
 #container {
   display: flex;
   flex: 1;
@@ -29,14 +44,35 @@ body {
 }
 
 #backgroundImage {
-  width: 25%;
+  width: 23%;
   height: 100%;
   object-fit: cover;
   cursor: move;
   position: fixed;
-  top: 0;
-  left: 0;
+  left: 20px;
   z-index: -1;
+}
+
+#removeImageButton {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px; /* Make button smaller */
+  height: 20px;
+  padding: 0; /* Remove extra padding */
+  font-size: 14px; /* Adjust font size */
+  background-color: rgba(255, 0, 0, 0.8); /* Red background */
+  color: white; /* White X icon */
+  border: none;
+  border-radius: 50%; /* Make it circular */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+#removeImageButton:hover {
+  background-color: rgba(255, 0, 0, 1); /* Darker red on hover */
 }
 
 .card {
@@ -178,7 +214,7 @@ body {
   overflow: hidden;
   margin: 0;
   padding: 0;
-  background-image: linear-gradient(to right, #000000, #000000);
+  background-image: linear-gradient(to right, #0f2138, #072d5f);
 }
 
 .card-body {

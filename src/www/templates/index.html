@@ -15,14 +15,31 @@
   <audio id="audioPlayer" controls hidden>
       Your browser does not support the audio element.
   </audio>
+        <script>
+            // Declare a global variable to store the base URL
+            let talkingheadBaseUrl = '';
 
+            // Fetch the talking head base URL from the backend
+            fetch('/get_ip')
+                .then(response => response.json())
+                .then(data => {
+                    // Store the base URL in the global variable
+                    talkingheadBaseUrl = data.talkinghead_base_url;
+
+                    // Update the image source or do other initial actions
+                    const fullUrl = talkingheadBaseUrl + "/stream";
+                    document.getElementById('backgroundImage').src = fullUrl;
+                })
+                .catch(error => console.error('Error fetching talking head URL:', error));
+        </script>
   <script>
     const talkinghead_url = "{{ talkinghead_base_url }}";
     const parser = new DOMParser();
     let decodedUrl = parser.parseFromString(`<!doctype html><body>{{ talkinghead_base_url }}`, 'text/html').body.textContent;
     decodedUrl = decodedUrl.replace(/^"|"$/g, '');
     console.log(decodedUrl);
-
+    let isMuted = false;
+    
     function start_talking() {
         if (!isMuted) {
             fetch(talkingheadBaseUrl + "/start_talking")
@@ -50,7 +67,6 @@
           const muteButton = document.getElementById("muteButton");
 
           // Initialize the audio as unmuted
-          let isMuted = false;
 
           muteButton.addEventListener("click", function () {
         const icon = this.querySelector('i'); // Find the icon within the button
@@ -201,23 +217,6 @@
             </div>
         </div>
         <img id="backgroundImage" src="" alt="Background Image">
-        <script>
-            // Declare a global variable to store the base URL
-            let talkingheadBaseUrl = '';
-
-            // Fetch the talking head base URL from the backend
-            fetch('/get_ip')
-                .then(response => response.json())
-                .then(data => {
-                    // Store the base URL in the global variable
-                    talkingheadBaseUrl = data.talkinghead_base_url;
-
-                    // Update the image source or do other initial actions
-                    const fullUrl = talkingheadBaseUrl + "/stream";
-                    document.getElementById('backgroundImage').src = fullUrl;
-                })
-                .catch(error => console.error('Error fetching talking head URL:', error));
-        </script>
     </div>
 
 
@@ -225,7 +224,15 @@
         <input class="form-control" type="file" id="imageUpload" name="file" accept="image/*">
         <!-- The label is not needed if the form is hidden and triggered by another button -->
     </form>
-    
+
+    <!-- Image Preview Container -->
+    <div id="imagePreviewContainer">
+        <img id="imagePreview" src="" alt="Preview">
+        <button id="removeImageButton">
+            <i class="bi bi-x"></i>
+        </button>
+    </div>
+
     <div class="input-group">
         <input type="text" id="prompt" class="form-control border-end-0" placeholder="Type message" aria-label="Recipient's username" aria-describedby="button-addon2" />
         <button id="recordToggle" class="btn btn-danger record-button" type="button" aria-label="Record">
@@ -248,41 +255,40 @@
 document.addEventListener('DOMContentLoaded', function() {
     
 
-    document.getElementById('uploadImageButton').addEventListener('click', function() {
-        document.getElementById('imageUpload').click();
-    });
+    let selectedImageFile = null; // Store the image file
 
-    document.getElementById('imageUpload').addEventListener('change', function() {
-        // Create a FormData object and append the file
-        var formData = new FormData();
-        var imageFile = document.getElementById('imageUpload').files[0];
-        formData.append('file', imageFile);
+document.getElementById('uploadImageButton').addEventListener('click', function () {
+    document.getElementById('imageUpload').click();
+});
+
+document.getElementById('imageUpload').addEventListener('change', function () {
+    const imageFile = this.files[0];
+
+    if (imageFile) {
+        console.log("Image selected:", imageFile.name); // ✅ Check if image is detected
+        selectedImageFile = imageFile; // Store the image file
         
-        delayedMessage()
-        // Use fetch to submit the form data asynchronously
-        fetch('/upload', {
-            method: 'POST',
-            body: formData,
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.text(); // or response.json() if your server responds with JSON
-        })
-        .then(data => {
-            // Handle success
-            console.log('Success:', data);
-            // Optionally, update the UI here to show the uploaded image or a success message
-        })
-        .catch(error => {
-            // Handle errors
-            console.error('Error:', error);
-        });
+        // Show the preview
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            document.getElementById('imagePreview').src = e.target.result;
+            document.getElementById('imagePreviewContainer').style.display = 'block';
+        };
+        reader.readAsDataURL(imageFile);
+    }
+});
 
-        // Prevent the form from submitting the traditional way
-        event.preventDefault();
-    });
+
+// Remove Image Button
+document.getElementById('removeImageButton').addEventListener('click', function () {
+    selectedImageFile = null; // Clear stored image
+    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+    if (imagePreviewContainer) {
+        imagePreviewContainer.style.display = 'none';
+        document.getElementById("imagePreview").src = ""; // Clear preview source
+    }
+});
+
 
 var socket = io.connect('http://' + document.domain + ':' + location.port);
 
@@ -354,27 +360,35 @@ var socket = io.connect('http://' + document.domain + ':' + location.port);
     const promptInput = document.getElementById('prompt');
     const sendButton = document.getElementById('button-addon2');
 
-    sendButton.addEventListener("click", function() {
-        const userInput = promptInput.value.trim();
-        if (userInput) {
-            displayUserMessage(userInput); // Display user's message in chat
-            sendUserMessage(userInput);
-            promptInput.value = ''; // Clear the input field after sending
-            delayedMessage();
+
+    function sendMessage() {
+    const userInput = promptInput.value.trim();
+    if (userInput || selectedImageFile) {
+        displayUserMessage(userInput);
+        sendUserMessage(userInput, selectedImageFile);
+
+        promptInput.value = '';
+
+        // ✅ Remove the image after sending
+        selectedImageFile = null; 
+        const imagePreviewContainer = document.getElementById("imagePreviewContainer");
+        if (imagePreviewContainer) {
+            imagePreviewContainer.style.display = "none";
+            document.getElementById("imagePreview").src = "";
         }
-    });
-    
-    promptInput.addEventListener('keyup', function(event) {
-        if (event.key === 'Enter') {
-            const userInput = promptInput.value.trim();
-            if (userInput) {
-                displayUserMessage(userInput); // Display user's message in chat
-                sendUserMessage(userInput);
-                promptInput.value = ''; // Clear the input field after sending
-                delayedMessage();
-            }
-        }
-    });
+
+        delayedMessage();
+    }
+}
+
+sendButton.addEventListener("click", sendMessage);
+
+promptInput.addEventListener('keyup', function(event) {
+    if (event.key === 'Enter') {
+        sendMessage();
+    }
+});
+
 
     function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
@@ -386,17 +400,32 @@ var socket = io.connect('http://' + document.domain + ':' + location.port);
         displayBotMessage("", true);
     }
 
-    function sendUserMessage(message) {
-        var xhr = new XMLHttpRequest();
-        xhr.open("POST", "/process_llm", true);
-        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === 4 && xhr.status === 200) {
-               // updateAndPlayAudio();
-            }
-        };
-        xhr.send("message=" + encodeURIComponent(message));
+function sendUserMessage(message, imageFile) {
+    const formData = new FormData();
+    formData.append("message", message);
+
+    if (imageFile) {
+        formData.append("file", imageFile);
+        console.log("File added to FormData:", imageFile.name); // ✅ Debugging
+    } else {
+        console.log("No image selected");
     }
+
+    fetch("/process_llm", {
+        method: "POST",
+        body: formData,
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log("Server response:", data);
+    })
+    .catch(error => {
+        console.error("Error:", error);
+    });
+}
+
+
+
 
     function displayBotMessage(message, isTemporary = false) {
     const chatBody = document.getElementsByClassName("card-body")[0];
@@ -468,59 +497,91 @@ var socket = io.connect('http://' + document.domain + ':' + location.port);
         }
     }
 
+
+
+
+
+
     function displayUserMessage(message) {
     const chatBody = document.getElementsByClassName("card-body")[0];
 
-    // Create user input container
+    // Create the user message container
     var userInputContainer = document.createElement("div");
     userInputContainer.className = "d-flex flex-row justify-content-end mb-4 pt-1";
     userInputContainer.style.display = "inline-block";
+    userInputContainer.style.width = "100%"; // Ensure full width
 
-    // Create user input content container
+    // Create a separate div for the image (right-aligned)
+    const imgContainer = document.createElement("div");
+    imgContainer.style.display = "flex";
+    imgContainer.style.justifyContent = "flex-end"; // Image aligned to the right
+    imgContainer.style.width = "100%"; // Full width container
+    imgContainer.style.marginBottom = "5px"; // Space between image and text
+
+    // If an image is selected, add it to imgContainer
+    if (selectedImageFile) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const imgElement = document.createElement("img");
+            imgElement.src = e.target.result;
+            imgElement.style.maxWidth = "200px";
+            imgElement.style.borderRadius = "10px";
+            imgElement.style.display = "block";
+            imgElement.style.marginLeft = "auto"; // Forces image to right side
+            imgContainer.appendChild(imgElement);
+        };
+        reader.readAsDataURL(selectedImageFile);
+    }
+
+    // Create a div for the text (left-aligned)
     var userInputContent = document.createElement("div");
-    userInputContent.className = "d-flex flex-row";
+    userInputContent.className = "d-flex flex-column";
     userInputContent.style.color = "rgb(204, 204, 204)";
     userInputContent.style.border = "0px solid rgb(129, 129, 129)";
     userInputContent.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.404)";
     userInputContent.style.backgroundColor = "rgba(0, 0, 0, 0.404)";
     userInputContent.style.borderRadius = "10px";
     userInputContent.style.padding = "1%";
-    userInputContent.style.marginRight = "10px"; // Space between message and avatar
+    userInputContent.style.marginRight = "10px";
+    userInputContent.style.maxWidth = "80%"; // Increased to allow longer lines before wrapping
+    userInputContent.style.alignSelf = "flex-start"; // Ensures text stays left-aligned
 
-    // Create paragraph element for user input text
+    // Create user input text
     var userInputText = document.createElement("p");
     userInputText.className = "firstmess";
     userInputText.id = "user";
-    //userInputText.textContent = formatText(message);
     userInputText.innerHTML = formatText(message);
     userInputText.style.color = "rgb(204, 204, 204)";
     userInputText.style.margin = "0";
     userInputText.style.padding = "0";
-    userInputText.style.display = "flex";
-    userInputText.style.alignItems = "center";
-    userInputText.style.justifyContent = "center";
 
-    
-    // Append user input text to content container
+    // ✅ Apply fixes for line breaking:
+    userInputText.style.whiteSpace = "nowrap"; // Prevents breaking until necessary
+    userInputText.style.wordBreak = "normal"; // Ensures words only break when necessary
+    userInputText.style.overflowWrap = "break-word"; // Allows breaking at natural word boundaries
+
+    // Append text inside the message bubble (aligned LEFT)
     userInputContent.appendChild(userInputText);
 
-    // Create user avatar
+    // Append the elements in order: IMAGE (right-aligned) → TEXT (left-aligned)
+    userInputContainer.appendChild(imgContainer); // Image comes first
+    userInputContainer.appendChild(userInputContent); // Text below the image
+
     var userAvatar = document.createElement("img");
-    userAvatar.src = "/static/imgs/user.png"; // Adjust the path as necessary
+    userAvatar.src = "/static/imgs/user.png";
     userAvatar.alt = "avatar 1";
     userAvatar.style.width = "45px";
     userAvatar.style.height = "100%";
 
-    // Append content container and avatar to input container
-    userInputContainer.appendChild(userInputContent);
     userInputContainer.appendChild(userAvatar);
-
-    // Append the complete input container to the chat body
     chatBody.appendChild(userInputContainer);
 
-    // Scroll to the bottom of the chat body to show the new message
     chatBody.scrollTop = chatBody.scrollHeight;
 }
+
+
+
+
 
 
 const recordToggle = document.getElementById("recordToggle");

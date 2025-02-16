@@ -44,7 +44,9 @@ import re
 import asyncio
 import threading
 from collections import OrderedDict
-
+import base64
+from io import BytesIO
+from PIL import Image, UnidentifiedImageError
 
 
 # === Custom Modules ===
@@ -291,11 +293,45 @@ def stop_talking_endpoint():
 def receive_user_message():
     global latest_text_to_read
 
-    user_message = request.form['message']
-    reply = get_completion(user_message)
-    latest_text_to_read = reply
-    socketio.emit('bot_message', {'message': latest_text_to_read})
-    return jsonify({"status": "success"})
+    user_message = request.form.get('message', '')  # ✅ Prevents KeyError if 'message' is missing
+    file = request.files.get('file')  # ✅ Safe way to check if a file was uploaded
+
+    #print(f"User message: {user_message}")
+    #print(f"Received file: {file.filename if file else 'No file uploaded'}")
+
+    if file:
+        buffer = BytesIO()
+        file.save(buffer)
+        buffer.seek(0)  # ✅ Reset buffer position before reading
+
+        # Convert to base64
+        base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
+
+        # Send image + text message to chat
+        # socketio.emit('user_message', {'message': img_html + user_message})
+
+        try:
+            raw_image = Image.open(buffer).convert('RGB')
+            caption = "Image processed successfully"
+        except UnidentifiedImageError as e:
+            print(f"Failed to open the image: {e}")
+            caption = "Failed to process image"
+
+        # Assuming `get_image_caption_from_base64()` generates a caption
+        caption = get_image_caption_from_base64(base64_image)
+        cmessage = f"*The Uploaded photo has the following description {caption}* and the user sent the following message with the photo: {user_message}"
+        reply = get_completion(cmessage)
+
+        latest_text_to_read = reply
+        socketio.emit('bot_message', {'message': latest_text_to_read})
+
+        return jsonify({"status": "success", "caption": caption})  # ✅ Proper return response
+    else:
+        reply = get_completion(user_message)
+        latest_text_to_read = reply
+        socketio.emit('bot_message', {'message': latest_text_to_read})
+        return jsonify({"status": "success"})
 
 @flask_app.route('/upload', methods=['GET', 'POST'])
 def upload():
