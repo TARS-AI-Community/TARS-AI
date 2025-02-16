@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI</title>
+    <title id="titleid">AI</title>
     <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/index.css') }}" rel="stylesheet">
     <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
@@ -235,9 +235,6 @@
 
     <div class="input-group">
         <input type="text" id="prompt" class="form-control border-end-0" placeholder="Type message" aria-label="Recipient's username" aria-describedby="button-addon2" />
-        <button id="recordToggle" class="btn btn-danger record-button" type="button" aria-label="Record">
-            <i class="bi bi-record-circle"></i> <!-- Corrected icon indicating ready to record -->
-        </button>
         <button id="muteButton" class="btn btn-secondary" type="button" aria-label="Mute">
             <i class="bi bi-volume-up-fill"></i>
         </button>
@@ -349,7 +346,10 @@ var socket = io.connect('http://' + document.domain + ':' + location.port);
   
       const botName = document.getElementById('bot name');
       botName.innerHTML = myChar.charName;
-  
+
+      const titleid = document.getElementById('titleid');
+      titleid.innerHTML = myChar.charName;
+
       const botPng = document.getElementById('bot png');
       botPng.src = `{{ url_for('static', filename='imgs/char.png') }}`;
   
@@ -579,92 +579,6 @@ function sendUserMessage(message, imageFile) {
     chatBody.scrollTop = chatBody.scrollHeight;
 }
 
-
-
-
-
-
-const recordToggle = document.getElementById("recordToggle");
-const audioPlayer = document.getElementById("audioPlayer");
-
-let mediaRecorder;
-let audioChunkswhisper = [];
-let isRecording = false;
-
-recordToggle.addEventListener("click", () => {
-    const icon = recordToggle.querySelector('i'); // Correctly find the icon element
-    if (!isRecording) {
-    
-            // Start recording
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then((stream) => {
-                    mediaRecorder = new MediaRecorder(stream);
-
-                    mediaRecorder.ondataavailable = (event) => {
-                        if (event.data.size > 0) {
-                            audioChunkswhisper.push(event.data);
-                        }
-                    };
-
-                    mediaRecorder.onstop = () => {
-                        const audioBlob = new Blob(audioChunkswhisper, { type: "audio/wav" });
-                        audioPlayer.src = URL.createObjectURL(audioBlob);
-
-                        const formData = new FormData();
-                        formData.append("audio", audioBlob);
-                        
-                        const fullUrlaudio = talkingheadBaseUrl + "/save_audio";
-                        fetch(fullUrlaudio, {
-                            method: "POST",
-                            body: formData,
-                        })
-                        .then((response) => response.json())
-                        .then((data) => {
-                            if (data.message && Array.isArray(data.message)) {
-                                // Check if there are any text segments in the "message" array
-                                if (data.message.length > 0) {
-                                    // Process the text segments as needed
-                                    for (const segment of data.message) {
-                                        const message = segment.text;
-                                        console.log(message);
-                                        displayUserMessage(message);
-                                        sendUserMessage(message);
-                                    }
-                                } else {
-                                    console.log("Received an empty message array.");
-                                }
-                            } else {
-                                console.log("Invalid data format:", data);
-                            }
-                        })
-                        .catch((error) => {
-                            console.error("Error:", error);
-                        });
-
-
-                    };
-                    mediaRecorder.start();
-                    isRecording = true;
-                    icon.classList.remove('bi-record-circle');
-                    icon.classList.add('bi-record-circle-fill');
-                    recordToggle.setAttribute('aria-label', 'Stop'); // Update aria-label for accessibility
-                })
-                .catch((error) => {
-                    console.error("Error:", error);
-                });
-        } else {
-            // Stop recording
-            if (mediaRecorder && mediaRecorder.state === "recording") {
-                mediaRecorder.stop();
-                mediaRecorder = null;
-                isRecording = false;
-                audioChunkswhisper = []; // Reset the audioChunks array
-                icon.classList.remove('bi-record-circle-fill');
-                icon.classList.add('bi-record-circle'); // Ensure this matches your initial markup
-                recordToggle.setAttribute('aria-label', 'Record');
-            }
-        }
-    });
 
 });
 

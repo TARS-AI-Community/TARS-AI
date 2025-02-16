@@ -237,7 +237,12 @@ def handle_disconnect():
 
 @flask_app.route('/')
 def index():
-    ipadd = "http://192.168.2.218:5012"
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(("8.8.8.8", 80))  # Connects to an external server but doesn't send data
+        local_ip = s.getsockname()[0]
+        
+    ipadd = local_ip
     return render_template('index.html',
                            char_name=json.dumps(character_name),
                            char_greeting='Welcome back',
@@ -351,7 +356,6 @@ def receive_user_message():
         img_talking_closed = img_talking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
         
     return jsonify({"status": "success"})
-
 
 @flask_app.route('/upload', methods=['GET', 'POST'])
 def upload():
