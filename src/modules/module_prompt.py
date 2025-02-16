@@ -6,7 +6,7 @@ Utility module for building prompts for LLM backends.
 
 from datetime import datetime
 import os
-from module_engine import check_for_module
+from modules.module_engine import check_for_module
 
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
     """

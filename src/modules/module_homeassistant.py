@@ -1,5 +1,5 @@
 import requests
-from module_config import load_config
+from modules.module_config import load_config
 
 config = load_config()
 

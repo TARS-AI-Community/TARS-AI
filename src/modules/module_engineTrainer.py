@@ -19,9 +19,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
 # === Constants ===
-DEFAULT_TRAINING_DATA_PATH = 'engine/training/training_data.csv'
-DEFAULT_MODEL_PATH = 'engine/pickles/naive_bayes_model.pkl'
-DEFAULT_VECTORIZER_PATH = 'engine/pickles/module_engine_model.pkl'
+DEFAULT_TRAINING_DATA_PATH = '../engine/training/training_data.csv'
+DEFAULT_MODEL_PATH = '../engine/pickles/naive_bayes_model.pkl'
+DEFAULT_VECTORIZER_PATH = '../engine/pickles/module_engine_model.pkl'
 
 def delete_existing_files(nb_classifier_path=DEFAULT_MODEL_PATH, vectorizer_path=DEFAULT_VECTORIZER_PATH):
     """

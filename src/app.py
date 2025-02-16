@@ -19,15 +19,15 @@ import threading
 from datetime import datetime
 
 # === Custom Modules ===
-from module_config import load_config
-from module_character import CharacterManager
-from module_memory import MemoryManager
-from module_stt import STTManager
-from module_tts import update_tts_settings
-from module_btcontroller import *
-from module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread, start_discord_bot, process_discord_message_callback
-from module_vision import initialize_blip
-from module_llm import initialize_manager_llm
+from modules.module_config import load_config
+from modules.module_character import CharacterManager
+from modules.module_memory import MemoryManager
+from modules.module_stt import STTManager
+from modules.module_tts import update_tts_settings
+from modules.module_btcontroller import *
+from modules.module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread, start_discord_bot, process_discord_message_callback
+from modules.module_vision import initialize_blip
+from modules.module_llm import initialize_manager_llm
 
 # === Constants and Globals ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

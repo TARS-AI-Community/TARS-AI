@@ -19,7 +19,7 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 from io import BytesIO
-from module_piper import *
+from modules.module_piper import *
 
 def update_tts_settings(ttsurl):
     """

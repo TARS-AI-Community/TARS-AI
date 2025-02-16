@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 # === Custom Modules ===
-from module_config import load_config
+from modules.module_config import load_config
 
 # === Constants and Globals ===
 CONFIG = load_config()
@@ -29,7 +29,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MODEL_NAME = "Salesforce/blip-image-captioning-base"
 
 # Cache directory for model
-CACHE_DIR = Path("./vision")
+CACHE_DIR = Path(__file__).resolve().parent.parent / "vision"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Globals for processor and model
@@ -183,7 +183,8 @@ def save_captured_image(image_bytes: BytesIO):
     """
     try:
         # Create the output directory if it doesn't exist
-        output_dir = Path("vision/images")
+        #output_dir = Path("vision/images")
+        output_dir = Path(__file__).resolve().parent.parent / "vision/images"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Define the file name with timestamp

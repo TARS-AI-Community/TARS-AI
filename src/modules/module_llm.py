@@ -12,8 +12,8 @@ Provides:
 import requests
 import threading
 import concurrent.futures
-from module_config import load_config
-from module_prompt import build_prompt
+from modules.module_config import load_config
+from modules.module_prompt import build_prompt
 
 # === Constants and Globals ===
 CONFIG = load_config()

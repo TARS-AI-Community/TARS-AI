@@ -12,13 +12,14 @@ from datetime import datetime
 import configparser
 import os
 
+
 class CharacterManager:
     """
     Manages character attributes and dynamic properties for TARS-AI.
     """
     def __init__(self, config):
         self.config = config
-        self.character_card_path = config['CHAR']['character_card_path']
+        self.character_card_path =  os.path.join("..", self.config['CHAR']['character_card_path'])
         self.character_card = None
         self.char_name = None
         self.description = None
@@ -66,7 +67,7 @@ class CharacterManager:
         """
         Load persona traits from the persona.ini file.
         """
-        persona_path = os.path.join(os.path.dirname(__file__), 'character', 'persona.ini')
+        persona_path =  os.path.join("..", 'character', self.char_name, 'persona.ini')
         config = configparser.ConfigParser()
 
         try:

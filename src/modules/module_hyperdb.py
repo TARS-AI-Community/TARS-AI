@@ -28,7 +28,7 @@ from typing import List, Union
 
 import configparser
 
-from module_config import get_api_key
+from modules.module_config import get_api_key
 
 config = configparser.ConfigParser()
 config.read('config.ini')

@@ -13,9 +13,73 @@ import sys
 import configparser
 from dotenv import load_dotenv
 from datetime import datetime
+from dataclasses import dataclass
+from typing import Optional
 
 # === Initialization ===
-load_dotenv() # Load environment variables from .env file
+load_dotenv()  # Load environment variables from .env file
+
+@dataclass
+class TTSConfig:
+    """Configuration class for Text-to-Speech settings"""
+    ttsoption: str
+    toggle_charvoice: bool
+    tts_voice: Optional[str]
+    voice_only: bool
+    is_talking_override: bool
+    is_talking: bool
+    global_timer_paused: bool
+    
+    # Azure specific settings
+    azure_api_key: Optional[str] = None
+    azure_region: Optional[str] = None
+    
+    # ElevenLabs specific settings
+    elevenlabs_api_key: Optional[str] = None
+    voice_id: Optional[str] = None
+    model_id: Optional[str] = None
+    
+    # Server specific settings
+    ttsurl: Optional[str] = None
+
+    def __getitem__(self, key):
+        """Enable dictionary-like access for backward compatibility"""
+        return getattr(self, key)
+
+    def validate(self) -> bool:
+        """Validate the configuration based on ttsoption"""
+        if self.ttsoption == "azure":
+            if not (self.azure_api_key and self.azure_region):
+                print("ERROR: Azure API key and region are required for Azure TTS")
+                return False
+        elif self.ttsoption == "elevenlabs":
+            if not self.elevenlabs_api_key:
+                print("ERROR: ElevenLabs API key is required for ElevenLabs TTS")
+                return False
+        elif self.ttsoption in ["xttsv2", "alltalk"]:
+            if not self.ttsurl:
+                print("ERROR: TTS URL is required for server-based TTS")
+                return False
+        return True
+
+    @classmethod
+    def from_config_dict(cls, config_dict: dict) -> 'TTSConfig':
+        """Create TTSConfig instance from configuration dictionary"""
+        return cls(
+            ttsoption=config_dict['ttsoption'],
+            toggle_charvoice=config_dict['toggle_charvoice'],
+            tts_voice=config_dict['tts_voice'],
+            voice_only=config_dict['voice_only'],
+            is_talking_override=config_dict['is_talking_override'],
+            is_talking=config_dict['is_talking'],
+            global_timer_paused=config_dict['global_timer_paused'],
+            azure_api_key=config_dict.get('azure_api_key'),
+            azure_region=config_dict.get('azure_region'),
+            elevenlabs_api_key=config_dict.get('elevenlabs_api_key'),
+            voice_id=config_dict.get('voice_id'),
+            model_id=config_dict.get('model_id'),
+            ttsurl=config_dict.get('ttsurl')
+        )
 
 def load_config():
     """
@@ -32,12 +96,18 @@ def load_config():
     sys.path.append(os.getcwd())
 
     # Parse the main config.ini file
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Ensures it resolves to src/
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config_path = os.path.join(base_dir, 'config.ini')  # Ensures it joins "src/config.ini"
+    config.read(config_path)  # Should correctly read "src/config.ini"
 
     # Parse the persona.ini file
+    character_path = config.get("CHAR", "character_card_path")  # Get full path
+    character_name = os.path.splitext(os.path.basename(character_path))[0]  # Extract filename without extension
+
     persona_config = configparser.ConfigParser()
-    persona_path = os.path.join(base_dir, 'character', 'persona.ini')
+    persona_path = os.path.join(base_dir, 'character', character_name, 'persona.ini')
+
     if not os.path.exists(persona_path):
         print(f"ERROR: {persona_path} not found.")
         sys.exit(1)  # Exit if persona.ini is missing
@@ -76,6 +146,7 @@ def load_config():
             "whisper_model": config['STT']['whisper_model'],
             "vosk_model": config['STT']['vosk_model'],
             "use_indicators": config.getboolean('STT', 'use_indicators'),
+            "vad_enabled": config.getboolean('STT', 'vad_enabled', fallback=False),
         },
         "CHAR": {
             "character_card_path": config['CHAR']['character_card_path'],
@@ -106,17 +177,25 @@ def load_config():
             "emotion_model": config['EMOTION']['emotion_model'],
             "storepath": os.path.join(os.getcwd(), config['EMOTION']['storepath']),
         },
-        "TTS": {
+        "TTS": TTSConfig.from_config_dict({
             "ttsoption": config['TTS']['ttsoption'],
             "azure_api_key": os.getenv('AZURE_API_KEY'),
+            "elevenlabs_api_key": os.getenv('ELEVENLABS_API_KEY'),
             "azure_region": config['TTS']['azure_region'],
             "ttsurl": config['TTS']['ttsurl'],
             "toggle_charvoice": config.getboolean('TTS', 'toggle_charvoice'),
             "tts_voice": config['TTS']['tts_voice'],
+            "voice_id": config['TTS']['voice_id'],
+            "model_id": config['TTS']['model_id'],
             "voice_only": config.getboolean('TTS', 'voice_only'),
             "is_talking_override": config.getboolean('TTS', 'is_talking_override'),
             "is_talking": config.getboolean('TTS', 'is_talking'),
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
+        }),
+        "RAG": {
+            "strategy": config.get('RAG', 'strategy', fallback='naive'),
+            "vector_weight": config.getfloat('RAG', 'vector_weight', fallback=0.5),
+            "top_k": config.getint('RAG', 'top_k', fallback=5),
         },
         "HOME_ASSISTANT": {
             "enabled": config['HOME_ASSISTANT']['enabled'],
@@ -180,7 +259,8 @@ def get_api_key(llm_backend: str) -> str:
     backend_to_env_var = {
         "openai": "OPENAI_API_KEY",
         "ooba": "OOBA_API_KEY",
-        "tabby": "TABBY_API_KEY"
+        "tabby": "TABBY_API_KEY",
+        "deepinfra": "DEEPINFRA_API_KEY"
     }
 
     # Check if the backend is supported
@@ -207,9 +287,7 @@ def update_character_setting(setting, value):
     - bool: True if the update is successful, False otherwise.
     """
     # Determine the path to config.ini in the same folder as this script
-
     config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'character', 'persona.ini')
-
     config = configparser.ConfigParser()
 
     try:

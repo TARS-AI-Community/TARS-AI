@@ -152,11 +152,11 @@ class STTManager:
         Initialize the Vosk model for local STT transcription.
         """
         if self.config['STT']['stt_processor'] == 'vosk':
-            vosk_model_path = os.path.join(os.getcwd(), "stt", self.config['STT']['vosk_model'])
+            vosk_model_path = os.path.join(os.getcwd(), "..", "stt", self.config['STT']['vosk_model'])
             if not os.path.exists(vosk_model_path):
                 print(f"ERROR: Vosk model not found. Downloading...")
                 download_url = f"https://alphacephei.com/vosk/models/{self.config['STT']['vosk_model']}.zip"
-                self._download_vosk_model(download_url, os.path.join(os.getcwd(), "stt"))
+                self._download_vosk_model(download_url, os.path.join(os.getcwd(), "..", "stt"))
                 print(f"INFO: Restarting model loading...")
                 self._load_vosk_model()
                 return
@@ -181,7 +181,7 @@ class STTManager:
             print(f"INFO: Preparing to load Faster-Whisper model '{model_size}'...")
 
             # Set up a folder for Whisper models inside the stt directory via environment variable.
-            whisper_folder = os.path.join(os.getcwd(), "stt", "whisper")
+            whisper_folder = os.path.join(os.getcwd(), "..", "stt", "whisper")
             os.makedirs(whisper_folder, exist_ok=True)
             os.environ["HF_HUB_CACHE"] = whisper_folder
 
@@ -200,7 +200,9 @@ class STTManager:
     def _load_silero_model(self):
         """Load Silero STT model via Torch Hub into the stt folder (without a hub subfolder)."""
         try:
-            stt_folder = os.path.join(os.getcwd(), "stt")
+            # Go one level up from the current directory
+            parent_dir = os.path.dirname(os.getcwd())
+            stt_folder = os.path.join(parent_dir, "stt")
             os.makedirs(stt_folder, exist_ok=True)
             # Override torch.hub.get_dir to return stt_folder directly.
             import torch.hub

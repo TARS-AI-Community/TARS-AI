@@ -36,17 +36,19 @@ from datetime import datetime
 import threading
 
 # === Custom Modules ===
-from module_websearch import search_google, search_google_news
-from module_vision import describe_camera_view
-from module_stablediffusion import generate_image
-from module_volume import handle_volume_command
-from module_homeassistant import send_prompt_to_homeassistant
-from module_tts import generate_tts_audio
-from module_config import load_config, update_character_setting
+from modules.module_websearch import search_google, search_google_news
+from modules.module_vision import describe_camera_view
+from modules.module_stablediffusion import generate_image
+from modules.module_volume import handle_volume_command
+from modules.module_homeassistant import send_prompt_to_homeassistant
+from modules.module_tts import generate_tts_audio
+from modules.module_config import load_config, update_character_setting
 
 # === Constants ===
-MODEL_FILENAME = 'engine/pickles/naive_bayes_model.pkl'
-VECTORIZER_FILENAME = 'engine/pickles/module_engine_model.pkl'
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Move up to "src"
+MODEL_FILENAME = os.path.join(BASE_DIR, 'engine/pickles/naive_bayes_model.pkl')
+VECTORIZER_FILENAME = os.path.join(BASE_DIR, 'engine/pickles/module_engine_model.pkl')
+TRAINING_DATA_PATH = os.path.join(BASE_DIR, 'engine/training/training_data.csv')
 
 CONFIG = load_config()
 

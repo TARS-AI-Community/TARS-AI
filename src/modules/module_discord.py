@@ -11,7 +11,7 @@ It allows the bot to respond to messages and mentions in a specified Discord cha
 import discord
 
 # === Custom Modules ===
-from module_config import load_config
+from modules.module_config import load_config
 
 # === Constants and Globals ===
 CONFIG = load_config()
