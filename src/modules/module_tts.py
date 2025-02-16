@@ -20,6 +20,22 @@ import sounddevice as sd
 import soundfile as sf
 from io import BytesIO
 from modules.module_piper import *
+from elevenlabs.client import ElevenLabs
+from elevenlabs import play
+
+elevenlabs_client = None
+
+def init_elevenlabs_client(api_key):
+    """
+    Initializes the global ElevenLabs client instance with the provided API key.
+    
+    Parameters:
+    - api_key (str): The ElevenLabs API key.
+    """
+    global elevenlabs_client
+    if not api_key:
+        raise ValueError("ElevenLabs API key must be provided for initialization.")
+    elevenlabs_client = ElevenLabs(api_key=api_key)
 
 def update_tts_settings(ttsurl):
     """
@@ -132,6 +148,27 @@ def azure_tts(text, azure_api_key, azure_region, tts_voice):
     except Exception as e:
         print(f"ERROR: Azure TTS generation failed: {e}")
 
+def elevenlabs_tts(text, voice_id="JBFqnCBsd6RMkjVDRZzb", model_id="eleven_multilingual_v2", output_format="mp3_44100_128"):
+    """
+    Generate TTS audio using ElevenLabs.
+    
+    Parameters:
+    - text (str): The text to convert into speech.
+    - voice_id (str): Voice ID for ElevenLabs.
+    - model_id (str): Model ID for ElevenLabs.
+    - output_format (str): Output format for the audio.
+    """
+    try:
+        audio = elevenlabs_client.text_to_speech.convert(
+            text=text,
+            voice_id=voice_id,
+            model_id=model_id,
+            output_format=output_format,
+        )
+        play(audio)
+    except Exception as e:
+        print(f"ERROR: ElevenLabs TTS generation failed: {e}")
+        
 def alltalk_tts(text, ttsurl, tts_voice):
     try:
         # API endpoint and payload

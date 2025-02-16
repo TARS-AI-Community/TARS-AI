@@ -28,3 +28,7 @@ librosa
 #alsa-utils
 #sudo apt install ffmpeg
 faster-whisper
+silero-vad
+bm25s
+pystemmer
+elevenlabs
