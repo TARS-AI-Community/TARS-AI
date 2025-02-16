@@ -19,9 +19,11 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 from io import BytesIO
-from modules.module_piper import *
 from elevenlabs.client import ElevenLabs
 from elevenlabs import play
+
+from modules.module_piper import *
+from modules.module_silero import text_to_speech_with_pipelining_silero
 
 elevenlabs_client = None
 
@@ -292,8 +294,17 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
             alltalk_tts(text, ttsurl, tts_voice)
 
         # Local TTS generation using local onboard PIPER TTS
-        if ttsoption == "piper":
+        elif ttsoption == "piper":
             async for chunk in text_to_speech_with_pipelining(text):
+                yield chunk  # Yield each chunk to be processed later
+
+        elif ttsoption == "elevenlabs":
+            if not elevenlabs_client:
+                init_elevenlabs_client(CONFIG['elevenlabs_api_key'])
+            elevenlabs_tts(text, CONFIG['voice_id'], CONFIG['model_id'])
+
+        elif ttsoption == "silero":
+            async for chunk in text_to_speech_with_pipelining_silero(text):
                 yield chunk  # Yield each chunk to be processed later
 
         # Server-based TTS generation using `xttsv2`
