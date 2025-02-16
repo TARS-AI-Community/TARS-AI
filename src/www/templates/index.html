@@ -45,8 +45,8 @@
 
 
    
-            //const startTalkingUrl = talkingheadBaseUrl + "/api/talkinghead/start_talking";
-            fetch(talkingheadBaseUrl + "/api/talkinghead/start_talking")
+            //const startTalkingUrl = talkingheadBaseUrl + "/start_talking";
+            fetch(talkingheadBaseUrl + "/start_talking")
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
@@ -63,7 +63,7 @@
             muteButton.setAttribute('aria-label', 'Unmute'); // Update aria-label for accessibility
             
                               // Send fetch request to stop talking
-        fetch(talkingheadBaseUrl + "/api/talkinghead/stop_talking")
+        fetch(talkingheadBaseUrl + "/stop_talking")
         .then(response => {
             if (!response.ok) {
                 throw new Error('Network response was not ok');
@@ -86,7 +86,7 @@
           audioPlayer.play().then(() => {
               // Call the /talking_start endpoint right after the audio starts playing if not muted
               if (!audioPlayer.muted) {
-                  fetch(talkingheadBaseUrl + "/api/talkinghead/start_talking")
+                  fetch(talkingheadBaseUrl + "/start_talking")
                       .then(response => {
                           if (!response.ok) {
                               throw new Error('Network response was not ok');
@@ -102,7 +102,7 @@
       function handleAudioEnd() {
           // Call the /talking_stop endpoint right after the audio stops if not muted
           if (!audioPlayer.muted) {
-              fetch(talkingheadBaseUrl + "/api/talkinghead/stop_talking")
+              fetch(talkingheadBaseUrl + "/stop_talking")
                   .then(response => {
                       if (!response.ok) {
                           throw new Error('Network response was not ok');
@@ -486,8 +486,9 @@ recordToggle.addEventListener("click", () => {
 
                         const formData = new FormData();
                         formData.append("audio", audioBlob);
-
-                        fetch("http://192.168.2.218:5012/save_audio", {
+                        
+                        const fullUrlaudio = talkingheadBaseUrl + "/save_audio";
+                        fetch(fullUrlaudio, {
                             method: "POST",
                             body: formData,
                         })
