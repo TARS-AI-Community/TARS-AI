@@ -28,3 +28,4 @@ whisper
 #espeak-ng
 #alsa-utils
 #sudo apt install ffmpeg
+faster-whisper
