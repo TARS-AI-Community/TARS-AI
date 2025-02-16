@@ -24,9 +24,8 @@ discord.py[voice] #needed to voice chat with tars on discord
 configobj #needed to keep comments in the config.ini when updating
 openai
 librosa
-#espeak-ng
-#alsa-utils
-#sudo apt install ffmpeg
+espeak-ng
+alsa-utils
 faster-whisper
 silero-vad
 bm25s
@@ -38,3 +37,4 @@ flask-cors #needed for chat ui
 flask-socketio #needed for chat ui
 eventlet #needed for chat ui instead of waitress
 Flask[async]
+optimum[onnxruntime]

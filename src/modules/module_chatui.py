@@ -54,6 +54,7 @@ from modules.module_config import load_config
 from modules.module_llm import get_completion
 from modules.module_vision import get_image_caption_from_base64
 from modules.module_tts import generate_tts_audio
+from modules.module_llm import detect_emotion
 
 # Suppress Flask logs
 log = logging.getLogger('werkzeug')
@@ -78,7 +79,7 @@ swayamount = 1   # You can change this value from 1 to 10.
 
 # Get the base directory where the script is running
 sprite = 'tars'
-emotion = 'zero'
+emotion = 'neutral'
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  
 character_path = CONFIG['CHAR']['character_card_path']
@@ -291,47 +292,66 @@ def stop_talking_endpoint():
 
 @flask_app.route('/process_llm', methods=['POST'])
 def receive_user_message():
-    global latest_text_to_read
+    global latest_text_to_read, CHARACTER_DIR, img_nottalking_open, img_nottalking_closed, img_talking_open, img_talking_closed
 
-    user_message = request.form.get('message', '')  # ✅ Prevents KeyError if 'message' is missing
-    file = request.files.get('file')  # ✅ Safe way to check if a file was uploaded
-
-    #print(f"User message: {user_message}")
-    #print(f"Received file: {file.filename if file else 'No file uploaded'}")
+    user_message = request.form.get('message', '')  
+    file = request.files.get('file')  
 
     if file:
         buffer = BytesIO()
         file.save(buffer)
-        buffer.seek(0)  # ✅ Reset buffer position before reading
+        buffer.seek(0)
 
-        # Convert to base64
         base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
         img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
 
-        # Send image + text message to chat
-        # socketio.emit('user_message', {'message': img_html + user_message})
-
         try:
             raw_image = Image.open(buffer).convert('RGB')
-            caption = "Image processed successfully"
+            caption = get_image_caption_from_base64(base64_image)
         except UnidentifiedImageError as e:
             print(f"Failed to open the image: {e}")
             caption = "Failed to process image"
 
-        # Assuming `get_image_caption_from_base64()` generates a caption
-        caption = get_image_caption_from_base64(base64_image)
         cmessage = f"*The Uploaded photo has the following description {caption}* and the user sent the following message with the photo: {user_message}"
         reply = get_completion(cmessage)
-
-        latest_text_to_read = reply
-        socketio.emit('bot_message', {'message': latest_text_to_read})
-
-        return jsonify({"status": "success", "caption": caption})  # ✅ Proper return response
     else:
         reply = get_completion(user_message)
-        latest_text_to_read = reply
-        socketio.emit('bot_message', {'message': latest_text_to_read})
-        return jsonify({"status": "success"})
+
+    latest_text_to_read = reply
+    socketio.emit('bot_message', {'message': latest_text_to_read})
+
+    if CONFIG['CHAR']['user_name'] == "True": 
+        # **🎭 Detect Emotion and Update Animation Folder**
+        detected_emotion = detect_emotion(reply)
+        print(f"Detected Emotion: {detected_emotion}")
+
+        # Build the new emotion folder path
+        new_character_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
+
+        # Check if the folder exists, otherwise, fallback to 'neutral'
+        if not os.path.exists(new_character_dir):
+            print(f"Emotion folder '{new_character_dir}' not found. Falling back to 'neutral'.")
+            detected_emotion = "neutral"
+            new_character_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
+
+        # **Update Global Emotion Directory**
+        CHARACTER_DIR = new_character_dir
+        print(f"Updated CHARACTER_DIR: {CHARACTER_DIR}")
+
+        # **🔄 Reload Character Images for New Emotion**
+        img_nottalking_open = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_nottalking_eyes_open.png")).convert("RGBA")
+        img_nottalking_closed = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_nottalking_eyes_closed.png")).convert("RGBA")
+        img_talking_open = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_talking_eyes_open.png")).convert("RGBA")
+        img_talking_closed = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_talking_eyes_closed.png")).convert("RGBA")
+
+        # Resize images to match the frame dimensions
+        img_nottalking_open = img_nottalking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))
+        img_nottalking_closed = img_nottalking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
+        img_talking_open = img_talking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))
+        img_talking_closed = img_talking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
+        
+    return jsonify({"status": "success"})
+
 
 @flask_app.route('/upload', methods=['GET', 'POST'])
 def upload():
