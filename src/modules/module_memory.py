@@ -119,7 +119,7 @@ class MemoryManager:
             else:
                 return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARN: No memories found for the query."
         except Exception as e:
-            print(f"ERROR: Error retrieving related memories: {e}")
+            #print(f"ERROR: Error retrieving related memories: {e}")
             return "Error retrieving related memories."
     
     def get_longterm_memory(self, user_input: str) -> str:
