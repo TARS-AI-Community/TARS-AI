@@ -28,6 +28,7 @@ from modules.module_btcontroller import *
 from modules.module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread, start_discord_bot, process_discord_message_callback
 from modules.module_vision import initialize_blip
 from modules.module_llm import initialize_manager_llm
+import modules.module_chatui
 
 # === Constants and Globals ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -89,6 +90,10 @@ if __name__ == "__main__":
     bt_controller_thread = threading.Thread(target=start_bt_controller_thread, name="BTControllerThread", daemon=True)
     bt_controller_thread.start()
 
+    # Create a thread for the Flask app
+    flask_thread = threading.Thread(target=modules.module_chatui.start_flask_app, daemon=True)
+    flask_thread.start()
+    
     # Initilize BLIP to speed up initial image capture
     if not CONFIG['VISION']['server_hosted']:
         initialize_blip()

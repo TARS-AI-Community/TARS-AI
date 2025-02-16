@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI</title>
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/index.css') }}" rel="stylesheet">
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
+    <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}" rel="stylesheet">
+    <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}">
+</head>
+<body>
+  <audio id="audioPlayer" controls hidden>
+      Your browser does not support the audio element.
+  </audio>
+
+  <script>
+    const talkinghead_url = "{{ talkinghead_base_url }}";
+    const parser = new DOMParser();
+    let decodedUrl = parser.parseFromString(`<!doctype html><body>{{ talkinghead_base_url }}`, 'text/html').body.textContent;
+    decodedUrl = decodedUrl.replace(/^"|"$/g, '');
+    console.log(decodedUrl);
+
+
+    document.addEventListener("DOMContentLoaded", function () {
+          const audioPlayer = document.getElementById("audioPlayer");
+          const muteButton = document.getElementById("muteButton");
+
+          // Initialize the audio as unmuted
+          let isMuted = false;
+
+          muteButton.addEventListener("click", function () {
+        const icon = this.querySelector('i'); // Find the icon within the button
+        if (isMuted) {
+            // If audio is currently muted, unmute it and switch icon to volume-up
+            audioPlayer.muted = false;
+            icon.classList.remove('bi-volume-mute-fill');
+            icon.classList.add('bi-volume-up-fill');
+            muteButton.setAttribute('aria-label', 'Mute'); // Update aria-label for accessibility
+                              // Check if the audio is playing
+            if (!audioPlayer.paused) {
+            // Send fetch request to start talking
+
+
+   
+            //const startTalkingUrl = talkingheadBaseUrl + "/api/talkinghead/start_talking";
+            fetch(talkingheadBaseUrl + "/api/talkinghead/start_talking")
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    // Handle the response if necessary
+                })
+                .catch(error => console.error('Fetch error:', error));
+        }
+        } else {
+            // If audio is currently unmuted, mute it and switch icon to volume-mute
+            audioPlayer.muted = true;
+            icon.classList.remove('bi-volume-up-fill');
+            icon.classList.add('bi-volume-mute-fill');
+            muteButton.setAttribute('aria-label', 'Unmute'); // Update aria-label for accessibility
+            
+                              // Send fetch request to stop talking
+        fetch(talkingheadBaseUrl + "/api/talkinghead/stop_talking")
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            // Handle the response if necessary
+        })
+        .catch(error => console.error('Fetch error:', error));
+        }
+
+        // Toggle the mute state
+        isMuted = !isMuted;
+    });
+    });
+
+      var audioPlayer = document.getElementById('audioPlayer');
+
+      function updateAndPlayAudio() {
+          audioPlayer.src = '/audio_stream';
+          audioPlayer.load();
+          audioPlayer.play().then(() => {
+              // Call the /talking_start endpoint right after the audio starts playing if not muted
+              if (!audioPlayer.muted) {
+                  fetch(talkingheadBaseUrl + "/api/talkinghead/start_talking")
+                      .then(response => {
+                          if (!response.ok) {
+                              throw new Error('Network response was not ok');
+                          }
+                          // Handle the response if necessary
+                      })
+                      .catch(error => console.error('Fetch error:', error));
+              }
+          });
+      }
+
+      // Function to handle the 'ended' event
+      function handleAudioEnd() {
+          // Call the /talking_stop endpoint right after the audio stops if not muted
+          if (!audioPlayer.muted) {
+              fetch(talkingheadBaseUrl + "/api/talkinghead/stop_talking")
+                  .then(response => {
+                      if (!response.ok) {
+                          throw new Error('Network response was not ok');
+                      }
+                      // Handle the response if necessary
+                  })
+                  .catch(error => console.error('Fetch error:', error));
+          }
+      }
+
+      // Add event listener for 'ended' event
+      audioPlayer.addEventListener('ended', handleAudioEnd);
+  </script>
+        <div class="chat-container">
+            <div class="card h-100 gradient-custom">
+                <div class="card-body" data-mdb-perfect-scrollbar="true">
+                    <div class="chat-messages" style="padding: 0%; margin: 0%;">
+                        <div class="d-flex justify-content-left" style="padding: 0px; margin: 0px;">
+                            <p class="small mb-1 name" id="bot name" style="padding: 0px; margin: 0px;">$CHARNAME</p>
+                            <p class="small mb-1 text-muted" id="timestamp first" style="padding: 0px; margin: 0px;"></p>
+                        </div>
+                        <div class="d-flex flex-row justify-content-left mb-4 pt-1" style="display: inline-block;">
+                            <img src="{{ url_for('static', filename='imgs/user.png') }}" id="bot png" alt="avatar 1"
+                                style="width: 45px; height: 100%;">
+                            <div class="d-flex flex-row"
+                                style="box-shadow: 0 2px 4px rgb(0, 0, 0, 0.404); border: 0px solid rgb(129, 129, 129); margin-bottom: 0px; background-color: rgba(0, 0, 0, 0.404); border-radius: 10px; padding: 1%;">
+                                <p class="firstmess" id="bot firstmess"
+                                    style="margin: 0px; padding: 0px; align-items: center; justify-content: center; color: rgb(204, 204, 204);">$REPLACEFIRSTMEMESSAGE</p>
+                            </div>
+                        </div>
+                        <div id="output"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <img id="backgroundImage" src="" alt="Background Image">
+        <script>
+            // Declare a global variable to store the base URL
+            let talkingheadBaseUrl = '';
+
+            // Fetch the talking head base URL from the backend
+            fetch('/get_ip')
+                .then(response => response.json())
+                .then(data => {
+                    // Store the base URL in the global variable
+                    talkingheadBaseUrl = data.talkinghead_base_url;
+
+                    // Update the image source or do other initial actions
+                    const fullUrl = talkingheadBaseUrl + "/stream";
+                    document.getElementById('backgroundImage').src = fullUrl;
+                })
+                .catch(error => console.error('Error fetching talking head URL:', error));
+        </script>
+    </div>
+
+
+    <form id="imageUploadForm" method="POST" enctype="multipart/form-data" action="/upload" hidden>
+        <input class="form-control" type="file" id="imageUpload" name="file" accept="image/*">
+        <!-- The label is not needed if the form is hidden and triggered by another button -->
+    </form>
+    
+    <div class="input-group">
+        <input type="text" id="prompt" class="form-control border-end-0" placeholder="Type message" aria-label="Recipient's username" aria-describedby="button-addon2" />
+        <button id="recordToggle" class="btn btn-danger record-button" type="button" aria-label="Record">
+            <i class="bi bi-record-circle"></i> <!-- Corrected icon indicating ready to record -->
+        </button>
+        <button id="muteButton" class="btn btn-secondary" type="button" aria-label="Mute">
+            <i class="bi bi-volume-up-fill"></i>
+        </button>
+        <button id="uploadImageButton" class="btn btn-primary" type="button" aria-label="Upload">
+            <i class="bi bi-upload"></i> <!-- Changed icon to better reflect action -->
+        </button>
+        <button class="btn btn-primary" type="button" id="button-addon2" aria-label="Send">
+            <i class="bi bi-arrow-right-circle-fill"></i>
+        </button>
+    </div>
+
+<script>
+    
+
+document.addEventListener('DOMContentLoaded', function() {
+    
+
+    document.getElementById('uploadImageButton').addEventListener('click', function() {
+        document.getElementById('imageUpload').click();
+    });
+
+    document.getElementById('imageUpload').addEventListener('change', function() {
+        // Create a FormData object and append the file
+        var formData = new FormData();
+        var imageFile = document.getElementById('imageUpload').files[0];
+        formData.append('file', imageFile);
+        
+        delayedMessage()
+        // Use fetch to submit the form data asynchronously
+        fetch('/upload', {
+            method: 'POST',
+            body: formData,
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.text(); // or response.json() if your server responds with JSON
+        })
+        .then(data => {
+            // Handle success
+            console.log('Success:', data);
+            // Optionally, update the UI here to show the uploaded image or a success message
+        })
+        .catch(error => {
+            // Handle errors
+            console.error('Error:', error);
+        });
+
+        // Prevent the form from submitting the traditional way
+        event.preventDefault();
+    });
+
+var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+    socket.on('bot_message', function(data) {
+        //console.log('Received botmessage:', data.message);
+        displayBotMessage(data.message);
+    });
+
+    socket.on('user_message', function(data) {
+        //console.log('Received botmessage:', data.message);
+        displayUserMessage(data.message);
+    });
+
+    socket.on('disconnect', function() {
+        console.log('Disconnected from server. Attempting to reconnect...');
+        setTimeout(function() {
+            socket.connect();
+        }, 5000); // Attempt to reconnect after 5 seconds
+    });
+
+    socket.on('heartbeat', function(msg) {
+        //console.log('Heartbeat received from server');
+        socket.emit('heartbeat', {status: 'alive'});
+    });
+
+
+
+    function formatText(text) {
+    // Convert newline characters to HTML line breaks
+    text = text.replace(/\n/g, '<br>');
+
+    // Replace text enclosed within * with emphasized text
+    text = text.replace(/\*(.*?)\*/g, '<span class="emphasized-text">$1</span>'); 
+
+    // Replace text enclosed within `` with code text styling
+    text = text.replace(/``(.*?)``/g, '<span class="code-text">$1</span>');
+
+    // Corrected Unicode character replacement
+    text = text.replace(/\\u([\dA-F]{4})/gi, function(match, group1) {
+        return String.fromCharCode(parseInt(group1, 16));
+    });
+    
+    return text;
+}
+
+
+  try {
+      // Assign values to myChar properties
+      myChar = {
+        charName: "{{ char_name }}",
+        char_greeting: "{{ char_greeting }}"
+      };
+
+      // Set values in the HTML elements
+      const botFirstMess = document.getElementById('bot firstmess');
+
+      botFirstMess.innerHTML = formatText(myChar.char_greeting);
+  
+      const botName = document.getElementById('bot name');
+      botName.innerHTML = myChar.charName;
+  
+      const botPng = document.getElementById('bot png');
+      botPng.src = `{{ url_for('static', filename='imgs/char.png') }}`;
+  
+    } catch (error) {
+      console.error(error);
+    }
+
+    const promptInput = document.getElementById('prompt');
+    const sendButton = document.getElementById('button-addon2');
+
+    sendButton.addEventListener("click", function() {
+        const userInput = promptInput.value.trim();
+        if (userInput) {
+            displayUserMessage(userInput); // Display user's message in chat
+            sendUserMessage(userInput);
+            promptInput.value = ''; // Clear the input field after sending
+            delayedMessage();
+        }
+    });
+    
+    promptInput.addEventListener('keyup', function(event) {
+        if (event.key === 'Enter') {
+            const userInput = promptInput.value.trim();
+            if (userInput) {
+                displayUserMessage(userInput); // Display user's message in chat
+                sendUserMessage(userInput);
+                promptInput.value = ''; // Clear the input field after sending
+                delayedMessage();
+            }
+        }
+    });
+
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Usage within an async function
+    async function delayedMessage() {
+        await delay(1000); // Wait for 2 seconds
+        displayBotMessage("", true);
+    }
+
+    function sendUserMessage(message) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", "/process_llm", true);
+        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4 && xhr.status === 200) {
+               updateAndPlayAudio();
+            }
+        };
+        xhr.send("message=" + encodeURIComponent(message));
+    }
+
+    function displayBotMessage(message, isTemporary = false) {
+    const chatBody = document.getElementsByClassName("card-body")[0];
+
+    // Create elements for the bot message container
+    const responseContainer = document.createElement("div");
+    responseContainer.className = "d-flex flex-row justify-content-left mb-4 pt-1";
+
+    // Create the bot avatar image element
+    const avatarElement = document.createElement("img");
+    avatarElement.src = "/static/imgs/char.png"; // URL for the bot's avatar image
+    avatarElement.alt = "avatar 1";
+    avatarElement.style.width = "45px";
+    avatarElement.style.height = "100%";
+    responseContainer.appendChild(avatarElement);
+
+    // Create the message content container
+    const responseContent = document.createElement("div");
+    responseContent.className = "response-content";
+    responseContent.style.border = "0px solid rgb(129, 129, 129)";
+    responseContent.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.404)";
+    responseContent.style.backgroundColor = "rgba(0, 0, 0, 0.404)";
+    responseContent.style.borderRadius = "10px";
+    responseContent.style.padding = "1%";
+    responseContent.style.marginLeft = "10px"; // Add some space between the avatar and the message
+
+    // Parse the message for *emphasis* and apply styling
+    // const formattedMessage = message.replace(/\*(.*?)\*/g, '<font style="color: grey;">$1</font>');
+    const formattedMessage = formatText(message);
+    
+    // Create a div element to hold the formatted message
+    const responseText = document.createElement("div");
+    responseText.className = "response-text";
+    responseText.innerHTML = formattedMessage;
+
+    // Append the formatted message to the content container
+    responseContent.appendChild(responseText);
+
+    // Append the content container to the message container
+    responseContainer.appendChild(responseContent);
+
+    if (isTemporary) {
+        responseContainer.classList.add("is-typing");
+        // New code: Apply the typing-dots class to the specific element that will contain "Is Typing..."
+        const typingElement = document.createElement("div");
+        typingElement.textContent = "Is Typing";
+        typingElement.className = "typing-dots"; // Apply the animation class
+        responseContent.appendChild(typingElement);
+    } else {
+        
+        // Remove any existing "Is typing..." messages when displaying a new actual message
+        removeTypingMessage();
+    }
+    // Append the complete message container to the chat body
+    chatBody.appendChild(responseContainer);
+
+    // Scroll to the bottom of the chat body to show the new message
+    chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+    function removeTypingMessage() {
+        const chatBody = document.getElementsByClassName("card-body")[0];
+        const typingMessages = chatBody.getElementsByClassName("is-typing");
+        while (typingMessages.length > 0) {
+            typingMessages[0].parentNode.removeChild(typingMessages[0]);
+        }
+    }
+
+    function displayUserMessage(message) {
+    const chatBody = document.getElementsByClassName("card-body")[0];
+
+    // Create user input container
+    var userInputContainer = document.createElement("div");
+    userInputContainer.className = "d-flex flex-row justify-content-end mb-4 pt-1";
+    userInputContainer.style.display = "inline-block";
+
+    // Create user input content container
+    var userInputContent = document.createElement("div");
+    userInputContent.className = "d-flex flex-row";
+    userInputContent.style.color = "rgb(204, 204, 204)";
+    userInputContent.style.border = "0px solid rgb(129, 129, 129)";
+    userInputContent.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.404)";
+    userInputContent.style.backgroundColor = "rgba(0, 0, 0, 0.404)";
+    userInputContent.style.borderRadius = "10px";
+    userInputContent.style.padding = "1%";
+    userInputContent.style.marginRight = "10px"; // Space between message and avatar
+
+    // Create paragraph element for user input text
+    var userInputText = document.createElement("p");
+    userInputText.className = "firstmess";
+    userInputText.id = "user";
+    //userInputText.textContent = formatText(message);
+    userInputText.innerHTML = formatText(message);
+    userInputText.style.color = "rgb(204, 204, 204)";
+    userInputText.style.margin = "0";
+    userInputText.style.padding = "0";
+    userInputText.style.display = "flex";
+    userInputText.style.alignItems = "center";
+    userInputText.style.justifyContent = "center";
+
+    
+    // Append user input text to content container
+    userInputContent.appendChild(userInputText);
+
+    // Create user avatar
+    var userAvatar = document.createElement("img");
+    userAvatar.src = "/static/imgs/user.png"; // Adjust the path as necessary
+    userAvatar.alt = "avatar 1";
+    userAvatar.style.width = "45px";
+    userAvatar.style.height = "100%";
+
+    // Append content container and avatar to input container
+    userInputContainer.appendChild(userInputContent);
+    userInputContainer.appendChild(userAvatar);
+
+    // Append the complete input container to the chat body
+    chatBody.appendChild(userInputContainer);
+
+    // Scroll to the bottom of the chat body to show the new message
+    chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+
+const recordToggle = document.getElementById("recordToggle");
+const audioPlayer = document.getElementById("audioPlayer");
+
+let mediaRecorder;
+let audioChunkswhisper = [];
+let isRecording = false;
+
+recordToggle.addEventListener("click", () => {
+    const icon = recordToggle.querySelector('i'); // Correctly find the icon element
+    if (!isRecording) {
+    
+            // Start recording
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then((stream) => {
+                    mediaRecorder = new MediaRecorder(stream);
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) {
+                            audioChunkswhisper.push(event.data);
+                        }
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunkswhisper, { type: "audio/wav" });
+                        audioPlayer.src = URL.createObjectURL(audioBlob);
+
+                        const formData = new FormData();
+                        formData.append("audio", audioBlob);
+
+                        fetch("http://192.168.2.218:5012/save_audio", {
+                            method: "POST",
+                            body: formData,
+                        })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (data.message && Array.isArray(data.message)) {
+                                // Check if there are any text segments in the "message" array
+                                if (data.message.length > 0) {
+                                    // Process the text segments as needed
+                                    for (const segment of data.message) {
+                                        const message = segment.text;
+                                        console.log(message);
+                                        displayUserMessage(message);
+                                        sendUserMessage(message);
+                                    }
+                                } else {
+                                    console.log("Received an empty message array.");
+                                }
+                            } else {
+                                console.log("Invalid data format:", data);
+                            }
+                        })
+                        .catch((error) => {
+                            console.error("Error:", error);
+                        });
+
+
+                    };
+                    mediaRecorder.start();
+                    isRecording = true;
+                    icon.classList.remove('bi-record-circle');
+                    icon.classList.add('bi-record-circle-fill');
+                    recordToggle.setAttribute('aria-label', 'Stop'); // Update aria-label for accessibility
+                })
+                .catch((error) => {
+                    console.error("Error:", error);
+                });
+        } else {
+            // Stop recording
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                mediaRecorder = null;
+                isRecording = false;
+                audioChunkswhisper = []; // Reset the audioChunks array
+                icon.classList.remove('bi-record-circle-fill');
+                icon.classList.add('bi-record-circle'); // Ensure this matches your initial markup
+                recordToggle.setAttribute('aria-label', 'Record');
+            }
+        }
+    });
+
+});
+
+
+
+  </script>
+  
+</body>
+
+</html>

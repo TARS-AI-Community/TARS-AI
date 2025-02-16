@@ -32,3 +32,8 @@ silero-vad
 bm25s
 pystemmer
 elevenlabs
+pydub # needed for voice modifications
+waitress #needed for chat ui
+flask-cors #needed for chat ui
+flask-socketio #needed for chat ui
+eventlet #needed for chat ui instead of waitress
