@@ -265,7 +265,7 @@ def server_tts(text, ttsurl, tts_voice):
     except Exception as e:
         print(f"ERROR: Server TTS generation failed: {e}")
 
-def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
+async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
     """
     Generate TTS audio for the given text using the specified TTS system.
 
@@ -284,26 +284,39 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
             azure_tts(text, azure_api_key, azure_region, tts_voice)
 
         # Local TTS generation using `espeak-ng`
-        elif ttsoption == "local" and toggle_charvoice:
+        elif ttsoption == "local":
             local_tts(text)
 
         # Local TTS generation using `espeak-ng`
-        elif ttsoption == "alltalk" and toggle_charvoice:
+        elif ttsoption == "alltalk":
             alltalk_tts(text, ttsurl, tts_voice)
 
         # Local TTS generation using local onboard PIPER TTS
-        elif ttsoption == "piper" and toggle_charvoice:
-            asyncio.run(text_to_speech_with_pipelining(text))
+        if ttsoption == "piper":
+            async for chunk in text_to_speech_with_pipelining(text):
+                yield chunk  # Yield each chunk to be processed later
 
         # Server-based TTS generation using `xttsv2`
-        elif ttsoption == "xttsv2" and toggle_charvoice:
+        elif ttsoption == "xttsv2":
             if not ttsurl:
-                raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: TTS URL and play_audio_stream function must be provided for 'xttsv2'.")
+                raise ValueError(f"ERROR: TTS URL and play_audio_stream function must be provided for 'xttsv2'.")
             server_tts(text, ttsurl, tts_voice)
 
         else:
-            raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Invalid TTS option or character voice flag.")
+            raise ValueError(f"ERROR: Invalid TTS option.")
 
     except Exception as e:
         print(f"ERROR: Text-to-speech generation failed: {e}")
 
+async def play_audio_chunks(text, config):
+    """
+    Plays audio chunks sequentially from the generate_tts_audio function.
+    """
+    async for audio_chunk in generate_tts_audio(text, config):
+        try:
+            # Read the audio chunk into a format playable by sounddevice
+            data, samplerate = sf.read(audio_chunk, dtype='float32')
+            sd.play(data, samplerate)
+            await asyncio.sleep(len(data) / samplerate)  # Wait for playback to finish
+        except Exception as e:
+            print(f"ERROR: Failed to play audio chunk: {e}")

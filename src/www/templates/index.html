@@ -23,6 +23,27 @@
     decodedUrl = decodedUrl.replace(/^"|"$/g, '');
     console.log(decodedUrl);
 
+    function start_talking() {
+        if (!isMuted) {
+            fetch(talkingheadBaseUrl + "/start_talking")
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok');
+                            }
+                        })
+                        .catch(error => console.error('Fetch error:', error));
+            }
+        }
+    
+    function stop_talking() {
+        fetch(talkingheadBaseUrl + "/stop_talking")
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                    })
+                    .catch(error => console.error('Fetch error:', error));
+        }
 
     document.addEventListener("DOMContentLoaded", function () {
           const audioPlayer = document.getElementById("audioPlayer");
@@ -46,14 +67,7 @@
 
    
             //const startTalkingUrl = talkingheadBaseUrl + "/start_talking";
-            fetch(talkingheadBaseUrl + "/start_talking")
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    // Handle the response if necessary
-                })
-                .catch(error => console.error('Fetch error:', error));
+            start_talking();
         }
         } else {
             // If audio is currently unmuted, mute it and switch icon to volume-mute
@@ -63,15 +77,8 @@
             muteButton.setAttribute('aria-label', 'Unmute'); // Update aria-label for accessibility
             
                               // Send fetch request to stop talking
-        fetch(talkingheadBaseUrl + "/stop_talking")
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
+            stop_talking();
             }
-            // Handle the response if necessary
-        })
-        .catch(error => console.error('Fetch error:', error));
-        }
 
         // Toggle the mute state
         isMuted = !isMuted;
@@ -79,24 +86,6 @@
     });
 
       var audioPlayer = document.getElementById('audioPlayer');
-
-      function updateAndPlayAudio() {
-          audioPlayer.src = '/audio_stream';
-          audioPlayer.load();
-          audioPlayer.play().then(() => {
-              // Call the /talking_start endpoint right after the audio starts playing if not muted
-              if (!audioPlayer.muted) {
-                  fetch(talkingheadBaseUrl + "/start_talking")
-                      .then(response => {
-                          if (!response.ok) {
-                              throw new Error('Network response was not ok');
-                          }
-                          // Handle the response if necessary
-                      })
-                      .catch(error => console.error('Fetch error:', error));
-              }
-          });
-      }
 
       // Function to handle the 'ended' event
       function handleAudioEnd() {
@@ -115,6 +104,79 @@
 
       // Add event listener for 'ended' event
       audioPlayer.addEventListener('ended', handleAudioEnd);
+
+    let audioStarted = false; // Prevent multiple requests
+    let firstChunkPlayed = false; // Track if first chunk already played
+
+    function startAudioStream() {
+        if (audioStarted) {
+            // console.log("Audio stream already started, ignoring duplicate request.");
+            return; // 🚨 Prevent duplicate requests
+        }
+        audioStarted = true; // ✅ Mark that audio has started
+        firstChunkPlayed = false; // ✅ Reset for new message
+
+        fetch('/audio_stream')
+            .then(response => response.blob())
+            .then(blob => {
+                if (blob.size === 0) {
+                    // console.error("Received an empty first chunk!");
+                    return;
+                }
+
+                const audioUrl = URL.createObjectURL(blob);
+                audioPlayer.src = audioUrl;
+                audioPlayer.load();
+
+                audioPlayer.play().then(() => {
+                    // console.log("Playing first MP3 chunk...");
+                    firstChunkPlayed = true; // ✅ Mark first chunk as played
+
+                    // ✅ Wait for first chunk to finish before fetching next
+                    audioPlayer.onended = function () {
+                        // console.log("First chunk finished, requesting next...");
+                        setTimeout(() => {
+                            playNextAudioChunk();
+                        }, 500);
+                    };
+                }).catch(error => {
+                    console.error("Error playing first MP3 chunk:", error);
+                });
+            })
+            .catch(error => console.error("Error starting MP3 audio stream:", error));
+    }
+
+    function playNextAudioChunk() {
+    fetch('/get_next_audio_chunk')
+        .then(response => {
+            if (response.status === 204) {
+                // console.log("No more audio chunks.");
+                stop_talking()
+                audioStarted = false; // ✅ Reset audio system after last chunk
+                return null; // No more content
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            if (blob) {
+                const audioUrl = URL.createObjectURL(blob);
+                audioPlayer.src = audioUrl;
+                audioPlayer.load();
+
+                audioPlayer.play().then(() => {
+                    // console.log("Playing next MP3 chunk...");
+                        start_talking()
+                    // ✅ Ensure we reset audioStarted only after the last chunk
+                    audioPlayer.onended = function () {
+                        // console.log("Chunk finished, requesting next...");
+                        setTimeout(() => playNextAudioChunk(), 500);
+                    };
+                });
+            }
+        })
+        .catch(error => console.error("Error fetching next MP3 chunk:", error));
+}
+
   </script>
         <div class="chat-container">
             <div class="card h-100 gradient-custom">
@@ -330,7 +392,7 @@ var socket = io.connect('http://' + document.domain + ':' + location.port);
         xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
         xhr.onreadystatechange = function() {
             if (xhr.readyState === 4 && xhr.status === 200) {
-               updateAndPlayAudio();
+               // updateAndPlayAudio();
             }
         };
         xhr.send("message=" + encodeURIComponent(message));
@@ -393,6 +455,9 @@ var socket = io.connect('http://' + document.domain + ':' + location.port);
 
     // Scroll to the bottom of the chat body to show the new message
     chatBody.scrollTop = chatBody.scrollHeight;
+
+
+    startAudioStream();
 }
 
     function removeTypingMessage() {

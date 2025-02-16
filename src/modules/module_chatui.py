@@ -41,6 +41,11 @@ from flask import (
 from flask_cors import CORS
 from flask_socketio import SocketIO
 import re
+import asyncio
+import threading
+from collections import OrderedDict
+
+
 
 # === Custom Modules ===
 from modules.module_config import load_config
@@ -96,9 +101,13 @@ is_talking = False
 is_blinking = False
 next_blink_time = time.time() + random.uniform(3, 4)
 blink_end_time = None
+latest_text_to_read = ""  # Initialize as an empty string (or a default message)
 
 current_frame = None
 frame_lock = threading.Lock()
+
+audio_chunks_dict = OrderedDict()
+current_chunk_index = 0  # Keep track of which chunk is currently being served
 
 def apply_breathing(base_img, t):
     """
@@ -220,7 +229,8 @@ def handle_heartbeat(message):
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print('Client disconnected')
+    pass
+    #print('Client disconnected')
 
 @flask_app.route('/')
 def index():
@@ -245,7 +255,7 @@ def get_config_variable():
     except Exception as e:
         return f"Error: {e}"
     
-    print(jsonify({'talkinghead_base_url': f"http://{local_ip}:5012"}))
+    #print(jsonify({'talkinghead_base_url': f"http://{local_ip}:5012"}))
     return jsonify({'talkinghead_base_url': f"http://{local_ip}:5012"})
 
 @flask_app.route('/stream')
@@ -332,43 +342,92 @@ def upload():
 
 @flask_app.route('/audio_stream')
 def audio_stream():
-    global is_talking
-    is_talking = False
+    """
+    Generate MP3 TTS and serve the first chunk using dictionary-based storage.
+    """
+    global is_talking, current_chunk_index
+    is_talking = True  # Set talking state
 
-    async def get_audio_chunks():
-        """Generate and yield TTS audio chunks asynchronously."""
-        if CONFIG['TTS']['voice_only'] == "True":
-            extracted_text = re.findall(r'"(.*?)"', latest_text_to_read)
-            final_text = ' '.join(extracted_text)
-        else:
-            final_text = latest_text_to_read
+    # ✅ Reset chunk tracking for new requests
+    audio_chunks_dict.clear()  
+    current_chunk_index = 0  
 
-        async for chunk in generate_tts_audio(final_text, CONFIG['TTS']):
-            yield chunk.getvalue()  # Convert BytesIO to raw bytes for streaming
+    def get_final_text():
+        return latest_text_to_read if 'latest_text_to_read' in globals() else "No response available."
 
-    def generate():
-        """Sync wrapper to consume the async generator properly."""
+    final_text = get_final_text()
+    #print("Audio stream starting with final text:", final_text)
+
+    async def generate_mp3_chunks():
+        """
+        Generate text-to-speech audio chunks and store them in the dictionary.
+        """
+        index = 0
+        async for chunk in generate_tts_audio(final_text, CONFIG['TTS']['ttsoption']):
+            audio_chunks_dict[index] = chunk.getvalue()  # Store chunk with its order
+            index += 1
+
+        #print(f"Generated {len(audio_chunks_dict)} chunks.")
+        audio_chunks_dict[index] = None  # Mark end of chunks
+
+    # Run the async generator in a background thread
+    def run_async_generator():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        loop.run_until_complete(generate_mp3_chunks())
+        loop.close()
+
+    threading.Thread(target=run_async_generator, daemon=True).start()
+
+    # ✅ Wait for the first chunk to be available
+    max_wait_time = 5  # Max time to wait for the first chunk (seconds)
+    waited = 0
+    while 0 not in audio_chunks_dict:
+        if waited >= max_wait_time:
+            #print("First chunk did not generate in time.")
+            return Response(status=204)
+        time.sleep(0.1)
+        waited += 0.1
+
+    # ✅ Serve the first MP3 chunk and update index **before returning**
+    #print("Serving first chunk.")
+    first_chunk = audio_chunks_dict[0]
+    current_chunk_index = 1  # ✅ Update chunk index immediately
+    return Response(first_chunk, mimetype="audio/mp3", headers={'Content-Type': 'audio/mp3'})
+
+@flask_app.route('/get_next_audio_chunk')
+def get_next_audio_chunk():
+    """
+    Serve the next MP3 chunk by index from the dictionary.
+    """
+    global current_chunk_index
+
+    if current_chunk_index in audio_chunks_dict:
+        next_chunk = audio_chunks_dict[current_chunk_index]
         
-        async_gen = get_audio_chunks()
+        if next_chunk is None:
+            #print(f"End of chunks at index {current_chunk_index}.")
+            return Response(status=204)  # No more audio
 
-        try:
-            # Iterate over async generator using `asyncio.run()`
-            for chunk in loop.run_until_complete(consume_async_gen(async_gen)):
-                yield chunk
-        finally:
-            loop.close()
+        #print(f"Serving chunk {current_chunk_index}.")
+        response = Response(next_chunk, mimetype="audio/mp3", headers={
+            'Content-Type': 'audio/mp3',
+            'Content-Length': str(len(next_chunk)),  # Ensure correct content size
+        })
 
-    async def consume_async_gen(async_gen):
-        """Helper function to fully iterate through an async generator."""
-        return [chunk async for chunk in async_gen]  # Collect all chunks
-
-    return Response(generate(), mimetype="audio/mpeg")
-
+        # ✅ Update `current_chunk_index` **AFTER** the chunk is sent
+        current_chunk_index += 1
+        return response
+    else:
+        #print(f"Chunk {current_chunk_index} not available yet.")
+        return Response(status=204)  # No content available yet
 
 def start_flask_app():
     import eventlet
     import eventlet.wsgi
     print("INFO: Starting Flask app with Eventlet...")
-    eventlet.wsgi.server(eventlet.listen(("0.0.0.0", 5012)), flask_app)
+    eventlet.wsgi.server(
+        eventlet.listen(("0.0.0.0", 5012)),
+        flask_app,
+        log_output=False  # Disable request logging.
+    )

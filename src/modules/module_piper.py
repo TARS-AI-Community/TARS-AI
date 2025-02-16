@@ -50,27 +50,15 @@ async def synthesize(voice, chunk):
     wav_buffer.seek(0)
     return wav_buffer
 
-async def play_audio(wav_buffer):
-    """
-    Play audio from a BytesIO buffer.
-    """
-    data, samplerate = sf.read(wav_buffer, dtype='float32')
-    # Set the custom error handler
-    asound.snd_lib_error_set_handler(c_error_handler)
-    sd.play(data, samplerate)
-    await asyncio.sleep(len(data) / samplerate)  # Wait until playback finishes
-    # Reset to the default error handler
-    asound.snd_lib_error_set_handler(None)
-
 async def text_to_speech_with_pipelining(text):
     """
-    Converts text to speech using the specified Piper model and streams audio playback with pipelining.
+    Converts text to speech using the Piper model and streams audio as it's generated.
     """
     # Split text into smaller chunks
     chunks = re.split(r'(?<=\.)\s', text)  # Split at sentence boundaries
 
-    # Process and play chunks sequentially
+    # Yield each audio chunk as soon as it's ready
     for chunk in chunks:
         if chunk.strip():  # Ignore empty chunks
             wav_buffer = await synthesize(voice, chunk.strip())
-            await play_audio(wav_buffer)
+            yield wav_buffer  # Return the chunk for external playback

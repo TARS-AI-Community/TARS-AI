@@ -99,7 +99,7 @@ if __name__ == "__main__":
         initialize_blip()
     
     try:
-        print(f"LOAD: TARS-AI v1.01 running.")
+        print(f"LOAD: TARS-AI v1.03a running.")
         # Start the STT thread
         stt_manager.start()
 
