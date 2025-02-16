@@ -24,6 +24,7 @@ from elevenlabs import play
 
 from modules.module_piper import *
 from modules.module_silero import text_to_speech_with_pipelining_silero
+from modules.module_espeak import text_to_speech_with_pipelining_espeak
 
 elevenlabs_client = None
 
@@ -218,22 +219,6 @@ def alltalk_tts(text, ttsurl, tts_voice):
     except Exception as e:
         print(f"An error occurred: {e}")
 
-def local_tts(text):
-    """
-    Generate TTS audio locally using `espeak-ng` and `sox`.
-
-    Parameters:
-    - text (str): The text to convert into speech.
-    """
-    try:
-        command = (
-            f'espeak-ng -s 140 -p 50 -v en-us+m3 "{text}" --stdout | '
-            f'sox -t wav - -c 1 -t wav - gain 0.0 reverb 30 highpass 500 lowpass 3000 | aplay'
-        )
-        os.system(command)
-    except Exception as e:
-        print(f"ERROR: Local TTS generation failed: {e}")
-
 def server_tts(text, ttsurl, tts_voice):
     """
     Generate TTS audio using a server-based TTS system.
@@ -286,17 +271,17 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
             azure_tts(text, azure_api_key, azure_region, tts_voice)
 
         # Local TTS generation using `espeak-ng`
-        elif ttsoption == "local":
-            local_tts(text)
+        elif ttsoption == "espeak":
+            async for chunk in text_to_speech_with_pipelining_espeak(text):
+                yield chunk
 
-        # Local TTS generation using `espeak-ng`
         elif ttsoption == "alltalk":
             alltalk_tts(text, ttsurl, tts_voice)
 
         # Local TTS generation using local onboard PIPER TTS
         elif ttsoption == "piper":
             async for chunk in text_to_speech_with_pipelining(text):
-                yield chunk  # Yield each chunk to be processed later
+                yield chunk  
 
         elif ttsoption == "elevenlabs":
             if not elevenlabs_client:
@@ -305,7 +290,7 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
 
         elif ttsoption == "silero":
             async for chunk in text_to_speech_with_pipelining_silero(text):
-                yield chunk  # Yield each chunk to be processed later
+                yield chunk 
 
         # Server-based TTS generation using `xttsv2`
         elif ttsoption == "xttsv2":
