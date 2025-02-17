@@ -4,7 +4,6 @@ tiktoken                # Token counting for OpenAI models
 sentence-transformers   # Sentence embeddings and semantic search
 
 # TTS (Text-to-Speech) Tools
-espeak-ng               # Local TTS using eSpeak-NG
 elevenlabs              # External TTS using 11Labs API
 piper-tts              # Local TTS with voice cloning support
 azure-cognitiveservices-speech  # Azure TTS API
