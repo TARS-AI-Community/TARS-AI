@@ -165,13 +165,11 @@ TARS.wav
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea
 /stt
-/vision
 /llm
+/vision
+stt/
 llm/
 vision/
-stt/vosk-model-small-en-us-0.15/
-stt/vosk-model-small-en-us-0.15
-captured_image.jpg
 config.ini
 output.wav
 /memory/initial_memory.json

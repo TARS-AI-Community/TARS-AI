@@ -71,18 +71,20 @@ storepath = ./emotions
 
 [TTS] # Text-to-Speech configuration 
 ttsoption = piper
-# TTS backend option: [azure, local, xttsv2, alltalk, piper]
+# Onboard Options: espeak, piper, silero 
+# External SelfHosted: alltalk
+# Externally Hosted: azure, elevenlabs
 azure_region = eastus
 # Azure region for Azure TTS (e.g., eastus)
-ttsurl = http://192.168.2.20:8020
-# URL of the TTS server (i.e., xttsv2)
+ttsurl = http://192.168.2.57:7852
+# URL of the TTS server (i.e., alltalk)
 toggle_charvoice = True
 # Use character-specific voice settings
 tts_voice = en-US-Steffan:DragonHDLatestNeural
-# Name of the cloned voice to use (e.g., TARS2)
-voice_id = "JBFqnCBsd6RMkjVDRZzb"
+# Name of the cloned voice to use (e.g., TARS2 or en-US-Steffan:DragonHDLatestNeural for azure)
+voice_id = JBFqnCBsd6RMkjVDRZzb
 # Voice ID of ElevenLabs (e.g.,JBFqnCBsd6RMkjVDRZzb)
-model_id = "eleven_multilingual_v2"
+model_id = eleven_multilingual_v2
 # Model ID of ElevenLabs (e.g.,eleven_multilingual_v2)
 voice_only = False
 # If True, only generate voice responses (no text)
