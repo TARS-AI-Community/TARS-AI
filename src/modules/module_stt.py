@@ -300,16 +300,14 @@ class STTManager:
         detected_speech = False
         silent_frames = 0
 
-        with sd.InputStream(
-            samplerate=self.SAMPLE_RATE,
-            channels=1,
-            dtype="int16",
-            blocksize=4000,
-            latency="high",
-        ) as stream:
-            for _ in range(50):
+        with sd.InputStream(samplerate=self.SAMPLE_RATE,
+                            channels=1, dtype="int16",
+                            blocksize=4000, latency='high') as stream:
+            for _ in range(200):  # Limit recording duration (~12.5 seconds)
                 data, _ = stream.read(4000)
-                
+
+                data = self.amplify_audio(data) #amp the sound
+
                 is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
                 if is_silence:
                     if not detected_speech:
