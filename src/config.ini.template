@@ -17,10 +17,10 @@ vosk_model = vosk-model-small-en-us-0.15
 # Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15)
 use_indicators = True
 vad_method = silero
-# Enable silero, webrtc, or rms
+# Enable silero or rms
 
 [CHAR] # Character-specific details
-character_card_path = character/TARS.json
+character_card_path = character/TARS/TARS.json
 # Path to the JSON file describing the character
 user_name = Joe
 # Name of the user interacting with the character
