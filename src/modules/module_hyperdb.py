@@ -32,6 +32,7 @@ import configparser
 import torch
 
 from modules.module_config import get_api_key
+from modules.module_messageQue import queue_message
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -67,16 +68,16 @@ def get_embedding_new(documents):
                 # Format embeddings in scientific notation
                 formatted_embeddings = [[f"{val:0.8e}" for val in embedding] for embedding in embeddings]
 
-                #print("Embeddings:", formatted_embeddings)
+                #queue_message("Embeddings:", formatted_embeddings)
                 return formatted_embeddings
             else:
-                print("Error: 'data' key not found in API response.")
+                queue_message("Error: 'data' key not found in API response.")
                 return None
         except KeyError:
-            print("Error: 'data' key not found in API response.")
+            queue_message("Error: 'data' key not found in API response.")
             return None
     else:
-        print("Error:", response.status_code, response.text)
+        queue_message("Error:", response.status_code, response.text)
         return None
 
 from sentence_transformers import SentenceTransformer
@@ -187,13 +188,13 @@ class HyperDB:
                     device='cuda' if torch.cuda.is_available() else 'cpu', 
                     max_length=256,
                 )
-                print("INFO: BGE reranker model loaded successfully")
+                queue_message("INFO: BGE reranker model loaded successfully")
             except Exception as e:
-                print(f"WARNING: Failed to load BGE reranker model: {e}")
+                queue_message(f"WARNING: Failed to load BGE reranker model: {e}")
                 self.reranker = None
 
         # Initialize BM25 components
-        print(f"INFO: Initializing HyperDB with {rag_strategy} RAG strategy")
+        queue_message(f"INFO: Initializing HyperDB with {rag_strategy} RAG strategy")
         if self.rag_strategy == "hybrid":
             self.stemmer = Stemmer.Stemmer("english")
             self.bm25_retriever = bm25s.BM25(method="lucene")
@@ -284,7 +285,7 @@ class HyperDB:
             vector = vector[0]
         else:
             # Handle the case where the embedding function returns None or an empty list
-            print("Error: Unable to get embeddings for the document.")
+            queue_message("Error: Unable to get embeddings for the document.")
             return
 
         if self.vectors is None:
@@ -302,7 +303,7 @@ class HyperDB:
             vector = vector[0]
         else:
             # Handle the case where the embedding function returns None or an empty list
-            print("Error: Unable to get embeddings for the document.")
+            queue_message("Error: Unable to get embeddings for the document.")
             return
 
         if self.vectors is None:
@@ -378,7 +379,7 @@ class HyperDB:
             return True
 
         except Exception as e:
-            print(f"Error loading memory: {e}")
+            queue_message(f"Error loading memory: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -466,7 +467,7 @@ class HyperDB:
 
             # Safety check for scores
             if len(rerank_scores) != len(candidate_docs):
-                print(f"WARNING: Mismatch between scores ({len(rerank_scores)}) and docs ({len(candidate_docs)})")
+                queue_message(f"WARNING: Mismatch between scores ({len(rerank_scores)}) and docs ({len(candidate_docs)})")
                 return candidate_docs
             
             # Sort documents by reranking scores
@@ -476,7 +477,7 @@ class HyperDB:
             return reranked_results
             
         except Exception as e:
-            print(f"WARNING: Reranking failed: {e}. Returning original order.")
+            queue_message(f"WARNING: Reranking failed: {e}. Returning original order.")
             import traceback
             traceback.print_exc()
             return candidate_docs
@@ -493,7 +494,7 @@ class HyperDB:
         The pipeline: vector search -> BM25 -> RRF fusion -> BGE reranking.
         """
         if self.rag_strategy != "hybrid":
-            print("Warning: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
+            queue_message("Warning: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
             return self._vector_query(query_text, top_k, return_similarities)
 
         # Get vector search results

@@ -10,6 +10,8 @@ import wave
 from pydub import AudioSegment
 import numpy as np
 
+from modules.module_messageQue import queue_message
+
 # Set relative path for model storage
 model_dir = os.path.join(os.path.dirname(__file__), "..", "stt")  # Relative to script location
 torch.hub.set_dir(model_dir)  # Set PyTorch hub directory

@@ -9,6 +9,8 @@ import ctypes
 
 # === Custom Modules ===
 from modules.module_config import load_config
+from modules.module_messageQue import queue_message
+
 CONFIG = load_config()
 
 # Define the error handler function type
@@ -45,7 +47,7 @@ async def synthesize(voice, chunk):
         try:
             voice.synthesize(chunk, wav_file)
         except TypeError as e:
-            print(f"ERROR: {e}")
+            queue_message(f"ERROR: {e}")
     wav_buffer.seek(0)
     return wav_buffer
 

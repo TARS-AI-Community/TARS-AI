@@ -31,6 +31,8 @@ from pocketsphinx import LiveSpeech
 from faster_whisper import WhisperModel
 import requests
 
+from modules.module_messageQue import queue_message
+
 # Suppress Vosk logs and parallelism warnings
 SetLogLevel(-1)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -72,7 +74,7 @@ class STTManager:
             # If VAD is enabled, force 16000 Hz sample rate
             self.SAMPLE_RATE = 16000
             self.DEFAULT_SAMPLE_RATE = 16000
-            print("INFO: Using 16000 Hz sample rate for VAD compatibility")
+            queue_message("INFO: Using 16000 Hz sample rate for VAD compatibility")
         else:
             # If VAD is disabled, use system default
             self.DEFAULT_SAMPLE_RATE = 16000
@@ -139,7 +141,7 @@ class STTManager:
         file_name = url.split("/")[-1]
         dest_path = os.path.join(dest_folder, file_name)
 
-        print(f"INFO: Downloading Vosk model from {url}...")
+        queue_message(f"INFO: Downloading Vosk model from {url}...")
         response = requests.get(url, stream=True)
         response.raise_for_status()
 
@@ -150,14 +152,14 @@ class STTManager:
             for chunk in response.iter_content(chunk_size=8192):
                 file.write(chunk)
                 downloaded_size += len(chunk)
-        print(f"INFO: Download complete. Extracting...")
+        queue_message(f"INFO: Download complete. Extracting...")
         if file_name.endswith(".zip"):
             import zipfile
             with zipfile.ZipFile(dest_path, 'r') as zip_ref:
                 zip_ref.extractall(dest_folder)
             os.remove(dest_path)
-            print(f"INFO: Zip file deleted.")
-        print(f"INFO: Extraction complete.")
+            queue_message(f"INFO: Zip file deleted.")
+        queue_message(f"INFO: Extraction complete.")
 
     def _load_vosk_model(self):
         """
@@ -166,15 +168,15 @@ class STTManager:
         if self.config['STT']['stt_processor'] == 'vosk':
             vosk_model_path = os.path.join(os.getcwd(), "..", "stt", self.config['STT']['vosk_model'])
             if not os.path.exists(vosk_model_path):
-                print(f"ERROR: Vosk model not found. Downloading...")
+                queue_message(f"ERROR: Vosk model not found. Downloading...")
                 download_url = f"https://alphacephei.com/vosk/models/{self.config['STT']['vosk_model']}.zip"
                 self._download_vosk_model(download_url, os.path.join(os.getcwd(), "..", "stt"))
-                print(f"INFO: Restarting model loading...")
+                queue_message(f"INFO: Restarting model loading...")
                 self._load_vosk_model()
                 return
 
             self.vosk_model = Model(vosk_model_path)
-            print(f"INFO: Vosk model loaded successfully.")
+            queue_message(f"INFO: Vosk model loaded successfully.")
 
     def _load_fasterwhisper_model(self):
         """Load the Faster-Whisper model for local transcription."""
@@ -189,7 +191,7 @@ class STTManager:
             torch.load = patched_torch_load
 
             model_size = self.config["STT"].get("whisper_model", "tiny")
-            print(f"INFO: Preparing to load Faster-Whisper model '{model_size}'...")
+            queue_message(f"INFO: Preparing to load Faster-Whisper model '{model_size}'...")
 
             # Set up a folder for Whisper models inside the stt directory via environment variable.
             whisper_folder = os.path.join(os.getcwd(), "..", "stt", "whisper")
@@ -200,9 +202,9 @@ class STTManager:
             self.faster_whisper_model = WhisperModel(
                 model_size, device="cpu", compute_type="int8", num_workers=4
             )
-            print("INFO: Faster-Whisper model loaded successfully.")
+            queue_message("INFO: Faster-Whisper model loaded successfully.")
         except Exception as e:
-            print(f"ERROR: Failed to load Faster-Whisper model: {e}")
+            queue_message(f"ERROR: Failed to load Faster-Whisper model: {e}")
             self.faster_whisper_model = None
         finally:
             torch.load = original_torch_load
@@ -227,9 +229,9 @@ class STTManager:
                 self.read_audio,
                 self.prepare_model_input,
             ) = self.utils
-            print("INFO: Silero model loaded successfully.")
+            queue_message("INFO: Silero model loaded successfully.")
         except Exception as e:
-            print(f"ERROR: Failed to load Silero model: {e}")
+            queue_message(f"ERROR: Failed to load Silero model: {e}")
 
     def _load_silero_vad(self):
         """
@@ -245,9 +247,9 @@ class STTManager:
                 from silero_vad import load_silero_vad, get_speech_timestamps
                 self.silero_vad_model = load_silero_vad(onnx=USE_ONNX)
                 self.get_speech_timestamps = get_speech_timestamps
-                print("INFO: Silero VAD loaded successfully using pip package.")
+                queue_message("INFO: Silero VAD loaded successfully using pip package.")
             except Exception as e:
-                print(f"ERROR: Failed to load Silero VAD with pip: {e}")
+                queue_message(f"ERROR: Failed to load Silero VAD with pip: {e}")
         else:
             try:
                 self.silero_vad_model, utils = torch.hub.load(
@@ -262,9 +264,9 @@ class STTManager:
                  VADIterator,
                  collect_chunks) = utils
                 self.get_speech_timestamps = get_speech_timestamps
-                print("INFO: Silero VAD loaded successfully using torch.hub.")
+                queue_message("INFO: Silero VAD loaded successfully using torch.hub.")
             except Exception as e:
-                print(f"ERROR: Failed to load Silero VAD with torch.hub: {e}")
+                queue_message(f"ERROR: Failed to load Silero VAD with torch.hub: {e}")
 
     # === Transcription Methods ===
 
@@ -285,7 +287,7 @@ class STTManager:
             if self.post_utterance_callback and result:
                 self.post_utterance_callback()
         except Exception as e:
-            print(f"ERROR: Transcription failed: {e}")
+            queue_message(f"ERROR: Transcription failed: {e}")
 
     def _transcribe_with_vosk(self):
         """Transcribe audio using the local Vosk model."""
@@ -351,7 +353,7 @@ class STTManager:
 
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
-            print("ERROR: No audio recorded.")
+            queue_message("ERROR: No audio recorded.")
             return None
 
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
@@ -369,7 +371,7 @@ class STTManager:
                 self.utterance_callback(json.dumps(formatted_result))
             return formatted_result
         else:
-            print("ERROR: No transcription from Faster-Whisper.")
+            queue_message("ERROR: No transcription from Faster-Whisper.")
             return None
 
     def _transcribe_silero(self):
@@ -403,7 +405,7 @@ class STTManager:
 
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
-            print("ERROR: No audio recorded.")
+            queue_message("ERROR: No audio recorded.")
             return None
 
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
@@ -452,7 +454,7 @@ class STTManager:
 
             audio_buffer.seek(0)
             if audio_buffer.getbuffer().nbytes == 0:
-                print("ERROR: No audio recorded for server transcription.")
+                queue_message("ERROR: No audio recorded for server transcription.")
                 return None
 
             files = {"audio": ("audio.wav", audio_buffer, "audio/wav")}
@@ -480,18 +482,18 @@ class STTManager:
                         self.utterance_callback(json.dumps(formatted_result))
                     return formatted_result
         except requests.RequestException as e:
-            print(f"ERROR: Server transcription request failed: {e}")
+            queue_message(f"ERROR: Server transcription request failed: {e}")
         return None
 
     # === Helper Methods ===
 
     def _stt_processing_loop(self):
         """Main loop that detects the wake word and transcribes utterances."""
-        print("INFO: Starting STT processing loop...")
+        queue_message("INFO: Starting STT processing loop...")
         while self.running and not self.shutdown_event.is_set():
             if self._detect_wake_word():
                 self._transcribe_utterance()
-        print("INFO: STT Manager stopped.")
+        queue_message("INFO: STT Manager stopped.")
 
     def _detect_wake_word(self) -> bool:
         """
@@ -502,7 +504,7 @@ class STTManager:
 
         character_path = self.config.get("CHAR", {}).get("character_card_path")
         character_name = os.path.splitext(os.path.basename(character_path))[0]
-        print(f"{character_name}: Sleeping...")
+        queue_message(f"{character_name}: Sleeping...")
 
         # Notify external service to stop talking.
         try:
@@ -540,7 +542,7 @@ class STTManager:
                     except Exception:
                         pass
                     wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                    print(f"{character_name}: {wake_response}")
+                    queue_message(f"{character_name}: {wake_response}", stream=True)
                     if self.wake_word_callback:
                         self.wake_word_callback(wake_response)
                     return True
@@ -551,7 +553,7 @@ class STTManager:
             ) as stream:
                 for iteration, _ in enumerate(speech):
                     if iteration >= max_iterations:
-                        print("DEBUG: Maximum iterations reached for wake word detection.")
+                        queue_message("DEBUG: Maximum iterations reached for wake word detection.")
                         break
                     data, _ = stream.read(4000)
                     rms = self.prepare_audio_data(self.amplify_audio(data))
@@ -564,7 +566,7 @@ class STTManager:
                         break
 
         except Exception as e:
-            print(f"ERROR: Wake word detection failed: {e}")
+            queue_message(f"ERROR: Wake word detection failed: {e}")
 
         return False
 
@@ -572,6 +574,12 @@ class STTManager:
         """Initialize progress bar settings and functions"""
         bar_length = 10  
         show_progress = self.config["STT"].get("stt_processor") != "vosk"
+
+        def flush_all():
+            """Ensure all buffers are completely flushed"""
+            sys.stdout.flush()
+            sys.stderr.flush()
+            time.sleep(0.01)  # Small delay to allow the terminal to catch up
 
         def update_progress_bar(frames, max_frames):
             if show_progress:
@@ -582,12 +590,13 @@ class STTManager:
                 bar = f"\r[SILENCE: {filled}{empty}] {frames}/{max_frames}"
                 sys.stdout.write(bar)
                 sys.stdout.flush()
+                flush_all()  # 🔹 Ensure everything is flushed immediately
 
         def clear_progress_bar():
             if show_progress:
                 sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
                 sys.stdout.flush()
-
+                flush_all()  # 🔹 Ensure everything is flushed immediately
         return update_progress_bar, clear_progress_bar
     
     # === VAD Methods ===
@@ -621,14 +630,14 @@ class STTManager:
                     
                     if len(speech_ts) > 0:
                         if self.DEBUG:
-                            print(f"DEBUG: Speech detected at: {speech_ts}")
+                            queue_message(f"DEBUG: Speech detected at: {speech_ts}")
                         detected_speech = True
                         silent_frames = 0
                         clear_bar()
                     else:
                         silent_frames += 1
                         if self.DEBUG:
-                            print(f"DEBUG: No speech in frame {silent_frames}")
+                            queue_message(f"DEBUG: No speech in frame {silent_frames}")
                         update_bar(silent_frames, max_silent_frames)
 
                     if silent_frames > max_silent_frames:
@@ -637,14 +646,14 @@ class STTManager:
                     return False, detected_speech, silent_frames
                         
                 except Exception as e:
-                    print(f"WARNING: VAD error, falling back to RMS: {e}")
+                    queue_message(f"WARNING: VAD error, falling back to RMS: {e}")
                     return self._is_silence_detected_rms(data, detected_speech, silent_frames, max_silent_frames)
             
             # If no VAD model, fall back to RMS detection
             return self._is_silence_detected_rms(data, detected_speech, silent_frames, max_silent_frames)
         
         except Exception as e:
-            print(f"ERROR: Silence detection failed: {e}")
+            queue_message(f"ERROR: Silence detection failed: {e}")
             # Return safe default values
             return False, detected_speech, silent_frames
         
@@ -680,7 +689,7 @@ class STTManager:
                 return data if has_speech else None, has_speech
 
             except Exception as e:
-                print(f"WARNING: VAD processing failed: {e}, falling back to raw audio")
+                queue_message(f"WARNING: VAD processing failed: {e}, falling back to raw audio")
                 return data, True  # Fallback to raw audio on error
         
         return data, True  # When VAD is disabled, assume all frames contain speech
@@ -704,14 +713,14 @@ class STTManager:
                 silent_frames = 0
                 
                 if self.DEBUG:
-                    print(f"AUDIO: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}")
+                    queue_message(f"AUDIO: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}")
                 
                 clear_bar()
             else:
                 silent_frames += 1
                 
                 if self.DEBUG:
-                    print(f"SILENT: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}")
+                    queue_message(f"SILENT: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}")
                 
                 update_bar(silent_frames, max_silent_frames)
 
@@ -722,7 +731,7 @@ class STTManager:
             return False, detected_speech, silent_frames
         
         except Exception as e:
-            print(f"ERROR: RMS silence detection failed: {e}")
+            queue_message(f"ERROR: RMS silence detection failed: {e}")
             # Return safe default values
             return False, detected_speech, silent_frames
 
@@ -730,7 +739,7 @@ class STTManager:
     
     def _measure_background_noise(self):
         """Measure background noise and set the silence threshold."""
-        print("INFO: Measuring background noise...")
+        queue_message("INFO: Measuring background noise...")
         background_rms_values = []
         total_frames = 20  # ~2-3 seconds
 
@@ -759,9 +768,9 @@ class STTManager:
             self.silence_threshold = self.wake_silence_threshold * self.silence_margin
 
             db = 20 * np.log10(self.silence_threshold)
-            print(f"INFO: Silence threshold: {db:.2f} dB and {self.silence_threshold}")
+            queue_message(f"INFO: Silence threshold: {db:.2f} dB and {self.silence_threshold}")
         else:
-            print("WARNING: Background noise measurement failed; using default threshold.")
+            queue_message("WARNING: Background noise measurement failed; using default threshold.")
 
     def prepare_audio_data(self, data: np.ndarray) -> Optional[float]:
         """
@@ -770,18 +779,18 @@ class STTManager:
             float or None: RMS value or None if invalid.
         """
         if data.size == 0:
-            print("WARNING: Empty audio data received.")
+            queue_message("WARNING: Empty audio data received.")
             return None
         data = data.reshape(-1).astype(np.float64)
         data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
         data = np.clip(data, -32000, 32000)
         if np.all(data == 0):
-            print("WARNING: Audio data is silent or all zeros.")
+            queue_message("WARNING: Audio data is silent or all zeros.")
             return None
         try:
             return np.sqrt(np.mean(np.square(data)))
         except Exception as e:
-            print(f"ERROR: RMS calculation failed: {e}")
+            queue_message(f"ERROR: RMS calculation failed: {e}")
             return None
 
     def amplify_audio(self, data: np.ndarray) -> np.ndarray:
@@ -803,7 +812,7 @@ class STTManager:
             device_info = sd.query_devices(default_index, kind="input")
             return int(device_info.get("default_samplerate", 16000))
         except Exception as e:
-            print(f"ERROR: {e}")
+            queue_message(f"ERROR: {e}")
             return self.DEFAULT_SAMPLE_RATE
 
     def play_beep(self, frequency: int, duration: float, sample_rate: int, volume: float):

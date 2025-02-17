@@ -26,6 +26,7 @@ from modules.module_espeak import text_to_speech_with_pipelining_espeak
 from modules.module_alltalk import text_to_speech_with_pipelining_alltalk
 from modules.module_elevenlabs import text_to_speech_with_pipelining_elevenlabs
 from modules.module_azure import text_to_speech_with_pipelining_azure
+from modules.module_messageQue import queue_message
 
 def update_tts_settings(ttsurl):
     """
@@ -54,12 +55,12 @@ def update_tts_settings(ttsurl):
     try:
         response = requests.post(url, headers=headers, json=payload)
         if response.status_code == 200:
-            print(f"LOAD: TTS Settings updated successfully.")
+            queue_message(f"LOAD: TTS Settings updated successfully.")
         else:
-            print(f"ERROR: Failed to update TTS settings. Status code: {response.status_code}")
-            print(f"INFO: Response: {response.text}")
+            queue_message(f"ERROR: Failed to update TTS settings. Status code: {response.status_code}")
+            queue_message(f"INFO: Response: {response.text}")
     except Exception as e:
-        print(f"ERROR: TTS update failed: {e}")
+        queue_message(f"ERROR: TTS update failed: {e}")
 
 def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normalize=False):
     """
@@ -91,9 +92,9 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
                     # Write the adjusted audio data to the stream
                     stream.write(audio_data)
                 else:
-                    print(f"ERROR: Received empty chunk.")
+                    queue_message(f"ERROR: Received empty chunk.")
     except Exception as e:
-        print(f"ERROR: Error during audio playback: {e}")
+        queue_message(f"ERROR: Error during audio playback: {e}")
 
 
 async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
@@ -139,7 +140,7 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
             raise ValueError(f"ERROR: Invalid TTS option.")
 
     except Exception as e:
-        print(f"ERROR: Text-to-speech generation failed: {e}")
+        queue_message(f"ERROR: Text-to-speech generation failed: {e}")
 
 async def play_audio_chunks(text, config):
     """
@@ -152,4 +153,4 @@ async def play_audio_chunks(text, config):
             sd.play(data, samplerate)
             await asyncio.sleep(len(data) / samplerate)  # Wait for playback to finish
         except Exception as e:
-            print(f"ERROR: Failed to play audio chunk: {e}")
+            queue_message(f"ERROR: Failed to play audio chunk: {e}")

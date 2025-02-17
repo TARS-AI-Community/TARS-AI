@@ -3,6 +3,8 @@
 import subprocess
 import re
 
+from modules.module_messageQue import queue_message
+
 class RaspbianVolumeManager:
     def __init__(self, control='Master'):
         self.control = control
@@ -33,7 +35,7 @@ class RaspbianVolumeManager:
 
             raise RuntimeError("Volume percentage not found in amixer output.")
         except subprocess.CalledProcessError as e:
-            print(f"Error getting volume: {e}")
+            queue_message(f"Error getting volume: {e}")
             return None
 
     def set_volume(self, percent):
@@ -47,9 +49,9 @@ class RaspbianVolumeManager:
             )
             # Verify the current volume after setting it
             current_volume = self.get_volume()
-            print(f"Volume set to {percent}%. Current volume is {current_volume}%.")
+            queue_message(f"Volume set to {percent}%. Current volume is {current_volume}%.")
         except subprocess.CalledProcessError as e:
-            print(f"Error setting volume: {e}")
+            queue_message(f"Error setting volume: {e}")
 
 
 def correct_transcription(transcribed_text):
@@ -74,7 +76,7 @@ def correct_transcription(transcribed_text):
     for wrong, correct in corrections.items():
         if wrong in transcribed_text.lower():
             suggestion = "increase" if "increase" in correct else "decrease"
-            print(f"I think I heard {suggestion}. Proceeding as '{correct}'.")
+            queue_message(f"I think I heard {suggestion}. Proceeding as '{correct}'.")
             return transcribed_text.lower().replace(wrong, correct)
     return transcribed_text
 
@@ -97,7 +99,7 @@ def handle_volume_command(user_input):
     if current_volume is None:
         return "Unable to retrieve the current volume level. Please try again."
 
-    #print(f"TOOL: Current Volume {current_volume / 100:.2f}")  # Report the correct volume value
+    #queue_message(f"TOOL: Current Volume {current_volume / 100:.2f}")  # Report the correct volume value
 
     # Handle specific volume commands
     if "increase" in user_input.lower() or "raise" in user_input.lower():

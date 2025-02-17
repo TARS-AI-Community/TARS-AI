@@ -16,6 +16,8 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional
 
+from modules.module_messageQue import queue_message
+
 # === Initialization ===
 load_dotenv()  # Load environment variables from .env file
 
@@ -50,15 +52,15 @@ class TTSConfig:
         """Validate the configuration based on ttsoption"""
         if self.ttsoption == "azure":
             if not (self.azure_api_key and self.azure_region):
-                print("ERROR: Azure API key and region are required for Azure TTS")
+                queue_message("ERROR: Azure API key and region are required for Azure TTS")
                 return False
         elif self.ttsoption == "elevenlabs":
             if not self.elevenlabs_api_key:
-                print("ERROR: ElevenLabs API key is required for ElevenLabs TTS")
+                queue_message("ERROR: ElevenLabs API key is required for ElevenLabs TTS")
                 return False
         elif self.ttsoption in ["xttsv2", "alltalk"]:
             if not self.ttsurl:
-                print("ERROR: TTS URL is required for server-based TTS")
+                queue_message("ERROR: TTS URL is required for server-based TTS")
                 return False
         return True
 
@@ -109,7 +111,7 @@ def load_config():
     persona_path = os.path.join(base_dir, 'character', character_name, 'persona.ini')
 
     if not os.path.exists(persona_path):
-        print(f"ERROR: {persona_path} not found.")
+        queue_message(f"ERROR: {persona_path} not found.")
         sys.exit(1)  # Exit if persona.ini is missing
 
     persona_config.read(persona_path)
@@ -121,7 +123,7 @@ def load_config():
     missing_sections = [section for section in required_sections if section not in config]
 
     if missing_sections:
-        print(f"ERROR: Missing sections in config.ini: {', '.join(missing_sections)}")
+        queue_message(f"ERROR: Missing sections in config.ini: {', '.join(missing_sections)}")
         sys.exit(1)
 
     # Extract persona traits
@@ -129,7 +131,7 @@ def load_config():
     if 'PERSONA' in persona_config:
         persona_traits = {key: int(value) for key, value in persona_config['PERSONA'].items()}
     else:
-        print("ERROR: [PERSONA] section missing in persona.ini.")
+        queue_message("ERROR: [PERSONA] section missing in persona.ini.")
         sys.exit(1)
 
     # Extract and return combined configurations
@@ -296,7 +298,7 @@ def update_character_setting(setting, value):
 
         # Check if [CHAR] section exists
         if 'PERSONA' not in config:
-            print("Error: [PERSONA] section not found in the config file.")
+            queue_message("Error: [PERSONA] section not found in the config file.")
             return False
 
         # Update the setting
@@ -306,9 +308,9 @@ def update_character_setting(setting, value):
         with open(config_path, 'w') as config_file:
             config.write(config_file)
 
-        print(f"Updated {setting} to {value} in [PERSONA] section.")
+        queue_message(f"Updated {setting} to {value} in [PERSONA] section.")
         return True
 
     except Exception as e:
-        print(f"Error updating setting: {e}")
+        queue_message(f"Error updating setting: {e}")
         return False

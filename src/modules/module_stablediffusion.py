@@ -8,6 +8,7 @@ import threading
 from io import BytesIO
 
 from modules.module_config import load_config
+from modules.module_messageQue import queue_message
 
 # Load configuration
 config = load_config()
@@ -69,7 +70,7 @@ def get_image_from_dalle_v3(prompt):
         return f"Image generated and displayed in fullscreen."
 
     except Exception as e:
-        print(f"Error: {e}")
+        queue_message(f"Error: {e}")
         return None
 
 def get_image_from_automatic1111(sdpromptllm):
@@ -115,9 +116,9 @@ def get_image_from_automatic1111(sdpromptllm):
         return f"The image has been created and displayed on screen."
 
     except requests.exceptions.HTTPError as err:
-        print(f"HTTP error occurred: {err}")
+        queue_message(f"HTTP error occurred: {err}")
     except requests.exceptions.RequestException as e:
-        print(f"Error: {e}")
+        queue_message(f"Error: {e}")
 
     return f"Image generated and displayed in fullscreen."
   

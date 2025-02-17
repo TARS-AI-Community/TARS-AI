@@ -3,7 +3,9 @@ import io
 import re
 import asyncio
 import wave
+
 from modules.module_config import load_config
+from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
 
@@ -59,7 +61,7 @@ async def synthesize_alltalk(chunk):
 
         wav_url = response.json().get("output_file_url")
         if not wav_url:
-            print(f"ERROR: No WAV file URL for chunk: {chunk}")
+            queue_message(f"ERROR: No WAV file URL for chunk: {chunk}")
             return None
 
         # Download the WAV file into memory
@@ -73,7 +75,7 @@ async def synthesize_alltalk(chunk):
         return wav_data  # Return the processed audio buffer
 
     except Exception as e:
-        print(f"ERROR: AllTalk TTS synthesis failed: {e}")
+        queue_message(f"ERROR: AllTalk TTS synthesis failed: {e}")
         return None
 
 

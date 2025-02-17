@@ -5,6 +5,8 @@ import wave
 from modules.module_config import load_config
 from elevenlabs.client import ElevenLabs
 
+from modules.module_messageQue import queue_message
+
 CONFIG = load_config()
 
 # ✅ Initialize ElevenLabs client globally
@@ -37,7 +39,7 @@ async def synthesize_elevenlabs(chunk):
         audio_bytes = b"".join(audio_generator)
 
         if not audio_bytes:  # ✅ Ensure the API response is valid
-            print(f"ERROR: ElevenLabs returned an empty response for chunk: {chunk}")
+            queue_message(f"ERROR: ElevenLabs returned an empty response for chunk: {chunk}")
             return None
 
         # Convert raw audio bytes to BytesIO buffer
@@ -47,7 +49,7 @@ async def synthesize_elevenlabs(chunk):
         return audio_buffer  # ✅ Return the processed audio buffer
 
     except Exception as e:
-        print(f"ERROR: ElevenLabs TTS synthesis failed: {e}")
+        queue_message(f"ERROR: ElevenLabs TTS synthesis failed: {e}")
         return None
 
 

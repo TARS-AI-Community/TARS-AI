@@ -7,6 +7,7 @@ Utility module for building prompts for LLM backends.
 from datetime import datetime
 import os
 from modules.module_engine import check_for_module
+from modules.module_messageQue import queue_message
 
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
     """
@@ -54,7 +55,7 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
     final_prompt = inject_dynamic_values(final_prompt, user_name, char_name)
 
     if debug:
-        print(f"DEBUG PROMPT:\n{final_prompt}")
+        queue_message(f"DEBUG PROMPT:\n{final_prompt}")
 
     return clean_text(final_prompt)
 
@@ -105,20 +106,20 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     f"### Response:\n{character_manager.char_name}: "
     ])
 
-    #print(f"base prompt {memory_manager.token_count(base_prompt).get('length', 0)}")
+    #queue_message(f"base prompt {memory_manager.token_count(base_prompt).get('length', 0)}")
 
     context_size = int(config['LLM']['contextsize'])
     base_length = memory_manager.token_count(total_base_prompt).get('length', 0)
     available_tokens = max(0, context_size - base_length)
 
-    #print(f"context_size {context_size}: base_length{base_length}: available_tokens: {available_tokens} ")
+    #queue_message(f"context_size {context_size}: base_length{base_length}: available_tokens: {available_tokens} ")
 
     # Add short-term memory first
     if available_tokens > 0:
         short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(available_tokens)
         memory_length = memory_manager.token_count(short_term_memory).get('length', 0)
         available_tokens -= memory_length
-        #print(f"Tokens after short term {available_tokens}")
+        #queue_message(f"Tokens after short term {available_tokens}")
 
     # Add example dialog only if there's space remaining
     if available_tokens > 0 and character_manager.example_dialogue:
