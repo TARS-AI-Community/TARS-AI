@@ -87,7 +87,7 @@ class STTManager:
         self.wake_silence_threshold = None
         self.silence_threshold = None  # Updated after measuring background noise
         self.MAX_RECORDING_FRAMES = 100   # ~12.5 seconds
-        self.MAX_SILENT_FRAMES = 10       # ~1.25 seconds of silence
+        self.MAX_SILENT_FRAMES = 15      # ~1.25 seconds of silence
         
         # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None
@@ -303,16 +303,18 @@ class STTManager:
         with sd.InputStream(samplerate=self.SAMPLE_RATE,
                             channels=1, dtype="int16",
                             blocksize=4000, latency='high') as stream:
-            for _ in range(200):  # Limit recording duration (~12.5 seconds)
+            for _ in range(self.MAX_RECORDING_FRAMES):  # Limit recording duration (~12.5 seconds)
                 data, _ = stream.read(4000)
-
-                data = self.amplify_audio(data) #amp the sound
-
+                
                 is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
                 if is_silence:
                     if not detected_speech:
                         return None
                     break
+                
+                #write the audio data
+                data = self.amplify_audio(data) #amp the sound
+
 
                 if recognizer.AcceptWaveform(data.tobytes()):
                     result = recognizer.Result()
@@ -713,7 +715,7 @@ class STTManager:
             queue_message(f"ERROR: RMS silence detection failed: {e}")
             # Return safe default values
             return False, detected_speech, silent_frames
-
+    
     # === Audio adjustments ===
     
     def _measure_background_noise(self):
