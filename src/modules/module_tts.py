@@ -95,38 +95,6 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
     except Exception as e:
         print(f"ERROR: Error during audio playback: {e}")
 
-def xttsv2_tts(text, ttsurl, tts_voice):
-    """
-    Generate TTS audio using a server-based TTS system.
-
-    Parameters:
-    - text (str): The text to convert into speech.
-    - ttsurl (str): The base URL of the TTS server.
-    - tts_voice (str): Speaker/voice configuration for the TTS.
-    - play_audio_stream (Callable): Function to play the audio stream.
-    """
-    try:
-        chunk_size = 1024
-
-        full_url = f"{ttsurl}/tts_stream"
-        params = {
-            'text': text,
-            'speaker_wav': tts_voice,
-            'language': "en"
-        }
-        headers = {'accept': 'audio/x-wav'}
-
-        response = requests.get(full_url, params=params, headers=headers, stream=True)
-        response.raise_for_status()
-
-        # Pass the response content to play_audio_stream
-        def tts_stream():
-            for chunk in response.iter_content(chunk_size=chunk_size):
-                yield chunk
-
-        play_audio_stream(tts_stream())
-    except Exception as e:
-        print(f"ERROR: Server TTS generation failed: {e}")
 
 async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
     """
@@ -166,12 +134,6 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
         elif ttsoption == "silero":
             async for chunk in text_to_speech_with_pipelining_silero(text):
                 yield chunk 
-
-        # Server-based TTS generation using `xttsv2`
-        elif ttsoption == "xttsv2":
-            if not ttsurl:
-                raise ValueError(f"ERROR: TTS URL and play_audio_stream function must be provided for 'xttsv2'.")
-            xttsv2_tts(text, ttsurl, tts_voice)
 
         else:
             raise ValueError(f"ERROR: Invalid TTS option.")
