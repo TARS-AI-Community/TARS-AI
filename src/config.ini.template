@@ -9,7 +9,7 @@ voicemovement = False
 [STT] # Speech-to-Text configuration
 wake_word = hey tar
 # Wake word for activating the system
-sensitivity = 4
+sensitivity = 8
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection. 
 stt_processor = faster-whisper
 #vosk, faster-whisper, silero, or external
