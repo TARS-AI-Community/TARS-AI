@@ -30,6 +30,7 @@ from vosk import Model, KaldiRecognizer, SetLogLevel
 from pocketsphinx import LiveSpeech
 from faster_whisper import WhisperModel
 import requests
+import webrtcvad
 
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config
@@ -102,6 +103,8 @@ class STTManager:
         self.silero_vad_model = None
         self.get_speech_timestamps = None
         self._initialize_models()
+        self.vadmethod = CONFIG['STT']['vad_method']
+        self.DEBUG = False
 
     def _initialize_models(self):
         """
@@ -596,20 +599,19 @@ class STTManager:
     def voice_activity_detection_main(self, data, detected_speech, silent_frames=0):
         """
         Determines if the current audio frame contains silence using VAD or RMS.
-        Returns: (is_silence, detected_speech, silent_frames)
+        Returns a tuple: (is_silence, detected_speech, silent_frames)
         """
-        vad_method = self.config["STT"].get("vad_method", "rms")  # Default to RMS if not specified
-
-        # Initialize result to prevent uninitialized variable errors
-        result = (False, detected_speech, silent_frames)  # Default return value
-
-        if vad_method in ["silero"]:
-            result = self._is_silence_detected_silero(data, detected_speech, silent_frames)
-
-        elif vad_method in ["rms", ""]:
-            result = self._is_silence_detected_rms(data, detected_speech, silent_frames)
-
-        return result
+        # Get the vad_method from the configuration, defaulting to "rms" if not set.
+        print(self.vadmethod)
+    
+        if self.vadmethod == "silero":
+            return self._is_silence_detected_silero(data, detected_speech, silent_frames)
+        elif self.vadmethod == "webrtc":
+            return self._is_silence_detected_webrtc(data, detected_speech, silent_frames)
+        elif self.vadmethod == "rms":
+            return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+        else:
+            return self._is_silence_detected_rms(data, detected_speech, silent_frames)
 
     def _is_silence_detected_silero(self, data, detected_speech, silent_frames):
         """
@@ -669,16 +671,71 @@ class STTManager:
                         
                 except Exception as e:
                     queue_message(f"WARNING: VAD error, falling back to RMS: {e}")
-                    return self._is_silence_detected_RMS(data, detected_speech, silent_frames)
+                    return self._is_silence_detected_rms(data, detected_speech, silent_frames)
             
             # If no VAD model, fall back to RMS detection
-            return self._is_silence_detected_RMS(data, detected_speech, silent_frames)
+            queue_message(f"WARNING: no vad model: {e}")
+            return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+            
         
         except Exception as e:
             queue_message(f"ERROR: Silence detection failed: {e}")
             # Return safe default values
             return False, detected_speech, silent_frames
     
+    def _is_silence_detected_webrtc(self, data, detected_speech, silent_frames):
+        """
+        Use webrtcvad to determine if the provided audio data represents silence.
+        The data is split into small frames (e.g., 10ms) and each frame is checked.
+        
+        Args:
+            data (np.ndarray): The audio data.
+            detected_speech (bool): Whether speech has been detected in previous frames.
+            silent_frames (int): Count of consecutive silent frames so far.
+            
+        Returns:
+            tuple: (is_silence, detected_speech, silent_frames)
+                is_silence (bool): True if we've exceeded the allowed silent frames.
+                detected_speech (bool): True if any frame was classified as speech.
+                silent_frames (int): The updated silent frame count.
+        """
+        # Convert sensitivity to an integer and clamp to [1, 10]
+        sensitivity = int(self.config["STT"].get("sensitivity", 5))
+        sensitivity = max(1, min(10, sensitivity))
+        mode = round((10 - sensitivity) * 3 / 9)  # Maps: 1->3, 10->0, etc.
+
+        vad = webrtcvad.Vad(mode)
+        
+        update_bar, clear_bar = self._init_progress_bar()
+
+        # Define frame duration in milliseconds.
+        FRAME_DURATION_MS = 10  # You can adjust this if you want 10, 20, or 30 ms frames.
+        frame_length = int(self.DEFAULT_SAMPLE_RATE * FRAME_DURATION_MS / 1000)
+
+        # Calculate the number of complete frames in the data.
+        num_frames = len(data) // frame_length
+
+        for i in range(num_frames):
+            frame = data[i * frame_length : (i + 1) * frame_length]
+            # Check if this frame is considered speech.
+            if vad.is_speech(frame.tobytes(), self.DEFAULT_SAMPLE_RATE):
+                if self.DEBUG:
+                    queue_message("DEBUG: Speech detected in frame")
+                detected_speech = True
+                silent_frames = 0
+                clear_bar()
+            else:
+                silent_frames += 1
+                if self.DEBUG:
+                    queue_message(f"DEBUG: No speech in frame, silent_frames={silent_frames}")
+                update_bar(silent_frames, self.MAX_SILENT_FRAMES)
+
+            # If silent frames exceed the maximum allowed, consider it silence.
+            if silent_frames > self.MAX_SILENT_FRAMES:
+                clear_bar()
+                return True, detected_speech, silent_frames
+        return False, detected_speech, silent_frames
+
     def _is_silence_detected_rms(self, data, detected_speech, silent_frames):
         """RMS-based silence detection with visual progress bar"""
         try:
@@ -717,7 +774,7 @@ class STTManager:
             queue_message(f"ERROR: RMS silence detection failed: {e}")
             # Return safe default values
             return False, detected_speech, silent_frames
-    
+  
     # === Audio adjustments ===
     
     def _measure_background_noise(self):

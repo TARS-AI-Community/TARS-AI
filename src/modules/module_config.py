@@ -148,7 +148,7 @@ def load_config():
             "whisper_model": config['STT']['whisper_model'],
             "vosk_model": config['STT']['vosk_model'],
             "use_indicators": config.getboolean('STT', 'use_indicators'),
-            "vad_enabled": config.getboolean('STT', 'vad_enabled', fallback=False),
+            "vad_method": config['STT']['vad_method'],
         },
         "CHAR": {
             "character_card_path": config['CHAR']['character_card_path'],
