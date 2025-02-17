@@ -7,15 +7,31 @@ from modules.module_config import load_config
 
 CONFIG = load_config()
 
-# Initialize global speech configuration
-speech_config = speechsdk.SpeechConfig(
-    subscription=CONFIG['TTS']['azure_api_key'],
-    region=CONFIG['TTS']['azure_region']
-)
-speech_config.speech_synthesis_voice_name = CONFIG['TTS']['tts_voice']
-speech_config.set_speech_synthesis_output_format(
-    speechsdk.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm
-)
+def init_speech_config() -> speechsdk.SpeechConfig:
+    """
+    Initialize and return Azure speech configuration.
+    
+    Returns:
+        speechsdk.SpeechConfig: Configured speech configuration object
+        
+    Raises:
+        ValueError: If Azure API key or region is missing
+    """
+    if not CONFIG['TTS']['azure_api_key'] or not CONFIG['TTS']['azure_region']:
+        raise ValueError("Azure API key and region must be provided for the 'azure' TTS option.")
+    
+    try:
+        speech_config = speechsdk.SpeechConfig(
+            subscription=CONFIG['TTS']['azure_api_key'],
+            region=CONFIG['TTS']['azure_region']
+        )
+        speech_config.speech_synthesis_voice_name = CONFIG['TTS']['tts_voice']
+        speech_config.set_speech_synthesis_output_format(
+            speechsdk.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm
+        )
+        return speech_config
+    except Exception as e:
+        raise RuntimeError(f"Failed to initialize Azure speech config: {str(e)}")
 
 async def synthesize_azure(chunk: str) -> io.BytesIO:
     """
@@ -23,7 +39,8 @@ async def synthesize_azure(chunk: str) -> io.BytesIO:
     Extensive debug logging is included.
     """
     try:
-        
+        speech_config = init_speech_config()
+
         # Set audio_config to None to capture the audio data in result.audio_data
         audio_config = None
         # Create the Speech Synthesizer
