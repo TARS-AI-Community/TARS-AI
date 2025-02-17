@@ -161,11 +161,7 @@ def utterance_callback(message):
         reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-]', '', reply)
         
         # Stream TTS audio to speakers
-<<<<<<< HEAD:src/module_main.py
-        generate_tts_audio(reply, CONFIG['TTS'])
-=======
         asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
->>>>>>> upstream/dev:src/modules/module_main.py
 
     except json.JSONDecodeError:
         print("ERROR: Invalid JSON format. Could not process user message.")

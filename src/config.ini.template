@@ -20,7 +20,7 @@ vad_enabled = False
 # Enable Silero VAD instead of RMS 
 
 [CHAR] # Character-specific details
-character_card_path = character/TARS.json
+character_card_path = character/TARS/TARS.json
 # Path to the JSON file describing the character
 user_name = Joe
 # Name of the user interacting with the character
