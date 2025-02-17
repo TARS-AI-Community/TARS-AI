@@ -69,7 +69,7 @@ storepath = ./emotions
 
 [TTS] # Text-to-Speech configuration 
 ttsoption = piper
-# Local Options: espeak, piper, silero 
+# Onboard Options: espeak, piper, silero 
 # External SelfHosted: alltalk, xttsv2,
 # Externally Hosted: azure, eleven labs
 azure_region = eastus
