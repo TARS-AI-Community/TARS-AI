@@ -10,7 +10,7 @@ def debug_log(message: str):
 
 CONFIG = load_config()
 
-# Debug: Log configuration details (be cautious about printing sensitive keys in production)
+# Debug: Log configuration details (avoid printing sensitive info in production)
 debug_log("Initializing Azure Speech SDK with configuration:")
 debug_log(f"  API Key: {CONFIG['TTS']['azure_api_key']}")
 debug_log(f"  Region: {CONFIG['TTS']['azure_region']}")
@@ -30,14 +30,12 @@ debug_log("Global speech config initialized and output format set.")
 async def synthesize_azure(chunk: str) -> io.BytesIO:
     """
     Synthesize a chunk of text into an audio buffer using Azure TTS.
-    Extensive debug logging is included to trace the execution.
+    Extensive debug logging is included.
     """
     try:
         debug_log(f"Starting synthesis for chunk: '{chunk}'")
         
-        # IMPORTANT:
-        # To capture the audio data (instead of playing it on the default speaker),
-        # we pass `None` for the audio_config.
+        # Set audio_config to None to capture the audio data in result.audio_data
         audio_config = None
         debug_log("AudioOutputConfig set to None to capture audio data.")
 
@@ -48,7 +46,7 @@ async def synthesize_azure(chunk: str) -> io.BytesIO:
         )
         debug_log("SpeechSynthesizer created.")
 
-        # Build the SSML string (using settings similar to your original working function)
+        # Build the SSML string using your original settings
         ssml = f"""
         <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis'
                xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='en-US'>
@@ -61,19 +59,17 @@ async def synthesize_azure(chunk: str) -> io.BytesIO:
         """
         debug_log(f"SSML built: {ssml.strip()}")
 
-        # Run synthesis on a separate thread (the call is blocking)
+        # Run synthesis on a separate thread (since this call is blocking)
         debug_log("Calling speak_ssml_async...")
         result = await asyncio.to_thread(lambda: synthesizer.speak_ssml_async(ssml).get())
         debug_log("speak_ssml_async completed.")
 
-        # Log the result's reason and, if available, cancellation details
         debug_log(f"Synthesis result reason: {result.reason}")
         if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
             cancellation_details = getattr(result, "cancellation_details", None)
             debug_log(f"Synthesis failed for chunk: '{chunk}'. Cancellation details: {cancellation_details}")
             return None
 
-        # Check if audio_data is present
         if not result.audio_data:
             debug_log("No audio data was returned from synthesis!")
             return None
@@ -93,8 +89,8 @@ async def synthesize_azure(chunk: str) -> io.BytesIO:
 
 async def text_to_speech_with_pipelining_azure(text: str):
     """
-    Converts text to speech by splitting the text into chunks, synthesizing each chunk,
-    and yielding audio buffers with extensive debug logging.
+    Converts text to speech by splitting the text into chunks, synthesizing each chunk concurrently,
+    and yielding audio buffers as soon as each is ready.
     """
     debug_log("Starting text-to-speech pipelining.")
     if not CONFIG['TTS']['azure_api_key'] or not CONFIG['TTS']['azure_region']:
@@ -102,20 +98,26 @@ async def text_to_speech_with_pipelining_azure(text: str):
 
     debug_log(f"Input text: {text}")
 
-    # Split text into chunks based on sentence endings (adjust regex if needed)
+    # Split text into chunks based on sentence endings (adjust regex as needed)
     chunks = re.split(r'(?<=\.)\s', text)
     debug_log(f"Text split into {len(chunks)} chunks: {chunks}")
 
+    # Schedule synthesis for all non-empty chunks concurrently.
+    tasks = []
     for index, chunk in enumerate(chunks):
         chunk = chunk.strip()
         if chunk:
-            debug_log(f"Processing chunk {index + 1}: '{chunk}'")
-            wav_buffer = await synthesize_azure(chunk)
-            if wav_buffer:
-                debug_log(f"Successfully synthesized chunk {index + 1}. Yielding audio buffer.")
-                yield wav_buffer
-            else:
-                debug_log(f"Failed to synthesize audio for chunk {index + 1}.")
+            debug_log(f"Scheduling synthesis for chunk {index + 1}: '{chunk}'")
+            tasks.append(asyncio.create_task(synthesize_azure(chunk)))
         else:
             debug_log(f"Skipping empty chunk at index {index}.")
+
+    # Now await and yield the results in the original order.
+    for i, task in enumerate(tasks):
+        audio_buffer = await task  # Each task is already running concurrently.
+        if audio_buffer:
+            debug_log(f"Yielding synthesized chunk {i+1} audio buffer.")
+            yield audio_buffer
+        else:
+            debug_log(f"Failed to synthesize chunk {i+1}.")
     debug_log("Completed text-to-speech pipelining.")
