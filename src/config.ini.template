@@ -16,6 +16,8 @@ whisper_model = tiny
 vosk_model = vosk-model-small-en-us-0.15
 # Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15)
 use_indicators = True
+vad_method = silero
+# Enable silero or RMS 
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS.json
@@ -60,7 +62,7 @@ base_url = http://192.168.2.68:5678
 # URL for the vision server API
 
 [EMOTION] # Emotion detection configuration
-enabled = False
+enabled = false
 # Enable or disable emotion detection
 emotion_model = SamLowe/roberta-base-go_emotions
 # Hugging Face model for emotion analysis
@@ -122,6 +124,16 @@ restore_faces = False
 # Set to True if you want better face rendering in the generated image.
 negative_prompt = deformed, black and white, disfigured, low contrast, extra limbs, bad anatomy, bad hands
 # The model will attempt to avoid creating images with these characteristics.
+
+[CHATUI]
+enabled = false
+
+[RAG]
+# RAG (Retrieval Augmented Generation) settings
+strategy = hybrid
+# Options: naive (vector-only), hybrid (vector + BM25)
+top_k = 5
+# Number of documents to retrieve
 
 [HOME_ASSISTANT] # HA Module
 enabled = False

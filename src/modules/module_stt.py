@@ -32,11 +32,13 @@ from faster_whisper import WhisperModel
 import requests
 
 from modules.module_messageQue import queue_message
+from modules.module_config import load_config
+
+CONFIG = load_config()
 
 # Suppress Vosk logs and parallelism warnings
 SetLogLevel(-1)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
 
 class STTManager:
     """
@@ -297,7 +299,6 @@ class STTManager:
 
         detected_speech = False
         silent_frames = 0
-        max_silent_frames = self.MAX_SILENT_FRAMES
 
         with sd.InputStream(
             samplerate=self.SAMPLE_RATE,
@@ -308,12 +309,13 @@ class STTManager:
         ) as stream:
             for _ in range(50):
                 data, _ = stream.read(4000)
-                data = self.amplify_audio(data)
-                is_silence, detected_speech, silent_frames = self._is_silence_detected(
-                    data, detected_speech, silent_frames, max_silent_frames
-                )
-                if is_silence and not detected_speech:
-                    return None
+                
+                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
+                if is_silence:
+                    if not detected_speech:
+                        return None
+                    break
+
                 if recognizer.AcceptWaveform(data.tobytes()):
                     result = recognizer.Result()
                     if self.utterance_callback:
@@ -336,20 +338,14 @@ class STTManager:
             wf.setframerate(self.SAMPLE_RATE)
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
-                processed_data, has_speech = self._process_audio_frame(data)
 
-                if processed_data is not None:
-                    wf.writeframes(processed_data.tobytes())
-                    detected_speech = detected_speech or has_speech
+                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
+                if is_silence:
+                    if not detected_speech:
+                        return None
+                    break
 
                 wf.writeframes(data.tobytes())
-                is_silence, detected_speech, silent_frames = self._is_silence_detected(
-                    data, detected_speech, silent_frames, max_silent_frames
-                )
-                if is_silence and not detected_speech:
-                    return None
-                if is_silence:
-                    break
 
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
@@ -386,36 +382,37 @@ class STTManager:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(self.SAMPLE_RATE)
+
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
                 
-                processed_data, has_speech = self._process_audio_frame(data)
 
-                if processed_data is not None:
-                    wf.writeframes(processed_data.tobytes())
-                    detected_speech = detected_speech or has_speech
-                wf.writeframes(data.tobytes())
-                is_silence, detected_speech, silent_frames = self._is_silence_detected(
-                    data, detected_speech, silent_frames, self.MAX_SILENT_FRAMES
-                )
-                if is_silence and not detected_speech:
-                    return None
+                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
                 if is_silence:
+                    if not detected_speech:
+                        return None
                     break
-
+                
+                #write the audio data
+                wf.writeframes(data.tobytes())
+    
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
             queue_message("ERROR: No audio recorded.")
             return None
 
+        # Convert recorded audio for STT model
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
         if sample_rate != self.DEFAULT_SAMPLE_RATE:
             audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=self.DEFAULT_SAMPLE_RATE)
+            #queue_message("INFO: Resampled Audio.")
 
-        # Prepare model input using Silero's helper
+        # Run STT Model
         input_audio = self.prepare_model_input([torch.tensor(audio_data)], device="cpu")
         silero_output = self.silero_model(input_audio)[0]
         decoded_text = self.decoder(silero_output.cpu())
+
+        # Return transcription result
         if decoded_text:
             formatted_result = {"text": decoded_text}
             if self.utterance_callback:
@@ -427,7 +424,6 @@ class STTManager:
         try:
             audio_buffer = BytesIO()
             silent_frames = 0
-            max_silent_frames = self.MAX_SILENT_FRAMES
 
             with sd.InputStream(
                 samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
@@ -437,20 +433,14 @@ class STTManager:
                 wf.setframerate(self.SAMPLE_RATE)
                 for _ in range(self.MAX_RECORDING_FRAMES):
                     data, _ = stream.read(4000)
-                    processed_data, has_speech = self._process_audio_frame(data)
 
-                    if processed_data is not None:
-                        wf.writeframes(processed_data.tobytes())
-                        detected_speech = detected_speech or has_speech
+                    is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
+                    if is_silence:
+                        if not detected_speech:
+                            return None
+                        break
 
-                    rms = self.prepare_audio_data(self.amplify_audio(data))
-                    if rms and rms > self.silence_threshold:
-                        silent_frames = 0
-                        wf.writeframes(data.tobytes())
-                    else:
-                        silent_frames += 1
-                        if silent_frames > max_silent_frames:
-                            break
+                    wf.writeframes(data.tobytes())
 
             audio_buffer.seek(0)
             if audio_buffer.getbuffer().nbytes == 0:
@@ -573,7 +563,7 @@ class STTManager:
     def _init_progress_bar(self):
         """Initialize progress bar settings and functions"""
         bar_length = 10  
-        show_progress = self.config["STT"].get("stt_processor") != "vosk"
+        show_progress = True
 
         def flush_all():
             """Ensure all buffers are completely flushed"""
@@ -601,9 +591,27 @@ class STTManager:
     
     # === VAD Methods ===
 
-    def _is_silence_detected(self, data, detected_speech, silent_frames, max_silent_frames):
+    def voice_activity_detection_main(self, data, detected_speech, silent_frames=0):
         """
-        Check if the provided audio data represents silence using either VAD or RMS.
+        Determines if the current audio frame contains silence using VAD or RMS.
+        Returns: (is_silence, detected_speech, silent_frames)
+        """
+        vad_method = self.config["STT"].get("vad_method", "rms")  # Default to RMS if not specified
+
+        # Initialize result to prevent uninitialized variable errors
+        result = (False, detected_speech, silent_frames)  # Default return value
+
+        if vad_method in ["silero"]:
+            result = self._is_silence_detected_VAD(data, detected_speech, silent_frames)
+
+        elif vad_method in ["rms", ""]:
+            result = self._is_silence_detected_RMS(data, detected_speech, silent_frames)
+
+        return result
+
+    def _is_silence_detected_VAD(self, data, detected_speech, silent_frames):
+        """
+        Check if the provided audio data represents silence using VAD.
         Always returns a tuple of (is_silence, detected_speech, silent_frames).
         """
         update_bar, clear_bar = self._init_progress_bar()
@@ -618,16 +626,27 @@ class STTManager:
                     
                     if hasattr(self.silero_vad_model, 'reset_states'):
                         self.silero_vad_model.reset_states()
-                        
+                    
+                    # Get VAD configuration with defaults
+                    vad_config = self.config["STT"].get("vad_config", {})
+                    noise_gate = vad_config.get("noise_gate_threshold", 0.01)
+                    vad_threshold = vad_config.get("threshold", 0.3)
+                    min_duration = vad_config.get("min_speech_duration_ms", 100)
+
+                    # Skip very low amplitude signals 
+                    if np.max(np.abs(audio_norm)) < noise_gate:
+                        return True, detected_speech, silent_frames
+
                     speech_ts = self.get_speech_timestamps(
                         audio_tensor, 
                         self.silero_vad_model,
                         sampling_rate=self.SAMPLE_RATE,
-                        threshold=0.3,
-                        min_speech_duration_ms=100,
+                        threshold=vad_threshold,
+                        min_speech_duration_ms=min_duration,
                         return_seconds=True
-                    )
+                    ) or []
                     
+
                     if len(speech_ts) > 0:
                         if self.DEBUG:
                             queue_message(f"DEBUG: Speech detected at: {speech_ts}")
@@ -638,65 +657,27 @@ class STTManager:
                         silent_frames += 1
                         if self.DEBUG:
                             queue_message(f"DEBUG: No speech in frame {silent_frames}")
-                        update_bar(silent_frames, max_silent_frames)
+                        update_bar(silent_frames, self.MAX_SILENT_FRAMES)
 
-                    if silent_frames > max_silent_frames:
+                    if silent_frames > self.MAX_SILENT_FRAMES:
                         clear_bar()
                         return True, detected_speech, silent_frames
+                    
                     return False, detected_speech, silent_frames
                         
                 except Exception as e:
                     queue_message(f"WARNING: VAD error, falling back to RMS: {e}")
-                    return self._is_silence_detected_rms(data, detected_speech, silent_frames, max_silent_frames)
+                    return self._is_silence_detected_RMS(data, detected_speech, silent_frames)
             
             # If no VAD model, fall back to RMS detection
-            return self._is_silence_detected_rms(data, detected_speech, silent_frames, max_silent_frames)
+            return self._is_silence_detected_RMS(data, detected_speech, silent_frames)
         
         except Exception as e:
             queue_message(f"ERROR: Silence detection failed: {e}")
             # Return safe default values
             return False, detected_speech, silent_frames
-        
-    def _process_audio_frame(self, data):
-        """Centralized audio frame processing with optional VAD."""
-        if self.config["STT"]["vad_enabled"] and self.silero_vad_model:
-            try:
-                # Normalize audio
-                audio_norm = data.astype(np.float32) / 32768.0
-                audio_tensor = torch.from_numpy(audio_norm).squeeze()
-                
-                # Get VAD configuration with defaults
-                vad_config = self.config["STT"].get("vad_config", {})
-                noise_gate = vad_config.get("noise_gate_threshold", 0.01)
-                vad_threshold = vad_config.get("threshold", 0.3)
-                min_duration = vad_config.get("min_speech_duration_ms", 100)
-
-                # Skip very low amplitude signals
-                if np.max(np.abs(audio_norm)) < noise_gate:
-                    return None, False
-
-                # Get speech timestamps
-                speech_ts = self.get_speech_timestamps(
-                    audio_tensor,
-                    self.silero_vad_model,
-                    sampling_rate=self.SAMPLE_RATE,
-                    threshold=vad_threshold,
-                    min_speech_duration_ms=min_duration,
-                    return_seconds=True
-                )
-                
-                has_speech = len(speech_ts) > 0
-                return data if has_speech else None, has_speech
-
-            except Exception as e:
-                queue_message(f"WARNING: VAD processing failed: {e}, falling back to raw audio")
-                return data, True  # Fallback to raw audio on error
-        
-        return data, True  # When VAD is disabled, assume all frames contain speech
- 
-    # === RMS Methods ===
-
-    def _is_silence_detected_rms(self, data, detected_speech, silent_frames, max_silent_frames):
+    
+    def _is_silence_detected_RMS(self, data, detected_speech, silent_frames):
         """RMS-based silence detection with visual progress bar"""
         try:
             update_bar, clear_bar = self._init_progress_bar()
@@ -722,9 +703,9 @@ class STTManager:
                 if self.DEBUG:
                     queue_message(f"SILENT: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}")
                 
-                update_bar(silent_frames, max_silent_frames)
+                update_bar(silent_frames, self.MAX_SILENT_FRAMES)
 
-                if silent_frames > max_silent_frames:
+                if silent_frames > self.MAX_SILENT_FRAMES:
                     clear_bar()
                     return True, detected_speech, silent_frames
 
