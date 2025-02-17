@@ -69,7 +69,9 @@ storepath = ./emotions
 
 [TTS] # Text-to-Speech configuration 
 ttsoption = piper
-# TTS backend option: [azure, local, xttsv2, alltalk, piper]
+# Local Options: espeak, piper, silero 
+# External SelfHosted: alltalk, xttsv2,
+# Externally Hosted: azure, eleven labs
 azure_region = eastus
 # Azure region for Azure TTS (e.g., eastus)
 ttsurl = http://192.168.2.20:8020
