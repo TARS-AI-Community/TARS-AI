@@ -25,6 +25,7 @@ from elevenlabs import play
 from modules.module_piper import *
 from modules.module_silero import text_to_speech_with_pipelining_silero
 from modules.module_espeak import text_to_speech_with_pipelining_espeak
+from modules.module_alltalk import text_to_speech_with_pipelining_alltalk
 
 elevenlabs_client = None
 
@@ -171,53 +172,6 @@ def elevenlabs_tts(text, voice_id="JBFqnCBsd6RMkjVDRZzb", model_id="eleven_multi
         play(audio)
     except Exception as e:
         print(f"ERROR: ElevenLabs TTS generation failed: {e}")
-        
-def alltalk_tts(text, ttsurl, tts_voice):
-    try:
-        # API endpoint and payload
-        url = f"{ttsurl}/api/tts-generate"
-        data = {
-            "text_input": text,
-            "text_filtering": "standard",
-            "character_voice_gen": f"{tts_voice}.wav",
-            "narrator_enabled": "false",
-            "narrator_voice_gen": "default.wav",
-            "text_not_inside": "character",
-            "language": "en",
-            "output_file_name": "test_output",
-            "output_file_timestamp": "true",
-            "autoplay": "false",
-            "autoplay_volume": 0.8,
-        }
-
-        #print("Generating audio on the server...")
-        response = requests.post(url, data=data)
-        response.raise_for_status()
-
-        wav_url = response.json().get("output_file_url")
-        if not wav_url:
-            print("Error: No WAV file URL provided.")
-            return
-
-        #print(f"Audio generated. WAV file URL: {wav_url}")
-
-        # Download the audio file into memory
-        #print("Downloading WAV file...")
-        response = requests.get(wav_url)
-        response.raise_for_status()
-
-        wav_data = BytesIO(response.content)
-
-        # Read and play the audio using sounddevice
-        #print("Playing audio...")
-        data, samplerate = sf.read(wav_data, dtype='float32')
-        sd.play(data, samplerate)
-        sd.wait()  # Wait for playback to finish
-
-        #print("Audio playback complete.")
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
 
 def server_tts(text, ttsurl, tts_voice):
     """
@@ -276,8 +230,9 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
                 yield chunk
 
         elif ttsoption == "alltalk":
-            alltalk_tts(text, ttsurl, tts_voice)
-
+            async for chunk in text_to_speech_with_pipelining_alltalk(text):
+                yield chunk
+                
         # Local TTS generation using local onboard PIPER TTS
         elif ttsoption == "piper":
             async for chunk in text_to_speech_with_pipelining(text):
