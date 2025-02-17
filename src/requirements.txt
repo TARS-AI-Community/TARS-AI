@@ -30,7 +30,6 @@ scikit-learn==1.5.2     # Predictive data analysis tools
 flask-cors              # Cross-Origin Resource Sharing (CORS) for Flask
 flask-socketio          # WebSockets support for Flask
 eventlet                # Async support for Flask-SocketIO (alternative to Waitress)
-Flask[async]            # Flask with async support
 
 # Miscellaneous Utilities
 optimum[onnxruntime]    # ONNX model optimization
