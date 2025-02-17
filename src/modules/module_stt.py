@@ -630,35 +630,30 @@ class STTManager:
                         self.silero_vad_model.reset_states()
                     
                     # Get VAD configuration with defaults
-                    vad_config = self.config["STT"].get("vad_config", {})
-                    noise_gate = vad_config.get("noise_gate_threshold", 0.01)
-                    vad_threshold = vad_config.get("threshold", 0.3)
-                    min_duration = vad_config.get("min_speech_duration_ms", 100)
+
+                    noise_gate = 0.01 * self.silence_threshold #adjust for bgnoise
 
                     # Skip very low amplitude signals 
-                    if np.max(np.abs(audio_norm)) < noise_gate:
-                        return True, detected_speech, silent_frames
+                    #if np.max(np.abs(audio_norm)) < noise_gate:
+                        #return True, detected_speech, silent_frames
 
                     speech_ts = self.get_speech_timestamps(
                         audio_tensor, 
                         self.silero_vad_model,
                         sampling_rate=self.SAMPLE_RATE,
-                        threshold=vad_threshold,
-                        min_speech_duration_ms=min_duration,
+                        threshold=0.3,
+                        min_speech_duration_ms=100,
                         return_seconds=True
                     ) or []
                     
+             
 
                     if len(speech_ts) > 0:
-                        if self.DEBUG:
-                            queue_message(f"DEBUG: Speech detected at: {speech_ts}")
                         detected_speech = True
                         silent_frames = 0
                         clear_bar()
                     else:
                         silent_frames += 1
-                        if self.DEBUG:
-                            queue_message(f"DEBUG: No speech in frame {silent_frames}")
                         update_bar(silent_frames, self.MAX_SILENT_FRAMES)
 
                     if silent_frames > self.MAX_SILENT_FRAMES:
