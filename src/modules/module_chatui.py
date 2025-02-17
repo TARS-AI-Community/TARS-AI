@@ -61,7 +61,6 @@ from modules.module_messageQue import queue_message
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 os.environ['WERKZEUG_RUN_MAIN'] = 'true'
-os.environ["WAITERSS_LOG_LEVEL"] = "ERROR"
 
 # If using eventlet or gevent with Flask-SocketIO
 sio_logger = logging.getLogger('socketio')

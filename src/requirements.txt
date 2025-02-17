@@ -12,7 +12,6 @@ azure-cognitiveservices-speech  # Azure TTS API
 # STT (Speech-to-Text) & VAD Tools
 faster-whisper          # Local STT using Faster Whisper
 silero-vad              # Voice Activity Detection (VAD) using Silero
-webrtcvad               # Voice Activity Detection (VAD) using webrtc
 vosk                    # Offline speech recognition
 pocketsphinx            # Lightweight speech recognition (CMU Sphinx)
 
@@ -28,7 +27,6 @@ hyperdb-python          # High-performance database library
 scikit-learn==1.5.2     # Predictive data analysis tools
 
 # Chat UI & Web Frameworks
-waitress                # Production WSGI server
 flask-cors              # Cross-Origin Resource Sharing (CORS) for Flask
 flask-socketio          # WebSockets support for Flask
 eventlet                # Async support for Flask-SocketIO (alternative to Waitress)
