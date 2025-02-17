@@ -2,7 +2,6 @@ import sounddevice as sd
 import soundfile as sf
 from io import BytesIO
 from piper.voice import PiperVoice
-import asyncio
 import wave
 import re
 import os
@@ -50,7 +49,7 @@ async def synthesize(voice, chunk):
     wav_buffer.seek(0)
     return wav_buffer
 
-async def text_to_speech_with_pipelining(text):
+async def text_to_speech_with_pipelining_piper(text):
     """
     Converts text to speech using the Piper model and streams audio as it's generated.
     """

@@ -19,27 +19,13 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 from io import BytesIO
-from elevenlabs.client import ElevenLabs
-from elevenlabs import play
+import asyncio
 
-from modules.module_piper import *
+from modules.module_piper import text_to_speech_with_pipelining_piper
 from modules.module_silero import text_to_speech_with_pipelining_silero
 from modules.module_espeak import text_to_speech_with_pipelining_espeak
 from modules.module_alltalk import text_to_speech_with_pipelining_alltalk
-
-elevenlabs_client = None
-
-def init_elevenlabs_client(api_key):
-    """
-    Initializes the global ElevenLabs client instance with the provided API key.
-    
-    Parameters:
-    - api_key (str): The ElevenLabs API key.
-    """
-    global elevenlabs_client
-    if not api_key:
-        raise ValueError("ElevenLabs API key must be provided for initialization.")
-    elevenlabs_client = ElevenLabs(api_key=api_key)
+from modules.module_elevenlabs import text_to_speech_with_pipelining_elevenlabs
 
 def update_tts_settings(ttsurl):
     """
@@ -152,28 +138,7 @@ def azure_tts(text, azure_api_key, azure_region, tts_voice):
     except Exception as e:
         print(f"ERROR: Azure TTS generation failed: {e}")
 
-def elevenlabs_tts(text, voice_id="JBFqnCBsd6RMkjVDRZzb", model_id="eleven_multilingual_v2", output_format="mp3_44100_128"):
-    """
-    Generate TTS audio using ElevenLabs.
-    
-    Parameters:
-    - text (str): The text to convert into speech.
-    - voice_id (str): Voice ID for ElevenLabs.
-    - model_id (str): Model ID for ElevenLabs.
-    - output_format (str): Output format for the audio.
-    """
-    try:
-        audio = elevenlabs_client.text_to_speech.convert(
-            text=text,
-            voice_id=voice_id,
-            model_id=model_id,
-            output_format=output_format,
-        )
-        play(audio)
-    except Exception as e:
-        print(f"ERROR: ElevenLabs TTS generation failed: {e}")
-
-def server_tts(text, ttsurl, tts_voice):
+def xttsv2_tts(text, ttsurl, tts_voice):
     """
     Generate TTS audio using a server-based TTS system.
 
@@ -235,13 +200,12 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
                 
         # Local TTS generation using local onboard PIPER TTS
         elif ttsoption == "piper":
-            async for chunk in text_to_speech_with_pipelining(text):
+            async for chunk in text_to_speech_with_pipelining_piper(text):
                 yield chunk  
 
         elif ttsoption == "elevenlabs":
-            if not elevenlabs_client:
-                init_elevenlabs_client(CONFIG['elevenlabs_api_key'])
-            elevenlabs_tts(text, CONFIG['voice_id'], CONFIG['model_id'])
+            async for chunk in text_to_speech_with_pipelining_elevenlabs(text):
+                yield chunk
 
         elif ttsoption == "silero":
             async for chunk in text_to_speech_with_pipelining_silero(text):
@@ -251,7 +215,7 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
         elif ttsoption == "xttsv2":
             if not ttsurl:
                 raise ValueError(f"ERROR: TTS URL and play_audio_stream function must be provided for 'xttsv2'.")
-            server_tts(text, ttsurl, tts_voice)
+            xttsv2_tts(text, ttsurl, tts_voice)
 
         else:
             raise ValueError(f"ERROR: Invalid TTS option.")
