@@ -306,7 +306,7 @@ class STTManager:
             for _ in range(self.MAX_RECORDING_FRAMES):  # Limit recording duration (~12.5 seconds)
                 data, _ = stream.read(4000)
                 
-                is_silence, detected_speech, silent_frames = self._is_silence_detected_RMS(data, detected_speech, silent_frames) #force RMS as VAD doesnt like vosk
+                is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(data, detected_speech, silent_frames) #force RMS as VAD doesnt like vosk
                 if is_silence:
                     if not detected_speech:
                         return None
@@ -424,6 +424,7 @@ class STTManager:
         try:
             audio_buffer = BytesIO()
             silent_frames = 0
+            detected_speech = False
 
             with sd.InputStream(
                 samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
@@ -433,6 +434,7 @@ class STTManager:
                 wf.setframerate(self.SAMPLE_RATE)
                 for _ in range(self.MAX_RECORDING_FRAMES):
                     data, _ = stream.read(4000)
+
 
                     is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
                     if is_silence:
@@ -602,14 +604,14 @@ class STTManager:
         result = (False, detected_speech, silent_frames)  # Default return value
 
         if vad_method in ["silero"]:
-            result = self._is_silence_detected_VAD(data, detected_speech, silent_frames)
+            result = self._is_silence_detected_silero(data, detected_speech, silent_frames)
 
         elif vad_method in ["rms", ""]:
-            result = self._is_silence_detected_RMS(data, detected_speech, silent_frames)
+            result = self._is_silence_detected_rms(data, detected_speech, silent_frames)
 
         return result
 
-    def _is_silence_detected_VAD(self, data, detected_speech, silent_frames):
+    def _is_silence_detected_silero(self, data, detected_speech, silent_frames):
         """
         Check if the provided audio data represents silence using VAD.
         Always returns a tuple of (is_silence, detected_speech, silent_frames).
@@ -677,7 +679,7 @@ class STTManager:
             # Return safe default values
             return False, detected_speech, silent_frames
     
-    def _is_silence_detected_RMS(self, data, detected_speech, silent_frames):
+    def _is_silence_detected_rms(self, data, detected_speech, silent_frames):
         """RMS-based silence detection with visual progress bar"""
         try:
             update_bar, clear_bar = self._init_progress_bar()
