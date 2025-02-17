@@ -4,38 +4,54 @@ import asyncio
 import azure.cognitiveservices.speech as speechsdk
 from modules.module_config import load_config
 
+# Simple debug logger function
+def debug_log(message: str):
+    print(f"[DEBUG] {message}")
+
 CONFIG = load_config()
 
-# ✅ Initialize Azure Speech SDK globally
+# Debug: Log configuration details (be cautious about printing sensitive keys in production)
+debug_log("Initializing Azure Speech SDK with configuration:")
+debug_log(f"  API Key: {CONFIG['TTS']['azure_api_key']}")
+debug_log(f"  Region: {CONFIG['TTS']['azure_region']}")
+debug_log(f"  Voice: {CONFIG['TTS']['tts_voice']}")
+
+# Initialize global speech configuration
 speech_config = speechsdk.SpeechConfig(
     subscription=CONFIG['TTS']['azure_api_key'],
     region=CONFIG['TTS']['azure_region']
 )
 speech_config.speech_synthesis_voice_name = CONFIG['TTS']['tts_voice']
-speech_config.set_speech_synthesis_output_format(speechsdk.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm)
+speech_config.set_speech_synthesis_output_format(
+    speechsdk.SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm
+)
+debug_log("Global speech config initialized and output format set.")
 
-
-async def synthesize_azure(chunk):
+async def synthesize_azure(chunk: str) -> io.BytesIO:
     """
     Synthesize a chunk of text into an audio buffer using Azure TTS.
-
-    Parameters:
-    - chunk (str): A single sentence or phrase.
-
-    Returns:
-    - BytesIO: A buffer containing the generated audio.
+    Extensive debug logging is included to trace the execution.
     """
     try:
-        # ✅ Set up an in-memory audio stream
-        stream = speechsdk.audio.PullAudioOutputStream()
-        audio_config = speechsdk.audio.AudioOutputConfig(stream=stream)
+        debug_log(f"Starting synthesis for chunk: '{chunk}'")
+        
+        # IMPORTANT:
+        # To capture the audio data (instead of playing it on the default speaker),
+        # we pass `None` for the audio_config.
+        audio_config = None
+        debug_log("AudioOutputConfig set to None to capture audio data.")
 
-        # ✅ Create a Speech Synthesizer
-        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+        # Create the Speech Synthesizer
+        synthesizer = speechsdk.SpeechSynthesizer(
+            speech_config=speech_config,
+            audio_config=audio_config
+        )
+        debug_log("SpeechSynthesizer created.")
 
-        # ✅ SSML Configuration (Adjust speed, pitch, and volume)
+        # Build the SSML string (using settings similar to your original working function)
         ssml = f"""
-        <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='en-US'>
+        <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis'
+               xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='en-US'>
             <voice name='{CONFIG['TTS']['tts_voice']}'>
                 <prosody rate="10%" pitch="5%" volume="default">
                     {chunk}
@@ -43,51 +59,63 @@ async def synthesize_azure(chunk):
             </voice>
         </speak>
         """
+        debug_log(f"SSML built: {ssml.strip()}")
 
-        # ✅ Start synthesis asynchronously
-        result_future = synthesizer.speak_ssml_async(ssml)
-        result = await asyncio.to_thread(result_future.get)
+        # Run synthesis on a separate thread (the call is blocking)
+        debug_log("Calling speak_ssml_async...")
+        result = await asyncio.to_thread(lambda: synthesizer.speak_ssml_async(ssml).get())
+        debug_log("speak_ssml_async completed.")
 
-        # ✅ Check if synthesis was successful
+        # Log the result's reason and, if available, cancellation details
+        debug_log(f"Synthesis result reason: {result.reason}")
         if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
-            print(f"ERROR: Azure TTS synthesis failed for chunk: {chunk}")
+            cancellation_details = getattr(result, "cancellation_details", None)
+            debug_log(f"Synthesis failed for chunk: '{chunk}'. Cancellation details: {cancellation_details}")
             return None
 
-        # ✅ Read streamed audio into a buffer
-        audio_buffer = io.BytesIO()
-        buffer_size = 4096  # Read in small chunks
+        # Check if audio_data is present
+        if not result.audio_data:
+            debug_log("No audio data was returned from synthesis!")
+            return None
 
-        while True:
-            audio_chunk = stream.read(buffer_size)
-            if not audio_chunk:
-                break  # Stop reading when no more data is available
-            audio_buffer.write(audio_chunk)
+        audio_length = len(result.audio_data)
+        debug_log(f"Synthesized audio data length: {audio_length} bytes.")
 
-        audio_buffer.seek(0)  # Reset buffer position
-
-        return audio_buffer  # ✅ Return processed audio buffer
+        # Wrap the resulting audio data in a BytesIO buffer
+        audio_buffer = io.BytesIO(result.audio_data)
+        audio_buffer.seek(0)
+        debug_log("Audio buffer is ready for this chunk.")
+        return audio_buffer
 
     except Exception as e:
-        print(f"ERROR: Azure TTS synthesis failed: {e}")
+        debug_log(f"Exception during synthesis for chunk '{chunk}': {e}")
         return None
 
-
-async def text_to_speech_with_pipelining_azure(text):
+async def text_to_speech_with_pipelining_azure(text: str):
     """
-    Converts text to speech using Azure TTS API and streams audio as it's generated.
-
-    Yields:
-    - BytesIO: Processed audio chunks as they're generated.
+    Converts text to speech by splitting the text into chunks, synthesizing each chunk,
+    and yielding audio buffers with extensive debug logging.
     """
+    debug_log("Starting text-to-speech pipelining.")
     if not CONFIG['TTS']['azure_api_key'] or not CONFIG['TTS']['azure_region']:
-        raise ValueError("ERROR: Azure API key and region must be provided for ttsoption 'azure'.")
+        raise ValueError("Azure API key and region must be provided for the 'azure' TTS option.")
 
-    # ✅ Split text into sentences before sending to Azure
-    chunks = re.split(r'(?<=\.)\s', text)  # Split at sentence boundaries
+    debug_log(f"Input text: {text}")
 
-    # ✅ Process each sentence separately
-    for chunk in chunks:
-        if chunk.strip():  # ✅ Ignore empty chunks
-            wav_buffer = await synthesize_azure(chunk.strip())  # ✅ Generate audio
+    # Split text into chunks based on sentence endings (adjust regex if needed)
+    chunks = re.split(r'(?<=\.)\s', text)
+    debug_log(f"Text split into {len(chunks)} chunks: {chunks}")
+
+    for index, chunk in enumerate(chunks):
+        chunk = chunk.strip()
+        if chunk:
+            debug_log(f"Processing chunk {index + 1}: '{chunk}'")
+            wav_buffer = await synthesize_azure(chunk)
             if wav_buffer:
-                yield wav_buffer  # ✅ Stream audio chunks dynamically
+                debug_log(f"Successfully synthesized chunk {index + 1}. Yielding audio buffer.")
+                yield wav_buffer
+            else:
+                debug_log(f"Failed to synthesize audio for chunk {index + 1}.")
+        else:
+            debug_log(f"Skipping empty chunk at index {index}.")
+    debug_log("Completed text-to-speech pipelining.")
