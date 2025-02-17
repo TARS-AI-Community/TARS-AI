@@ -139,6 +139,8 @@ def load_config():
         "BASE_DIR": base_dir,
         "CONTROLS": {
             "controller_name": config['CONTROLS']['controller_name'],
+            "enabled": config['CONTROLS']['enabled'],
+            "voicemovement": config['CONTROLS']['voicemovement'],         
         },
         "STT": {
             "wake_word": config['STT']['wake_word'],

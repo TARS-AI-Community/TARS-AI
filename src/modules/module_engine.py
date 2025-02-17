@@ -111,6 +111,10 @@ def execute_movement(movement, times):
     return thread  # Return the thread object if needed
 
 def movement_llmcall(user_input):
+
+    if CONFIG['CONTROLS']['voicemovement'] != "True":
+        return
+    
     """
     Interpret and execute movement commands based on user input using an LLM.
 

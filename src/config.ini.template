@@ -1,6 +1,10 @@
 [CONTROLS] # Controller settings
 controller_name = 8BitDo
 # Name of the controller used for interaction
+enabled = False
+# enable use of controller used for interaction
+voicemovement = False
+#Enable or disable movement via voice control
 
 [STT] # Speech-to-Text configuration
 wake_word = hey tar

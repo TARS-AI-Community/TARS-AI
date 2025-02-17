@@ -87,8 +87,9 @@ if __name__ == "__main__":
     initialize_manager_llm(memory_manager, char_manager)
 
     # Start necessary threads
-    bt_controller_thread = threading.Thread(target=start_bt_controller_thread, name="BTControllerThread", daemon=True)
-    bt_controller_thread.start()
+    if CONFIG['CONTROLS']['enabled'] == 'True':
+        bt_controller_thread = threading.Thread(target=start_bt_controller_thread, name="BTControllerThread", daemon=True)
+        bt_controller_thread.start()
 
     # Create a thread for the Flask app
     if CONFIG['CHATUI']['enabled'] == "True":
