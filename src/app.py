@@ -91,11 +91,13 @@ if __name__ == "__main__":
     bt_controller_thread.start()
 
     # Create a thread for the Flask app
-    flask_thread = threading.Thread(target=modules.module_chatui.start_flask_app, daemon=True)
-    flask_thread.start()
+    if CONFIG['CHATUI']['enabled'] == "True":
+        queue_message(f"LOAD: ChatUI starting on port 5012...")
+        flask_thread = threading.Thread(target=modules.module_chatui.start_flask_app, daemon=True)
+        flask_thread.start()
     
     # Initilize BLIP to speed up initial image capture
-    if not CONFIG['VISION']['server_hosted']:
+    if CONFIG['VISION']['server_hosted'] == "True":
         initialize_blip()
     
     try:

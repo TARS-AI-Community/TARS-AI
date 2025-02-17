@@ -194,6 +194,9 @@ def load_config():
             "is_talking": config.getboolean('TTS', 'is_talking'),
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
         }),
+        "CHATUI": {
+            "enabled": config['CHATUI']['enabled'],
+        },
         "RAG": {
             "strategy": config.get('RAG', 'strategy', fallback='naive'),
             "vector_weight": config.getfloat('RAG', 'vector_weight', fallback=0.5),
