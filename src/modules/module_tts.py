@@ -14,7 +14,6 @@ Handles TTS functionality to convert text into audio using:
 import requests
 import os 
 from datetime import datetime
-import azure.cognitiveservices.speech as speechsdk
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
@@ -26,6 +25,7 @@ from modules.module_silero import text_to_speech_with_pipelining_silero
 from modules.module_espeak import text_to_speech_with_pipelining_espeak
 from modules.module_alltalk import text_to_speech_with_pipelining_alltalk
 from modules.module_elevenlabs import text_to_speech_with_pipelining_elevenlabs
+from modules.module_azure import text_to_speech_with_pipelining_azure
 
 def update_tts_settings(ttsurl):
     """
@@ -95,49 +95,6 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
     except Exception as e:
         print(f"ERROR: Error during audio playback: {e}")
 
-def azure_tts(text, azure_api_key, azure_region, tts_voice):
-    """
-    Generate TTS audio using Azure Speech SDK.
-    
-    Parameters:
-    - text (str): The text to convert into speech.
-    - azure_api_key (str): Azure API key for authentication.
-    - azure_region (str): Azure region for the TTS service.
-    - tts_voice (str): Voice configuration for Azure TTS.
-    """
-    try:
-        # Initialize Azure Speech SDK
-        speech_config = speechsdk.SpeechConfig(subscription=azure_api_key, region=azure_region)
-        audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
-
-        # Create a Speech Synthesizer
-        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
-
-        # SSML Configuration
-        ssml = f"""
-        <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='en-US'>
-            <voice name='{tts_voice}'>
-                <prosody rate="10%" pitch="5%" volume="default">
-                    {text}
-                </prosody>
-            </voice>
-        </speak>
-        """
-
-        # Perform speech synthesis
-        result = synthesizer.speak_ssml_async(ssml).get()
-
-        # Check for errors
-        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-            pass
-        elif result.reason == speechsdk.ResultReason.Canceled:
-            cancellation_details = result.cancellation_details
-            print(f"ERROR: Speech synthesis canceled: {cancellation_details.reason}")
-            if cancellation_details.error_details:
-                print(f"ERROR: Error details: {cancellation_details.error_details}")
-    except Exception as e:
-        print(f"ERROR: Azure TTS generation failed: {e}")
-
 def xttsv2_tts(text, ttsurl, tts_voice):
     """
     Generate TTS audio using a server-based TTS system.
@@ -185,9 +142,8 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
     try:
         # Azure TTS generation
         if ttsoption == "azure":
-            if not azure_api_key or not azure_region:
-                raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Azure API key and region must be provided for ttsoption 'azure'.")
-            azure_tts(text, azure_api_key, azure_region, tts_voice)
+           async for chunk in text_to_speech_with_pipelining_azure(text):
+                yield chunk
 
         # Local TTS generation using `espeak-ng`
         elif ttsoption == "espeak":
