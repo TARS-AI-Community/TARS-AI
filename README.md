@@ -7,7 +7,7 @@
     <a href="https://www.youtube.com/@TARS-AI.py.youtube">
         <img src="https://img.shields.io/badge/YouTube-red?style=flat-square&logo=youtube&logoColor=white" alt="YouTube" align="center" />
     </a>
-    <a href="https://www.instagram.com/tars.ai.py">
+    <a href="https://www.instagram.com/tars_ai.py">
         <img src="https://img.shields.io/badge/Instagram-purple?style=flat-square&logo=instagram&logoColor=white" alt="Instagram" align="center" />
     </a>
     <a href="https://www.tiktok.com/@tars.ai.py">
