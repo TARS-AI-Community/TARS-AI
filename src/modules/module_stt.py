@@ -30,7 +30,6 @@ from vosk import Model, KaldiRecognizer, SetLogLevel
 from pocketsphinx import LiveSpeech
 from faster_whisper import WhisperModel
 import requests
-import webrtcvad
 
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config
