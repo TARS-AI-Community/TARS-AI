@@ -23,6 +23,8 @@ use_indicators = True
 # Use beeps to indicate when listening
 vad_method = rms
 # Enable silero or rms
+speechdelay = 20
+# Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS/TARS.json
