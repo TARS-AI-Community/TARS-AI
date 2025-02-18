@@ -87,7 +87,7 @@ class STTManager:
         self.wake_silence_threshold = None
         self.silence_threshold = None  # Updated after measuring background noise
         self.MAX_RECORDING_FRAMES = 100   # ~12.5 seconds
-        self.MAX_SILENT_FRAMES = 10      # ~1.25 seconds of silence
+        self.MAX_SILENT_FRAMES = CONFIG['STT']['speechdelay']
         
         # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None

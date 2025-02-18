@@ -151,6 +151,7 @@ def load_config():
             "vosk_model": config['STT']['vosk_model'],
             "use_indicators": config.getboolean('STT', 'use_indicators'),
             "vad_method": config['STT']['vad_method'],
+            "speechdelay": config['STT']['speechdelay'],
         },
         "CHAR": {
             "character_card_path": config['CHAR']['character_card_path'],
