@@ -4,7 +4,7 @@ module_llm.py
 LLM module for the TARS-AI application.
 
 Provides:
-- Integration with LLM backends (OpenAI, Ooba, Tabby).
+- Integration with LLM backends (OpenAI, DeepInfra, Ooba, Tabby).
 - Functions for text generation, emotion detection, and memory management.
 """
 
@@ -14,6 +14,8 @@ import threading
 import concurrent.futures
 from modules.module_config import load_config
 from modules.module_prompt import build_prompt
+
+from modules.module_messageQue import queue_message
 
 # === Constants and Globals ===
 CONFIG = load_config()
@@ -40,13 +42,10 @@ def get_completion(user_prompt, istext=True):
         raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
 
     prompt = build_prompt(user_prompt, character_manager, memory_manager, CONFIG)
-    #print(f"Generated prompt:\n{prompt}")
-
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
     }
-
     llm_backend = CONFIG['LLM']['llm_backend']
     url, data = _prepare_request_data(llm_backend, prompt)
 
@@ -59,7 +58,7 @@ def get_completion(user_prompt, istext=True):
         return bot_reply
     
     except requests.RequestException as e:
-        print(f"ERROR: LLM request failed: {e}")
+        queue_message(f"ERROR: LLM request failed: {e}")
         return None
 
 def _prepare_request_data(llm_backend, prompt):
@@ -75,6 +74,18 @@ def _prepare_request_data(llm_backend, prompt):
     """
     if llm_backend == "openai":
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
+        data = {
+            "model": CONFIG['LLM']['openai_model'],
+            "messages": [
+                {"role": "system", "content": CONFIG['LLM']['systemprompt']},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": CONFIG['LLM']['max_tokens'],
+            "temperature": CONFIG['LLM']['temperature'],
+            "top_p": CONFIG['LLM']['top_p']
+        }
+    elif llm_backend == "deepinfra":
+        url = f"{CONFIG['LLM']['base_url']}/v1/openai/chat/completions"
         data = {
             "model": CONFIG['LLM']['openai_model'],
             "messages": [
@@ -114,9 +125,10 @@ def _extract_text(response_json, istext):
     try:
         llm_backend = CONFIG['LLM']['llm_backend']
         if 'choices' in response_json:
+            # Both openai and deepinfra return the message in a similar format.
             return (
                 response_json['choices'][0]['message']['content']
-                if llm_backend == "openai"
+                if llm_backend in ["openai", "deepinfra"]
                 else response_json['choices'][0]['text']
             ).strip()
         else:
@@ -135,7 +147,6 @@ def process_completion(prompt):
     - str: The generated response.
     """
     future = executor.submit(get_completion, prompt, istext=True)
-    
     return future.result()
 
 # === Emotion Detection ===
@@ -173,12 +184,11 @@ def llm_process(user_input, bot_response):
     """
     if memory_manager:
         threading.Thread(target=memory_manager.write_longterm_memory, args=(user_input, bot_response)).start()
-        #print(f"Memory updated with user input: {user_input} and bot response: {bot_response}")
-
+    
     if CONFIG['EMOTION']['enabled']:
         emotionvalue = threading.Thread(target=detect_emotion, args=(bot_response,)).start()
         #do something with emotionvalue (IE SAD, ANGRY)
-
+    
     return bot_response
 
 def raw_complete_llm(user_prompt, istext=True):
@@ -192,14 +202,10 @@ def raw_complete_llm(user_prompt, istext=True):
     Returns:
     - str: The generated completion.
     """
-    #if memory_manager is None or character_manager is None:
-        #raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
-
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
     }
-
     llm_backend = CONFIG['LLM']['llm_backend']
     url, data = _prepare_request_data(llm_backend, user_prompt)
 
@@ -207,11 +213,10 @@ def raw_complete_llm(user_prompt, istext=True):
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
         bot_reply = _extract_text(response.json(), istext)
-
         return bot_reply
     
     except requests.RequestException as e:
-        print(f"ERROR: LLM request failed: {e}")
+        queue_message(f"ERROR: LLM request failed: {e}")
         return None
 
 # === Initialization ===

@@ -9,6 +9,7 @@ This module provides functionality for handling secret or special content.
 # === Standard Libraries ===
 from pathlib import Path
 from moviepy.video.io.VideoFileClip import VideoFileClip
+from modules.module_messageQue import queue_message
 
 def play_video_fullscreen(video_path, rotation_angle=0):
     """

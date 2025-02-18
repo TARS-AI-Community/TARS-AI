@@ -1,30 +1,47 @@
-requests  # HTTP library for making API calls.
-pandas  # Data manipulation and analysis library.
-scikit-learn==1.5.2  # Tools for predictive data analysis.
-joblib  # Efficient serialization of Python objects.
-sounddevice  # Audio I/O for capturing and playing sound.
-vosk  # Offline speech recognition library.
-pocketsphinx  # CMU's lightweight speech recognition library.
-sentence-transformers  # Library for sentence embeddings and semantic search.
-evdev  # Handle input devices such as keyboards, mice (Linux only).
-selenium  # Web automation library for controlling browsers.
-discord.py  # Discord API wrapper for bot creation.
-hyperdb-python  # High-performance database library.
-tiktoken 
-python-dotenv
-pygame
-openai  #Python package necessary for interacting with the OpenAI API
-moviepy  # Python library for video editing / playing videos.
-sox
-adafruit-pca9685
-azure-cognitiveservices-speech #needed for azure TTS
-soundfile #needed for alltalk tts
-piper-tts #needed for local TTS with voice clone
-discord.py[voice] #needed to voice chat with tars on discord
-configobj #needed to keep comments in the config.ini when updating
-openai
-librosa
-#espeak-ng
-#alsa-utils
-#sudo apt install ffmpeg
-faster-whisper
+# LLM Tools
+openai                  # External LLM API
+tiktoken                # Token counting for OpenAI models
+sentence-transformers   # Sentence embeddings and semantic search
+
+# TTS (Text-to-Speech) Tools
+elevenlabs              # External TTS using 11Labs API
+piper-tts              # Local TTS with voice cloning support
+azure-cognitiveservices-speech  # Azure TTS API
+
+# STT (Speech-to-Text) & VAD Tools
+faster-whisper          # Local STT using Faster Whisper
+silero-vad              # Voice Activity Detection (VAD) using Silero
+vosk                    # Offline speech recognition
+pocketsphinx            # Lightweight speech recognition (CMU Sphinx)
+
+# Sound Processing Tools
+pydub                   # Audio processing for TTS modifications
+soundfile               # Read & write sound files
+sounddevice             # Audio I/O for playing and capturing sound
+
+# Memory & Search Tools
+bm25s                   # BM25 ranking for information retrieval
+pystemmer               # Stem words for text processing
+hyperdb-python          # High-performance database library
+scikit-learn==1.5.2     # Predictive data analysis tools
+
+# Chat UI & Web Frameworks
+flask-cors              # Cross-Origin Resource Sharing (CORS) for Flask
+flask-socketio          # WebSockets support for Flask
+eventlet                # Async support for Flask-SocketIO (alternative to Waitress)
+
+# Miscellaneous Utilities
+optimum[onnxruntime]    # ONNX model optimization
+librosa                 # Audio analysis and feature extraction
+configobj               # Maintain comments in config.ini during updates
+python-dotenv           # Load environment variables from a .env file
+pygame                  # Game development & multimedia support
+evdev                   # Handle Linux input devices (keyboards, mice, controllers)
+moviepy                 # Video editing and playback support
+adafruit-pca9685        # Servo driver for hardware integration
+selenium                # Web automation for browser control
+discord.py              # Discord bot API
+discord.py[voice]       # Voice chat functionality for Discord bots
+requests                # HTTP library for API interactions
+pandas                  # Data analysis and manipulation
+joblib                  # Efficient serialization of Python objects

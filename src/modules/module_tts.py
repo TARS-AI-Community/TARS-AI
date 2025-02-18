@@ -14,12 +14,19 @@ Handles TTS functionality to convert text into audio using:
 import requests
 import os 
 from datetime import datetime
-import azure.cognitiveservices.speech as speechsdk
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
 from io import BytesIO
-from modules.module_piper import *
+import asyncio
+
+from modules.module_piper import text_to_speech_with_pipelining_piper
+from modules.module_silero import text_to_speech_with_pipelining_silero
+from modules.module_espeak import text_to_speech_with_pipelining_espeak
+from modules.module_alltalk import text_to_speech_with_pipelining_alltalk
+from modules.module_elevenlabs import text_to_speech_with_pipelining_elevenlabs
+from modules.module_azure import text_to_speech_with_pipelining_azure
+from modules.module_messageQue import queue_message
 
 def update_tts_settings(ttsurl):
     """
@@ -48,12 +55,12 @@ def update_tts_settings(ttsurl):
     try:
         response = requests.post(url, headers=headers, json=payload)
         if response.status_code == 200:
-            print(f"LOAD: TTS Settings updated successfully.")
+            queue_message(f"LOAD: TTS Settings updated successfully.")
         else:
-            print(f"ERROR: Failed to update TTS settings. Status code: {response.status_code}")
-            print(f"INFO: Response: {response.text}")
+            queue_message(f"ERROR: Failed to update TTS settings. Status code: {response.status_code}")
+            queue_message(f"INFO: Response: {response.text}")
     except Exception as e:
-        print(f"ERROR: TTS update failed: {e}")
+        queue_message(f"ERROR: TTS update failed: {e}")
 
 def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normalize=False):
     """
@@ -85,150 +92,12 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
                     # Write the adjusted audio data to the stream
                     stream.write(audio_data)
                 else:
-                    print(f"ERROR: Received empty chunk.")
+                    queue_message(f"ERROR: Received empty chunk.")
     except Exception as e:
-        print(f"ERROR: Error during audio playback: {e}")
+        queue_message(f"ERROR: Error during audio playback: {e}")
 
-def azure_tts(text, azure_api_key, azure_region, tts_voice):
-    """
-    Generate TTS audio using Azure Speech SDK.
-    
-    Parameters:
-    - text (str): The text to convert into speech.
-    - azure_api_key (str): Azure API key for authentication.
-    - azure_region (str): Azure region for the TTS service.
-    - tts_voice (str): Voice configuration for Azure TTS.
-    """
-    try:
-        # Initialize Azure Speech SDK
-        speech_config = speechsdk.SpeechConfig(subscription=azure_api_key, region=azure_region)
-        audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
 
-        # Create a Speech Synthesizer
-        synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
-
-        # SSML Configuration
-        ssml = f"""
-        <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='en-US'>
-            <voice name='{tts_voice}'>
-                <prosody rate="10%" pitch="5%" volume="default">
-                    {text}
-                </prosody>
-            </voice>
-        </speak>
-        """
-
-        # Perform speech synthesis
-        result = synthesizer.speak_ssml_async(ssml).get()
-
-        # Check for errors
-        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-            pass
-        elif result.reason == speechsdk.ResultReason.Canceled:
-            cancellation_details = result.cancellation_details
-            print(f"ERROR: Speech synthesis canceled: {cancellation_details.reason}")
-            if cancellation_details.error_details:
-                print(f"ERROR: Error details: {cancellation_details.error_details}")
-    except Exception as e:
-        print(f"ERROR: Azure TTS generation failed: {e}")
-
-def alltalk_tts(text, ttsurl, tts_voice):
-    try:
-        # API endpoint and payload
-        url = f"{ttsurl}/api/tts-generate"
-        data = {
-            "text_input": text,
-            "text_filtering": "standard",
-            "character_voice_gen": f"{tts_voice}.wav",
-            "narrator_enabled": "false",
-            "narrator_voice_gen": "default.wav",
-            "text_not_inside": "character",
-            "language": "en",
-            "output_file_name": "test_output",
-            "output_file_timestamp": "true",
-            "autoplay": "false",
-            "autoplay_volume": 0.8,
-        }
-
-        #print("Generating audio on the server...")
-        response = requests.post(url, data=data)
-        response.raise_for_status()
-
-        wav_url = response.json().get("output_file_url")
-        if not wav_url:
-            print("Error: No WAV file URL provided.")
-            return
-
-        #print(f"Audio generated. WAV file URL: {wav_url}")
-
-        # Download the audio file into memory
-        #print("Downloading WAV file...")
-        response = requests.get(wav_url)
-        response.raise_for_status()
-
-        wav_data = BytesIO(response.content)
-
-        # Read and play the audio using sounddevice
-        #print("Playing audio...")
-        data, samplerate = sf.read(wav_data, dtype='float32')
-        sd.play(data, samplerate)
-        sd.wait()  # Wait for playback to finish
-
-        #print("Audio playback complete.")
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-def local_tts(text):
-    """
-    Generate TTS audio locally using `espeak-ng` and `sox`.
-
-    Parameters:
-    - text (str): The text to convert into speech.
-    """
-    try:
-        command = (
-            f'espeak-ng -s 140 -p 50 -v en-us+m3 "{text}" --stdout | '
-            f'sox -t wav - -c 1 -t wav - gain 0.0 reverb 30 highpass 500 lowpass 3000 | aplay'
-        )
-        os.system(command)
-    except Exception as e:
-        print(f"ERROR: Local TTS generation failed: {e}")
-
-def server_tts(text, ttsurl, tts_voice):
-    """
-    Generate TTS audio using a server-based TTS system.
-
-    Parameters:
-    - text (str): The text to convert into speech.
-    - ttsurl (str): The base URL of the TTS server.
-    - tts_voice (str): Speaker/voice configuration for the TTS.
-    - play_audio_stream (Callable): Function to play the audio stream.
-    """
-    try:
-        chunk_size = 1024
-
-        full_url = f"{ttsurl}/tts_stream"
-        params = {
-            'text': text,
-            'speaker_wav': tts_voice,
-            'language': "en"
-        }
-        headers = {'accept': 'audio/x-wav'}
-
-        response = requests.get(full_url, params=params, headers=headers, stream=True)
-        response.raise_for_status()
-
-        # Pass the response content to play_audio_stream
-        def tts_stream():
-            for chunk in response.iter_content(chunk_size=chunk_size):
-                yield chunk
-
-        play_audio_stream(tts_stream())
-    except Exception as e:
-        print(f"ERROR: Server TTS generation failed: {e}")
-
-def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
+async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
     """
     Generate TTS audio for the given text using the specified TTS system.
 
@@ -242,31 +111,46 @@ def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, t
     try:
         # Azure TTS generation
         if ttsoption == "azure":
-            if not azure_api_key or not azure_region:
-                raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Azure API key and region must be provided for ttsoption 'azure'.")
-            azure_tts(text, azure_api_key, azure_region, tts_voice)
+           async for chunk in text_to_speech_with_pipelining_azure(text):
+                yield chunk
 
         # Local TTS generation using `espeak-ng`
-        elif ttsoption == "local" and toggle_charvoice:
-            local_tts(text)
+        elif ttsoption == "espeak":
+            async for chunk in text_to_speech_with_pipelining_espeak(text):
+                yield chunk
 
-        # Local TTS generation using `espeak-ng`
-        elif ttsoption == "alltalk" and toggle_charvoice:
-            alltalk_tts(text, ttsurl, tts_voice)
-
+        elif ttsoption == "alltalk":
+            async for chunk in text_to_speech_with_pipelining_alltalk(text):
+                yield chunk
+                
         # Local TTS generation using local onboard PIPER TTS
-        elif ttsoption == "piper" and toggle_charvoice:
-            asyncio.run(text_to_speech_with_pipelining(text))
+        elif ttsoption == "piper":
+            async for chunk in text_to_speech_with_pipelining_piper(text):
+                yield chunk  
 
-        # Server-based TTS generation using `xttsv2`
-        elif ttsoption == "xttsv2" and toggle_charvoice:
-            if not ttsurl:
-                raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: TTS URL and play_audio_stream function must be provided for 'xttsv2'.")
-            server_tts(text, ttsurl, tts_voice)
+        elif ttsoption == "elevenlabs":
+            async for chunk in text_to_speech_with_pipelining_elevenlabs(text):
+                yield chunk
+
+        elif ttsoption == "silero":
+            async for chunk in text_to_speech_with_pipelining_silero(text):
+                yield chunk 
 
         else:
-            raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Invalid TTS option or character voice flag.")
+            raise ValueError(f"ERROR: Invalid TTS option.")
 
     except Exception as e:
-        print(f"ERROR: Text-to-speech generation failed: {e}")
+        queue_message(f"ERROR: Text-to-speech generation failed: {e}")
 
+async def play_audio_chunks(text, config):
+    """
+    Plays audio chunks sequentially from the generate_tts_audio function.
+    """
+    async for audio_chunk in generate_tts_audio(text, config):
+        try:
+            # Read the audio chunk into a format playable by sounddevice
+            data, samplerate = sf.read(audio_chunk, dtype='float32')
+            sd.play(data, samplerate)
+            await asyncio.sleep(len(data) / samplerate)  # Wait for playback to finish
+        except Exception as e:
+            queue_message(f"ERROR: Failed to play audio chunk: {e}")

@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="titleid">AI</title>
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/index.css') }}" rel="stylesheet">
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
+    <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}" rel="stylesheet">
+    <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}">
+</head>
+<body>
+  <audio id="audioPlayer" controls hidden>
+      Your browser does not support the audio element.
+  </audio>
+        <script>
+            // Declare a global variable to store the base URL
+            let talkingheadBaseUrl = '';
+
+            // Fetch the talking head base URL from the backend
+            fetch('/get_ip')
+                .then(response => response.json())
+                .then(data => {
+                    // Store the base URL in the global variable
+                    talkingheadBaseUrl = data.talkinghead_base_url;
+
+                    // Update the image source or do other initial actions
+                    const fullUrl = talkingheadBaseUrl + "/stream";
+                    document.getElementById('backgroundImage').src = fullUrl;
+                })
+                .catch(error => console.error('Error fetching talking head URL:', error));
+        </script>
+  <script>
+    const talkinghead_url = "{{ talkinghead_base_url }}";
+    const parser = new DOMParser();
+    let decodedUrl = parser.parseFromString(`<!doctype html><body>{{ talkinghead_base_url }}`, 'text/html').body.textContent;
+    decodedUrl = decodedUrl.replace(/^"|"$/g, '');
+    console.log(decodedUrl);
+    let isMuted = false;
+    
+    function start_talking() {
+        if (!isMuted) {
+            fetch(talkingheadBaseUrl + "/start_talking")
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok');
+                            }
+                        })
+                        .catch(error => console.error('Fetch error:', error));
+            }
+        }
+    
+    function stop_talking() {
+        fetch(talkingheadBaseUrl + "/stop_talking")
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                    })
+                    .catch(error => console.error('Fetch error:', error));
+        }
+
+    document.addEventListener("DOMContentLoaded", function () {
+          const audioPlayer = document.getElementById("audioPlayer");
+          const muteButton = document.getElementById("muteButton");
+
+          // Initialize the audio as unmuted
+
+          muteButton.addEventListener("click", function () {
+        const icon = this.querySelector('i'); // Find the icon within the button
+        if (isMuted) {
+            // If audio is currently muted, unmute it and switch icon to volume-up
+            audioPlayer.muted = false;
+            icon.classList.remove('bi-volume-mute-fill');
+            icon.classList.add('bi-volume-up-fill');
+            muteButton.setAttribute('aria-label', 'Mute'); // Update aria-label for accessibility
+                              // Check if the audio is playing
+            if (!audioPlayer.paused) {
+            // Send fetch request to start talking
+
+
+   
+            //const startTalkingUrl = talkingheadBaseUrl + "/start_talking";
+            start_talking();
+        }
+        } else {
+            // If audio is currently unmuted, mute it and switch icon to volume-mute
+            audioPlayer.muted = true;
+            icon.classList.remove('bi-volume-up-fill');
+            icon.classList.add('bi-volume-mute-fill');
+            muteButton.setAttribute('aria-label', 'Unmute'); // Update aria-label for accessibility
+            
+                              // Send fetch request to stop talking
+            stop_talking();
+            }
+
+        // Toggle the mute state
+        isMuted = !isMuted;
+    });
+    });
+
+      var audioPlayer = document.getElementById('audioPlayer');
+
+      // Function to handle the 'ended' event
+      function handleAudioEnd() {
+          // Call the /talking_stop endpoint right after the audio stops if not muted
+          if (!audioPlayer.muted) {
+              fetch(talkingheadBaseUrl + "/stop_talking")
+                  .then(response => {
+                      if (!response.ok) {
+                          throw new Error('Network response was not ok');
+                      }
+                      // Handle the response if necessary
+                  })
+                  .catch(error => console.error('Fetch error:', error));
+          }
+      }
+
+      // Add event listener for 'ended' event
+      audioPlayer.addEventListener('ended', handleAudioEnd);
+
+    let audioStarted = false; // Prevent multiple requests
+    let firstChunkPlayed = false; // Track if first chunk already played
+
+    function startAudioStream() {
+        if (audioStarted) {
+            // console.log("Audio stream already started, ignoring duplicate request.");
+            return; // 🚨 Prevent duplicate requests
+        }
+        audioStarted = true; // ✅ Mark that audio has started
+        firstChunkPlayed = false; // ✅ Reset for new message
+
+        fetch('/audio_stream')
+            .then(response => response.blob())
+            .then(blob => {
+                if (blob.size === 0) {
+                    // console.error("Received an empty first chunk!");
+                    return;
+                }
+
+                const audioUrl = URL.createObjectURL(blob);
+                audioPlayer.src = audioUrl;
+                audioPlayer.load();
+
+                audioPlayer.play().then(() => {
+                    // console.log("Playing first MP3 chunk...");
+                    firstChunkPlayed = true; // ✅ Mark first chunk as played
+
+                    // ✅ Wait for first chunk to finish before fetching next
+                    audioPlayer.onended = function () {
+                        // console.log("First chunk finished, requesting next...");
+                        setTimeout(() => {
+                            playNextAudioChunk();
+                        }, 500);
+                    };
+                }).catch(error => {
+                    console.error("Error playing first MP3 chunk:", error);
+                });
+            })
+            .catch(error => console.error("Error starting MP3 audio stream:", error));
+    }
+
+    function playNextAudioChunk() {
+    fetch('/get_next_audio_chunk')
+        .then(response => {
+            if (response.status === 204) {
+                // console.log("No more audio chunks.");
+                stop_talking()
+                audioStarted = false; // ✅ Reset audio system after last chunk
+                return null; // No more content
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            if (blob) {
+                const audioUrl = URL.createObjectURL(blob);
+                audioPlayer.src = audioUrl;
+                audioPlayer.load();
+
+                audioPlayer.play().then(() => {
+                    // console.log("Playing next MP3 chunk...");
+                        start_talking()
+                    // ✅ Ensure we reset audioStarted only after the last chunk
+                    audioPlayer.onended = function () {
+                        // console.log("Chunk finished, requesting next...");
+                        setTimeout(() => playNextAudioChunk(), 500);
+                    };
+                });
+            }
+        })
+        .catch(error => console.error("Error fetching next MP3 chunk:", error));
+}
+
+  </script>
+        <div class="chat-container">
+            <div class="card h-100 gradient-custom">
+                <div class="card-body" data-mdb-perfect-scrollbar="true">
+                    <div class="chat-messages" style="padding: 0%; margin: 0%;">
+                        <div class="d-flex justify-content-left" style="padding: 0px; margin: 0px;">
+                            <p class="small mb-1 name" id="bot name" style="padding: 0px; margin: 0px;">$CHARNAME</p>
+                            <p class="small mb-1 text-muted" id="timestamp first" style="padding: 0px; margin: 0px;"></p>
+                        </div>
+                        <div class="d-flex flex-row justify-content-left mb-4 pt-1" style="display: inline-block;">
+                            <img src="{{ url_for('static', filename='imgs/user.png') }}" id="bot png" alt="avatar 1"
+                                style="width: 45px; height: 100%;">
+                            <div class="d-flex flex-row"
+                                style="box-shadow: 0 2px 4px rgb(0, 0, 0, 0.404); border: 0px solid rgb(129, 129, 129); margin-bottom: 0px; background-color: rgba(0, 0, 0, 0.404); border-radius: 10px; padding: 1%;">
+                                <p class="firstmess" id="bot firstmess"
+                                    style="margin: 0px; padding: 0px; align-items: center; justify-content: center; color: rgb(204, 204, 204);">$REPLACEFIRSTMEMESSAGE</p>
+                            </div>
+                        </div>
+                        <div id="output"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <img id="backgroundImage" src="" alt="Background Image">
+    </div>
+
+
+    <form id="imageUploadForm" method="POST" enctype="multipart/form-data" action="/upload" hidden>
+        <input class="form-control" type="file" id="imageUpload" name="file" accept="image/*">
+        <!-- The label is not needed if the form is hidden and triggered by another button -->
+    </form>
+
+    <!-- Image Preview Container -->
+    <div id="imagePreviewContainer">
+        <img id="imagePreview" src="" alt="Preview">
+        <button id="removeImageButton">
+            <i class="bi bi-x"></i>
+        </button>
+    </div>
+
+    <div class="input-group">
+        <input type="text" id="prompt" class="form-control border-end-0" placeholder="Type message" aria-label="Recipient's username" aria-describedby="button-addon2" />
+        <button id="muteButton" class="btn btn-secondary" type="button" aria-label="Mute">
+            <i class="bi bi-volume-up-fill"></i>
+        </button>
+        <button id="uploadImageButton" class="btn btn-primary" type="button" aria-label="Upload">
+            <i class="bi bi-upload"></i> <!-- Changed icon to better reflect action -->
+        </button>
+        <button class="btn btn-primary" type="button" id="button-addon2" aria-label="Send">
+            <i class="bi bi-arrow-right-circle-fill"></i>
+        </button>
+    </div>
+
+<script>
+    
+
+document.addEventListener('DOMContentLoaded', function() {
+    
+
+    let selectedImageFile = null; // Store the image file
+
+document.getElementById('uploadImageButton').addEventListener('click', function () {
+    document.getElementById('imageUpload').click();
+});
+
+document.getElementById('imageUpload').addEventListener('change', function () {
+    const imageFile = this.files[0];
+
+    if (imageFile) {
+        console.log("Image selected:", imageFile.name); // ✅ Check if image is detected
+        selectedImageFile = imageFile; // Store the image file
+        
+        // Show the preview
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            document.getElementById('imagePreview').src = e.target.result;
+            document.getElementById('imagePreviewContainer').style.display = 'block';
+        };
+        reader.readAsDataURL(imageFile);
+    }
+});
+
+
+// Remove Image Button
+document.getElementById('removeImageButton').addEventListener('click', function () {
+    selectedImageFile = null; // Clear stored image
+    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+    if (imagePreviewContainer) {
+        imagePreviewContainer.style.display = 'none';
+        document.getElementById("imagePreview").src = ""; // Clear preview source
+    }
+});
+
+
+var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+    socket.on('bot_message', function(data) {
+        //console.log('Received botmessage:', data.message);
+        displayBotMessage(data.message);
+    });
+
+    socket.on('user_message', function(data) {
+        //console.log('Received botmessage:', data.message);
+        displayUserMessage(data.message);
+    });
+
+    socket.on('disconnect', function() {
+        console.log('Disconnected from server. Attempting to reconnect...');
+        setTimeout(function() {
+            socket.connect();
+        }, 5000); // Attempt to reconnect after 5 seconds
+    });
+
+    socket.on('heartbeat', function(msg) {
+        //console.log('Heartbeat received from server');
+        socket.emit('heartbeat', {status: 'alive'});
+    });
+
+
+
+    function formatText(text) {
+    // Convert newline characters to HTML line breaks
+    text = text.replace(/\n/g, '<br>');
+
+    // Replace text enclosed within * with emphasized text
+    text = text.replace(/\*(.*?)\*/g, '<span class="emphasized-text">$1</span>'); 
+
+    // Replace text enclosed within `` with code text styling
+    text = text.replace(/``(.*?)``/g, '<span class="code-text">$1</span>');
+
+    // Corrected Unicode character replacement
+    text = text.replace(/\\u([\dA-F]{4})/gi, function(match, group1) {
+        return String.fromCharCode(parseInt(group1, 16));
+    });
+    
+    return text;
+}
+
+
+  try {
+      // Assign values to myChar properties
+      myChar = {
+        charName: "{{ char_name }}",
+        char_greeting: "{{ char_greeting }}"
+      };
+
+      // Set values in the HTML elements
+      const botFirstMess = document.getElementById('bot firstmess');
+
+      botFirstMess.innerHTML = formatText(myChar.char_greeting);
+  
+      const botName = document.getElementById('bot name');
+      botName.innerHTML = myChar.charName;
+
+      const titleid = document.getElementById('titleid');
+      titleid.innerHTML = myChar.charName;
+
+      const botPng = document.getElementById('bot png');
+      botPng.src = `{{ url_for('static', filename='imgs/char.png') }}`;
+  
+    } catch (error) {
+      console.error(error);
+    }
+
+    const promptInput = document.getElementById('prompt');
+    const sendButton = document.getElementById('button-addon2');
+
+
+    function sendMessage() {
+    const userInput = promptInput.value.trim();
+    if (userInput || selectedImageFile) {
+        displayUserMessage(userInput);
+        sendUserMessage(userInput, selectedImageFile);
+
+        promptInput.value = '';
+
+        // ✅ Remove the image after sending
+        selectedImageFile = null; 
+        const imagePreviewContainer = document.getElementById("imagePreviewContainer");
+        if (imagePreviewContainer) {
+            imagePreviewContainer.style.display = "none";
+            document.getElementById("imagePreview").src = "";
+        }
+
+        delayedMessage();
+    }
+}
+
+sendButton.addEventListener("click", sendMessage);
+
+promptInput.addEventListener('keyup', function(event) {
+    if (event.key === 'Enter') {
+        sendMessage();
+    }
+});
+
+
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Usage within an async function
+    async function delayedMessage() {
+        await delay(1000); // Wait for 2 seconds
+        displayBotMessage("", true);
+    }
+
+function sendUserMessage(message, imageFile) {
+    const formData = new FormData();
+    formData.append("message", message);
+
+    if (imageFile) {
+        formData.append("file", imageFile);
+        console.log("File added to FormData:", imageFile.name); // ✅ Debugging
+    } else {
+        console.log("No image selected");
+    }
+
+    fetch("/process_llm", {
+        method: "POST",
+        body: formData,
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log("Server response:", data);
+    })
+    .catch(error => {
+        console.error("Error:", error);
+    });
+}
+
+
+
+
+    function displayBotMessage(message, isTemporary = false) {
+    const chatBody = document.getElementsByClassName("card-body")[0];
+
+    // Create elements for the bot message container
+    const responseContainer = document.createElement("div");
+    responseContainer.className = "d-flex flex-row justify-content-left mb-4 pt-1";
+
+    // Create the bot avatar image element
+    const avatarElement = document.createElement("img");
+    avatarElement.src = "/static/imgs/char.png"; // URL for the bot's avatar image
+    avatarElement.alt = "avatar 1";
+    avatarElement.style.width = "45px";
+    avatarElement.style.height = "100%";
+    responseContainer.appendChild(avatarElement);
+
+    // Create the message content container
+    const responseContent = document.createElement("div");
+    responseContent.className = "response-content";
+    responseContent.style.border = "0px solid rgb(129, 129, 129)";
+    responseContent.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.404)";
+    responseContent.style.backgroundColor = "rgba(0, 0, 0, 0.404)";
+    responseContent.style.borderRadius = "10px";
+    responseContent.style.padding = "1%";
+    responseContent.style.marginLeft = "10px"; // Add some space between the avatar and the message
+
+    // Parse the message for *emphasis* and apply styling
+    // const formattedMessage = message.replace(/\*(.*?)\*/g, '<font style="color: grey;">$1</font>');
+    const formattedMessage = formatText(message);
+    
+    // Create a div element to hold the formatted message
+    const responseText = document.createElement("div");
+    responseText.className = "response-text";
+    responseText.innerHTML = formattedMessage;
+
+    // Append the formatted message to the content container
+    responseContent.appendChild(responseText);
+
+    // Append the content container to the message container
+    responseContainer.appendChild(responseContent);
+
+    if (isTemporary) {
+        responseContainer.classList.add("is-typing");
+        // New code: Apply the typing-dots class to the specific element that will contain "Is Typing..."
+        const typingElement = document.createElement("div");
+        typingElement.textContent = "Is Typing";
+        typingElement.className = "typing-dots"; // Apply the animation class
+        responseContent.appendChild(typingElement);
+    } else {
+        
+        // Remove any existing "Is typing..." messages when displaying a new actual message
+        removeTypingMessage();
+    }
+    // Append the complete message container to the chat body
+    chatBody.appendChild(responseContainer);
+
+    // Scroll to the bottom of the chat body to show the new message
+    chatBody.scrollTop = chatBody.scrollHeight;
+
+
+    startAudioStream();
+}
+
+    function removeTypingMessage() {
+        const chatBody = document.getElementsByClassName("card-body")[0];
+        const typingMessages = chatBody.getElementsByClassName("is-typing");
+        while (typingMessages.length > 0) {
+            typingMessages[0].parentNode.removeChild(typingMessages[0]);
+        }
+    }
+
+
+
+
+
+
+    function displayUserMessage(message) {
+    const chatBody = document.getElementsByClassName("card-body")[0];
+
+    // Create the user message container
+    var userInputContainer = document.createElement("div");
+    userInputContainer.className = "d-flex flex-row justify-content-end mb-4 pt-1";
+    userInputContainer.style.display = "inline-block";
+    userInputContainer.style.width = "100%"; // Ensure full width
+
+    // Create a separate div for the image (right-aligned)
+    const imgContainer = document.createElement("div");
+    imgContainer.style.display = "flex";
+    imgContainer.style.justifyContent = "flex-end"; // Image aligned to the right
+    imgContainer.style.width = "100%"; // Full width container
+    imgContainer.style.marginBottom = "5px"; // Space between image and text
+
+    // If an image is selected, add it to imgContainer
+    if (selectedImageFile) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const imgElement = document.createElement("img");
+            imgElement.src = e.target.result;
+            imgElement.style.maxWidth = "200px";
+            imgElement.style.borderRadius = "10px";
+            imgElement.style.display = "block";
+            imgElement.style.marginLeft = "auto"; // Forces image to right side
+            imgContainer.appendChild(imgElement);
+        };
+        reader.readAsDataURL(selectedImageFile);
+    }
+
+    // Create a div for the text (left-aligned)
+    var userInputContent = document.createElement("div");
+    userInputContent.className = "d-flex flex-column";
+    userInputContent.style.color = "rgb(204, 204, 204)";
+    userInputContent.style.border = "0px solid rgb(129, 129, 129)";
+    userInputContent.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.404)";
+    userInputContent.style.backgroundColor = "rgba(0, 0, 0, 0.404)";
+    userInputContent.style.borderRadius = "10px";
+    userInputContent.style.padding = "1%";
+    userInputContent.style.marginRight = "10px";
+    userInputContent.style.maxWidth = "80%"; // Increased to allow longer lines before wrapping
+    userInputContent.style.alignSelf = "flex-start"; // Ensures text stays left-aligned
+
+    // Create user input text
+    var userInputText = document.createElement("p");
+    userInputText.className = "firstmess";
+    userInputText.id = "user";
+    userInputText.innerHTML = formatText(message);
+    userInputText.style.color = "rgb(204, 204, 204)";
+    userInputText.style.margin = "0";
+    userInputText.style.padding = "0";
+
+    // ✅ Apply fixes for line breaking:
+    userInputText.style.whiteSpace = "nowrap"; // Prevents breaking until necessary
+    userInputText.style.wordBreak = "normal"; // Ensures words only break when necessary
+    userInputText.style.overflowWrap = "break-word"; // Allows breaking at natural word boundaries
+
+    // Append text inside the message bubble (aligned LEFT)
+    userInputContent.appendChild(userInputText);
+
+    // Append the elements in order: IMAGE (right-aligned) → TEXT (left-aligned)
+    userInputContainer.appendChild(imgContainer); // Image comes first
+    userInputContainer.appendChild(userInputContent); // Text below the image
+
+    var userAvatar = document.createElement("img");
+    userAvatar.src = "/static/imgs/user.png";
+    userAvatar.alt = "avatar 1";
+    userAvatar.style.width = "45px";
+    userAvatar.style.height = "100%";
+
+    userInputContainer.appendChild(userAvatar);
+    chatBody.appendChild(userInputContainer);
+
+    chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+
+});
+
+
+
+  </script>
+  
+</body>
+
+</html>

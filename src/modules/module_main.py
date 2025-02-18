@@ -12,13 +12,17 @@ import re
 import concurrent.futures
 import sys
 import time
+import asyncio
+import sounddevice as sd
+import soundfile as sf
 
 # === Custom Modules ===
 from modules.module_config import load_config
 from modules.module_btcontroller import start_controls
-from modules.module_tts import generate_tts_audio
 from modules.module_discord import *
 from modules.module_llm import process_completion
+from modules.module_tts import play_audio_chunks
+from modules.module_messageQue import queue_message
 
 # === Constants and Globals ===
 character_manager = None
@@ -37,33 +41,11 @@ def start_bt_controller_thread():
     Wrapper to start the BT Controller functionality in a thread.
     """
     try:
-        print(f"LOAD: Starting BT Controller thread...")
+        queue_message(f"LOAD: Starting BT Controller thread...")
         while not stop_event.is_set():
             start_controls()
     except Exception as e:
-        print(f"ERROR: {e}")
-
-def stream_text_nonblocking(text, delay=0.03):
-    """
-    Streams text character by character in a non-blocking way.
-
-    Parameters:
-    - text (str): The text to stream.
-    - delay (float): Delay (in seconds) between each character.
-    """
-    def stream():
-        for char in text:
-            sys.stdout.write(char)  # Write one character at a time
-            sys.stdout.flush()      # Ensure the text is shown immediately
-            time.sleep(delay)
-        
-        # Explicitly add only one newline
-        if not text.endswith("\n"):
-            sys.stdout.write("\n")
-            sys.stdout.flush()
-
-    # Run the streaming function in a separate thread
-    threading.Thread(target=stream, daemon=True).start()
+        queue_message(f"ERROR: {e}")
 
 # === Callback Functions ===
 def process_discord_message_callback(user_message):
@@ -78,7 +60,7 @@ def process_discord_message_callback(user_message):
     """
     try:
         # Parse the user message
-        #print(user_message)
+        #queue_message(user_message)
 
         match = re.match(r"<@(\d+)> ?(.*)", user_message)
 
@@ -87,16 +69,16 @@ def process_discord_message_callback(user_message):
             message_content = match.group(2).strip()  # Extracted message content (trim leading/trailing spaces)
 
         #stream_text_nonblocking(f"{mentioned_user_id}: {message_content}")
-        #print(message_content)
+        #queue_message(message_content)
 
         # Process the message using process_completion
         reply = process_completion(message_content)  # Process the message
 
-        #print(f"TARS: {reply}")
+        #queue_message(f"TARS: {reply}")
         #stream_text_nonblocking(f"TARS: {reply}")
         
     except Exception as e:
-        print(f"ERROR: {e}")
+        queue_message(f"ERROR: {e}")
 
     return reply
 
@@ -106,8 +88,8 @@ def wake_word_callback(wake_response):
 
     Parameters:
     - wake_response (str): The response to the wake word.
-    """
-    generate_tts_audio(wake_response, CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
+    """ 
+    asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption']))
 
 def utterance_callback(message):
     """
@@ -120,16 +102,16 @@ def utterance_callback(message):
         # Parse the user message
         message_dict = json.loads(message)
         if not message_dict.get('text'):  # Handles cases where text is "" or missing
-            #print(f"TARS: Going Idle...")
+            #queue_message(f"TARS: Going Idle...")
             return
         
         #Print or stream the response
-        #print(f"USER: {message_dict['text']}")
-        stream_text_nonblocking(f"USER: {message_dict['text']}")
+        #queue_message(f"USER: {message_dict['text']}")
+        queue_message(f"USER: {message_dict['text']}", stream=True) 
 
         # Check for shutdown command
         if "shutdown pc" in message_dict['text'].lower():
-            print(f"SHUTDOWN: Shutting down the PC...")
+            queue_message(f"SHUTDOWN: Shutting down the PC...")
             os.system('shutdown /s /t 0')
             return  # Exit function after issuing shutdown command
         
@@ -148,30 +130,22 @@ def utterance_callback(message):
 
         # Debug output for thoughts
         if thoughts:
-            #print(f"DEBUG: Thoughts\n{thoughts}")
+            #queue_message(f"DEBUG: Thoughts\n{thoughts}")
             pass
 
         # Stream the AI's reply
-        stream_text_nonblocking(f"TARS: {reply}")
+        queue_message(f"TARS: {reply}", stream=True) 
 
         # Strip special chars so he doesnt say them
         reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-]', '', reply)
         
         # Stream TTS audio to speakers
-        generate_tts_audio(
-            reply,
-            CONFIG['TTS']['ttsoption'],
-            CONFIG['TTS']['azure_api_key'],
-            CONFIG['TTS']['azure_region'],
-            CONFIG['TTS']['ttsurl'],
-            CONFIG['TTS']['toggle_charvoice'],
-            CONFIG['TTS']['tts_voice']
-        )
+        asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
 
     except json.JSONDecodeError:
-        print("ERROR: Invalid JSON format. Could not process user message.")
+        queue_message("ERROR: Invalid JSON format. Could not process user message.")
     except Exception as e:
-        print(f"ERROR: {e}")
+        queue_message(f"ERROR: {e}")
 
 def post_utterance_callback():
     """

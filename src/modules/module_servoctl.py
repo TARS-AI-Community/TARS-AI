@@ -16,7 +16,9 @@ import Adafruit_PCA9685
 from threading import Thread
 from datetime import datetime
 
+from modules.module_messageQue import queue_message
 from module_config import load_config
+
 config = load_config()
 
 
@@ -25,10 +27,10 @@ try:
     pwm = Adafruit_PCA9685.PCA9685(busnum=1)
     pwm.set_pwm_freq(60)  # Set frequency to 60 Hz for servos
 except FileNotFoundError as e:
-    print(f"ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
+    queue_message(f"ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
     pwm = None  # Fallback if hardware is unavailable
 except Exception as e:
-    print(f"ERROR: Unexpected error during PCA9685 initialization: {e}")
+    queue_message(f"ERROR: Unexpected error during PCA9685 initialization: {e}")
     pwm = None  # Fallback if hardware is unavailable
 
 # Servo Configuration Mapping with Integer Casting
@@ -60,12 +62,12 @@ perfectStaroffset = int(config["SERVO"]["perfectStaroffset"])  # Use this to fin
 # moves the torso from a neutral position upwards, allowing the torso to pivot forwards or backwards
 def height_neutral_to_up():
 	height = neutralHeight
-	#print('setting center servo (0) Neutral --> Up position')
+	#queue_message('setting center servo (0) Neutral --> Up position')
 	while (height > upHeight):
 		height = height - 1
 		pwm.set_pwm(0, 0, height)
 		time.sleep(0.001)
-	#print('center servo (0) set to: Up position\n ')
+	#queue_message('center servo (0) set to: Up position\n ')
 
 # rotates the torso outwards, enough so that when TARS pivots and lands, the bottom of the torso is 
 # flush with the ground. Making the torso flush with the ground is an intentional improvement from
@@ -75,42 +77,42 @@ def height_neutral_to_up():
 def torso_neutral_to_forwards():
 	port = neutralPort
 	starboard = neutralStarboard
-	#print('setting port and starboard servos (1)(2) Neutral --> Forward')
+	#queue_message('setting port and starboard servos (1)(2) Neutral --> Forward')
 	while (port < forwardPort):
 		port = port + 1
 		starboard = starboard - 1
 		pwm.set_pwm(1, 1, port)
 		pwm.set_pwm(2, 2, starboard)
 		time.sleep(0.0001)
-	#print('port and starboard servos (1)(2) set to: Forward position\n ')
+	#queue_message('port and starboard servos (1)(2) set to: Forward position\n ')
 
 def torso_neutral_to_backwards():
 	port = neutralPort
 	starboard = neutralStarboard
-	#print('setting port and starboard servos (1)(2) Neutral --> Forward')
+	#queue_message('setting port and starboard servos (1)(2) Neutral --> Forward')
 	while (port > backPort):
 		port = port - 1
 		starboard = starboard + 1
 		pwm.set_pwm(1, 1, port)
 		pwm.set_pwm(2, 2, starboard)
 		time.sleep(0.0001)
-	#print('port and starboard servos (1)(2) set to: Forward position\n ')
+	#queue_message('port and starboard servos (1)(2) set to: Forward position\n ')
 
 # rapidly shifts the torso height from UP --> DOWN and then returns --> UP, which should cause TARS 
 # to pivot and land on it's torso
 def torso_bump():
 	height = upHeight
-	#print('performing a torso bump\nsetting center servo (0) Up --> Down position FAST')
+	#queue_message('performing a torso bump\nsetting center servo (0) Up --> Down position FAST')
 	while (height < downHeight):
 		height = height + 2
 		pwm.set_pwm(0, 0, height)
 		time.sleep(0.000001)
-	#print('setting center servo (0) Down --> Up position FAST')
+	#queue_message('setting center servo (0) Down --> Up position FAST')
 	while (height > upHeight):
 		height = height - 1
 		pwm.set_pwm(0, 0, height)
 		time.sleep(0.0001)
-	#print('center servo (0) returned to Up position\n')
+	#queue_message('center servo (0) returned to Up position\n')
 	
 # returns the torso's vertical height and rotation to centered values from up height and forward 
 # rotation. Activates two external functions so movement in both axes can occur in parallel.
@@ -125,19 +127,19 @@ def torso_return():
 def torso_return_rotation():
 	port = forwardPort
 	starboard = forwardStarboard
-	#print('setting port and starboard servos (1)(2) Forward --> Neutral position')
+	#queue_message('setting port and starboard servos (1)(2) Forward --> Neutral position')
 	while (port > neutralPort):
 		port = port - 1
 		starboard = starboard + 1
 		pwm.set_pwm(1, 1, port)
 		pwm.set_pwm(2, 2, starboard)
 		time.sleep(0.005)
-	#print('port and starboard servos (1)(2) set to: Neutral position\n ')
+	#queue_message('port and starboard servos (1)(2) set to: Neutral position\n ')
 
 # returns torso's vertical to neutral from up	
 def torso_return_vertical():
 	height = upHeight
-	#print('setting center servo (0) Up --> Down position')
+	#queue_message('setting center servo (0) Up --> Down position')
 	# moving the torso down to create clearance for the rotation of the legs
 	while (height < downHeight):
 		height = height + 1
@@ -149,7 +151,7 @@ def torso_return_vertical():
 		height = height - 1
 		pwm.set_pwm(0, 0, height)
 		time.sleep(0.00001)
-	#print('center servo (0) set to: Neutral position\n ')
+	#queue_message('center servo (0) set to: Neutral position\n ')
 
 def torso_return2():
 	t1 = Thread(target = torso_return_rotation2)
@@ -162,19 +164,19 @@ def torso_return2():
 def torso_return_rotation2():
 	port = backPort
 	starboard = backStarboard
-	#print('setting port and starboard servos (1)(2) Forward --> Neutral position')
+	#queue_message('setting port and starboard servos (1)(2) Forward --> Neutral position')
 	while (port < neutralPort):
 		port = port + 1
 		starboard = starboard - 1
 		pwm.set_pwm(1, 1, port)
 		pwm.set_pwm(2, 2, starboard)
 		time.sleep(0.01)
-	#print('port and starboard servos (1)(2) set to: Neutral position\n ')
+	#queue_message('port and starboard servos (1)(2) set to: Neutral position\n ')
 
 # returns torso's vertical to neutral from up	
 def torso_return_vertical2():
 	height = upHeight
-	#print('setting center servo (0) Up --> Down position')
+	#queue_message('setting center servo (0) Up --> Down position')
 	# moving the torso down to create clearance for the rotation of the legs
 	while (height < downHeight):
 		height = height + 1
@@ -186,13 +188,13 @@ def torso_return_vertical2():
 		height = height - 1
 		pwm.set_pwm(0, 0, height)
 		time.sleep(0.001)
-	#print('center servo (0) set to: Neutral position\n ')
+	#queue_message('center servo (0) set to: Neutral position\n ')
 
 
 # moves the torso from neutral position to down
 def neutral_to_down():
     height = neutralHeight
-    #print('setting center servo (0) Neutral --> Down position')
+    #queue_message('setting center servo (0) Neutral --> Down position')
     while (height < downHeight):
         height = height + 1
         pwm.set_pwm(0, 0, height)
@@ -200,7 +202,7 @@ def neutral_to_down():
         
 def down_to_up():
     height = downHeight
-    #print('setting center servo (0) Down --> Neutral position')
+    #queue_message('setting center servo (0) Down --> Neutral position')
     while (height > upHeight):
         height = height - 1
         pwm.set_pwm(0, 0, height)
@@ -208,7 +210,7 @@ def down_to_up():
 
 def down_to_neutral():
     height = downHeight
-    #print('setting center servo (0) Down --> Neutral position')
+    #queue_message('setting center servo (0) Down --> Neutral position')
     while (height > neutralHeight):
         height = height - 1
         pwm.set_pwm(0, 0, height)
@@ -216,7 +218,7 @@ def down_to_neutral():
 
 def neutral_to_down():
     height = neutralHeight
-    #print('setting center servo (0) Down --> Neutral position')
+    #queue_message('setting center servo (0) Down --> Neutral position')
     while (height < downHeight):
         height = height + 1
         pwm.set_pwm(0, 0, height)
@@ -273,16 +275,16 @@ def portMainPlus():
     portMain = portMain - 10
     pwm.set_pwm(3, 3, portMain)
     time.sleep(0.0001)
-    print("increase starMain")
-    print(portMain)
+    queue_message("increase starMain")
+    queue_message(portMain)
 
 def portMainMinus():
     global portMain
     portMain = portMain + 10
     pwm.set_pwm(3, 3, portMain)
     time.sleep(0.0001)
-    print("decrease starMain")
-    print(portMain) 
+    queue_message("decrease starMain")
+    queue_message(portMain) 
 
 # port Forarm
 def portForarmPlus():
@@ -290,16 +292,16 @@ def portForarmPlus():
     portForarm = portForarm - 10
     pwm.set_pwm(4, 4, portForarm)
     time.sleep(0.0001)
-    print("increase starForarm")
-    print(portForarm)
+    queue_message("increase starForarm")
+    queue_message(portForarm)
 
 def portForarmMinus():
     global portForarm
     portForarm = portForarm + 10
     pwm.set_pwm(4, 4, portForarm)
     time.sleep(0.0001)
-    print("decrease starForarm")
-    print(portForarm) 
+    queue_message("decrease starForarm")
+    queue_message(portForarm) 
 
 # port Hand
 def portHandPlus():
@@ -307,16 +309,16 @@ def portHandPlus():
     portHand = portHand - 10
     pwm.set_pwm(5, 5, portHand)
     time.sleep(0.0001)
-    print("increase starHand")
-    print(portHand)
+    queue_message("increase starHand")
+    queue_message(portHand)
 
 def portHandMinus():
     global portHand
     portHand = portHand + 10
     pwm.set_pwm(5, 5, portHand)
     time.sleep(0.0001)
-    print("decrease starHand")
-    print(portHand)
+    queue_message("decrease starHand")
+    queue_message(portHand)
     
 # starboard Main Arm
 def starMainPlus():
@@ -324,16 +326,16 @@ def starMainPlus():
     starMain = starMain + 10
     pwm.set_pwm(6, 6, starMain)
     time.sleep(0.0001)
-    print("increase starMain")
-    print(starMain)
+    queue_message("increase starMain")
+    queue_message(starMain)
 
 def starMainMinus():
     global starMain
     starMain = starMain - 10
     pwm.set_pwm(6, 6, starMain)
     time.sleep(0.0001)
-    print("decrease starMain")
-    print(starMain) 
+    queue_message("decrease starMain")
+    queue_message(starMain) 
 
 # port Forarm
 def starForarmPlus():
@@ -341,16 +343,16 @@ def starForarmPlus():
     starForarm = starForarm + 10
     pwm.set_pwm(7, 7, starForarm)
     time.sleep(0.0001)
-    print("increase starForarm")
-    print(starForarm)
+    queue_message("increase starForarm")
+    queue_message(starForarm)
 
 def starForarmMinus():
     global starForarm
     starForarm = starForarm - 10
     pwm.set_pwm(7, 7, starForarm)
     time.sleep(0.0001)
-    print("decrease starForarm")
-    print(starForarm) 
+    queue_message("decrease starForarm")
+    queue_message(starForarm) 
 
 # port Hand
 def starHandPlus():
@@ -358,13 +360,13 @@ def starHandPlus():
     starHand = starHand + 10
     pwm.set_pwm(8, 8, starHand)
     time.sleep(0.0001)
-    print("increase starHand")
-    print(starHand)
+    queue_message("increase starHand")
+    queue_message(starHand)
 
 def starHandMinus():
     global starHand
     starHand = starHand - 10
     pwm.set_pwm(8, 8, starHand)
     time.sleep(0.0001)
-    print("decrease starHand")
-    print(starHand) 
+    queue_message("decrease starHand")
+    queue_message(starHand) 

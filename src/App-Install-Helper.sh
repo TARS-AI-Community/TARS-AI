@@ -9,6 +9,7 @@ sudo apt install -y chromium-browser
 sudo apt install -y chromium-chromedriver
 sudo apt install -y sox libsox-fmt-all
 sudo apt install -y portaudio19-dev
+sudo apt install -y ffmpeg
 chromium-browser --version
 chromedriver --version
 sox --version

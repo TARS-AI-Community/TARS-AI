@@ -18,6 +18,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
+from modules.module_messageQue import queue_message
+
 # === Constants ===
 DEFAULT_TRAINING_DATA_PATH = '../engine/training/training_data.csv'
 DEFAULT_MODEL_PATH = '../engine/pickles/naive_bayes_model.pkl'
@@ -30,7 +32,7 @@ def delete_existing_files(nb_classifier_path=DEFAULT_MODEL_PATH, vectorizer_path
     for file_path in [nb_classifier_path, vectorizer_path]:
         if os.path.exists(file_path):
             os.remove(file_path)
-            print(f"LOAD: {file_path} deleted successfully.")
+            queue_message(f"LOAD: {file_path} deleted successfully.")
 
 def sort_and_save_data(df):
     """
@@ -41,7 +43,7 @@ def sort_and_save_data(df):
     """
     sorted_df = df.sort_values(by='label')
     sorted_df.to_csv('engine/training/sorted_training_data.csv', index=False)
-    # print(f"LOAD: Data sorted and saved as 'sorted_training_data.csv'.")
+    # queue_message(f"LOAD: Data sorted and saved as 'sorted_training_data.csv'.")
 
 def train_and_validate_model(df_train, nb_classifier_path, vectorizer_path):
     """
@@ -78,12 +80,12 @@ def train_and_validate_model(df_train, nb_classifier_path, vectorizer_path):
     # Validate the model
     val_predictions = calibrated_classifier.predict(val_vectors)
     accuracy = accuracy_score(val_df['label'], val_predictions)
-    print(f"LOAD: Validation Accuracy: {accuracy:.2%}")
+    queue_message(f"LOAD: Validation Accuracy: {accuracy:.2%}")
 
     # Save the model and vectorizer
     joblib.dump(nb_classifier, nb_classifier_path)
     joblib.dump(vectorizer, vectorizer_path)
-    print(f"LOAD: Model and vectorizer saved successfully.")
+    queue_message(f"LOAD: Model and vectorizer saved successfully.")
 
     return accuracy
 
@@ -105,11 +107,11 @@ def clean_data(train_df, val_df):
     # Check for data leakage
     common_queries = set(train_df['query']).intersection(set(val_df['query']))
     if common_queries:
-        print(f"LOAD: Training data leaked into validation data!")
+        queue_message(f"LOAD: Training data leaked into validation data!")
         val_df = val_df[~val_df['query'].isin(common_queries)]
-        print(f"LOAD: Validation data cleaned.")
+        queue_message(f"LOAD: Validation data cleaned.")
     else:
-        print(f"LOAD: No data leakage detected.")
+        queue_message(f"LOAD: No data leakage detected.")
 
     return train_df, val_df
 
@@ -129,7 +131,7 @@ def train_text_classifier(
     - vectorizer_path (str): Path to save the TF-IDF vectorizer.
     - user_input (str): User input to control data preparation ('y' for training, 's' for sorting).
     """
-    # print(f"Using scikit-learn version: {sklearn_version}")
+    # queue_message(f"Using scikit-learn version: {sklearn_version}")
 
     # Remove existing model and vectorizer files
     delete_existing_files(nb_classifier_path, vectorizer_path)
@@ -143,4 +145,4 @@ def train_text_classifier(
     elif user_input.lower() == 'y':
         train_and_validate_model(df_train, nb_classifier_path, vectorizer_path)
     else:
-        print("Script terminated. Run the script again and type 'y' or 's' when prompted.")
+        queue_message("Script terminated. Run the script again and type 'y' or 's' when prompted.")

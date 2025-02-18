@@ -25,10 +25,14 @@ import numpy as np
 import random
 import requests
 from typing import List, Union
-
+import bm25s
+import Stemmer
+from sentence_transformers import CrossEncoder
 import configparser
+import torch
 
 from modules.module_config import get_api_key
+from modules.module_messageQue import queue_message
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -64,16 +68,16 @@ def get_embedding_new(documents):
                 # Format embeddings in scientific notation
                 formatted_embeddings = [[f"{val:0.8e}" for val in embedding] for embedding in embeddings]
 
-                #print("Embeddings:", formatted_embeddings)
+                #queue_message("Embeddings:", formatted_embeddings)
                 return formatted_embeddings
             else:
-                print("Error: 'data' key not found in API response.")
+                queue_message("Error: 'data' key not found in API response.")
                 return None
         except KeyError:
-            print("Error: 'data' key not found in API response.")
+            queue_message("Error: 'data' key not found in API response.")
             return None
     else:
-        print("Error:", response.status_code, response.text)
+        queue_message("Error:", response.status_code, response.text)
         return None
 
 from sentence_transformers import SentenceTransformer
@@ -155,7 +159,19 @@ class HyperDB:
         key=None,
         embedding_function=None,
         similarity_metric="cosine",
+        rag_strategy="naive",
     ):
+        """
+            Initialize HyperDB with configurable RAG strategy.
+
+            Parameters:
+            - documents: Initial documents to index
+            - vectors: Pre-computed vectors for documents
+            - key: Key to extract text from documents
+            - embedding_function: Function to compute embeddings
+            - similarity_metric: Metric for vector similarity
+            - rag_strategy: 'naive' for vector-only or 'hybrid' for vector+BM25
+        """
         self.documents = documents or []
         self.documents = []
         self.vectors = None
@@ -163,9 +179,38 @@ class HyperDB:
             #lambda docs: get_embedding(docs, key=key)
             lambda docs: get_embedding(docs)
         )
+        self.rag_strategy = rag_strategy
+
+        if rag_strategy == "hybrid":
+            try:
+                self.reranker = CrossEncoder(
+                    'BAAI/bge-reranker-base',
+                    device='cuda' if torch.cuda.is_available() else 'cpu', 
+                    max_length=256,
+                )
+                queue_message("INFO: BGE reranker model loaded successfully")
+            except Exception as e:
+                queue_message(f"WARNING: Failed to load BGE reranker model: {e}")
+                self.reranker = None
+
+        # Initialize BM25 components
+        queue_message(f"INFO: Initializing HyperDB with {rag_strategy} RAG strategy")
+        if self.rag_strategy == "hybrid":
+            self.stemmer = Stemmer.Stemmer("english")
+            self.bm25_retriever = bm25s.BM25(method="lucene")
+            self.corpus_tokens = None
+            self.corpus_texts = []
+        else:
+            self.stemmer = None
+            self.bm25_retriever = None
+            self.corpus_tokens = None
+            self.corpus_texts = None
+
         if vectors is not None:
             self.vectors = vectors
             self.documents = documents
+            if self.rag_strategy == "hybrid" and documents:
+                self._init_bm25_index()
         else:
             self.add_documents(documents)
 
@@ -183,6 +228,28 @@ class HyperDB:
             raise Exception(
                 "Similarity metric not supported. Please use either 'dot', 'cosine', 'euclidean', 'adams', or 'derrida'."
             )
+
+    def _init_bm25_index(self):
+        """Initialize BM25 index with current documents"""
+        if self.rag_strategy != "hybrid":
+            return
+
+        self.corpus_texts = []
+        for doc in self.documents:
+            if isinstance(doc, dict):
+                text = ""
+                if "user_input" in doc:
+                    text += doc["user_input"] + " "
+                if "bot_response" in doc:
+                    text += doc["bot_response"]
+                if not text:  # If no specific fields found, use all text fields
+                    text = " ".join(str(v) for v in doc.values() if isinstance(v, (str, int, float)))
+            else:
+                text = str(doc)
+            self.corpus_texts.append(text.strip())
+            
+        self.corpus_tokens = bm25s.tokenize(self.corpus_texts, stopwords="en", stemmer=self.stemmer)
+        self.bm25_retriever.index(self.corpus_tokens)
 
     def dict(self, vectors=False):
         if vectors:
@@ -218,13 +285,14 @@ class HyperDB:
             vector = vector[0]
         else:
             # Handle the case where the embedding function returns None or an empty list
-            print("Error: Unable to get embeddings for the document.")
+            queue_message("Error: Unable to get embeddings for the document.")
             return
 
         if self.vectors is None:
             self.vectors = np.empty((0, len(vector)), dtype=np.float32)
         elif len(vector) != self.vectors.shape[1]:
             raise ValueError("All vectors must have the same length.")
+
         self.vectors = np.vstack([self.vectors, vector]).astype(np.float32)
         self.documents.append(document)
 
@@ -235,7 +303,7 @@ class HyperDB:
             vector = vector[0]
         else:
             # Handle the case where the embedding function returns None or an empty list
-            print("Error: Unable to get embeddings for the document.")
+            queue_message("Error: Unable to get embeddings for the document.")
             return
 
         if self.vectors is None:
@@ -244,6 +312,10 @@ class HyperDB:
             raise ValueError("All vectors must have the same length.")
         self.vectors = np.vstack([self.vectors, vector]).astype(np.float32)
         self.documents.append(document)
+
+        # Update BM25 index if using hybrid strategy
+        if self.rag_strategy == "hybrid":
+            self._init_bm25_index()
 
     def add_documents(self, documents, vectors=None):
         if not documents:
@@ -255,20 +327,38 @@ class HyperDB:
             self.add_document(document, vector)
 
     def remove_document(self, index):
+        """Remove a document by its index"""
         self.vectors = np.delete(self.vectors, index, axis=0)
         self.documents.pop(index)
+        if self.rag_strategy == "hybrid":
+            self.corpus_texts.pop(index)
+            self._init_bm25_index()
 
-    def save(self, storage_file):
-        data = {"vectors": self.vectors, "documents": self.documents}
-        if storage_file.endswith(".gz"):
-            with gzip.open(storage_file, "wb") as f:
-                pickle.dump(data, f)
-        else:
-            with open(storage_file, "wb") as f:
-                pickle.dump(data, f)
+    def save(self, storage_file: str):
+        """
+        Save the database state - only save essential data (vectors and documents).
+        The RAG strategy is a runtime configuration and should not be persisted.
+        """
+        data = {
+            "vectors": self.vectors,
+            "documents": self.documents
+        }
+        
+        try:
+            if storage_file.endswith(".gz"):
+                with gzip.open(storage_file, "wb") as f:
+                    pickle.dump(data, f)
+            else:
+                with open(storage_file, "wb") as f:
+                    pickle.dump(data, f)
+        except Exception as e:
+            queue_message(f"ERROR: Failed to save database: {e}")
 
-    def load(self, storage_file):
-        #print(f"loading {storage_file}")
+    def load(self, storage_file: str) -> bool:
+        """
+        Load the database state.
+        The RAG strategy remains as configured during initialization.
+        """
         try:
             if storage_file.endswith(".gz"):
                 with gzip.open(storage_file, "rb") as f:
@@ -277,21 +367,57 @@ class HyperDB:
                 with open(storage_file, "rb") as f:
                     data = pickle.load(f)
 
+            # Load only vectors and documents
             if "vectors" in data and data["vectors"] is not None:
                 self.vectors = data["vectors"].astype(np.float32)
             else:
                 self.vectors = None
 
             self.documents = data.get("documents", [])
-            return True  # Indicate successful loading
+            
+            # Re-initialize BM25 if we're in hybrid mode
+            if self.rag_strategy == "hybrid" and self.documents:
+                self._init_bm25_index()
+                    
+            return True
 
         except Exception as e:
-            print(f"Error loading memory: {e}")
+            queue_message(f"Error loading memory: {e}")
             import traceback
-            traceback.print_exc()  # Print detailed traceback for debugging
+            traceback.print_exc()
             return False
 
-    def query(self, query_text, top_k=5, return_similarities=True):
+    def query(self, query_text: str, top_k: int = 5, return_similarities: bool = True):
+        """
+        Query the database using the configured RAG strategy.
+        For backward compatibility, this uses either vector-only search or hybrid search
+        based on the configured rag_strategy.
+        
+        Parameters:
+            query_text (str): The text to search for
+            top_k (int): Number of results to return
+            return_similarities (bool): Whether to return similarity scores
+            
+        Returns:
+            List of documents or (document, score) tuples if return_similarities is True
+        """
+        if self.rag_strategy == "naive":
+            return self._vector_query(query_text, top_k, return_similarities)
+        else:  # hybrid
+            return self.hybrid_query(query_text, top_k, return_similarities=return_similarities)
+
+    def _vector_query(self, query_text: str, top_k: int = 5, return_similarities: bool = True):
+        """
+        Perform vector-only search.
+        
+        Parameters:
+            query_text (str): The text to search for
+            top_k (int): Number of results to return
+            return_similarities (bool): Whether to return similarity scores
+            
+        Returns:
+            List of documents or (document, score) tuples if return_similarities is True
+        """
         query_vector = self.embedding_function([query_text])[0]
         ranked_results, similarities = hyper_SVM_ranking_algorithm_sort(
             self.vectors, query_vector, top_k=top_k, metric=self.similarity_metric
@@ -301,3 +427,172 @@ class HyperDB:
                 zip([self.documents[index] for index in ranked_results], similarities)
             )
         return [self.documents[index] for index in ranked_results]
+
+    def _rerank_results(self, query: str, candidate_docs: list) -> list:
+        """
+        Rerank candidate documents using the BGE reranker model.
+        
+        Parameters:
+        - query: The search query
+        - candidate_docs: List of candidate documents to rerank
+        
+        Returns:
+        - List of (doc, score) tuples after reranking
+        """
+        if not hasattr(self, 'reranker') or not self.reranker or not candidate_docs:
+            return candidate_docs
+
+        try:
+            # Prepare pairs for reranking
+            pairs = []
+            for doc in candidate_docs:
+                # Extract text from document based on its type
+                if isinstance(doc, dict):
+                    text = ""
+                    if "user_input" in doc:
+                        text += doc["user_input"] + " "
+                    if "bot_response" in doc:
+                        text += doc["bot_response"]
+                    if not text:  # If no specific fields found, use all text fields
+                        text = " ".join(str(v) for v in doc.values() if isinstance(v, (str, int, float)))
+                else:
+                    text = str(doc)
+                # Format pairs for CrossEncoder
+                pairs.append([query, text])
+
+            scores = self.reranker.predict(pairs)
+            
+            # Ensure scores are in the right format
+            if isinstance(scores, (list, np.ndarray)):
+                rerank_scores = [float(score) for score in scores]
+            else:
+                rerank_scores = [float(scores)]
+
+            # Safety check for scores
+            if len(rerank_scores) != len(candidate_docs):
+                queue_message(f"WARNING: Mismatch between scores ({len(rerank_scores)}) and docs ({len(candidate_docs)})")
+                return candidate_docs
+            
+            # Sort documents by reranking scores
+            reranked_results = list(zip(candidate_docs, rerank_scores))
+            reranked_results.sort(key=lambda x: x[1], reverse=True)
+            
+            return reranked_results
+            
+        except Exception as e:
+            queue_message(f"WARNING: Reranking failed: {e}. Returning original order.")
+            import traceback
+            traceback.print_exc()
+            return candidate_docs
+
+    def hybrid_query(
+        self, 
+        query_text: str, 
+        top_k: int = 5, 
+        return_similarities: bool = True,
+        rrf_k: int = 60
+    ):
+        """
+        Hybrid search using RRF fusion and BGE reranker.
+        The pipeline: vector search -> BM25 -> RRF fusion -> BGE reranking.
+        """
+        if not self.documents or not self.vectors.size:
+            queue_message("WARNING: Empty database, returning empty results")
+            return [] if not return_similarities else []
+
+        if self.rag_strategy != "hybrid":
+            queue_message("WARNING: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
+            return self._vector_query(query_text, top_k, return_similarities)
+
+        try:
+            # Vector Search
+            query_vector = self.embedding_function([query_text])[0]
+            vector_results, vector_scores = hyper_SVM_ranking_algorithm_sort(
+                self.vectors, query_vector, top_k=min(top_k * 2, len(self.documents)), 
+                metric=self.similarity_metric
+            )
+            
+            # BM25 Search
+            query_tokens = bm25s.tokenize([query_text], stopwords="en", stemmer=self.stemmer)
+            bm25_results, bm25_scores = self.bm25_retriever.retrieve(query_tokens, k=min(top_k * 2, len(self.documents)))
+            
+            # Validate BM25 results
+            if not isinstance(bm25_results, (list, np.ndarray)) or not isinstance(bm25_scores, (list, np.ndarray)):
+                queue_message("WARNING: Invalid BM25 results format, falling back to vector search")
+                return self._vector_query(query_text, top_k, return_similarities)
+
+            try:
+                bm25_results = bm25_results[0]
+                bm25_scores = bm25_scores[0]
+            except (IndexError, TypeError) as e:
+                queue_message(f"WARNING: Error processing BM25 results: {e}")
+                return self._vector_query(query_text, top_k, return_similarities)
+
+            # RRF Fusion
+            vector_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(vector_results) 
+                        if isinstance(doc_id, (int, np.integer)) and doc_id < len(self.documents)}
+            bm25_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(bm25_results) 
+                        if isinstance(doc_id, (int, np.integer)) and doc_id < len(self.documents)}
+
+            if not vector_ranks and not bm25_ranks:
+                queue_message("WARNING: No valid ranks found")
+                return self._vector_query(query_text, top_k, return_similarities)
+
+            # Calculate RRF scores
+            rrf_scores = {}
+            all_doc_ids = set(vector_ranks.keys()) | set(bm25_ranks.keys())
+            
+            for doc_id in all_doc_ids:
+                if not isinstance(doc_id, (int, np.integer)) or doc_id >= len(self.documents):
+                    continue
+                vector_rank = vector_ranks.get(doc_id, len(self.documents) + 1)
+                bm25_rank = bm25_ranks.get(doc_id, len(self.documents) + 1)
+                rrf_score = (1 / (rrf_k + vector_rank)) + (1 / (rrf_k + bm25_rank))
+                rrf_scores[doc_id] = rrf_score
+
+            # Reranking
+            rrf_ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+            rrf_ranked = rrf_ranked[:min(top_k * 2, len(rrf_ranked))]
+            
+            # Create candidate docs
+            candidate_docs = []
+            valid_indices = []
+            for idx, score in rrf_ranked:
+                if isinstance(idx, (int, np.integer)) and idx < len(self.documents):
+                    candidate_docs.append(self.documents[idx])
+                    valid_indices.append(idx)
+
+            if not candidate_docs:
+                queue_message("WARNING: No valid candidates for reranking")
+                return self._vector_query(query_text, top_k, return_similarities)
+
+            # Apply reranking
+            reranked_results = self._rerank_results(query_text, candidate_docs)
+            
+            # Process results
+            try:
+                if reranked_results and isinstance(reranked_results[0], tuple):
+                    final_results = reranked_results[:min(top_k, len(reranked_results))]
+
+                    if return_similarities:
+                        return final_results
+                    return [doc for doc, _ in final_results]
+                else:
+                    queue_message("WARNING: Reranking failed, using RRF results")
+                    candidate_docs = candidate_docs[:min(top_k, len(candidate_docs))]
+                    if return_similarities:
+                        return [(doc, rrf_scores[idx]) for doc, idx in zip(candidate_docs, valid_indices[:len(candidate_docs)])]
+                    return candidate_docs
+
+            except (IndexError, TypeError) as e:
+                queue_message(f"WARNING: Error processing results: {e}")
+                candidate_docs = candidate_docs[:min(top_k, len(candidate_docs))]
+                if return_similarities:
+                    return [(doc, rrf_scores[idx]) for doc, idx in zip(candidate_docs, valid_indices[:len(candidate_docs)])]
+                return candidate_docs
+
+        except Exception as e:
+            queue_message(f"WARNING: Hybrid query failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return self._vector_query(query_text, top_k, return_similarities)

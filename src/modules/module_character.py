@@ -12,6 +12,7 @@ from datetime import datetime
 import configparser
 import os
 
+from modules.module_messageQue import queue_message
 
 class CharacterManager:
     """
@@ -57,11 +58,11 @@ class CharacterManager:
                                   f"\nWorld Scenario: {self.scenario}\n"#\
                                   #f"\nExample Dialog:\n{self.example_dialogue}\n"
 
-            print(f"LOAD: Character loaded: {self.char_name}")
+            queue_message(f"LOAD: Character loaded: {self.char_name}")
         except FileNotFoundError:
-            print(f"ERROR: Character file '{self.character_card_path}' not found.")
+            queue_message(f"ERROR: Character file '{self.character_card_path}' not found.")
         except Exception as e:
-            print(f"ERROR: Error while loading character attributes: {e}")
+            queue_message(f"ERROR: Error while loading character attributes: {e}")
 
     def load_persona_traits(self):
         """
@@ -73,10 +74,10 @@ class CharacterManager:
         try:
             config.read(persona_path)
             if 'PERSONA' not in config:
-                print("ERROR: [PERSONA] section not found in persona.ini.")
+                queue_message("ERROR: [PERSONA] section not found in persona.ini.")
                 return
 
             self.traits = {key: int(value) for key, value in config['PERSONA'].items()}
-            #print("Traits loaded:", self.traits)
+            #queue_message("Traits loaded:", self.traits)
         except Exception as e:
-            print(f"ERROR: Error while loading persona traits: {e}")
+            queue_message(f"ERROR: Error while loading persona traits: {e}")

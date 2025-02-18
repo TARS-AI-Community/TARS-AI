@@ -43,6 +43,7 @@ from modules.module_volume import handle_volume_command
 from modules.module_homeassistant import send_prompt_to_homeassistant
 from modules.module_tts import generate_tts_audio
 from modules.module_config import load_config, update_character_setting
+from modules.module_messageQue import queue_message
 
 # === Constants ===
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Move up to "src"
@@ -80,7 +81,7 @@ def execute_movement(movement, times):
     Executes the specified movement in a separate thread.
     """
     def movement_task():
-        print(f"[DEBUG] Thread started for movement: {movement} x {times}")
+        queue_message(f"[DEBUG] Thread started for movement: {movement} x {times}")
         from module_btcontroller import turnRight, turnLeft, poseaction, unposeaction, stepForward
         
         action_map = {
@@ -95,14 +96,14 @@ def execute_movement(movement, times):
             action_function = action_map.get(movement)
             if callable(action_function):
                 for i in range(int(times)):
-                    print(f"[DEBUG] Executing {movement}, iteration {i + 1}/{times}")
+                    queue_message(f"[DEBUG] Executing {movement}, iteration {i + 1}/{times}")
                     action_function()  # Blocking for this thread
             else:
-                print(f"[ERROR] Movement '{movement}' not found in action_map.")
+                queue_message(f"[ERROR] Movement '{movement}' not found in action_map.")
         except Exception as e:
-            print(f"[ERROR] Unexpected error while executing movement: {e}")
+            queue_message(f"[ERROR] Unexpected error while executing movement: {e}")
         finally:
-            print(f"[DEBUG] Thread completed for movement: {movement} x {times}")
+            queue_message(f"[DEBUG] Thread completed for movement: {movement} x {times}")
 
     # Start the thread
     thread = threading.Thread(target=movement_task, daemon=True)
@@ -110,6 +111,10 @@ def execute_movement(movement, times):
     return thread  # Return the thread object if needed
 
 def movement_llmcall(user_input):
+
+    if CONFIG['CONTROLS']['voicemovement'] != "True":
+        return
+    
     """
     Interpret and execute movement commands based on user input using an LLM.
 
@@ -204,30 +209,30 @@ def movement_llmcall(user_input):
         movement = extracted_data.get("movement")
         times = extracted_data.get("times")
 
-        print(f"[DEBUG] FunctionCalling: {data}")
-        print(f"[DEBUG] Extracted values: {movement}, {times}")
+        queue_message(f"[DEBUG] FunctionCalling: {data}")
+        queue_message(f"[DEBUG] Extracted values: {movement}, {times}")
 
         # Validate the extracted data
         if movement and times:
             if isinstance(movement, str) and isinstance(times, int):
-                print("moving")
+                queue_message("moving")
                 execute_movement(movement, times)  # Call the movement function with validated values
                 return True
             else:
-                print("[ERROR] Invalid types: 'movement' must be str and 'times' must be int.")
+                queue_message("[ERROR] Invalid types: 'movement' must be str and 'times' must be int.")
                 return False
         else:
-            print("[ERROR] Missing 'movement' or 'times' in the response.")
+            queue_message("[ERROR] Missing 'movement' or 'times' in the response.")
             return False
     
     except Exception as e:
-        #print(f"[DEBUG] Error in movement_llmcall: {e}")
+        #queue_message(f"[DEBUG] Error in movement_llmcall: {e}")
         return f"Error processing the movement command: {e}"
 
 def call_function(module_name, *args, **kwargs):
-    #print(f"[DEBUG] Calling module: {module_name}")
+    #queue_message(f"[DEBUG] Calling module: {module_name}")
     if module_name not in FUNCTION_REGISTRY:
-        #print(f"[DEBUG] No function registered for module: {module_name}")
+        #queue_message(f"[DEBUG] No function registered for module: {module_name}")
         return "Not a Function"
     func = FUNCTION_REGISTRY[module_name]
     try:
@@ -237,7 +242,7 @@ def call_function(module_name, *args, **kwargs):
         else:  # Pass arguments if required
             return func(*args, **kwargs)
     except Exception as e:
-        print(f"[DEBUG] Error while executing {module_name}: {e}")
+        queue_message(f"[DEBUG] Error while executing {module_name}: {e}")
 
 def check_for_module(user_input):
     """
@@ -278,14 +283,14 @@ def predict_class_nb(user_input):
     max_probability = max(predicted_probabilities[0])
     # Return None if confidence is below threshold
 
-    #print(f"TOOL: Using Tool {predicted_class} ({max_probability})")
+    #queue_message(f"TOOL: Using Tool {predicted_class} ({max_probability})")
 
     if max_probability < 0.75:
         return None, max_probability
 
     # Format the value as a percentage with 2 decimal places
     formatted_probability = "{:.2f}%".format(max_probability * 100)
-    print(f"TOOL: Using Tool {predicted_class} ({formatted_probability})")
+    queue_message(f"TOOL: Using Tool {predicted_class} ({formatted_probability})")
     generate_tts_audio("processing, processing, processing", CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
 
     return predicted_class, max_probability
@@ -337,41 +342,41 @@ def predict_class_llm(user_input):
         predicted_class = function_call.get("tool")
         confidence = function_call.get("confidence")
 
-        #print(f"[DEBUG] FunctionCalling: {data}")
-        print(f"[DEBUG] Extracted values: tool={predicted_class}, confidence={confidence}")
+        #queue_message(f"[DEBUG] FunctionCalling: {data}")
+        queue_message(f"[DEBUG] Extracted values: tool={predicted_class}, confidence={confidence}")
 
         # Validate the extracted values
         if predicted_class not in FUNCTION_REGISTRY:
-            print("[ERROR] Tool not recognized.")
+            queue_message("[ERROR] Tool not recognized.")
             return None, 0.0
 
         if not isinstance(confidence, (int, float)):
-            print("[INFO] Confidence value not provided or invalid. Defaulting to 50%.")
+            queue_message("[INFO] Confidence value not provided or invalid. Defaulting to 50%.")
             confidence = 50.0
 
         if confidence < 0 or confidence > 100:
-            print("[ERROR] Confidence value out of bounds. Setting to 50%.")
+            queue_message("[ERROR] Confidence value out of bounds. Setting to 50%.")
             confidence = 50.0
 
         # Normalize confidence to 0–1
         max_probability = confidence / 100.0
 
         if max_probability < 0.75:
-            print(f"[INFO] Confidence too low ({max_probability:.2f}). Tool not used.")
+            queue_message(f"[INFO] Confidence too low ({max_probability:.2f}). Tool not used.")
             return None, max_probability
 
         # Announce the decision via TTS (optional)
         formatted_probability = f"{max_probability * 100:.2f}%"
-        print(f"TOOL: Using Tool {predicted_class} ({formatted_probability})")
+        queue_message(f"TOOL: Using Tool {predicted_class} ({formatted_probability})")
         generate_tts_audio("processing, processing, processing", CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
 
         return predicted_class, max_probability
 
     except json.JSONDecodeError as e:
-        print(f"[ERROR] Failed to parse LLM response: {e}")
+        queue_message(f"[ERROR] Failed to parse LLM response: {e}")
         return None, 0.0
     except Exception as e:
-        print(f"[ERROR] Unexpected error in predict_class: {e}")
+        queue_message(f"[ERROR] Unexpected error in predict_class: {e}")
         return None, 0.0
     
 def adjust_persona(user_input):
@@ -483,24 +488,24 @@ def adjust_persona(user_input):
         trait = persona_data.get("trait")
         value = persona_data.get("value")
 
-        print(f"[DEBUG] FunctionCalling: {data}")
-        print(f"[DEBUG] Extracted values: {trait}, {value}")
+        queue_message(f"[DEBUG] FunctionCalling: {data}")
+        queue_message(f"[DEBUG] Extracted values: {trait}, {value}")
 
         # Validate the extracted data
         if trait and value:
             if isinstance(trait, str) and isinstance(value, int):
-                print(f"INFO: Saving {trait} setting")
+                queue_message(f"INFO: Saving {trait} setting")
                 update_character_setting(trait, value)
                 return f"Updated {trait} setting to {value}"
             else:
-                print("[ERROR] Invalid types")
+                queue_message("[ERROR] Invalid types")
                 return False
         else:
-            print("[ERROR] Missing in the response.")
+            queue_message("[ERROR] Missing in the response.")
             return False
     
     except Exception as e:
-        #print(f"[DEBUG] Error in movement_llmcall: {e}")
+        #queue_message(f"[DEBUG] Error in movement_llmcall: {e}")
         return f"Error processing the movement command: {e}"
  
 # === Function Calling ===

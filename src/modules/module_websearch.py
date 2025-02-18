@@ -22,6 +22,8 @@ from selenium.webdriver.support import expected_conditions as EC
 import atexit
 from datetime import datetime
 
+from modules.module_messageQue import queue_message
+
 # === Helper Functions ===
 # Silence logs to suppress unnecessary outputs
 @contextmanager
@@ -74,7 +76,7 @@ def wait_for_element(element_id: str, delay: int = 10):
     try:
         WebDriverWait(driver, delay).until(EC.presence_of_element_located((By.ID, element_id)))
     except Exception:
-        print(f"ERROR: Element with ID '{element_id}' not found.")
+        queue_message(f"ERROR: Element with ID '{element_id}' not found.")
         
 def extract_text(selector):
     """
@@ -131,7 +133,7 @@ def search_google(query):
     Returns:
     - tuple: Extracted content and links.
     """
-    print(f"INFO: Searching Google for: {query}")
+    queue_message(f"INFO: Searching Google for: {query}")
     driver.get("https://google.com/search?hl=en&q=" + query)
     wait_for_element('res')
     save_debug()
@@ -139,13 +141,13 @@ def search_google(query):
     text = ""
     # Featured snippets
     text += extract_text('.wDYxhc')
-    print(f"INFO: Featured snippets: {text}")
+    queue_message(f"INFO: Featured snippets: {text}")
     # Knowledge panels
     text += extract_text('.hgKElc')
-    print(f"INFO: Knowledge panels: {text}")
+    queue_message(f"INFO: Knowledge panels: {text}")
     # Page snippets
     text += extract_text('.r025kc.lVm3ye')
-    print(f"INFO: Page snippets: {text}")
+    queue_message(f"INFO: Page snippets: {text}")
     # Additional selectors for compatibility
     text += extract_text('.yDYNvb.lyLwlc')
 
@@ -161,7 +163,7 @@ def search_google_news(query):
     Returns:
     - tuple: Extracted content and links.
     """
-    print(f"INFO: Fetching Google News for: {query}")
+    queue_message(f"INFO: Fetching Google News for: {query}")
     return search_query(
         "https://google.com/search?hl=en&gl=us&tbm=nws&q=",
         query,
@@ -178,7 +180,7 @@ def search_duckduckgo(query):
     Returns:
     - tuple: Extracted content and links.
     """
-    print(f"INFO: Searching DuckDuckGo for: {query}")
+    queue_message(f"INFO: Searching DuckDuckGo for: {query}")
     return search_query(
         "https://duckduckgo.com/?kp=-2&kl=wt-wt&q=",
         query,
@@ -195,7 +197,7 @@ def search_mojeek(query):
     Returns:
     - tuple: Extracted content and links.
     """
-    print(f"INFO: Searching Mojeek for: {query}")
+    queue_message(f"INFO: Searching Mojeek for: {query}")
     base_url = "https://www.mojeek.com/search?q="
     full_url = base_url + query
 
@@ -219,7 +221,7 @@ def search_mojeek_summary(query):
     Returns:
     - str: The extracted summary text, or an error message if not found.
     """
-    print(f"INFO: Searching Mojeek for: {query}")
+    queue_message(f"INFO: Searching Mojeek for: {query}")
     base_url = "https://www.mojeek.com/search?q="
     full_url = base_url + query
 
@@ -233,10 +235,10 @@ def search_mojeek_summary(query):
         # Print all elements with 'id=kalid' for verification
         elements = driver.find_elements(By.ID, "kalid")
         if not elements:
-            print("DEBUG: No elements with ID 'kalid' found.")
+            queue_message("DEBUG: No elements with ID 'kalid' found.")
         else:
             for el in elements:
-                print("DEBUG: Found element with ID 'kalid':", el.get_attribute("outerHTML"))
+                queue_message("DEBUG: Found element with ID 'kalid':", el.get_attribute("outerHTML"))
 
         # Wait for the summary box to load
         WebDriverWait(driver, 10).until(
@@ -245,11 +247,11 @@ def search_mojeek_summary(query):
 
         # Extract the summary content
         summary = extract_text("div#kalid.infobox-right.llm-ib div.content")
-        print("INFO: Summary extracted successfully.")
+        queue_message("INFO: Summary extracted successfully.")
         return summary
 
     except Exception as e:
-        print(f"ERROR: Unable to extract summary. {e}")
+        queue_message(f"ERROR: Unable to extract summary. {e}")
         return "Summary not found. Check debug.html for details."
 
 
