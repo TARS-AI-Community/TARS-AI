@@ -39,7 +39,7 @@ For a complete breakdown of the software environment, setup instructions, and de
 
 ## Contributing
 
-Interested in contributing? Read our [Contributing Guidelines](https://github.com/pyrater/TARS-AI/blob/main/CONTRIBUTING.md) before submitting any pull requests.
+Interested in contributing? Read our [Contributing Guidelines](https://docs-tars-ai.vercel.app/contribute) before submitting any pull requests.
 
 ## License
 
