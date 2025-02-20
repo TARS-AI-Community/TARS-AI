@@ -5,6 +5,8 @@ import subprocess
 import re
 from pydub import AudioSegment
 
+from modules.module_messageQue import queue_message
+
 def apply_tars_effects(audio):
     """
     Apply TARS-like effects: pitch change, speed up, reverb, and echo.
@@ -53,7 +55,7 @@ async def text_to_speech_with_pipelining_espeak(text):
             process = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
             if process.returncode != 0:
-                print(f"ERROR: espeak-ng failed: {process.stderr.decode()}")
+                queue_message(f"ERROR: espeak-ng failed: {process.stderr.decode()}")
                 continue
 
             # Convert espeak output to Pydub AudioSegment
@@ -74,5 +76,5 @@ async def text_to_speech_with_pipelining_espeak(text):
             yield wav_buffer  # Yield the processed audio chunk
 
         except Exception as e:
-            print(f"ERROR: Local TTS generation failed: {e}")
+            queue_message(f"ERROR: Local TTS generation failed: {e}")
             continue

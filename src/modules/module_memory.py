@@ -18,6 +18,7 @@ import numpy as np
 # === Custom Modules ===
 from modules.module_hyperdb import *
 from modules.module_config import load_config
+from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
 
@@ -50,15 +51,15 @@ class MemoryManager:
         Initialize dynamic memory from the database file.
         """
         if os.path.exists(self.memory_db_path):
-            print(f"LOAD: Found existing memory: {self.char_name}.pickle.gz")
+            queue_message(f"LOAD: Found existing memory: {self.char_name}.pickle.gz")
             loaded_successfully = self.hyper_db.load(self.memory_db_path)
             if not loaded_successfully or self.hyper_db.vectors is None:
-                print(f"LOAD: Memory load failed. Initializing new memory.")
+                queue_message(f"LOAD: Memory load failed. Initializing new memory.")
                 self.hyper_db.vectors = np.empty((0, 0), dtype=np.float32)
             else:
-                print(f"LOAD: Memory loaded successfully")
+                queue_message(f"LOAD: Memory loaded successfully")
         else:
-            print(f"LOAD: No memory DB found. Creating new one: {self.memory_db_path}")
+            queue_message(f"LOAD: No memory DB found. Creating new one: {self.memory_db_path}")
             self.hyper_db.add_document({"text": f'{self.char_name}: {self.char_greeting}'})
             self.hyper_db.save(self.memory_db_path)
 
@@ -119,7 +120,7 @@ class MemoryManager:
             else:
                 return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARN: No memories found for the query."
         except Exception as e:
-            #print(f"ERROR: Error retrieving related memories: {e}")
+            #queue_message(f"ERROR: Error retrieving related memories: {e}")
             return "Error retrieving related memories."
     
     def get_longterm_memory(self, user_input: str) -> str:
@@ -139,7 +140,7 @@ class MemoryManager:
                 return str(past) if past else "No relevant memories found."
             return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] WARN: Long-term memory is disabled."
         except Exception as e:
-            print(f"ERROR: Error retrieving long-term memory: {e}")
+            queue_message(f"ERROR: Error retrieving long-term memory: {e}")
             return "Error retrieving long-term memory."
 
     def get_shortterm_memories_recent(self, max_entries: int) -> List[str]:
@@ -213,7 +214,7 @@ class MemoryManager:
         - json_file_path (str): Path to the JSON file.
         """
         if os.path.exists(json_file_path):
-            print(f"LOAD: Injecting memories from JSON.")
+            queue_message(f"LOAD: Injecting memories from JSON.")
             with open(json_file_path, 'r') as file:
                 memories = json.load(file)
 
@@ -256,7 +257,7 @@ class MemoryManager:
                         enc = tiktoken.encoding_for_model(openai_model)
                     except KeyError:
                         if not self._fallback_warning_logged:
-                            print(f"INFO: Automatic mapping failed '{openai_model}'. Using '{override_encoding_model}'.")
+                            queue_message(f"INFO: Automatic mapping failed '{openai_model}'. Using '{override_encoding_model}'.")
                             self._fallback_warning_logged = True
                         enc = tiktoken.get_encoding(override_encoding_model)
 
@@ -265,7 +266,7 @@ class MemoryManager:
 
             except Exception as e:
                 if not hasattr(self, '_token_error_logged'):
-                    print(f"ERROR: Failed to calculate tokens using tiktoken: {e}")
+                    queue_message(f"ERROR: Failed to calculate tokens using tiktoken: {e}")
                     self._token_error_logged = True
                 return {"length": 0}
 
@@ -285,9 +286,9 @@ class MemoryManager:
                 response.raise_for_status()
                 return response.json()
             except requests.exceptions.RequestException as e:
-                print(f"ERROR: Request to {llm_backend} token count API failed: {e}")
+                queue_message(f"ERROR: Request to {llm_backend} token count API failed: {e}")
                 return {"length": 0}
 
         else:
-            print(f"ERROR: Unsupported LLM backend: {llm_backend}")
+            queue_message(f"ERROR: Unsupported LLM backend: {llm_backend}")
             return {"length": 0}

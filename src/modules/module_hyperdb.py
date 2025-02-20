@@ -32,6 +32,7 @@ import configparser
 import torch
 
 from modules.module_config import get_api_key
+from modules.module_messageQue import queue_message
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -67,16 +68,16 @@ def get_embedding_new(documents):
                 # Format embeddings in scientific notation
                 formatted_embeddings = [[f"{val:0.8e}" for val in embedding] for embedding in embeddings]
 
-                #print("Embeddings:", formatted_embeddings)
+                #queue_message("Embeddings:", formatted_embeddings)
                 return formatted_embeddings
             else:
-                print("Error: 'data' key not found in API response.")
+                queue_message("Error: 'data' key not found in API response.")
                 return None
         except KeyError:
-            print("Error: 'data' key not found in API response.")
+            queue_message("Error: 'data' key not found in API response.")
             return None
     else:
-        print("Error:", response.status_code, response.text)
+        queue_message("Error:", response.status_code, response.text)
         return None
 
 from sentence_transformers import SentenceTransformer
@@ -187,13 +188,13 @@ class HyperDB:
                     device='cuda' if torch.cuda.is_available() else 'cpu', 
                     max_length=256,
                 )
-                print("INFO: BGE reranker model loaded successfully")
+                queue_message("INFO: BGE reranker model loaded successfully")
             except Exception as e:
-                print(f"WARNING: Failed to load BGE reranker model: {e}")
+                queue_message(f"WARNING: Failed to load BGE reranker model: {e}")
                 self.reranker = None
 
         # Initialize BM25 components
-        print(f"INFO: Initializing HyperDB with {rag_strategy} RAG strategy")
+        queue_message(f"INFO: Initializing HyperDB with {rag_strategy} RAG strategy")
         if self.rag_strategy == "hybrid":
             self.stemmer = Stemmer.Stemmer("english")
             self.bm25_retriever = bm25s.BM25(method="lucene")
@@ -284,7 +285,7 @@ class HyperDB:
             vector = vector[0]
         else:
             # Handle the case where the embedding function returns None or an empty list
-            print("Error: Unable to get embeddings for the document.")
+            queue_message("Error: Unable to get embeddings for the document.")
             return
 
         if self.vectors is None:
@@ -302,7 +303,7 @@ class HyperDB:
             vector = vector[0]
         else:
             # Handle the case where the embedding function returns None or an empty list
-            print("Error: Unable to get embeddings for the document.")
+            queue_message("Error: Unable to get embeddings for the document.")
             return
 
         if self.vectors is None:
@@ -351,7 +352,7 @@ class HyperDB:
                 with open(storage_file, "wb") as f:
                     pickle.dump(data, f)
         except Exception as e:
-            print(f"ERROR: Failed to save database: {e}")
+            queue_message(f"ERROR: Failed to save database: {e}")
 
     def load(self, storage_file: str) -> bool:
         """
@@ -381,7 +382,7 @@ class HyperDB:
             return True
 
         except Exception as e:
-            print(f"Error loading memory: {e}")
+            queue_message(f"Error loading memory: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -469,7 +470,7 @@ class HyperDB:
 
             # Safety check for scores
             if len(rerank_scores) != len(candidate_docs):
-                print(f"WARNING: Mismatch between scores ({len(rerank_scores)}) and docs ({len(candidate_docs)})")
+                queue_message(f"WARNING: Mismatch between scores ({len(rerank_scores)}) and docs ({len(candidate_docs)})")
                 return candidate_docs
             
             # Sort documents by reranking scores
@@ -479,7 +480,7 @@ class HyperDB:
             return reranked_results
             
         except Exception as e:
-            print(f"WARNING: Reranking failed: {e}. Returning original order.")
+            queue_message(f"WARNING: Reranking failed: {e}. Returning original order.")
             import traceback
             traceback.print_exc()
             return candidate_docs
@@ -496,11 +497,11 @@ class HyperDB:
         The pipeline: vector search -> BM25 -> RRF fusion -> BGE reranking.
         """
         if not self.documents or not self.vectors.size:
-            print("WARNING: Empty database, returning empty results")
+            queue_message("WARNING: Empty database, returning empty results")
             return [] if not return_similarities else []
 
         if self.rag_strategy != "hybrid":
-            print("WARNING: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
+            queue_message("WARNING: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
             return self._vector_query(query_text, top_k, return_similarities)
 
         try:
@@ -517,14 +518,14 @@ class HyperDB:
             
             # Validate BM25 results
             if not isinstance(bm25_results, (list, np.ndarray)) or not isinstance(bm25_scores, (list, np.ndarray)):
-                print("WARNING: Invalid BM25 results format, falling back to vector search")
+                queue_message("WARNING: Invalid BM25 results format, falling back to vector search")
                 return self._vector_query(query_text, top_k, return_similarities)
 
             try:
                 bm25_results = bm25_results[0]
                 bm25_scores = bm25_scores[0]
             except (IndexError, TypeError) as e:
-                print(f"WARNING: Error processing BM25 results: {e}")
+                queue_message(f"WARNING: Error processing BM25 results: {e}")
                 return self._vector_query(query_text, top_k, return_similarities)
 
             # RRF Fusion
@@ -534,7 +535,7 @@ class HyperDB:
                         if isinstance(doc_id, (int, np.integer)) and doc_id < len(self.documents)}
 
             if not vector_ranks and not bm25_ranks:
-                print("WARNING: No valid ranks found")
+                queue_message("WARNING: No valid ranks found")
                 return self._vector_query(query_text, top_k, return_similarities)
 
             # Calculate RRF scores
@@ -562,7 +563,7 @@ class HyperDB:
                     valid_indices.append(idx)
 
             if not candidate_docs:
-                print("WARNING: No valid candidates for reranking")
+                queue_message("WARNING: No valid candidates for reranking")
                 return self._vector_query(query_text, top_k, return_similarities)
 
             # Apply reranking
@@ -577,21 +578,21 @@ class HyperDB:
                         return final_results
                     return [doc for doc, _ in final_results]
                 else:
-                    print("WARNING: Reranking failed, using RRF results")
+                    queue_message("WARNING: Reranking failed, using RRF results")
                     candidate_docs = candidate_docs[:min(top_k, len(candidate_docs))]
                     if return_similarities:
                         return [(doc, rrf_scores[idx]) for doc, idx in zip(candidate_docs, valid_indices[:len(candidate_docs)])]
                     return candidate_docs
 
             except (IndexError, TypeError) as e:
-                print(f"WARNING: Error processing results: {e}")
+                queue_message(f"WARNING: Error processing results: {e}")
                 candidate_docs = candidate_docs[:min(top_k, len(candidate_docs))]
                 if return_similarities:
                     return [(doc, rrf_scores[idx]) for doc, idx in zip(candidate_docs, valid_indices[:len(candidate_docs)])]
                 return candidate_docs
 
         except Exception as e:
-            print(f"WARNING: Hybrid query failed: {e}")
+            queue_message(f"WARNING: Hybrid query failed: {e}")
             import traceback
             traceback.print_exc()
             return self._vector_query(query_text, top_k, return_similarities)

@@ -10,6 +10,7 @@ sudo apt install -y chromium-browser
 sudo apt install -y chromium-chromedriver
 sudo apt install -y sox libsox-fmt-all
 sudo apt install -y portaudio19-dev
+sudo apt install -y espeak-ng
 chromium-browser --version
 chromedriver --version
 sox --version

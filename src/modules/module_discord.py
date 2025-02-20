@@ -12,6 +12,7 @@ import discord
 
 # === Custom Modules ===
 from modules.module_config import load_config
+from modules.module_messageQue import queue_message
 
 # === Constants and Globals ===
 CONFIG = load_config()
@@ -78,17 +79,17 @@ async def mention_to_username(mention):
             if user:
                 return user.name  # Return the user's username
         except discord.NotFound:
-            print(f"ERROR: User with ID {user_id} not found.")
+            queue_message(f"ERROR: User with ID {user_id} not found.")
         except discord.Forbidden:
-            print("ERROR: Insufficient permissions to fetch user details.")
+            queue_message("ERROR: Insufficient permissions to fetch user details.")
         except discord.HTTPException as e:
-            print(f"ERROR: HTTP error occurred: {e}")
+            queue_message(f"ERROR: HTTP error occurred: {e}")
 
     return None  # If the mention format or user is invalid
 
 @client.event
 async def on_ready():
-    print(f"INFO: Logged in as {client.user}")
+    queue_message(f"INFO: Logged in as {client.user}")
 
 
 @client.event
@@ -110,14 +111,14 @@ async def on_message(message):
         user_message = message.content.strip()
 
        
-        print(f"DISCORD: {await replace_mentions_with_usernames(user_message)}")
+        queue_message(f"DISCORD: {await replace_mentions_with_usernames(user_message)}")
 
         # Use the callback to process the message
         if process_discord_message_callback:
             reply = process_discord_message_callback(user_message)
-            print(f"DISCORD: {await replace_mentions_with_usernames(message.author.mention)} {reply}")
+            queue_message(f"DISCORD: {await replace_mentions_with_usernames(message.author.mention)} {reply}")
 
             await message.channel.send(f"{message.author.mention} {reply}")
         else:
-            print("No callback function defined.")
+            queue_message("No callback function defined.")
             await message.channel.send("Error: No processing logic available.")

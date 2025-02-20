@@ -15,6 +15,8 @@ import concurrent.futures
 from modules.module_config import load_config
 from modules.module_prompt import build_prompt
 
+from modules.module_messageQue import queue_message
+
 # === Constants and Globals ===
 CONFIG = load_config()
 character_manager = None
@@ -56,7 +58,7 @@ def get_completion(user_prompt, istext=True):
         return bot_reply
     
     except requests.RequestException as e:
-        print(f"ERROR: LLM request failed: {e}")
+        queue_message(f"ERROR: LLM request failed: {e}")
         return None
 
 def _prepare_request_data(llm_backend, prompt):
@@ -214,7 +216,7 @@ def raw_complete_llm(user_prompt, istext=True):
         return bot_reply
     
     except requests.RequestException as e:
-        print(f"ERROR: LLM request failed: {e}")
+        queue_message(f"ERROR: LLM request failed: {e}")
         return None
 
 # === Initialization ===

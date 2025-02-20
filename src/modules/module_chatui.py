@@ -55,12 +55,12 @@ from modules.module_llm import get_completion
 from modules.module_vision import get_image_caption_from_base64
 from modules.module_tts import generate_tts_audio
 from modules.module_llm import detect_emotion
+from modules.module_messageQue import queue_message
 
 # Suppress Flask logs
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 os.environ['WERKZEUG_RUN_MAIN'] = 'true'
-os.environ["WAITERSS_LOG_LEVEL"] = "ERROR"
 
 # If using eventlet or gevent with Flask-SocketIO
 sio_logger = logging.getLogger('socketio')
@@ -220,20 +220,20 @@ def send_heartbeat():
 @socketio.on('connect')
 def handle_connect():
     #start_idle()
-    #print('Client connected')
+    #queue_message('Client connected')
     socketio.start_background_task(send_heartbeat)
     #if IDLE_MSGS_enabled == "True":
         #socketio.start_background_task(idle_msg) 
 
 @socketio.on('heartbeat')
 def handle_heartbeat(message):
-    #print('Received heartbeat from client')
+    #queue_message('Received heartbeat from client')
     pass
 
 @socketio.on('disconnect')
 def handle_disconnect():
     pass
-    #print('Client disconnected')
+    #queue_message('Client disconnected')
 
 @flask_app.route('/')
 def index():
@@ -263,7 +263,7 @@ def get_config_variable():
     except Exception as e:
         return f"Error: {e}"
     
-    #print(jsonify({'talkinghead_base_url': f"http://{local_ip}:5012"}))
+    #queue_message(jsonify({'talkinghead_base_url': f"http://{local_ip}:5012"}))
     return jsonify({'talkinghead_base_url': f"http://{local_ip}:5012"})
 
 @flask_app.route('/stream')
@@ -285,14 +285,14 @@ def stream():
 def start_talking_endpoint():
     global is_talking
     is_talking = True
-    #print("DEBUG: Talking mode enabled.")
+    #queue_message("DEBUG: Talking mode enabled.")
     return Response("started", status=200)
 
 @flask_app.route('/stop_talking')
 def stop_talking_endpoint():
     global is_talking
     is_talking = False
-    #print("DEBUG: Talking mode disabled.")
+    #queue_message("DEBUG: Talking mode disabled.")
     return Response("stopped", status=200)
 
 @flask_app.route('/process_llm', methods=['POST'])
@@ -314,7 +314,7 @@ def receive_user_message():
             raw_image = Image.open(buffer).convert('RGB')
             caption = get_image_caption_from_base64(base64_image)
         except UnidentifiedImageError as e:
-            print(f"Failed to open the image: {e}")
+            queue_message(f"Failed to open the image: {e}")
             caption = "Failed to process image"
 
         cmessage = f"*The Uploaded photo has the following description {caption}* and the user sent the following message with the photo: {user_message}"
@@ -328,20 +328,20 @@ def receive_user_message():
     if CONFIG['CHAR']['user_name'] == "True": 
         # **🎭 Detect Emotion and Update Animation Folder**
         detected_emotion = detect_emotion(reply)
-        print(f"Detected Emotion: {detected_emotion}")
+        queue_message(f"Detected Emotion: {detected_emotion}")
 
         # Build the new emotion folder path
         new_character_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
 
         # Check if the folder exists, otherwise, fallback to 'neutral'
         if not os.path.exists(new_character_dir):
-            print(f"Emotion folder '{new_character_dir}' not found. Falling back to 'neutral'.")
+            queue_message(f"Emotion folder '{new_character_dir}' not found. Falling back to 'neutral'.")
             detected_emotion = "neutral"
             new_character_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
 
         # **Update Global Emotion Directory**
         CHARACTER_DIR = new_character_dir
-        print(f"Updated CHARACTER_DIR: {CHARACTER_DIR}")
+        queue_message(f"Updated CHARACTER_DIR: {CHARACTER_DIR}")
 
         # **🔄 Reload Character Images for New Emotion**
         img_nottalking_open = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_nottalking_eyes_open.png")).convert("RGBA")
@@ -384,7 +384,7 @@ def upload():
             # Proceed with processing the image, like getting a caption
             caption = "Image processed successfully"
         except UnidentifiedImageError as e:
-            print(f"Failed to open the image: {e}")
+            queue_message(f"Failed to open the image: {e}")
             caption = "Failed to process image"
 
 
@@ -416,7 +416,7 @@ def audio_stream():
         return latest_text_to_read if 'latest_text_to_read' in globals() else "No response available."
 
     final_text = get_final_text()
-    #print("Audio stream starting with final text:", final_text)
+    #queue_message("Audio stream starting with final text:", final_text)
 
     async def generate_mp3_chunks():
         """
@@ -427,7 +427,7 @@ def audio_stream():
             audio_chunks_dict[index] = chunk.getvalue()  # Store chunk with its order
             index += 1
 
-        #print(f"Generated {len(audio_chunks_dict)} chunks.")
+        #queue_message(f"Generated {len(audio_chunks_dict)} chunks.")
         audio_chunks_dict[index] = None  # Mark end of chunks
 
     # Run the async generator in a background thread
@@ -444,13 +444,13 @@ def audio_stream():
     waited = 0
     while 0 not in audio_chunks_dict:
         if waited >= max_wait_time:
-            #print("First chunk did not generate in time.")
+            #queue_message("First chunk did not generate in time.")
             return Response(status=204)
         time.sleep(0.1)
         waited += 0.1
 
     # ✅ Serve the first MP3 chunk and update index **before returning**
-    #print("Serving first chunk.")
+    #queue_message("Serving first chunk.")
     first_chunk = audio_chunks_dict[0]
     current_chunk_index = 1  # ✅ Update chunk index immediately
     return Response(first_chunk, mimetype="audio/mp3", headers={'Content-Type': 'audio/mp3'})
@@ -466,10 +466,10 @@ def get_next_audio_chunk():
         next_chunk = audio_chunks_dict[current_chunk_index]
         
         if next_chunk is None:
-            #print(f"End of chunks at index {current_chunk_index}.")
+            #queue_message(f"End of chunks at index {current_chunk_index}.")
             return Response(status=204)  # No more audio
 
-        #print(f"Serving chunk {current_chunk_index}.")
+        #queue_message(f"Serving chunk {current_chunk_index}.")
         response = Response(next_chunk, mimetype="audio/mp3", headers={
             'Content-Type': 'audio/mp3',
             'Content-Length': str(len(next_chunk)),  # Ensure correct content size
@@ -479,13 +479,13 @@ def get_next_audio_chunk():
         current_chunk_index += 1
         return response
     else:
-        #print(f"Chunk {current_chunk_index} not available yet.")
+        #queue_message(f"Chunk {current_chunk_index} not available yet.")
         return Response(status=204)  # No content available yet
 
 def start_flask_app():
     import eventlet
     import eventlet.wsgi
-    print("INFO: Starting Flask app with Eventlet...")
+    queue_message("INFO: Starting Flask app with Eventlet...")
     eventlet.wsgi.server(
         eventlet.listen(("0.0.0.0", 5012)),
         flask_app,

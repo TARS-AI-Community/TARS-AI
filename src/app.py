@@ -44,8 +44,8 @@ def init_app():
     Performs initial setup for the application
     """
     
-    print(f"LOAD: Script running from: {BASE_DIR}")
-    #print(f"DEBUG: init_app() called")
+    queue_message(f"LOAD: Script running from: {BASE_DIR}")
+    #queue_message(f"DEBUG: init_app() called")
     
     # Load the configuration
     CONFIG = load_config()
@@ -58,7 +58,7 @@ def start_discord_in_thread():
     """
     discord_thread = threading.Thread(target=start_discord_bot, args=(process_discord_message_callback,), daemon=True)
     discord_thread.start()
-    print("INFO: Discord bot started in a separate thread.")
+    queue_message("INFO: Discord bot started in a separate thread.")
 
 # === Main Application Logic ===
 if __name__ == "__main__":
@@ -87,19 +87,22 @@ if __name__ == "__main__":
     initialize_manager_llm(memory_manager, char_manager)
 
     # Start necessary threads
-    bt_controller_thread = threading.Thread(target=start_bt_controller_thread, name="BTControllerThread", daemon=True)
-    bt_controller_thread.start()
+    if CONFIG['CONTROLS']['enabled'] == 'True':
+        bt_controller_thread = threading.Thread(target=start_bt_controller_thread, name="BTControllerThread", daemon=True)
+        bt_controller_thread.start()
 
     # Create a thread for the Flask app
-    flask_thread = threading.Thread(target=modules.module_chatui.start_flask_app, daemon=True)
-    flask_thread.start()
+    if CONFIG['CHATUI']['enabled'] == "True":
+        queue_message(f"LOAD: ChatUI starting on port 5012...")
+        flask_thread = threading.Thread(target=modules.module_chatui.start_flask_app, daemon=True)
+        flask_thread.start()
     
     # Initilize BLIP to speed up initial image capture
-    if not CONFIG['VISION']['server_hosted']:
+    if CONFIG['VISION']['server_hosted'] != "True":
         initialize_blip()
     
     try:
-        print(f"LOAD: TARS-AI v1.03a running.")
+        queue_message(f"LOAD: TARS-AI v1.03a running.")
         # Start the STT thread
         stt_manager.start()
 
@@ -107,11 +110,11 @@ if __name__ == "__main__":
             time.sleep(0.1) # Sleep to reduce CPU usage
 
     except KeyboardInterrupt:
-        print(f"INFO: Stopping all threads and shutting down executor...")
+        queue_message(f"INFO: Stopping all threads and shutting down executor...")
         shutdown_event.set()  # Signal global threads to shutdown
         # executor.shutdown(wait=True)
 
     finally:
         stt_manager.stop()
         bt_controller_thread.join()
-        print(f"INFO: All threads and executor stopped gracefully.")
+        queue_message(f"INFO: All threads and executor stopped gracefully.")

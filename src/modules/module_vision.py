@@ -21,6 +21,7 @@ from pathlib import Path
 
 # === Custom Modules ===
 from modules.module_config import load_config
+from modules.module_messageQue import queue_message
 
 # === Constants and Globals ===
 CONFIG = load_config()
@@ -45,13 +46,13 @@ def initialize_blip():
     """
     global PROCESSOR, MODEL
     if not PROCESSOR or not MODEL:
-        print(f"INFO: Initializing BLIP model...")
+        queue_message(f"INFO: Initializing BLIP model...")
         PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
         MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
         MODEL = torch.quantization.quantize_dynamic(
             MODEL, {torch.nn.Linear}, dtype=torch.qint8
         )
-        print(f"INFO: BLIP model initialized.")
+        queue_message(f"INFO: BLIP model initialized.")
 
 
 def capture_image() -> BytesIO:
@@ -68,7 +69,7 @@ def capture_image() -> BytesIO:
         else:
             width, height = "1920", "1080"   # Low resolution for on-device processing
 
-        print(f"INFO: Capturing image at resolution {width}x{height}.")
+        queue_message(f"INFO: Capturing image at resolution {width}x{height}.")
 
         # Capture the image using libcamera-still
         command = [
@@ -105,7 +106,7 @@ def send_image_to_server(image_bytes: BytesIO) -> str:
     try:
         # Properly send the image as a file
         files = {'image': ('image.jpg', image_bytes.getvalue(), 'image/jpeg')}
-        #print(f"DEBUG: Sending image to {CONFIG['VISION']['base_url']}/caption")
+        #queue_message(f"DEBUG: Sending image to {CONFIG['VISION']['base_url']}/caption")
 
         response = requests.post(f"{CONFIG['VISION']['base_url']}/caption", files=files)
 
@@ -115,7 +116,7 @@ def send_image_to_server(image_bytes: BytesIO) -> str:
             error_message = response.json().get('error', 'Unknown error')
             raise RuntimeError(f"Server error ({response.status_code}): {error_message}")
     except Exception as e:
-        print(f"[{datetime.now()}] ERROR: Failed to send image to server:", traceback.format_exc())
+        queue_message(f"[{datetime.now()}] ERROR: Failed to send image to server:", traceback.format_exc())
         raise
 
 
@@ -171,7 +172,7 @@ def describe_camera_view() -> str:
             caption = PROCESSOR.decode(outputs[0], skip_special_tokens=True)
             return caption
     except Exception as e:
-        print(f"TARS is unable to see right now")
+        queue_message(f"TARS is unable to see right now")
         return f"Error: {e}"
 
 def save_captured_image(image_bytes: BytesIO):
@@ -195,8 +196,8 @@ def save_captured_image(image_bytes: BytesIO):
         with Image.open(image_bytes) as img:
             img.save(file_path, format="JPEG", optimize=True, quality=85)
 
-        #print(f"Image saved to {file_path}")
+        #queue_message(f"Image saved to {file_path}")
         return file_path
     except Exception as e:
-        print(f"Error saving image: {e}")
+        queue_message(f"Error saving image: {e}")
         return None
