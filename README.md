@@ -11,8 +11,12 @@
         <img src="https://img.shields.io/badge/Instagram-purple?style=flat-square&logo=instagram&logoColor=white" alt="Instagram" align="center" />
     </a>
     <a href="https://www.tiktok.com/@tars.ai.py">
-        <img src="https://img.shields.io/badge/TikTok-black?style=flat-square&logo=tiktok&logoColor=white" alt="TikTok" align="center" />
+        <img src="https://img.shields.io/badge/TikTok-black?style=flat-square&logo=tiktok&logoColor=white" alt="TikTok" align="center" />   
     </a>
+    <a href="https://docs-tars-ai.vercel.app">
+        <img src="https://img.shields.io/badge/Docs-grey?style=flat-square&logo=readthedocs&logoColor=white" alt="Documentation" align="center" />
+    </a>
+
 </p>
 
 <p align="center"><a href="https://github.com/pyrater/TARS-AI"><img width=50% alt="" src="/media/tars-ai.png" /></a></p>
