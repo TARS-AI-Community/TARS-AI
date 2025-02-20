@@ -21,7 +21,7 @@
 
 <p align="center"><a href="https://github.com/pyrater/TARS-AI"><img width=90% alt="" src="/media/tars-banner.png" /></a></p>
 
-A recreation of the robot TARS from Interstellar, featuring AI capabilities and servo-driven movement. 
+<p align="center">A recreation of the robot TARS from Interstellar, featuring AI capabilities.</p>
 
 ## To start building TARS-AI
 - See our documentation for more information: [docs-tars-ai.vercel.app](https://docs-tars-ai.vercel.app)
