@@ -199,3 +199,20 @@ neutralStarboard = 350
 backStarboard = 400
 # Fine-tuning offset for the starboard drive servo
 perfectStaroffset = 0
+
+
+
+[UI]
+UI_enabled = False
+maximize_console = False
+# start with the console using all the screen
+screen_width = 1024
+screen_height = 600
+# adjust based on your screen resolution
+rotation = 270
+# rotation can be 0, 90, 180, 270
+use_camera_module = False
+# enable the camera
+show_mouse = True
+background_id = 0
+# 0 = no background animation, # 1 = video 1, # 2 = video 2, # 3 = video 3 

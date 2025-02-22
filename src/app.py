@@ -28,6 +28,7 @@ from modules.module_btcontroller import *
 from modules.module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread, start_discord_bot, process_discord_message_callback
 from modules.module_vision import initialize_blip
 from modules.module_llm import initialize_manager_llm
+from modules.module_ui import UIManager
 import modules.module_chatui
 
 import logging  # This will hide INFO and DEBUG messages
@@ -41,6 +42,7 @@ sys.path.insert(0, BASE_DIR)
 sys.path.append(os.getcwd())
 
 CONFIG = load_config()
+VERSION = "1.03a"
 
 # === Helper Functions ===
 def init_app():
@@ -72,12 +74,19 @@ if __name__ == "__main__":
     # Create a shutdown event for global threads
     shutdown_event = threading.Event()
 
+    # Create global UI manager instance
+    ui_manager = UIManager(shutdown_event=shutdown_event)
+    if CONFIG['UI']['UI_enabled']:
+        ui_manager.start()
+    ui_manager.update_data("System", "Initializing application...", "DEBUG")
+
+
     # Initialize CharacterManager, MemoryManager
     char_manager = CharacterManager(config=CONFIG)
     memory_manager = MemoryManager(config=CONFIG, char_name=char_manager.char_name, char_greeting=char_manager.char_greeting)
    
     # Initialize STTManager
-    stt_manager = STTManager(config=CONFIG, shutdown_event=shutdown_event)
+    stt_manager = STTManager(config=CONFIG, shutdown_event=shutdown_event, ui_manager=ui_manager)
     stt_manager.set_wake_word_callback(wake_word_callback)
     stt_manager.set_utterance_callback(utterance_callback)
     stt_manager.set_post_utterance_callback(post_utterance_callback)
@@ -87,7 +96,7 @@ if __name__ == "__main__":
         start_discord_in_thread()
 
     # Pass managers to main module
-    initialize_managers(memory_manager, char_manager, stt_manager)
+    initialize_managers(memory_manager, char_manager, stt_manager, ui_manager)
     initialize_manager_llm(memory_manager, char_manager)
 
     # Start necessary threads
@@ -106,7 +115,8 @@ if __name__ == "__main__":
         initialize_blip()
     
     try:
-        queue_message(f"LOAD: TARS-AI v1.03a running.")
+        queue_message(f"LOAD: TARS-AI v"+VERSION+" running.")        
+        ui_manager.update_data("System", "LOAD: TARS-AI v"+VERSION+" running.", "SYSTEM")
         # Start the STT thread
         stt_manager.start()
 
@@ -114,11 +124,13 @@ if __name__ == "__main__":
             time.sleep(0.1) # Sleep to reduce CPU usage
 
     except KeyboardInterrupt:
+        ui_manager.update_data("System", "Stopping all threads and shutting down executor....", "SYSTEM")
         queue_message(f"INFO: Stopping all threads and shutting down executor...")
         shutdown_event.set()  # Signal global threads to shutdown
         # executor.shutdown(wait=True)
 
     finally:
+        ui_manager.stop()
         stt_manager.stop()
         bt_controller_thread.join()
         queue_message(f"INFO: All threads and executor stopped gracefully.")
