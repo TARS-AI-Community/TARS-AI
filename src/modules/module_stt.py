@@ -515,6 +515,7 @@ class STTManager:
 
         character_path = self.config.get("CHAR", {}).get("character_card_path")
         character_name = os.path.splitext(os.path.basename(character_path))[0]
+        
         queue_message(f"{character_name}: Sleeping...")
 
         if self.config["STT"]["wake_word_processor"] == 'pocketsphinx':
@@ -562,6 +563,10 @@ class STTManager:
                     except Exception:
                         pass
                     wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+
+                    character_path = self.config.get("CHAR", {}).get("character_card_path")
+                    character_name = os.path.splitext(os.path.basename(character_path))[0]
+                    
                     queue_message(f"{character_name}: {wake_response}", stream=True)
                     if self.wake_word_callback:
                         self.wake_word_callback(wake_response)

@@ -25,7 +25,7 @@ sounddevice             # Audio I/O for playing and capturing sound
 bm25s                   # BM25 ranking for information retrieval
 pystemmer               # Stem words for text processing
 hyperdb-python          # High-performance database library
-scikit-learn==1.5.2     # Predictive data analysis tools
+scikit-learn            # Predictive data analysis tools
 flashrank               # Lightweight re-ranker
 
 # Chat UI & Web Frameworks
