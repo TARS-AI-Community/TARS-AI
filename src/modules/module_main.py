@@ -23,8 +23,10 @@ from modules.module_discord import *
 from modules.module_llm import process_completion
 from modules.module_tts import play_audio_chunks
 from modules.module_messageQue import queue_message
+from modules.module_ui import UIManager 
 
 # === Constants and Globals ===
+ui_manager = None
 character_manager = None
 memory_manager = None
 stt_manager = None
@@ -89,6 +91,7 @@ def wake_word_callback(wake_response):
     Parameters:
     - wake_response (str): The response to the wake word.
     """ 
+    ui_manager.update_data("TARS", wake_response, "TARS")
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption']))
 
 def utterance_callback(message):
@@ -107,6 +110,7 @@ def utterance_callback(message):
         
         #Print or stream the response
         #queue_message(f"USER: {message_dict['text']}")
+        ui_manager.update_data("USER", message_dict['text'], "USER")
         queue_message(f"USER: {message_dict['text']}", stream=True) 
 
         # Check for shutdown command
@@ -134,6 +138,7 @@ def utterance_callback(message):
             pass
 
         # Stream the AI's reply
+        ui_manager.update_data("TARS", reply, "TARS")
         queue_message(f"TARS: {reply}", stream=True) 
 
         # Strip special chars so he doesnt say them
@@ -155,7 +160,7 @@ def post_utterance_callback():
     stt_manager._transcribe_utterance()
 
 # === Initialization ===
-def initialize_managers(mem_manager, char_manager, stt_mgr):
+def initialize_managers(mem_manager, char_manager, stt_mgr, ui_mgr):
     """
     Pass in the shared instances for MemoryManager, CharacterManager, and STTManager.
     
@@ -164,7 +169,8 @@ def initialize_managers(mem_manager, char_manager, stt_mgr):
     - char_manager: The CharacterManager instance from app.py.
     - stt_mgr: The STTManager instance from app.py.
     """
-    global memory_manager, character_manager, stt_manager
+    global memory_manager, character_manager, stt_manager, ui_manager
     memory_manager = mem_manager
     character_manager = char_manager
     stt_manager = stt_mgr
+    ui_manager = ui_mgr

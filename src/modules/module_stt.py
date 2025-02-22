@@ -35,6 +35,7 @@ import requests
 
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config
+from modules.module_main import ui_manager
 
 CONFIG = load_config()
 
@@ -60,7 +61,7 @@ class STTManager:
         "Finally, I was about to lose my mind.",
     ]
 
-    def __init__(self, config, shutdown_event: threading.Event, amp_gain: float = 4.0):
+    def __init__(self, config, shutdown_event: threading.Event, ui_manager, amp_gain: float = 4.0):
         """
         Initialize the STTManager.
 
@@ -69,6 +70,7 @@ class STTManager:
             shutdown_event (threading.Event): Event to signal when to stop.
             amp_gain (float): Amplification gain for audio data.
         """
+        self.ui_manager = ui_manager
         self.config = config
         self.shutdown_event = shutdown_event
         self.running = False
@@ -670,6 +672,7 @@ class STTManager:
                 filled = "#" * progress
                 empty = "-" * (bar_length - progress)
                 
+                self.ui_manager.silence(frames)
                 bar = f"\r[SILENCE: {filled}{empty}] {frames}/{max_frames}"
                 sys.stdout.write(bar)
                 sys.stdout.flush()
@@ -677,6 +680,7 @@ class STTManager:
 
         def clear_progress_bar():
             if show_progress:
+                self.ui_manager.silence(0)
                 sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
                 sys.stdout.flush()
                 flush_all()  # 🔹 Ensure everything is flushed immediately
