@@ -25,6 +25,10 @@ vad_method = rms
 # Enable silero or rms
 speechdelay = 20
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
+picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
+# Relative path to the Porcupine keyword file
+wake_word_processor = pocketsphinx
+# Options: picovoice, pocketsphinx
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS/TARS.json

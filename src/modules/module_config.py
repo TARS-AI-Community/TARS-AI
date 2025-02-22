@@ -152,6 +152,9 @@ def load_config():
             "use_indicators": config.getboolean('STT', 'use_indicators'),
             "vad_method": config['STT']['vad_method'],
             "speechdelay": int(config['STT']['speechdelay']),
+            "picovoice_keyword_path": config['STT']['picovoice_keyword_path'],
+            "wake_word_processor": config['STT']['wake_word_processor'],
+            "picovoice_api_key": os.getenv('PICOVOICE_API_KEY')
         },
         "CHAR": {
             "character_card_path": config['CHAR']['character_card_path'],

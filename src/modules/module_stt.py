@@ -29,6 +29,8 @@ import soundfile as sf
 from vosk import Model, KaldiRecognizer, SetLogLevel
 from pocketsphinx import LiveSpeech
 from faster_whisper import WhisperModel
+import pvporcupine
+from pvrecorder import PvRecorder
 import requests
 
 from modules.module_messageQue import queue_message
@@ -119,6 +121,13 @@ class STTManager:
             self._load_silero_model()
         else:
             self._load_vosk_model()
+
+        # Use Picovoice instead of Pocketsphinx (if configured)
+        if self.config["STT"]["wake_word_processor"] == "picovoice":
+            self.porcupine = pvporcupine.create(
+                access_key=self.config["STT"]["picovoice_api_key"],
+                keyword_paths=[self.config["STT"]["picovoice_keyword_path"]]
+            )
 
         # Use Silero VAD instead of RMS (if configured)
         if self.config["STT"].get("vad_enabled", False):
@@ -491,15 +500,32 @@ class STTManager:
 
     def _detect_wake_word(self) -> bool:
         """
-        Detect the wake word using enhanced false-positive filtering.
+        Detect a wake word using the selected method.
+        
+        Args:
+            config (dict): Configuration dictionary.
+            method (str): The detection method to use. Options: 'picovoice' or 'simple'.
+            timeout (float): Maximum time (seconds) to listen for the wake word.
+            
+        Returns:
+            bool: True if wake word is detected, otherwise False.
         """
-        if self.config["STT"].get("use_indicators"):
+        if self.config["STT"]["use_indicators"]:
             self.play_beep(400, 0.1, 44100, 0.6)
 
         character_path = self.config.get("CHAR", {}).get("character_card_path")
         character_name = os.path.splitext(os.path.basename(character_path))[0]
         queue_message(f"{character_name}: Sleeping...")
 
+        if self.config["STT"]["wake_word_processor"] == 'pocketsphinx':
+            return self._detect_wake_word_pocketsphinx()
+        else:
+            return self._detect_wake_word_picovoice()
+
+    def _detect_wake_word_pocketsphinx(self) -> bool:
+        """
+        Detect the wake word using enhanced false-positive filtering.
+        """
         # Notify external service to stop talking.
         try:
             requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
@@ -524,7 +550,7 @@ class STTManager:
             }
             kws_threshold = threshold_map.get(int(self.config["STT"]["sensitivity"]), 1)
             speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
-
+            
             for phrase in speech:
                 text = phrase.hypothesis().lower()
                 if self.WAKE_WORD in text:
@@ -561,6 +587,64 @@ class STTManager:
 
         except Exception as e:
             queue_message(f"ERROR: Wake word detection failed: {e}")
+
+        return False
+
+    def _detect_wake_word_picovoice(self) -> bool:
+        """
+        Detect the wake word using enhanced false-positive filtering.
+        """
+        # Notify external service to stop talking.
+        try:
+            requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
+        except Exception:
+            pass
+
+        silent_frames = 0
+        max_iterations = 100  # Prevent infinite loops
+        recorder = None
+
+        try:
+            recorder = PvRecorder(frame_length=512, device_index=-1)
+            recorder.start()
+            while True:
+                audio_chunk = recorder.read()  # Read 512 frames per buffer
+                audio_chunk = np.array(audio_chunk, dtype=np.int16)
+                if audio_chunk.ndim != 1:
+                    audio_chunk = audio_chunk.flatten()  # Make sure it's a 1D array
+
+                # Use Porcupine to process the audio chunk and detect the wake word
+                keyword_index = self.porcupine.process(audio_chunk)
+
+                if keyword_index >= 0:
+                    try:
+                        if self.config["STT"].get("use_indicators"):
+                            self.play_beep(1200, 0.1, 44100, 0.8)
+                        requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
+                    except Exception:
+                        pass
+
+                    character_path = self.config.get("CHAR", {}).get("character_card_path")
+                    character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
+                    wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                    queue_message(f"{character_name}: {wake_response}", stream=True)
+                    if self.wake_word_callback:
+                        self.wake_word_callback(wake_response)
+                    return True
+                    
+        except Exception as e:
+            queue_message(f"ERROR: Wake word detection failed: {e}")
+            return False
+        # finally:
+        #     try:
+        #         if recorder is not None:
+        #             recorder.delete()
+        #     except Exception:
+        #         pass
+        #     try:
+        #         self.porcupine.delete()
+        #     except Exception:
+        #         pass
 
         return False
 
