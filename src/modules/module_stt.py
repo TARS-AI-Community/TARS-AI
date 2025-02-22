@@ -380,7 +380,7 @@ class STTManager:
                 self.utterance_callback(json.dumps(formatted_result))
             return formatted_result
         else:
-            queue_message("ERROR: No transcription from Faster-Whisper.")
+            #queue_message("ERROR: No transcription from Faster-Whisper.")
             return None
 
     def _transcribe_silero(self):
