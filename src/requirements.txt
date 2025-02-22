@@ -13,6 +13,7 @@ faster-whisper          # Local STT using Faster Whisper
 silero-vad              # Voice Activity Detection (VAD) using Silero
 vosk                    # Offline speech recognition
 pocketsphinx            # Lightweight speech recognition (CMU Sphinx)
+pvporcupine             # Highly accurate speech recognitio by Picovoice
 
 # Sound Processing Tools
 pydub                   # Audio processing for TTS modifications
