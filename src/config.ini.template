@@ -25,6 +25,10 @@ vad_method = rms
 # Enable silero or rms
 speechdelay = 20
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
+picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
+# Relative path to the Porcupine keyword file
+wake_word_processor = pocketsphinx
+# Options: picovoice, pocketsphinx
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS/TARS.json
@@ -132,12 +136,9 @@ restore_faces = False
 negative_prompt = deformed, black and white, disfigured, low contrast, extra limbs, bad anatomy, bad hands
 # The model will attempt to avoid creating images with these characteristics.
 
-<<<<<<< HEAD
-=======
 [CHATUI]
 enabled = True
 
->>>>>>> 6f9a38596365dc8d875e47a5e431f18d3ba629a2
 [RAG]
 # RAG (Retrieval Augmented Generation) settings
 strategy = hybrid
