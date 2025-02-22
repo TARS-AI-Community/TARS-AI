@@ -184,7 +184,7 @@ class HyperDB:
 
         if self.rag_strategy == "hybrid":
             try:
-                self.reranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./src/memory")
+                self.reranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="../memory/flashrank_cache")
                 queue_message("INFO: FlashRank reranker model loaded successfully")
             except Exception as e:
                 queue_message(f"WARNING: Failed to load FlashRank reranker model: {e}")
