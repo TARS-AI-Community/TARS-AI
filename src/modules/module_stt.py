@@ -635,16 +635,16 @@ class STTManager:
         except Exception as e:
             queue_message(f"ERROR: Wake word detection failed: {e}")
             return False
-        finally:
-            try:
-                if recorder is not None:
-                    recorder.delete()
-            except Exception:
-                pass
-            try:
-                self.porcupine.delete()
-            except Exception:
-                pass
+        # finally:
+        #     try:
+        #         if recorder is not None:
+        #             recorder.delete()
+        #     except Exception:
+        #         pass
+        #     try:
+        #         self.porcupine.delete()
+        #     except Exception:
+        #         pass
 
         return False
 
