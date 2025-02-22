@@ -28,7 +28,6 @@ from typing import List, Union
 import bm25s
 import Stemmer
 from sentence_transformers import CrossEncoder
-from flashrank import Ranker, RerankRequest
 import configparser
 import torch
 
@@ -182,12 +181,16 @@ class HyperDB:
         )
         self.rag_strategy = rag_strategy
 
-        if self.rag_strategy == "hybrid":
+        if rag_strategy == "hybrid":
             try:
-                self.reranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="../memory/flashrank_cache")
-                queue_message("INFO: FlashRank reranker model loaded successfully")
+                self.reranker = CrossEncoder(
+                    'BAAI/bge-reranker-base',
+                    device='cuda' if torch.cuda.is_available() else 'cpu', 
+                    max_length=256,
+                )
+                queue_message("INFO: BGE reranker model loaded successfully")
             except Exception as e:
-                queue_message(f"WARNING: Failed to load FlashRank reranker model: {e}")
+                queue_message(f"WARNING: Failed to load BGE reranker model: {e}")
                 self.reranker = None
 
         # Initialize BM25 components
@@ -427,53 +430,59 @@ class HyperDB:
 
     def _rerank_results(self, query: str, candidate_docs: list) -> list:
         """
-        Rerank candidate documents using the FlashRank reranker model.
+        Rerank candidate documents using the BGE reranker model.
         
         Parameters:
         - query: The search query
         - candidate_docs: List of candidate documents to rerank
         
         Returns:
-        - List of (doc, score) tuples after reranking, sorted by score in descending order.
+        - List of (doc, score) tuples after reranking
         """
         if not hasattr(self, 'reranker') or not self.reranker or not candidate_docs:
             return candidate_docs
 
         try:
-            # Prepare passages for FlashRank.
-            passages = []
-            for idx, doc in enumerate(candidate_docs):
+            # Prepare pairs for reranking
+            pairs = []
+            for doc in candidate_docs:
+                # Extract text from document based on its type
                 if isinstance(doc, dict):
                     text = ""
                     if "user_input" in doc:
                         text += doc["user_input"] + " "
                     if "bot_response" in doc:
                         text += doc["bot_response"]
-                    if not text:  # Fallback: use all text fields from dict.
+                    if not text:  # If no specific fields found, use all text fields
                         text = " ".join(str(v) for v in doc.values() if isinstance(v, (str, int, float)))
                 else:
                     text = str(doc)
-                passages.append({
-                    "id": idx,  # Use the index as the id for mapping back.
-                    "text": text,
-                    "meta": {}
-                })
+                # Format pairs for CrossEncoder
+                pairs.append([query, text])
+
+            scores = self.reranker.predict(pairs)
             
-            rerank_request = RerankRequest(query=query, passages=passages)
-            results = self.reranker.rerank(rerank_request)
-            # The flash ranker returns a list of dicts with "id", "text", "meta", and "score"
-            # Map back the results to the original candidate_docs.
-            reranked_results = []
-            for result in results:
-                idx = result["id"]
-                score = result["score"]
-                reranked_results.append((candidate_docs[idx], score))
+            # Ensure scores are in the right format
+            if isinstance(scores, (list, np.ndarray)):
+                rerank_scores = [float(score) for score in scores]
+            else:
+                rerank_scores = [float(scores)]
+
+            # Safety check for scores
+            if len(rerank_scores) != len(candidate_docs):
+                queue_message(f"WARNING: Mismatch between scores ({len(rerank_scores)}) and docs ({len(candidate_docs)})")
+                return candidate_docs
+            
+            # Sort documents by reranking scores
+            reranked_results = list(zip(candidate_docs, rerank_scores))
             reranked_results.sort(key=lambda x: x[1], reverse=True)
             
             return reranked_results
             
         except Exception as e:
             queue_message(f"WARNING: Reranking failed: {e}. Returning original order.")
+            import traceback
+            traceback.print_exc()
             return candidate_docs
 
     def hybrid_query(
@@ -484,8 +493,8 @@ class HyperDB:
         rrf_k: int = 60
     ):
         """
-        Hybrid search using RRF fusion and FlashRank reranker.
-        The pipeline: vector search -> BM25 -> RRF fusion -> FlashRank reranking.
+        Hybrid search using RRF fusion and BGE reranker.
+        The pipeline: vector search -> BM25 -> RRF fusion -> BGE reranking.
         """
         if not self.documents or not self.vectors.size:
             queue_message("WARNING: Empty database, returning empty results")
@@ -541,7 +550,7 @@ class HyperDB:
                 rrf_score = (1 / (rrf_k + vector_rank)) + (1 / (rrf_k + bm25_rank))
                 rrf_scores[doc_id] = rrf_score
 
-            # RRF Ranking
+            # Reranking
             rrf_ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
             rrf_ranked = rrf_ranked[:min(top_k * 2, len(rrf_ranked))]
             
@@ -557,13 +566,14 @@ class HyperDB:
                 queue_message("WARNING: No valid candidates for reranking")
                 return self._vector_query(query_text, top_k, return_similarities)
 
-            # Apply FlashRank reranking
+            # Apply reranking
             reranked_results = self._rerank_results(query_text, candidate_docs)
             
             # Process results
             try:
                 if reranked_results and isinstance(reranked_results[0], tuple):
                     final_results = reranked_results[:min(top_k, len(reranked_results))]
+
                     if return_similarities:
                         return final_results
                     return [doc for doc, _ in final_results]

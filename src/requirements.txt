@@ -13,8 +13,6 @@ faster-whisper          # Local STT using Faster Whisper
 silero-vad              # Voice Activity Detection (VAD) using Silero
 vosk                    # Offline speech recognition
 pocketsphinx            # Lightweight speech recognition (CMU Sphinx)
-pvporcupine             # Highly accurate speech recognitio by Picovoice
-pvrecorder              # needed for picovoice
 
 # Sound Processing Tools
 pydub                   # Audio processing for TTS modifications
@@ -25,8 +23,7 @@ sounddevice             # Audio I/O for playing and capturing sound
 bm25s                   # BM25 ranking for information retrieval
 pystemmer               # Stem words for text processing
 hyperdb-python          # High-performance database library
-scikit-learn            # Predictive data analysis tools
-flashrank               # Lightweight re-ranker
+scikit-learn==1.5.2     # Predictive data analysis tools
 
 # Chat UI & Web Frameworks
 flask-cors              # Cross-Origin Resource Sharing (CORS) for Flask
@@ -48,7 +45,3 @@ discord.py[voice]       # Voice chat functionality for Discord bots
 requests                # HTTP library for API interactions
 pandas                  # Data analysis and manipulation
 joblib                  # Efficient serialization of Python objects
-
-# ui / camera module
-picamera2               # pi camera module, can interface with hailo module
-opencv-python           # video classes and modifiers

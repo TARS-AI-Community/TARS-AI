@@ -25,10 +25,6 @@ vad_method = rms
 # Enable silero or rms
 speechdelay = 20
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
-picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
-# Relative path to the Porcupine keyword file
-wake_word_processor = pocketsphinx
-# Options: picovoice, pocketsphinx
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS/TARS.json
@@ -199,20 +195,3 @@ neutralStarboard = 350
 backStarboard = 400
 # Fine-tuning offset for the starboard drive servo
 perfectStaroffset = 0
-
-
-
-[UI]
-UI_enabled = False
-maximize_console = False
-# start with the console using all the screen
-screen_width = 1024
-screen_height = 600
-# adjust based on your screen resolution
-rotation = 270
-# rotation can be 0, 90, 180, 270
-use_camera_module = False
-# enable the camera
-show_mouse = True
-background_id = 0
-# 0 = no background animation, # 1 = video 1, # 2 = video 2, # 3 = video 3 
