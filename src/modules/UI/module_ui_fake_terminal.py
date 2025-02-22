@@ -3,16 +3,28 @@ import random
 import string
 
 class ConsoleAnimation:
-    def __init__(self, width=300, height=180, font_size=10, code_snippets=None):
+    def __init__(self, width=800, height=600, base_width=800, base_height=600, font_size=8, code_snippets=None):
         self.width = width
         self.height = height
+        
+        # Compute scaling factor based on a base resolution (800x600)
+        self.scale_factor = min(width / base_width, height / base_height)
+
+        # Adjust font size dynamically
+        adjusted_font_size = max(8, int(font_size * self.scale_factor))
+
         if not pygame.font.get_init():
             pygame.font.init()
         self.surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        self.bg_color = (0, 0, 0, 80)         # Black background
-        self.text_color = (0, 255, 0)     # Green text (typical terminal look)
-        self.font = pygame.font.Font("UI/pixelmix.ttf", font_size)
-        self.line_height = self.font.get_linesize()
+
+        self.bg_color = (0, 0, 0, 80)  # Black background with slight transparency
+        self.text_color = (0, 255, 0)  # Green text for terminal look
+        self.font = pygame.font.Font("UI/pixelmix.ttf", adjusted_font_size)
+
+        # Scale line height dynamically
+        self.line_height = max(10, self.font.get_linesize())
+
+        # Adjust max lines dynamically
         self.max_lines = (self.height // self.line_height) + 1
 
         # Use provided code snippets or defaults.
@@ -76,6 +88,7 @@ class ConsoleAnimation:
                 length = random.randint(10, 30)
                 characters = string.ascii_letters + string.digits + " +-*/=<>[](){};:'\""
                 text = ''.join(random.choice(characters) for _ in range(length))
+        
         # ~5% chance to make this line flash (if it's not empty)
         if text and random.random() < 0.05:
             flash_color = random.choice([(0, 0, 255), (255, 255, 255), (255, 0, 0)])
