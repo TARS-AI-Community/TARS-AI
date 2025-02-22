@@ -198,7 +198,7 @@ class OrbitalAnimation:
         self.width = width
         self.height = height
         self.num_orbits = random.randint(3, 6)
-        self.orbit_radii = [random.randint(50, min(width, height) // 2) for _ in range(self.num_orbits)]
+        self.orbit_radii = [random.randint(50, max(50, min(width, height) // 2)) for _ in range(self.num_orbits)]
         self.orbit_speeds = [random.uniform(0.01, 0.05) for _ in range(self.num_orbits)]
         self.time = 0
         self.delay_frames = 30
