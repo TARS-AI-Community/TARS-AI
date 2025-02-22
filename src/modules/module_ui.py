@@ -358,7 +358,7 @@ class UIManager(threading.Thread):
         self.data_queue.put((timestamp, key, value, msg_type))
         self.data_store[f"{timestamp}_{key}"] = (value, msg_type)
         text = key + ": " + value
-        print(text)
+        #print(text)
         self.new_data_added = True
         
     def draw_console(self, surface, font):
