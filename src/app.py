@@ -30,6 +30,10 @@ from modules.module_vision import initialize_blip
 from modules.module_llm import initialize_manager_llm
 import modules.module_chatui
 
+import logging  # This will hide INFO and DEBUG messages
+logging.basicConfig(level=logging.WARNING)  # This will hide INFO and DEBUG messages
+logging.getLogger('bm25s').setLevel(logging.WARNING)
+
 # === Constants and Globals ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(BASE_DIR)
