@@ -42,7 +42,7 @@ sys.path.insert(0, BASE_DIR)
 sys.path.append(os.getcwd())
 
 CONFIG = load_config()
-VERSION = "1.03a"
+VERSION = "3.0 Dev Beta 0.1"
 
 # === Helper Functions ===
 def init_app():
