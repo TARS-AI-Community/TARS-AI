@@ -262,6 +262,8 @@ def load_config():
             "show_mouse": config.getboolean('UI', 'show_mouse'),
             "use_camera_module": config.getboolean('UI', 'use_camera_module'),
             "background_id": int(config['UI']['background_id']),
+            "fullscreen": config.getboolean('UI', 'fullscreen'),
+            "font_size": int(config['UI']['font_size']),
         }
     }
 

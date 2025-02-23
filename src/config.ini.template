@@ -153,6 +153,10 @@ use_camera_module = False
 show_mouse = True
 background_id = 0
 # 0 = no background animation, # 1 = video 1, # 2 = video 2, # 3 = video 3 
+fullscreen = False
+# fullscreen or within a framed window
+font_size = 12
+# normally from 9 to 20 depending on your resolution
 
 [RAG]
 # RAG (Retrieval Augmented Generation) settings
