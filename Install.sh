@@ -24,13 +24,6 @@ retry_pip_install() {
     done
 }
 
-# Ensure we are in the correct directory
-if [ ! -d "src" ]; then
-    echo "Error: 'src' directory not found!"
-    exit 1
-fi
-cd src
-
 # Update and upgrade system packages
 sudo apt clean
 sudo apt update -y
@@ -44,15 +37,22 @@ chromedriver --version
 sox --version
 
 # Create and activate Python virtual environment
-python3 -m venv venv
+python3 -m venv .venv
 
 # Use correct method for activating venv in bash
-if [ -f "venv/bin/activate" ]; then
-    source venv/bin/activate
+if [ -f ".venv/bin/activate" ]; then
+    source .venv/bin/activate
 else
     echo "Error: Virtual environment activation script not found!"
     exit 1
 fi
+
+# Ensure we are in the correct directory
+if [ ! -d "src" ]; then
+    echo "Error: 'src' directory not found!"
+    exit 1
+fi
+cd src
 
 # Install additional dependencies
 sudo apt-get install -y libcap-dev
