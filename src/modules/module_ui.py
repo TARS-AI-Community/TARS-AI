@@ -26,6 +26,8 @@ maximize_console = CONFIG['UI']['maximize_console']
 show_mouse = CONFIG['UI']['show_mouse']
 use_camera_module = CONFIG['UI']['use_camera_module']
 background_id = CONFIG['UI']['background_id']
+fullscreen = CONFIG['UI']['fullscreen']
+font_size = CONFIG['UI']['font_size']
 
 # Define a base resolution to scale from
 BASE_WIDTH = 800
@@ -237,7 +239,7 @@ class UIManager(threading.Thread):
         self.last_switch_time = 0
         self.last_image_filename = None
         self.crossfade_duration = 1000  # milliseconds
-        self.display_time = 5000  # milliseconds
+        self.display_time = 15000  # milliseconds
         self.alpha = 255
  
         self.camera_box = self.layouts[5]
@@ -275,7 +277,8 @@ class UIManager(threading.Thread):
         self.scroll_offset = 10
         self.max_lines = 15
         # Scale the font size (and line height) based on the scaling factor.
-        self.font_size = max(9, int(9 * self.scale))
+        # self.font_size = max(9, int(9 * self.scale))
+        self.font_size = font_size
         self.line_height = self.font_size + int(7 * self.scale)
 
         self.stars: List[Star] = [Star(width, height) for _ in range(1800)]
@@ -650,7 +653,10 @@ class UIManager(threading.Thread):
             pygame.init()
             pygame.mouse.set_visible(self.show_mouse)
             os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
-            screen = pygame.display.set_mode((self.width, self.height), pygame.FULLSCREEN)
+            if fullscreen:
+                screen = pygame.display.set_mode((self.width, self.height), pygame.FULLSCREEN)
+            else:
+                screen = pygame.display.set_mode((self.width, self.height))
             pygame.display.set_caption("TARS-AI Monitor")
             clock = pygame.time.Clock()
             font = pygame.font.Font("UI/pixelmix.ttf", self.font_size)
