@@ -65,17 +65,13 @@ retry_pip_install
 
 # Copy configuration files if they do not exist
 if [ ! -f "config.ini" ]; then
-    cp config.ini.example config.ini
+    cp config.ini.template config.ini
     echo "Default config.ini created. Please edit it with necessary values."
 fi
 
 if [ ! -f "../.env" ]; then
-    cp ../.env.example ../.env
+    cp ../.env.template ../.env
     echo "Default .env created. Please edit it with necessary values."
 fi
 
 echo "Installation completed successfully!"
-
-
-git config --global user.email "pyrater@gmail.com"
-git config --global user.name "Joseph Viverette"
