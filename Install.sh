@@ -29,7 +29,7 @@ sudo apt clean
 sudo apt update -y
 
 # Install necessary dependencies
-sudo apt install -y chromium-browser chromium-chromedriver sox libsox-fmt-all portaudio19-dev espeak-ng
+sudo apt install -y chromium-browser chromium-chromedriver sox libsox-fmt-all portaudio19-dev espeak-ng xterm
 
 # Verify installations
 chromium-browser --version
