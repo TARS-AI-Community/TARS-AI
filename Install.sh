@@ -36,6 +36,13 @@ chromium-browser --version
 chromedriver --version
 sox --version
 
+# Ensure we are in the correct directory
+if [ ! -d "src" ]; then
+    echo "Error: 'src' directory not found!"
+    exit 1
+fi
+cd src
+
 # Create and activate Python virtual environment
 python3 -m venv .venv
 
@@ -46,13 +53,6 @@ else
     echo "Error: Virtual environment activation script not found!"
     exit 1
 fi
-
-# Ensure we are in the correct directory
-if [ ! -d "src" ]; then
-    echo "Error: 'src' directory not found!"
-    exit 1
-fi
-cd src
 
 # Install additional dependencies
 sudo apt-get install -y libcap-dev
