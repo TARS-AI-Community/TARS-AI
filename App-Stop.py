@@ -13,5 +13,3 @@ def stop_tars_ai():
 
 if __name__ == "__main__":
     stop_tars_ai()
-
-
