@@ -74,4 +74,6 @@ if [ ! -f "../.env" ]; then
     echo "Default .env created. Please edit it with necessary values."
 fi
 
+sudo chmod 755 *
+
 echo "Installation completed successfully!"
