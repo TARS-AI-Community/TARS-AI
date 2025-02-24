@@ -2,21 +2,24 @@ import cv2  # OpenCV to handle frame format conversion
 import numpy as np
 import pygame
 import threading
-from picamera2 import Picamera2
+
 
 class CameraModule:
-    def __init__(self, width, height):
-        self.picam2 = Picamera2()
-        self.camera_config = self.picam2.create_preview_configuration(main={'size': (width, height), 'format': 'RGB888'})
-        self.picam2.configure(self.camera_config)
-        
-        self.frame = None
-        self.running = True
+    def __init__(self, width, height, use_camera_module):
+        self.use_camera_module = use_camera_module
+        if self.use_camera_module:
+            from picamera2 import Picamera2
+            self.picam2 = Picamera2()
+            self.camera_config = self.picam2.create_preview_configuration(main={'size': (width, height), 'format': 'RGB888'})
+            self.picam2.configure(self.camera_config)
+            
+            self.frame = None
+            self.running = True
 
-        # Start the camera thread
-        self.thread = threading.Thread(target=self.capture_frames, daemon=True)
-        self.thread.start()
-        self.picam2.start()
+            # Start the camera thread
+            self.thread = threading.Thread(target=self.capture_frames, daemon=True)
+            self.thread.start()
+            self.picam2.start()
 
     def update_size(self, width, height):
         self.stop()  # Stop the current camera

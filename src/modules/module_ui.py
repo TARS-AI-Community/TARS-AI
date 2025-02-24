@@ -11,7 +11,7 @@ import cv2
 import os
 import sounddevice as sd
 from module_config import load_config
-#from UI.module_ui_camera import CameraModule
+from UI.module_ui_camera import CameraModule
 from UI.module_ui_spectrum import SineWaveVisualizer
 from UI.module_ui_buttons import Button
 from UI.module_ui_fake_terminal import ConsoleAnimation
@@ -244,8 +244,7 @@ class UIManager(threading.Thread):
  
         self.camera_box = self.layouts[5]
         if use_camera_module:
-            pass  # temporarily bypass for debug
-            # self.camera_module = CameraModule(self.camera_box.original_width, self.camera_box.original_height)
+            self.camera_module = CameraModule(self.camera_box.original_width, self.camera_box.original_height, self.use_camera_module)
         else:
             self.camera_module = None
         self.change_camera_resolution = False
