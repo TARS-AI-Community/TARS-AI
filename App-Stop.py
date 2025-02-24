@@ -6,7 +6,7 @@ def stop_tars_ai():
     display = os.getenv("DISPLAY", ":0")
     
     command = (
-        f"killall lxterminal xterm gnome-terminal konsole mate-terminal xfce4-terminal"
+        f"killall xterm"
     )
     
     subprocess.Popen(command, shell=True)
