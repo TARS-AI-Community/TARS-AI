@@ -45,3 +45,4 @@ discord.py[voice]       # Voice chat functionality for Discord bots
 requests                # HTTP library for API interactions
 pandas                  # Data analysis and manipulation
 joblib                  # Efficient serialization of Python objects
+adafruit-pca9685
