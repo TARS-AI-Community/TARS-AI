@@ -54,6 +54,9 @@ else
     exit 1
 fi
 
+# Fix permissions
+sudo chown -R $USER:$USER /home/pyrater/TARS-AI/src/.venv/
+
 # Install additional dependencies
 sudo apt-get install -y libcap-dev
 
@@ -67,12 +70,14 @@ retry_pip_install
 if [ ! -f "config.ini" ]; then
     cp config.ini.template config.ini
     sudo chmod 777 config.ini
+    sudo chown $USER:$USER config.ini
     echo "Default config.ini created. Please edit it with necessary values."
 fi
 
 if [ ! -f "../.env" ]; then
     cp ../.env.template ../.env
     sudo chmod 777 ../.env
+    sudo chown $USER:$USER config.ini
     echo "Default .env created. Please edit it with necessary values."
 fi
 
