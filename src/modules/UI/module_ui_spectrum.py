@@ -28,7 +28,8 @@ class SineWaveVisualizer:
             # Map x coordinates to the center, and apply padding
             for x in range(self.padding, self.width - self.padding):
                 # Adjust the frequency bin to account for padding on both sides
-                freq_bin = int((x - self.padding) * len(spectrum) / (self.width - 2 * self.padding))
+                width_adj = max(2, self.width - 2 * self.padding)
+                freq_bin = int((x - self.padding) * len(spectrum) / width_adj)
                 amplitude = spectrum[freq_bin] * self.max_amplitude
                 t = (x - self.padding) / (self.width - 2 * self.padding)
                 # Centering the wave around the middle of the screen
