@@ -185,16 +185,21 @@ def get_vertical_layout(screen_width, screen_height, rotation, scale):
 
 class Star:
     def __init__(self, width: int, height: int):
-        self.width = width
-        self.height = height
+        self.width = max(2, width)   # Ensure at least 2
+        self.height = max(2, height) # Ensure at least 2
         self.reset()
-        
+            
     def reset(self):
-        self.x = random.randrange(-self.width, self.width)
-        self.y = random.randrange(-self.height, self.height)
-        self.z = random.randrange(1, self.width)
+        # Ensure width and height are always valid
+        safe_width = max(2, self.width)   # Minimum width of 2
+        safe_height = max(2, self.height) # Minimum height of 2
+
+        # Adjust range to prevent empty range errors
+        self.x = random.randrange(-safe_width, safe_width)
+        self.y = random.randrange(-safe_height, safe_height)
+        self.z = random.randrange(1, safe_width)  # Ensure at least a valid range
         self.speed = random.uniform(2, 5)
-        
+
     def moveStars(self):
         self.z -= self.speed
         if self.z <= 0:

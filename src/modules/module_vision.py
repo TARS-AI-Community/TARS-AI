@@ -47,13 +47,24 @@ def initialize_blip():
     global PROCESSOR, MODEL
     if not PROCESSOR or not MODEL:
         queue_message(f"INFO: Initializing BLIP model...")
-        PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
-        MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
-        MODEL = torch.quantization.quantize_dynamic(
-            MODEL, {torch.nn.Linear}, dtype=torch.qint8
-        )
-        queue_message(f"INFO: BLIP model initialized.")
 
+        model_path = CACHE_DIR / MODEL_NAME.replace("/", "_")  # Create a unique folder name
+        model_path.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
+
+        try:
+            PROCESSOR = BlipProcessor.from_pretrained(str(model_path))
+            MODEL = BlipForConditionalGeneration.from_pretrained(str(model_path)).to(DEVICE)
+            MODEL = torch.quantization.quantize_dynamic(
+                MODEL, {torch.nn.Linear}, dtype=torch.qint8
+            )
+            queue_message(f"INFO: BLIP model initialized from cache.")
+        except:
+            PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
+            MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
+            MODEL = torch.quantization.quantize_dynamic(
+                MODEL, {torch.nn.Linear}, dtype=torch.qint8
+            )
+            queue_message(f"INFO: BLIP model downloaded and cached.")
 
 def capture_image() -> BytesIO:
     """
@@ -89,7 +100,6 @@ def capture_image() -> BytesIO:
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Error capturing image: {e}")
 
-
 def send_image_to_server(image_bytes: BytesIO) -> str:
     """
     Send an image to the server for captioning and return the generated caption.
@@ -118,7 +128,6 @@ def send_image_to_server(image_bytes: BytesIO) -> str:
     except Exception as e:
         queue_message(f"[{datetime.now()}] ERROR: Failed to send image to server:", traceback.format_exc())
         raise
-
 
 def get_image_caption_from_base64(base64_str):
     """
