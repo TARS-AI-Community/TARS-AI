@@ -49,7 +49,7 @@ class ConsoleAnimation:
         if r < 0.1:
             text = ""
         elif r < 0.3:
-            length = random.randint(max(1, self.max_chars_full - 5), self.max_chars_full)
+            length = random.randint(max(1, min(self.max_chars_full, self.max_chars_full - 5)), self.max_chars_full)
             characters = string.ascii_letters + string.digits + " +-*/=<>[](){};:'\""
             text = ''.join(random.choice(characters) for _ in range(length))
         else:

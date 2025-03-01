@@ -197,7 +197,10 @@ class Star:
         # Adjust range to prevent empty range errors
         self.x = random.randrange(-safe_width, safe_width)
         self.y = random.randrange(-safe_height, safe_height)
-        self.z = random.randrange(1, safe_width)  # Ensure at least a valid range
+        
+        # ✅ Ensure `safe_width` is always greater than 1
+        self.z = random.randrange(1, max(2, safe_width))  # Avoids (1, 0) error
+
         self.speed = random.uniform(2, 5)
 
     def moveStars(self):
