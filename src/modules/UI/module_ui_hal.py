@@ -298,13 +298,14 @@ class OrbitalAnimation:
 
     def reset(self):
         self.num_orbits = random.randint(3, 6)
-        self.orbit_radii = [random.randint(50, min(self.width, self.height) // 2) for _ in range(self.num_orbits)]
+        upper = max(50, min(self.width, self.height) // 2)
+        self.orbit_radii = [random.randint(50, upper) for _ in range(self.num_orbits)]
         self.orbit_speeds = [random.uniform(0.01, 0.05) for _ in range(self.num_orbits)]
         self.orbit_inclinations = [random.uniform(0, math.pi/3) for _ in range(self.num_orbits)]
         self.orbit_rotations = [random.uniform(0, 2*math.pi) for _ in range(self.num_orbits)]
         self.generate_planet_names()
         self.reset_view_angles()
-        self.time = 0 
+        self.time = 0
 
 
 class HALInterfaceAnimation:

@@ -42,9 +42,9 @@ class CameraModule:
 
                 self.thread = None
                 self.start_camera()
-                print("🎥 Camera initialized successfully.")
+                #print("🎥 Camera initialized successfully.")
             except Exception as e:
-                print(f"❌ Camera initialization failed: {e}")
+                #print(f"❌ Camera initialization failed: {e}")
                 self.picam2 = None
 
     def start_camera(self):
@@ -57,14 +57,14 @@ class CameraModule:
             self.picam2.start()
             self.thread = threading.Thread(target=self.capture_frames, daemon=True)
             self.thread.start()
-            print("🎥 Camera streaming started.")
+            #print("🎥 Camera streaming started.")
         except Exception as e:
-            print(f"❌ Failed to start camera: {e}")
+            #print(f"❌ Failed to start camera: {e}")
             self.running = False
 
     def restart_camera(self):
         """Restart the camera if it encounters an error."""
-        print("🔄 Restarting camera...")
+        #print("🔄 Restarting camera...")
         self.stop()
         time.sleep(2)  # Give time before reinitializing
         self.__init__(640, 480, self.use_camera_module)  # Reinitialize
@@ -81,7 +81,8 @@ class CameraModule:
             self.picam2.configure(self.camera_config)
             self.start_camera()  # Restart camera with new resolution
         except Exception as e:
-            print(f"❌ Failed to update camera resolution: {e}")
+            pass
+            #print(f"❌ Failed to update camera resolution: {e}")
 
     def capture_frames(self):
         """Continuously captures frames from the camera but only saves when manually triggered."""
@@ -102,14 +103,14 @@ class CameraModule:
 
                 if not self.first_frame_captured:
                     self.first_frame_captured = True
-                    print("🎥 First valid frame captured. Camera is ready.")
+                    #print("🎥 First valid frame captured. Camera is ready.")
 
                 with self.lock:
                     if self.save_next_frame:
                         self.last_saved_image = self.save_frame()
                         self.save_next_frame = False  # Reset flag after saving
             except Exception as e:
-                print(f"⚠️ Camera frame capture error: {e}")
+                #print(f"⚠️ Camera frame capture error: {e}")
                 self.restart_camera()  # Attempt restart on error
 
     def capture_single_image(self):
@@ -117,7 +118,7 @@ class CameraModule:
         with self.lock:
             if self.first_frame_captured:
                 self.save_next_frame = True
-                print("🟢 Next frame will be saved.")
+                #print("🟢 Next frame will be saved.")
 
         while True:
             with self.lock:
@@ -130,7 +131,7 @@ class CameraModule:
     def save_frame(self):
         """Saves the current frame as an image."""
         if self.frame is None:
-            print("⚠️ No frame available to save.")
+            #print("⚠️ No frame available to save.")
             return None
 
         frame_array = pygame.surfarray.array3d(self.frame)
@@ -143,7 +144,7 @@ class CameraModule:
         image_path = output_dir / f"capture_{timestamp}.jpg"
 
         cv2.imwrite(str(image_path), frame_array)
-        print(f"📸 Image saved to {image_path}")
+        #print(f"📸 Image saved to {image_path}")
 
         return str(image_path)
 
@@ -158,4 +159,4 @@ class CameraModule:
             self.thread.join()
         if self.use_camera_module and self.picam2:
             self.picam2.stop()
-        print("🛑 Camera stopped.")
+        #print("🛑 Camera stopped.")

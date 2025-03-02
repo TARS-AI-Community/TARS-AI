@@ -32,7 +32,7 @@ def initialize_camera():
     """Initialize camera once and store the reference globally."""
     global CAMERA
     if CAMERA is None:  # Ensure it's only created once
-        CAMERA = CameraModule(640, 480)
+        CAMERA = CameraModule(1920, 1080)
         queue_message(f"INFO: Camera initialized.")
 
 def initialize_blip():
@@ -52,7 +52,7 @@ def capture_image() -> str:
     try:
         from UI.module_ui_camera import CameraModule
 
-        camera = CameraModule(640, 480)
+        camera = CameraModule(1920, 1080)
         image_path = camera.capture_single_image()
         print(f"✅ Image saved: {image_path}")
         #camera.stop()
@@ -67,8 +67,6 @@ def describe_camera_view() -> str:
     try:
         image_path = capture_image()
         print(image_path)
-        #"../vision/capture_20250301_191131.jpg"
-
         if CONFIG['VISION']['server_hosted']:
             return send_image_to_server(image_path)
         else:
