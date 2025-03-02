@@ -191,15 +191,35 @@ class Star:
             
     def reset(self):
         # Ensure width and height are always valid
-        safe_width = max(2, self.width)   # Minimum width of 2
-        safe_height = max(2, self.height) # Minimum height of 2
+        safe_width = max(2, self.width)   
+        safe_height = max(2, self.height)  
 
-        # Adjust range to prevent empty range errors
-        self.x = random.randrange(-safe_width, safe_width)
-        self.y = random.randrange(-safe_height, safe_height)
-        
-        # ✅ Ensure `safe_width` is always greater than 1
-        self.z = random.randrange(1, max(2, safe_width))  # Avoids (1, 0) error
+        # Debugging print statements
+        print(f"DEBUG: safe_width={safe_width}, safe_height={safe_height}")
+
+        min_x, max_x = sorted([-safe_width, safe_width])
+        min_y, max_y = sorted([-safe_height, safe_height])
+
+        print(f"DEBUG: x range: {min_x} to {max_x}, y range: {min_y} to {max_y}")
+
+        # Ensure that we never provide an invalid range
+        if min_x >= max_x or min_y >= max_y:
+            print(f"ERROR: Invalid range for randrange! min_x={min_x}, max_x={max_x}, min_y={min_y}, max_y={max_y}")
+            return
+
+        self.x = random.randrange(min_x, max_x)  # Ensures valid range
+        self.y = random.randrange(min_y, max_y)
+
+        # Ensure z value does not cause an invalid range
+        min_z = 1
+        max_z = max(2, safe_width)
+        print(f"DEBUG: z range: {min_z} to {max_z}")
+
+        if min_z >= max_z:
+            print(f"ERROR: Invalid range for randrange! min_z={min_z}, max_z={max_z}")
+            return
+
+        self.z = random.randrange(min_z, max_z)  # Ensures at least (1,2)
 
         self.speed = random.uniform(2, 5)
 
