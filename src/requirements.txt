@@ -49,9 +49,9 @@ requests                # HTTP library for API interactions
 pandas                  # Data analysis and manipulation
 joblib                  # Efficient serialization of Python objects
 adafruit-pca9685        # Servo Control
-simplejpeg              # Camera Requirement
-picamera2               # Camera Requirement
 
 # ui / camera module
-picamera2               # pi camera module, can interface with hailo module
-opencv-python           # video classes and modifiers
+picamera2               # PI camera module, can interface with hailo module
+opencv-python           # Video classes and modifiers
+simplejpeg              # Camera Requirement
+numpy                   # Needed for image rotations
