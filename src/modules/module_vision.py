@@ -1,14 +1,3 @@
-"""
-module_vision.py
-
-Vision Processing Module for TARS-AI Application.
-
-This module handles image capture and caption generation, supporting both server-hosted 
-and on-device processing modes. It utilizes the BLIP model for on-device inference and 
-communicates with a server endpoint for remote processing.
-"""
-# === Standard Libraries ===
-import subprocess
 import traceback
 from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
@@ -22,6 +11,7 @@ from pathlib import Path
 # === Custom Modules ===
 from modules.module_config import load_config
 from modules.module_messageQue import queue_message
+from UI.module_ui_camera import CameraModule  # Import once, no reinitialization in function calls
 
 # === Constants and Globals ===
 CONFIG = load_config()
@@ -33,100 +23,94 @@ MODEL_NAME = "Salesforce/blip-image-captioning-base"
 CACHE_DIR = Path(__file__).resolve().parent.parent / "vision"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-# Globals for processor and model
+# Globals for processor, model, and camera instance
 PROCESSOR = None
 MODEL = None
+CAMERA = None  # Prevents reinitialization
 
-# === Helper Functions ===
+def initialize_camera():
+    """Initialize camera once and store the reference globally."""
+    global CAMERA
+    if CAMERA is None:  # Ensure it's only created once
+        CAMERA = CameraModule(640, 480)
+        queue_message(f"INFO: Camera initialized.")
 
 def initialize_blip():
-    """
-    Initialize BLIP model and processor for detailed captions.
-    Ensures the model is loaded from the cache directory.
-    """
+    """Initialize BLIP model and processor for detailed captions."""
     global PROCESSOR, MODEL
     if not PROCESSOR or not MODEL:
         queue_message(f"INFO: Initializing BLIP model...")
 
-        model_path = CACHE_DIR / MODEL_NAME.replace("/", "_")  # Create a unique folder name
-        model_path.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
+        PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
+        MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
+        MODEL = torch.quantization.quantize_dynamic(MODEL, {torch.nn.Linear}, dtype=torch.qint8)
 
-        try:
-            PROCESSOR = BlipProcessor.from_pretrained(str(model_path))
-            MODEL = BlipForConditionalGeneration.from_pretrained(str(model_path)).to(DEVICE)
-            MODEL = torch.quantization.quantize_dynamic(
-                MODEL, {torch.nn.Linear}, dtype=torch.qint8
-            )
-            queue_message(f"INFO: BLIP model initialized from cache.")
-        except:
-            PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
-            MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
-            MODEL = torch.quantization.quantize_dynamic(
-                MODEL, {torch.nn.Linear}, dtype=torch.qint8
-            )
-            queue_message(f"INFO: BLIP model downloaded and cached.")
+        queue_message(f"INFO: BLIP model initialized.")
 
-def capture_image() -> BytesIO:
-    """
-    Capture an image using libcamera-still and return it as a BytesIO object.
-
-    Returns:
-    - BytesIO: Captured image in memory.
-    """
+def capture_image() -> str:
+    """Capture an image from the camera instance and return the saved image path."""
     try:
-        # Determine resolution from CONFIG
-        if CONFIG['VISION']['server_hosted']:
-            width, height = "2592", "1944"  # High resolution for server processing
-        else:
-            width, height = "1920", "1080"   # Low resolution for on-device processing
+        from UI.module_ui_camera import CameraModule
 
-        queue_message(f"INFO: Capturing image at resolution {width}x{height}.")
+        camera = CameraModule(640, 480)
+        image_path = camera.capture_single_image()
+        print(f"✅ Image saved: {image_path}")
+        #camera.stop()
+        return image_path
 
-        # Capture the image using libcamera-still
-        command = [
-            "libcamera-still",
-            "--output", "-",  # Output to stdout
-            "--timeout", "50",  # Short timeout
-            "--width", width,
-            "--height", height,
-        ]
-        process = subprocess.run(
-            command,
-            stdout=subprocess.PIPE,  # Capture standard output (image data)
-            stderr=subprocess.DEVNULL,  # Suppress standard error (libcamera logs)
-            check=True
-        )
-        return BytesIO(process.stdout)  # Return the captured image as BytesIO
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
+        queue_message(f"ERROR: {e}")
         raise RuntimeError(f"Error capturing image: {e}")
 
-def send_image_to_server(image_bytes: BytesIO) -> str:
+def describe_camera_view() -> str:
+    """Capture an image and process it for captioning."""
+    try:
+        image_path = capture_image()
+        print(image_path)
+        #"../vision/capture_20250301_191131.jpg"
+
+        if CONFIG['VISION']['server_hosted']:
+            return send_image_to_server(image_path)
+        else:
+            image = Image.open(image_path)
+            inputs = PROCESSOR(image, return_tensors="pt").to(DEVICE)
+            outputs = MODEL.generate(**inputs, max_new_tokens=50, num_beams=2)
+            output = PROCESSOR.decode(outputs[0], skip_special_tokens=True)
+            print(output)
+            return output
+        
+    except Exception as e:
+        queue_message(f"TARS is unable to see right now")
+        return f"Error: {e}"
+
+
+
+
+
+
+def send_image_to_server(image_path: str) -> str:
     """
     Send an image to the server for captioning and return the generated caption.
 
     Parameters:
-    - image_bytes (BytesIO): The image in memory to be sent.
+    - image_path (str): Path of the saved image.
 
     Returns:
     - str: Generated caption from the server.
     """
-    # Ensure the BytesIO object is rewound before sending
-    image_bytes.seek(0)
-
     try:
-        # Properly send the image as a file
-        files = {'image': ('image.jpg', image_bytes.getvalue(), 'image/jpeg')}
-        #queue_message(f"DEBUG: Sending image to {CONFIG['VISION']['base_url']}/caption")
+        with open(image_path, "rb") as img_file:
+            files = {'image': ('image.jpg', img_file, 'image/jpeg')}
 
-        response = requests.post(f"{CONFIG['VISION']['base_url']}/caption", files=files)
+            response = requests.post(f"{CONFIG['VISION']['base_url']}/caption", files=files)
 
-        if response.status_code == 200:
-            return response.json().get("caption", "No caption returned")
-        else:
-            error_message = response.json().get('error', 'Unknown error')
-            raise RuntimeError(f"Server error ({response.status_code}): {error_message}")
+            if response.status_code == 200:
+                return response.json().get("caption", "No caption returned")
+            else:
+                error_message = response.json().get('error', 'Unknown error')
+                raise RuntimeError(f"Server error ({response.status_code}): {error_message}")
     except Exception as e:
-        queue_message(f"[{datetime.now()}] ERROR: Failed to send image to server:", traceback.format_exc())
+        queue_message(f"[{datetime.now()}] ERROR: Failed to send image to server: {e}")
         raise
 
 def get_image_caption_from_base64(base64_str):
@@ -137,76 +121,43 @@ def get_image_caption_from_base64(base64_str):
     - base64_str (str): Base64-encoded string of the image.
 
     Returns:
-    - str
+    - str: Generated caption.
     """
     try:
-        # Decode the base64 string into image bytes
         img_bytes = base64.b64decode(base64_str)
         raw_image = Image.open(BytesIO(img_bytes)).convert('RGB')
 
-        # Prepare inputs for the BLIP model
-        inputs = PROCESSOR(raw_image, return_tensors="pt")
+        inputs = PROCESSOR(raw_image, return_tensors="pt").to(DEVICE)
         outputs = MODEL.generate(**inputs, max_new_tokens=100)
 
-        # Decode and return the generated caption
         caption = PROCESSOR.decode(outputs[0], skip_special_tokens=True)
         return caption
     except Exception as e:
-        raise RuntimeError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Error generating caption from base64: {e}")
+        raise RuntimeError(f"Error generating caption from base64: {e}")
 
-# === Main Functions ===
-def describe_camera_view() -> str:
-    """
-    Capture an image and process it either on-device or by sending it to the server.
-
-    Returns:
-    - str: Caption describing the captured image.
-    """
-    try:
-        # Capture the image once
-        image_bytes = capture_image()
-
-        # Save the image before processing
-        save_captured_image(image_bytes)  # Pass image_bytes as an argument
-
-        if CONFIG['VISION']['server_hosted']:
-            # Use server-hosted vision processing
-            return send_image_to_server(image_bytes)
-        else:
-            # Use on-device BLIP model for captioning
-            image = Image.open(image_bytes)
-            inputs = PROCESSOR(image, return_tensors="pt").to(DEVICE)
-
-            outputs = MODEL.generate(**inputs, max_new_tokens=50, num_beams=2)
-            caption = PROCESSOR.decode(outputs[0], skip_special_tokens=True)
-            return caption
-    except Exception as e:
-        queue_message(f"TARS is unable to see right now")
-        return f"Error: {e}"
-
-def save_captured_image(image_bytes: BytesIO):
+def save_captured_image(image_path: str) -> str:
     """
     Save the captured image to the 'vision/images' directory.
 
     Parameters:
-    - image_bytes (BytesIO): The image to save.
+    - image_path (str): Path of the image to be saved.
+
+    Returns:
+    - str: The new saved image path.
     """
     try:
-        # Create the output directory if it doesn't exist
-        #output_dir = Path("vision/images")
         output_dir = Path(__file__).resolve().parent.parent / "vision/images"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Define the file name with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_path = output_dir / f"captured_image_{timestamp}.jpg"
+        new_path = output_dir / f"captured_image_{timestamp}.jpg"
 
-        # Save the image to the file path
-        with Image.open(image_bytes) as img:
-            img.save(file_path, format="JPEG", optimize=True, quality=85)
+        # Save the image to the new file path
+        img = Image.open(image_path)
+        img.save(new_path, format="JPEG", optimize=True, quality=85)
 
-        #queue_message(f"Image saved to {file_path}")
-        return file_path
+        return str(new_path)
     except Exception as e:
         queue_message(f"Error saving image: {e}")
         return None
