@@ -127,8 +127,8 @@ class STTManager:
         # Use Picovoice instead of Pocketsphinx (if configured)
         if self.config["STT"]["wake_word_processor"] == "picovoice":
             self.porcupine = pvporcupine.create(
-                access_key=self.config["STT"]["picovoice_api_key"],
-                keyword_paths=[self.config["STT"]["picovoice_keyword_path"]]
+                access_key=CONFIG["STT"]["picovoice_api_key"],
+                keyword_paths=[CONFIG["STT"]["picovoice_keyword_path"]]
             )
 
         # Use Silero VAD instead of RMS (if configured)
