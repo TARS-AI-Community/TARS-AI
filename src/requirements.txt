@@ -53,3 +53,4 @@ adafruit-pca9685
 # ui / camera module
 picamera2               # pi camera module, can interface with hailo module
 opencv-python           # video classes and modifiers
+PyOpenGL

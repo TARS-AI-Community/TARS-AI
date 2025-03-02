@@ -256,6 +256,8 @@ def load_config():
         "UI": {
             "UI_enabled": config.getboolean('UI', 'UI_enabled'),
             "maximize_console": config.getboolean('UI','maximize_console'),
+            "neural_net": config.getboolean('UI', 'neural_net'),
+            "neural_net_always_visible": config.getboolean('UI', 'neural_net_always_visible'),
             "screen_width": int(config['UI']['screen_width']),
             "screen_height": int(config['UI']['screen_height']),
             "rotation": int(config['UI']['rotation']),
@@ -263,7 +265,7 @@ def load_config():
             "use_camera_module": config.getboolean('UI', 'use_camera_module'),
             "background_id": int(config['UI']['background_id']),
             "fullscreen": config.getboolean('UI', 'fullscreen'),
-            "font_size": int(config['UI']['font_size']),
+            "font_size": int(config['UI']['font_size']),         
         }
     }
 

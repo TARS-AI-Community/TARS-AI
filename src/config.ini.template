@@ -140,11 +140,14 @@ negative_prompt = deformed, black and white, disfigured, low contrast, extra lim
 enabled = True
 
 [UI]
-[UI]
 UI_enabled = True
 #Enable or Disable the visuals
 maximize_console = False
 # start with the console using all the screen
+neural_net = True
+# Show the neural net animation 
+neural_net_always_visible = False
+# keep the neural net active all the time
 screen_width = 480
 # Adjust based on your screen resolution
 screen_height = 320
@@ -156,7 +159,7 @@ use_camera_module = False
 show_mouse = True
 # enable the software mouse
 background_id = 0
-# 0 = no background animation, # 1 = video 1, # 2 = video 2, # 3 = video 3 
+# 0 = no background animation, # 1 = background image, # 2 = stars, # 3 = video 3 , 4 = video, 5 = video
 fullscreen = False
 # fullscreen or within a framed window
 font_size = 12

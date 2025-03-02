@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
     # Initialize CharacterManager, MemoryManager
     char_manager = CharacterManager(config=CONFIG)
-    memory_manager = MemoryManager(config=CONFIG, char_name=char_manager.char_name, char_greeting=char_manager.char_greeting)
+    memory_manager = MemoryManager(config=CONFIG, char_name=char_manager.char_name, char_greeting=char_manager.char_greeting, ui_manager=ui_manager)
    
     # Initialize STTManager
     stt_manager = STTManager(config=CONFIG, shutdown_event=shutdown_event, ui_manager=ui_manager)
