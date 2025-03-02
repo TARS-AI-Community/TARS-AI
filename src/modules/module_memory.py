@@ -26,7 +26,7 @@ class MemoryManager:
     """
     Handles memory operations (long-term and short-term) for TARS-AI.
     """
-    def __init__(self, config, char_name, char_greeting):
+    def __init__(self, config, char_name, char_greeting, ui_manager):
         self.config = config
         self.char_name = char_name
         self.char_greeting = char_greeting
@@ -43,6 +43,8 @@ class MemoryManager:
         self.long_mem_use = True
         self.initial_memory_path =  os.path.abspath(os.path.join(os.path.join("..", "memory", "initial_memory.json")))
         
+        self.ui_manager = ui_manager
+
         self.init_dynamic_memory()
         self.load_initial_memory(self.initial_memory_path)
 
@@ -64,6 +66,7 @@ class MemoryManager:
             self.hyper_db.save(self.memory_db_path)
 
     def write_longterm_memory(self, user_input: str, bot_response: str):
+        self.ui_manager.save_memory()
         """
         Save user input and bot response to long-term memory.
 
@@ -81,6 +84,7 @@ class MemoryManager:
         self.hyper_db.save(self.memory_db_path)
 
     def get_related_memories(self, query: str) -> str:
+        self.ui_manager.think()
         """
         Retrieve memories related to a given query from the HyperDB.
 

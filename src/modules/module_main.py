@@ -91,7 +91,8 @@ def wake_word_callback(wake_response):
     Parameters:
     - wake_response (str): The response to the wake word.
     """ 
-    ui_manager.update_data("TARS", wake_response, "TARS")
+    ui_manager.wake()
+    ui_manager.update_data("*", wake_response, "*")
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption']))
 
 def utterance_callback(message):
