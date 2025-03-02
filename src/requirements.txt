@@ -54,4 +54,4 @@ adafruit-pca9685        # Servo Control
 picamera2               # PI camera module, can interface with hailo module
 opencv-python           # Video classes and modifiers
 simplejpeg              # Camera Requirement
-numpy                   # Needed for image rotations
+numpy==2.1              # Needed for image rotations
