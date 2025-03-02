@@ -26,8 +26,9 @@ class SineWaveVisualizer:
             sinewave_points = []
 
             for x in range(self.padding, self.width - self.padding):
-
-                freq_bin = int((x - self.padding) * len(spectrum) / (self.width - 2 * self.padding))
+                # Adjust the frequency bin to account for padding on both sides
+                width_adj = max(2, self.width - 2 * self.padding)
+                freq_bin = int((x - self.padding) * len(spectrum) / width_adj)
                 amplitude = spectrum[freq_bin] * self.max_amplitude
                 t = (x - self.padding) / (self.width - 2 * self.padding)
 

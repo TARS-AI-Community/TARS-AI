@@ -174,7 +174,7 @@ top_k = 5
 
 [HOME_ASSISTANT] # HA Module
 enabled = False
-# If set to False, the Stable Diffusion module will be disabled.
+# If set to False, the Home Assistant module will be disabled.
 url = http://192.168.2.5:8123
 # Url to acccess HA from (set Token in .env file!).
 

@@ -156,12 +156,16 @@ class TextAnimation:
 class FrequencyBars3DAnimation:
     def __init__(self, width, height):
         self.width = width
-        self.height = height
+        self.height = max(height, 50)  # Ensure height is at least 50 to avoid invalid range
         self.num_bars = random.randint(15, 35)
-        self.bars = [random.randint(50, height) for _ in range(self.num_bars)]
+        self.bars = [random.randint(50, self.height) for _ in range(self.num_bars)]
         self.bar_speeds = [random.uniform(0.05, 0.2) for _ in range(self.num_bars)]
         self.bar_directions = [random.choice([-1, 1]) for _ in range(self.num_bars)]
-        self.moving_indices = random.sample(range(len(self.bars)), max(2, min(10, len(self.bars))))
+        # Ensure we don't sample more indices than available
+        max_moving = min(len(self.bars), 10)
+        min_moving = min(2, len(self.bars))
+        num_moving = max(min_moving, min(max_moving, len(self.bars)))
+        self.moving_indices = random.sample(range(len(self.bars)), num_moving)
         self.time = 0
         self.delay_frames = 30
 
@@ -190,7 +194,11 @@ class FrequencyBars3DAnimation:
         self.bars = [random.randint(50, self.height) for _ in range(self.num_bars)]
         self.bar_speeds = [random.uniform(0.05, 0.2) for _ in range(self.num_bars)]
         self.bar_directions = [random.choice([-1, 1]) for _ in range(self.num_bars)]
-        self.moving_indices = random.sample(range(len(self.bars)), max(2, min(10, len(self.bars))))
+        # Ensure we don't sample more indices than available
+        max_moving = min(len(self.bars), 10)
+        min_moving = min(2, len(self.bars))
+        num_moving = max(min_moving, min(max_moving, len(self.bars)))
+        self.moving_indices = random.sample(range(len(self.bars)), num_moving)
         self.time = 0
 
 class OrbitalAnimation:
@@ -290,13 +298,14 @@ class OrbitalAnimation:
 
     def reset(self):
         self.num_orbits = random.randint(3, 6)
-        self.orbit_radii = [random.randint(50, min(self.width, self.height) // 2) for _ in range(self.num_orbits)]
+        upper = max(50, min(self.width, self.height) // 2)
+        self.orbit_radii = [random.randint(50, upper) for _ in range(self.num_orbits)]
         self.orbit_speeds = [random.uniform(0.01, 0.05) for _ in range(self.num_orbits)]
         self.orbit_inclinations = [random.uniform(0, math.pi/3) for _ in range(self.num_orbits)]
         self.orbit_rotations = [random.uniform(0, 2*math.pi) for _ in range(self.num_orbits)]
         self.generate_planet_names()
         self.reset_view_angles()
-        self.time = 0 
+        self.time = 0
 
 
 class HALInterfaceAnimation:
