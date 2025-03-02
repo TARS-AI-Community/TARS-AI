@@ -179,3 +179,5 @@ memory/initial_memory.loaded
 character/persona.ini
 stt/
 !stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
+src/engine/pickles
+src/engine/pickles/*
