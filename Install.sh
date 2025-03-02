@@ -1,6 +1,6 @@
 #!/bin/bash
 # New Build Script with Retry Mechanism for pip install
-# v0.3 TeknikL
+# v0.4 TeknikL
 
 set -e  # Exit on any error
 
@@ -30,7 +30,7 @@ sudo apt update -y
 
 # Install necessary dependencies
 sudo apt install -y chromium-browser chromium-chromedriver sox libsox-fmt-all portaudio19-dev espeak-ng --fix-missing
-sudo apt install -y xterm --fix-missing
+sudo apt install -y xterm libcap-dev --fix-missing
 
 # Verify installations
 chromium-browser --version
@@ -56,13 +56,18 @@ else
 fi
 
 # Fix permissions
-sudo chown -R $USER:$USER .venv/
+sudo chown -R $(id -u):$(id -g) .venv/
 
-# Install additional dependencies
-sudo apt-get install -y libcap-dev
+# Remove system-wide installations to avoid conflicts
+echo "Removing system-wide installations of simplejpeg and picamera2..."
+sudo apt remove -y python3-simplejpeg python3-picamera2 || true
 
-# Upgrade pip
+# Ensure the latest version of pip is installed
 pip install --upgrade pip
+
+# **Force clean installation of NumPy, simplejpeg, and picamera2 to prevent binary issues**
+pip uninstall -y numpy simplejpeg picamera2 || true
+pip install --no-cache-dir numpy==2.1 simplejpeg picamera2
 
 # **Retry pip install on failure**
 retry_pip_install
