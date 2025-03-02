@@ -55,7 +55,7 @@ else
 fi
 
 # Fix permissions
-sudo chown -R $USER:$USER /home/pyrater/TARS-AI/src/.venv/
+sudo chown -R $USER:$USER .venv/
 
 # Install additional dependencies
 sudo apt-get install -y libcap-dev
