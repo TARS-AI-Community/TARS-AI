@@ -44,7 +44,7 @@ fi
 cd src
 
 # Create and activate Python virtual environment
-python3 -m venv .venv
+python3 -m venv .venv --system-site-packages
 
 # Use correct method for activating venv in bash
 if [ -f ".venv/bin/activate" ]; then

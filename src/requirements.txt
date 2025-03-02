@@ -48,7 +48,9 @@ discord.py[voice]       # Voice chat functionality for Discord bots
 requests                # HTTP library for API interactions
 pandas                  # Data analysis and manipulation
 joblib                  # Efficient serialization of Python objects
-adafruit-pca9685
+adafruit-pca9685        # Servo Control
+simplejpeg              # Camera Requirement
+picamera2               # Camera Requirement
 
 # ui / camera module
 picamera2               # pi camera module, can interface with hailo module
