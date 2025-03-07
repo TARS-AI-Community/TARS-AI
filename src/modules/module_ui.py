@@ -923,11 +923,17 @@ class UIManager(threading.Thread):
                         self.draw_brain(original_surface, font)
 
                     pygame.draw.rect(original_surface, (255, 255, 255, 255), (0, 0, self.width, self.width), 1) # DO NOT REMOVE THIS LINE
-                    texture_data = pygame.image.tostring(original_surface, "BGRA", True)
+
+                    #texture_data = pygame.image.tostring(original_surface, "BGRA", True) # BREAKS MY INSTALL FIX BELOW
+                    texture_data = pygame.image.tostring(original_surface, "RGBA", True) #fix
+
                     GL.glBindTexture(GL.GL_TEXTURE_2D, texture_id)
                     GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
                     GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
-                    GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, self.width, self.height, 0, GL.GL_BGRA, GL.GL_UNSIGNED_BYTE, texture_data)
+
+                    #GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, self.width, self.height, 0, GL.GL_BGRA, GL.GL_UNSIGNED_BYTE, texture_data) #breaks color
+                    GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA, self.width, self.height, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, texture_data) #fix color for applied fix above
+
                     GL.glBegin(GL.GL_QUADS)
                     GL.glTexCoord2f(0, 1); GL.glVertex2f(0, 0)
                     GL.glTexCoord2f(1, 1); GL.glVertex2f(self.width, 0)
