@@ -87,4 +87,11 @@ if [ ! -f "../.env" ]; then
     echo "Default .env created. Please edit it with necessary values."
 fi
 
+# Set DISPLAY for GUI applications
+export DISPLAY=:0
+echo "DISPLAY set to $DISPLAY"
+
+# Fix permissions and executable files
+sudo chown "$(id -u):$(id -g)" src/*
+chmod 755 src/*  
 echo "Installation completed successfully!"
