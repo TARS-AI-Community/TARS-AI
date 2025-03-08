@@ -532,7 +532,10 @@ class UIManager(threading.Thread):
         max_frames = 20
         padding = int(15 * self.scale)
         progress_bar_height = int(10 * self.scale)
-        available_width = self.brain_box.original_width - (padding * 2)
+        if self.brain_box:
+            available_width = self.brain_box.original_width - (padding * 2)
+        else:
+            available_width = 20
         progress_bar_x = padding
         progress_bar_y = padding                    
         if self.silence_progress > 0:
@@ -544,26 +547,24 @@ class UIManager(threading.Thread):
                             (progress_bar_x, progress_bar_y, fill_width, progress_bar_height))
         #pygame.draw.rect(box_surface, (0, 0, 0), (progress_bar_x, progress_bar_y, available_width, progress_bar_height), 1)
 
-
-
-
-
-
         pygame.draw.rect(box_surface, border_color, (0, 0, box.original_width, box.original_height), int(2 * self.scale))
         rotated_surface = pygame.transform.rotate(box_surface, box.rotation)
         surface.blit(rotated_surface, (box.x, box.y))
 
     def draw_brain(self, surface, font):
-        if not self.brain or not self.brain_box or self.expanded_box not in ["", "brain"]:
+        if not self.brain_box or not self.brain or self.expanded_box not in ["", "brain"]:
             return
         box = self.brain_box
-        x, y = box.x, box.y
-        width, height = box.original_width, box.original_height
+        if box:
+            x, y = box.x, box.y
+            width, height = box.original_width, box.original_height
+        else:
+            x, y, width, height = 0, 0, 0, 0
         box_surface = pygame.Surface((width, height), pygame.SRCALPHA)
         box_surface.fill((0, 0, 0, 0))
 
-        #if self.barVisualizer:
-            #box_surface = self.barVisualizer.update(self.spectrum, box_surface)
+        if self.barVisualizer:
+            box_surface = self.barVisualizer.update(self.spectrum, box_surface)
             
         border_color = (76, 194, 230, 255)
         rotated_surface = pygame.transform.rotate(box_surface, box.rotation)
@@ -830,11 +831,11 @@ class UIManager(threading.Thread):
                     GL.glEnable(GL.GL_BLEND)
                     GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
 
-                    if self.brain_box and self.brain_visible:
+                    if self.brain_box and self.brain and self.brain_visible:
                         screen_height = pygame.display.get_surface().get_height()  # Get screen height
 
                         previous_viewport = GL.glGetIntegerv(GL.GL_VIEWPORT)  # Save current viewport
-                        self.brain.render(self.brain_box, screen_height)  # ✅ Pass screen height
+                        self.brain.render(self.brain_box, screen_height)  # Pass screen height
                         GL.glViewport(*previous_viewport)  # Restore original viewport
 
 
@@ -855,7 +856,7 @@ class UIManager(threading.Thread):
                         self.draw_fake_terminal(original_surface, font)
                     if self.avatar_box:
                         self.draw_avatar(original_surface, font)
-                    if self.brain_visible:
+                    if self.brain_box and self.brain and self.brain_visible:
                         self.draw_brain(original_surface, font)
 
 
