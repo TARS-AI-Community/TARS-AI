@@ -91,8 +91,12 @@ def wake_word_callback(wake_response):
     Parameters:
     - wake_response (str): The response to the wake word.
     """ 
+
+    character_name = os.path.splitext(os.path.basename(CONFIG['CHAR']['character_card_path']))[0]
+    
     ui_manager.wake()
-    ui_manager.update_data("*", wake_response, "*")
+    ui_manager.update_data(character_name, wake_response, character_name)
+    
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption']))
 
 def utterance_callback(message):
