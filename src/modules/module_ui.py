@@ -68,39 +68,74 @@ def load_layout_config(config_file):
         return {"landscape": [], "portrait": []}
 
 def get_layout_dimensions(layout_config, screen_width, screen_height, rotation):
-    # Choose the correct key based on orientation.
+    """
+    Calculate layout dimensions with correct rotation handling.
+    
+    Parameters:
+    - layout_config: Dictionary with layout configurations
+    - screen_width: Physical screen width (e.g., 1024)
+    - screen_height: Physical screen height (e.g., 600)
+    - rotation: Screen rotation in degrees (0, 90, 180, or 270)
+    
+    Returns:
+    - A list of Box objects with correctly calculated positions and dimensions
+    """
+    # For a 270° rotation with 1024x600 screen:
+    # - Physical screen is still 1024x600
+    # - But the logical screen becomes 600x1024 (portrait orientation)
+    
+    # Select layout based on orientation
     layout_key = "landscape" if rotation in (0, 180) else "portrait"
-    logical_width, logical_height = screen_width, screen_height
-    if rotation in (90, 270):
-        logical_width, logical_height = screenHeight, screenWidth
+    
+    # For 270° rotation, logical dimensions are swapped
+    if rotation in (0, 180):
+        logical_width, logical_height = screen_width, screen_height  # 1024x600
+    else:  # rotation in (90, 270)
+        logical_width, logical_height = screen_height, screen_width  # 600x1024
+    
     layout = []
     for box_config in layout_config.get(layout_key, []):
+        # Calculate percentage-based dimensions
         logical_x = box_config["x"] * logical_width
         logical_y = box_config["y"] * logical_height
         logical_width_box = box_config["width"] * logical_width
         logical_height_box = box_config["height"] * logical_height
+        
+        # Apply rotation transformations
         if rotation == 0:
             physical_x = int(logical_x)
             physical_y = int(logical_y)
+            physical_width = int(logical_width_box)
+            physical_height = int(logical_height_box)
         elif rotation == 180:
             physical_x = int(screen_width - logical_x - logical_width_box)
             physical_y = int(screen_height - logical_y - logical_height_box)
+            physical_width = int(logical_width_box)
+            physical_height = int(logical_height_box)
         elif rotation == 90:
-            physical_x = int(logical_y)
-            physical_y = int(screen_width - logical_x - logical_width_box)
+            # When the screen is rotated 90°, Y becomes X and X becomes inverted Y
+            physical_x = int(logical_y)  # Y → X
+            physical_y = int(logical_width - logical_x - logical_width_box)  # Inverted X → Y
+            physical_width = int(logical_height_box)
+            physical_height = int(logical_width_box)
         elif rotation == 270:
-            physical_x = int(screenHeight - logical_y - logical_height_box)
-            physical_y = int(logical_x)
+            # When the screen is rotated 270°, Y becomes inverted X and X becomes Y
+            physical_x = int(logical_height - logical_y - logical_height_box)  # Inverted Y → X
+            physical_y = int(logical_x)  # X → Y
+            physical_width = int(logical_height_box)
+            physical_height = int(logical_width_box)
+        
         layout.append(Box(
             box_config["name"],
-            physical_x,
+            physical_x, 
             physical_y,
-            int(logical_width_box),
-            int(logical_height_box),
+            physical_width,
+            physical_height,
             rotation,
             int(logical_width_box),
             int(logical_height_box)
         ))
+    
     return layout
 
 # --- Star Class for Background Effects ---
@@ -400,6 +435,9 @@ class UIManager(threading.Thread):
         if self.expanded_box == "console":
             x, y = 0, 0
             width, height = self.width, self.height
+            if box.rotation in (90, 270):
+                width, height = self.height, self.width
+
         console_surface = pygame.Surface((width, height), pygame.SRCALPHA)
         console_background = (0, 0, 0, 160)
         pygame.draw.rect(console_surface, console_background, (0, 0, width, height))
@@ -532,10 +570,7 @@ class UIManager(threading.Thread):
         max_frames = 20
         padding = int(15 * self.scale)
         progress_bar_height = int(10 * self.scale)
-        if self.brain_box:
-            available_width = self.brain_box.original_width - (padding * 2)
-        else:
-            available_width = 20
+        available_width = self.brain_box.original_width - (padding * 2)
         progress_bar_x = padding
         progress_bar_y = padding                    
         if self.silence_progress > 0:
@@ -547,24 +582,26 @@ class UIManager(threading.Thread):
                             (progress_bar_x, progress_bar_y, fill_width, progress_bar_height))
         #pygame.draw.rect(box_surface, (0, 0, 0), (progress_bar_x, progress_bar_y, available_width, progress_bar_height), 1)
 
+
+
+
+
+
         pygame.draw.rect(box_surface, border_color, (0, 0, box.original_width, box.original_height), int(2 * self.scale))
         rotated_surface = pygame.transform.rotate(box_surface, box.rotation)
         surface.blit(rotated_surface, (box.x, box.y))
 
     def draw_brain(self, surface, font):
-        if not self.brain_box or not self.brain or self.expanded_box not in ["", "brain"]:
+        if not self.brain or not self.brain_box or self.expanded_box not in ["", "brain"]:
             return
         box = self.brain_box
-        if box:
-            x, y = box.x, box.y
-            width, height = box.original_width, box.original_height
-        else:
-            x, y, width, height = 0, 0, 0, 0
+        x, y = box.x, box.y
+        width, height = box.original_width, box.original_height
         box_surface = pygame.Surface((width, height), pygame.SRCALPHA)
         box_surface.fill((0, 0, 0, 0))
 
-        if self.barVisualizer:
-            box_surface = self.barVisualizer.update(self.spectrum, box_surface)
+        #if self.barVisualizer:
+            #box_surface = self.barVisualizer.update(self.spectrum, box_surface)
             
         border_color = (76, 194, 230, 255)
         rotated_surface = pygame.transform.rotate(box_surface, box.rotation)
@@ -831,11 +868,11 @@ class UIManager(threading.Thread):
                     GL.glEnable(GL.GL_BLEND)
                     GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
 
-                    if self.brain_box and self.brain and self.brain_visible:
+                    if self.brain_box and self.brain_visible:
                         screen_height = pygame.display.get_surface().get_height()  # Get screen height
 
                         previous_viewport = GL.glGetIntegerv(GL.GL_VIEWPORT)  # Save current viewport
-                        self.brain.render(self.brain_box, screen_height)  # Pass screen height
+                        self.brain.render(self.brain_box, screen_height)  # ✅ Pass screen height
                         GL.glViewport(*previous_viewport)  # Restore original viewport
 
 
@@ -856,7 +893,7 @@ class UIManager(threading.Thread):
                         self.draw_fake_terminal(original_surface, font)
                     if self.avatar_box:
                         self.draw_avatar(original_surface, font)
-                    if self.brain_box and self.brain and self.brain_visible:
+                    if self.brain_visible:
                         self.draw_brain(original_surface, font)
 
 
