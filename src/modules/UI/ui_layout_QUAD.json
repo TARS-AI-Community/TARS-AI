@@ -1,0 +1,16 @@
+{
+  "landscape": [
+      {"name": "console", "x": 0, "y": 0, "width": 0.5, "height": 1, "expandable": true},
+      {"name": "hal", "x": 0.5, "y": 0, "width": 0.25, "height": 0.5, "expandable": false},
+      {"name": "camera", "x": 0.75, "y": 0, "width": 0.25, "height": 0.5, "expandable": true},
+      {"name": "spectrum", "x": 0.5, "y": 0.5, "width": 0.25, "height": 0.5, "expandable": false},
+      {"name": "buttons", "x": 0.75, "y": 0.5, "width": 0.25, "height": 0.5, "expandable": false}
+  ],
+  "portrait": [
+      {"name": "console", "x": 0, "y": -0.41, "width": 1, "height": 0.41, "expandable": true},
+      {"name": "spectrum", "x": 0, "y": 0.25, "width": 0.5, "height": 0.25, "expandable": true},
+      {"name": "camera", "x": 0, "y": 0, "width": 0.5, "height": 0.25, "expandable": true},
+      {"name": "avatar", "x": 0.5, "y": 0, "width": 0.5, "height": 0.6, "expandable": false},
+      {"name": "buttons", "x": 0, "y": 0.5, "width": 0.5, "height": 0.1, "expandable": false}
+  ]
+}

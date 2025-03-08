@@ -1,0 +1,103 @@
+{
+  "landscape": [
+    {
+      "name": "spectrum",
+      "x": 0.0,
+      "y": 0.00,
+      "width": 0.35,
+      "height": 0.15,
+      "expandable": false
+    },
+    {
+      "name": "camera",
+      "x": 0.0,
+      "y": 0.15,
+      "width": 0.35,
+      "height": 0.25,
+      "expandable": true
+    },
+    {
+      "name": "fake_terminal",
+      "x": 0.0,
+      "y": 0.40,
+      "width": 0.35,
+      "height": 0.20,
+      "expandable": true
+    },
+    {
+      "name": "img",
+      "x": 0.0,
+      "y": 0.60,
+      "width": 0.35,
+      "height": 0.25,
+      "expandable": true
+    },
+    {
+      "name": "buttons",
+      "x": 0.0,
+      "y": 0.85,
+      "width": 0.35,
+      "height": 0.15,
+      "expandable": false
+    },
+    {
+      "name": "console",
+      "x": 0.35,
+      "y": 0.0,
+      "width": 0.65,
+      "height": 1.0,
+      "expandable": true
+    }
+  ],
+
+  "portrait": [
+    {
+      "name": "console",
+      "x": 0.0,
+      "y": 0.0,
+      "width": 1.0,
+      "height": 0.40,
+      "expandable": true
+    },
+    {
+      "name": "spectrum",
+      "x": 0.0,
+      "y": 0.40,
+      "width": 1.0,
+      "height": 0.10,
+      "expandable": false
+    },
+    {
+      "name": "camera",
+      "x": 0.0,
+      "y": 0.50,
+      "width": 1.0,
+      "height": 0.20,
+      "expandable": true
+    },
+    {
+      "name": "fake_terminal",
+      "x": 0.0,
+      "y": 0.70,
+      "width": 1.0,
+      "height": 0.15,
+      "expandable": true
+    },
+    {
+      "name": "img",
+      "x": 0.0,
+      "y": 0.85,
+      "width": 1.0,
+      "height": 0.10,
+      "expandable": true
+    },
+    {
+      "name": "buttons",
+      "x": 0.0,
+      "y": 0.95,
+      "width": 1.0,
+      "height": 0.05,
+      "expandable": false
+    }
+  ]
+}

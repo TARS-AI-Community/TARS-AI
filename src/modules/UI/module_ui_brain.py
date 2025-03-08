@@ -770,7 +770,7 @@ class BrainVisualization:
                         glVertex3f(node[0], node[1], node[2])
                 glEnd()
 
-    def render(self):
+    def render2(self):
         if not self.initialized:
             self.initialize()
 
@@ -890,6 +890,142 @@ class BrainVisualization:
 
         glPopAttrib()
         glMatrixMode(GL_MODELVIEW)
+
+    def render(self, brain_box, screen_height):
+        """
+        Renders the Brain Visualization inside the specified Pygame brain_box.
+
+        :param brain_box: Object containing x, y, width, and height (Pygame surface area)
+        :param screen_height: Total screen height to adjust OpenGL y-coordinates
+        """
+        if not self.initialized:
+            self.initialize()
+
+        glPushAttrib(GL_ALL_ATTRIB_BITS)  # Save OpenGL state
+
+        try:
+            # ✅ Fix OpenGL viewport (Pygame y-coordinates start from top, OpenGL from bottom)
+            adjusted_y = screen_height - (brain_box.y + brain_box.height)  # Flip y-axis for OpenGL
+            glViewport(brain_box.x, adjusted_y, brain_box.width, brain_box.height)
+
+            # ✅ Projection matrix setup
+            glMatrixMode(GL_PROJECTION)
+            glPushMatrix()
+            glLoadIdentity()
+
+            aspect_ratio = brain_box.width / max(1, brain_box.height)  # Prevent division by zero
+            gluPerspective(45, aspect_ratio, 0.1, 50.0)
+
+            glMatrixMode(GL_MODELVIEW)
+            glLoadIdentity()
+
+            # ✅ Enable depth testing and transparency blending
+            glEnable(GL_DEPTH_TEST)
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+            # ✅ Apply transformations
+            self.rotation_y += 0.08
+            self.rotation_x += 0.12
+            self.sphere_rotation_angle += self.sphere_rotation_speed
+
+            glPushMatrix()
+            glTranslatef(0.0, 0.0, -15)  # Keep the brain inside view
+            glRotatef(self.rotation_y, 0, 1, 0)
+            glRotatef(self.rotation_x, 1, 0, 0)
+
+            self.draw_edges()
+            self.draw_nodes()
+
+            if hasattr(self, 'matrix_active') and self.matrix_active:
+                self._draw_matrix_streams()
+
+            glPopMatrix()
+
+            # ✅ Render the rotating sphere
+            glPushMatrix()
+            glTranslatef(0.0, 0.0, -15)
+            glRotatef(self.sphere_rotation_angle, *self.sphere_rotation_axis)
+            self.draw_sphere()
+            glPopMatrix()
+
+            # ✅ Restore projection and attributes
+            glMatrixMode(GL_PROJECTION)
+            glPopMatrix()
+            glMatrixMode(GL_MODELVIEW)
+
+            # ✅ Time-based updates
+            current_time = time.time() if hasattr(time, 'time') else 0
+            if not hasattr(self, 'last_frame_time'):
+                self.last_frame_time = current_time
+
+            delta_time = min(0.1, current_time - self.last_frame_time)  
+            self.last_frame_time = current_time
+
+            # ✅ Handle animation updates
+            if hasattr(self, 'wave_active') and self.wave_active:
+                if hasattr(self, 'is_band') and self.is_band:
+                    self._update_band(delta_time)
+                elif hasattr(self, 'is_ripple') and self.is_ripple:
+                    self._update_ripple(delta_time)
+                else:
+                    self._update_wave(delta_time)
+
+            if hasattr(self, 'matrix_active') and self.matrix_active:
+                self._update_matrix_effect(delta_time)
+
+            # ✅ Render particles
+            if hasattr(self, 'particles') and self.particles:
+                glPushAttrib(GL_ALL_ATTRIB_BITS)
+
+                glMatrixMode(GL_PROJECTION)
+                glPushMatrix()
+                glLoadIdentity()
+                gluPerspective(45, aspect_ratio, 0.1, 50.0)
+
+                glMatrixMode(GL_MODELVIEW)
+                glEnable(GL_DEPTH_TEST)
+                glEnable(GL_BLEND)
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+
+                glPushMatrix()
+                glLoadIdentity()
+                glTranslatef(0.0, 0.0, -15)
+                glRotatef(self.rotation_y, 0, 1, 0)
+                glRotatef(self.rotation_x, 1, 0, 0)
+
+                if self.particles:
+                    size_groups = {}
+                    for particle in self.particles:
+                        size = particle['size']
+                        if size not in size_groups:
+                            size_groups[size] = []
+                        size_groups[size].append(particle)
+
+                    for size, particles in size_groups.items():
+                        glPointSize(size)
+                        glBegin(GL_POINTS)
+                        for particle in particles:
+                            glColor4f(*particle['color'])
+                            glVertex3f(*particle['position'])
+                        glEnd()
+
+                glPopMatrix()
+                glMatrixMode(GL_PROJECTION)
+                glPopMatrix()
+                glPopAttrib()
+                glMatrixMode(GL_MODELVIEW)
+
+            # ✅ Limit particle count
+            if hasattr(self, 'particles') and self.particles:
+                max_particles = self.max_particles if hasattr(self, 'max_particles') else 200
+                if len(self.particles) > max_particles:
+                    self.particles = self.particles[-max_particles:]
+
+        finally:
+            glPopAttrib()  # Restore OpenGL state
+
+
 
     def set_sphere_rotation(self, speed=None, axis=None):
         if speed is not None:

@@ -9,14 +9,6 @@
       "expandable": true
     },
     {
-      "name": "brain",
-      "x": 0.0,
-      "y": 0.0,
-      "width": 0.50,
-      "height": 1.0,
-      "expandable": true
-    },
-    {
       "name": "hal",
       "x": 0.50,
       "y": 0.0,
@@ -28,7 +20,7 @@
       "name": "fake_terminal",
       "x": 0.66,
       "y": 0.0,
-      "width": 0.17,
+      "width": 0.16,
       "height": 0.5,
       "expandable": false
     },
@@ -69,14 +61,6 @@
   "portrait": [
     {
       "name": "console",
-      "x": 0.0,
-      "y": 0.0,
-      "width": 1.0,
-      "height": 0.40,
-      "expandable": true
-    },
-    {
-      "name": "brain",
       "x": 0.0,
       "y": 0.0,
       "width": 1.0,
