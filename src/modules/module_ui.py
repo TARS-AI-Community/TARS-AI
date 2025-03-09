@@ -876,18 +876,7 @@ class UIManager(threading.Thread):
                             self.current_video = new_video_path
                         self.draw_video(original_surface)
 
-
-                    GL.glDisable(GL.GL_DEPTH_TEST)
-                    GL.glEnable(GL.GL_BLEND)
-                    GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
-
-                    if self.brain_box and self.brain_visible:
-                        screen_height = pygame.display.get_surface().get_height()  # Get screen height
-
-                        previous_viewport = GL.glGetIntegerv(GL.GL_VIEWPORT)  # Save current viewport
-                        self.brain.render(self.brain_box, screen_height)  # ✅ Pass screen height
-                        GL.glViewport(*previous_viewport)  # Restore original viewport
-
+                    # Draw all other UI elements onto original_surface
                     if self.console_box:
                         self.draw_console(original_surface, font)
                     if self.system_box:
@@ -904,11 +893,8 @@ class UIManager(threading.Thread):
                         self.draw_fake_terminal(original_surface, font)
                     if self.avatar_box:
                         self.draw_avatar(original_surface, font)
-                    if self.brain_visible:
-                        self.draw_brain(original_surface, font)
 
-
-                    pygame.draw.rect(original_surface, (255, 255, 255, 255), (0, 0, self.width, self.width), 1)
+                    # Render original_surface to OpenGL texture
                     texture_data = pygame.image.tostring(original_surface, "RGBA", True)
                     GL.glBindTexture(GL.GL_TEXTURE_2D, texture_id)
                     GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
@@ -921,11 +907,22 @@ class UIManager(threading.Thread):
                     GL.glTexCoord2f(1, 0); GL.glVertex2f(self.width, self.height)
                     GL.glTexCoord2f(0, 0); GL.glVertex2f(0, self.height)
                     GL.glEnd()
+
+                    # Render BrainVisualization last to ensure it’s on top
+                    if self.brain_box and self.brain_visible:
+                        GL.glClear(GL.GL_DEPTH_BUFFER_BIT)  # Clear depth to render on top
+                        screen_height = pygame.display.get_surface().get_height()
+                        previous_viewport = GL.glGetIntegerv(GL.GL_VIEWPORT)
+                        self.brain.render(self.brain_box, screen_height)
+                        GL.glViewport(*previous_viewport)  # Restore viewport
+
                     pygame.display.flip()
-                    if not self.neural_net_always_visible:
-                        if time.time() - self.start_time >= 15 and self.brain_visible:
-                            self.brain_visible = False
                     clock.tick(60)
+
+                    if not self.neural_net_always_visible and self.brain_visible:
+                        if time.time() - self.start_time >= 15:
+                            self.brain_visible = False
+
                 except Exception as e:
                     print(f"Error in main UI loop: {e}")
                     self.running = False
@@ -933,6 +930,7 @@ class UIManager(threading.Thread):
                         self.cap.release()
                     if self.camera_module:
                         self.camera_module.stop()
+
         except Exception as e:
             print(f"Fatal UI error: {e}")
             self.running = False
@@ -940,6 +938,7 @@ class UIManager(threading.Thread):
                 self.cap.release()
             if self.camera_module:
                 self.camera_module.stop()
+
         finally:
             pygame.quit()
             if self.video_enabled and self.cap:
