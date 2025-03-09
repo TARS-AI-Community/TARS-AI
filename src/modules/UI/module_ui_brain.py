@@ -516,6 +516,7 @@ class BrainVisualization:
 
         self.particles = updated_particles
 
+
     def add_matrix_data_insertion(self, target_nodes=None, duration=4.0, color=(0, 255, 0), 
                                 speed=1.0, density=0.8, entry_point=None):
 
@@ -530,25 +531,32 @@ class BrainVisualization:
         self.matrix_density = min(1.0, max(0.1, density))
 
         max_targets = min(20, int(len(self.nodes) * 0.1))  
-        num_targets = max(3, max_targets)
+        num_targets = min(max(3, max_targets), len(self.nodes))  # Ensure num_targets is valid
 
         if target_nodes is None:
-            self.matrix_targets = random.sample(range(len(self.nodes)), num_targets)
+            if num_targets > 0:
+                self.matrix_targets = random.sample(range(len(self.nodes)), num_targets)
+            else:
+                self.matrix_targets = []
         else:
             self.matrix_targets = target_nodes[:max_targets] if len(target_nodes) > max_targets else target_nodes
+
         if entry_point is None:
             self.matrix_entry = (0, self.brain_height * 1.5, 0)
         else:
             self.matrix_entry = entry_point
+
         self.binary_streams = []
         self.node_matrix_effects = {}
         max_streams_per_target = 2  
+
         for target_idx in self.matrix_targets:
             target_pos = self.nodes[target_idx]
             streams_per_target = min(max_streams_per_target, 
                                     max(1, int(max_streams_per_target * self.matrix_density)))
 
             for _ in range(streams_per_target):
+
 
                 start_pos = (
                     self.matrix_entry[0] + random.uniform(-1.0, 1.0),
