@@ -30,22 +30,24 @@ CAMERA = None  # Prevents reinitialization
 
 def initialize_camera():
     """Initialize camera once and store the reference globally."""
-    global CAMERA
-    if CAMERA is None:  # Ensure it's only created once
-        CAMERA = CameraModule(1920, 1080)
-        queue_message(f"INFO: Camera initialized.")
+    if not CONFIG['VISION']['enabled']:
+        global CAMERA
+        if CAMERA is None:  # Ensure it's only created once
+            CAMERA = CameraModule(1920, 1080)
+            queue_message(f"INFO: Camera initialized.")
 
 def initialize_blip():
     """Initialize BLIP model and processor for detailed captions."""
-    global PROCESSOR, MODEL
-    if not PROCESSOR or not MODEL:
-        queue_message(f"INFO: Initializing BLIP model...")
+    if not CONFIG['VISION']['enabled']:
+        global PROCESSOR, MODEL
+        if not PROCESSOR or not MODEL:
+            queue_message(f"INFO: Initializing BLIP model...")
 
-        PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
-        MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
-        MODEL = torch.quantization.quantize_dynamic(MODEL, {torch.nn.Linear}, dtype=torch.qint8)
+            PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
+            MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
+            MODEL = torch.quantization.quantize_dynamic(MODEL, {torch.nn.Linear}, dtype=torch.qint8)
 
-        queue_message(f"INFO: BLIP model initialized.")
+            queue_message(f"INFO: BLIP model initialized.")
 
 def capture_image() -> str:
     """Capture an image from the camera instance and return the saved image path."""
@@ -80,11 +82,6 @@ def describe_camera_view() -> str:
     except Exception as e:
         queue_message(f"TARS is unable to see right now")
         return f"Error: {e}"
-
-
-
-
-
 
 def send_image_to_server(image_path: str) -> str:
     """

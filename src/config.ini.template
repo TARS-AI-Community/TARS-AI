@@ -11,7 +11,7 @@ wake_word = hey tar
 # Wake word for activating the system
 sensitivity = 8
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection. 
-stt_processor = faster-whisper
+stt_processor = fastrtc
 #vosk, faster-whisper, silero, fastrtc, or external
 external_url = http://192.168.2.57:5678
 # URL for the STT server (if enabled)
@@ -67,6 +67,8 @@ instructionprompt = You are {char}. Compose {char}s next roleplay message to {us
 # Instructions guiding the LLM's response style
 
 [VISION] # Vision-related configuration (e.g., image recognition)
+enabled = True
+# Set to false to prevent loading of blip
 server_hosted = False
 # If True, the vision server is hosted locally
 base_url = http://192.168.2.68:5678

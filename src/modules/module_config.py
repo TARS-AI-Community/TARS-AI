@@ -177,6 +177,7 @@ def load_config():
             "instructionprompt": config['LLM']['instructionprompt'],
         },
         "VISION": {
+            "enabled": config.getboolean('VISION', 'enabled'),
             "server_hosted": config.getboolean('VISION', 'server_hosted'),
             "base_url": config['VISION']['base_url'],
         },

@@ -15,6 +15,7 @@ vosk                    # Offline speech recognition
 pocketsphinx            # Lightweight speech recognition (CMU Sphinx)
 pvporcupine             # Highly accurate speech recognitio by Picovoice
 pvrecorder              # needed for picovoice
+fastrtc[vad, stt, tts]  # needed for fastrtc
 
 # Sound Processing Tools
 pydub                   # Audio processing for TTS modifications
@@ -57,6 +58,3 @@ PyOpenGL                # Needed for Neural NEt
 simplejpeg              # Camera Requirement
 numpy==2.1              # Needed for image rotations
 PyOpenGL_accelerate     # NOT SURE IF NEEDED
-
-#testing fastrtc
-fastrtc[vad, stt, tts]

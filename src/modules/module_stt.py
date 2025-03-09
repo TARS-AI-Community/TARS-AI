@@ -100,13 +100,14 @@ class STTManager:
         self.post_utterance_callback: Optional[Callable[[], None]] = None
 
         # Wake word and model settings
-        self.WAKE_WORD = config.get("STT", {}).get("wake_word", "default_wake_word")
+        self.WAKE_WORD = config.get("STT", {}).get("wake_word", "hey tar").lower()
         self.fastrtc_model = None
         self.vosk_model = None
         self.faster_whisper_model = None
         self.silero_model = None  # For Silero STT (if used)
         self.silero_vad_model = None
         self.get_speech_timestamps = None
+
         self._initialize_models()
         self.vadmethod = CONFIG['STT']['vad_method']
         self.DEBUG = False
@@ -128,14 +129,16 @@ class STTManager:
         else:
             self._load_vosk_model()
 
-        # Use Picovoice instead of Pocketsphinx (if configured)
-        if self.config["STT"]["wake_word_processor"] == "picovoice":
+        # Wake word processor initialization
+        wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
+        if wake_word_processor == "picovoice":
             self.porcupine = pvporcupine.create(
                 access_key=CONFIG["STT"]["picovoice_api_key"],
                 keyword_paths=[CONFIG["STT"]["picovoice_keyword_path"]]
             )
+        elif wake_word_processor == "fastrtc" and not self.fastrtc_model:
+            self._load_fastrtc_model()  # Ensure FastRTC is loaded if used for wake word
 
-        # Use Silero VAD instead of RMS (if configured)
         if self.config["STT"].get("vad_enabled", False):
             self._load_silero_vad()
         
@@ -303,23 +306,29 @@ class STTManager:
     def _transcribe_utterance(self):
         """Transcribe the user's utterance using the selected STT processor."""
         try:
-            processor = self.config["STT"].get("stt_processor", "vosk")
+            processor = self.config["STT"].get("stt_processor", "fastrtc")  # Default to fastrtc
+            #queue_message(f"DEBUG: Selected STT processor: {processor}")
 
             if processor == "fastrtc":
-                result = self._transcribe_with_fastrtc()     
-            if processor in ["whisper", "faster-whisper"]:
+                result = self._transcribe_with_fastrtc()
+            elif processor in ["whisper", "faster-whisper"]:
                 result = self._transcribe_with_faster_whisper()
             elif processor == "silero":
                 result = self._transcribe_silero()
             elif processor == "external":
                 result = self._transcribe_with_server()
-            else:
+            elif processor == "vosk":
                 result = self._transcribe_with_vosk()
+            else:
+                queue_message(f"WARNING: Unknown STT processor '{processor}', falling back to FastRTC")
+                result = self._transcribe_with_fastrtc()
 
             if self.post_utterance_callback and result:
                 self.post_utterance_callback()
+            return result
         except Exception as e:
             queue_message(f"ERROR: Transcription failed: {e}")
+            return None
 
     def _transcribe_with_fastrtc(self):
         """Transcribe audio using FastRTC STT."""
@@ -563,30 +572,91 @@ class STTManager:
         queue_message("INFO: STT Manager stopped.")
 
     def _detect_wake_word(self) -> bool:
-        """
-        Detect a wake word using the selected method.
-        
-        Args:
-            config (dict): Configuration dictionary.
-            method (str): The detection method to use. Options: 'picovoice' or 'simple'.
-            timeout (float): Maximum time (seconds) to listen for the wake word.
-            
-        Returns:
-            bool: True if wake word is detected, otherwise False.
-        """
         if self.config["STT"]["use_indicators"]:
             self.play_beep(400, 0.1, 44100, 0.6)
 
         character_path = self.config.get("CHAR", {}).get("character_card_path")
-        character_name = os.path.splitext(os.path.basename(character_path))[0]
-        
+        character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
         queue_message(f"{character_name}: Sleeping...")
 
-        if self.config["STT"]["wake_word_processor"] == 'pocketsphinx':
+        wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
+        if wake_word_processor == "pocketsphinx":
             return self._detect_wake_word_pocketsphinx()
+        elif wake_word_processor == "fastrtc":
+            return self._detect_wake_word_fastrtc()
         else:
             return self._detect_wake_word_picovoice()
 
+    def _detect_wake_word_fastrtc(self) -> bool:
+        """
+        Detect the wake word using FastRTC STT by transcribing short audio chunks.
+        """
+        if not self.fastrtc_model:
+            queue_message("ERROR: FastRTC model not loaded for wake word detection.")
+            return False
+
+        try:
+            requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
+        except Exception:
+            pass
+
+        chunk_duration = 2.0  # Process 1-second chunks
+        frames_per_chunk = int(self.SAMPLE_RATE * chunk_duration)
+        silent_frames = 0
+        max_iterations = 100  # Prevent infinite loops
+
+        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+            for iteration in range(max_iterations):
+                if not self.running or self.shutdown_event.is_set():
+                    break
+
+                # Read a short audio chunk
+                data, _ = stream.read(frames_per_chunk)
+                data = self.amplify_audio(data)  # Apply amplification
+
+                # Check for silence
+                is_silence, _, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
+                if is_silence:
+                    silent_frames += 1
+                    if silent_frames > self.MAX_SILENT_FRAMES:
+                        queue_message("DEBUG: Silence timeout reached in FastRTC wake word detection.")
+                        break
+                    continue
+                else:
+                    silent_frames = 0
+
+                # Convert to format expected by FastRTC (float32)
+                audio_data = data.astype(np.float32) / 32768.0
+                # Ensure 1D array: flatten from (44100,) to [44100]
+                audio_data = audio_data.flatten()
+                #queue_message(f"DEBUG: audio_data shape: {audio_data.shape}, sample_rate: {self.SAMPLE_RATE}")
+
+                try:
+                    transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip().lower()
+                except Exception as e:
+                    queue_message(f"ERROR: FastRTC STT failed: {e}")
+                    continue
+
+                if self.DEBUG:
+                    queue_message(f"DEBUG: FastRTC Wake Word Transcript: '{transcript}'")
+
+                if self.WAKE_WORD in transcript:
+                    if self.config["STT"].get("use_indicators"):
+                        self.play_beep(1200, 0.1, 44100, 0.8)
+                    try:
+                        requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
+                    except Exception:
+                        pass
+                    wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                    character_name = os.path.splitext(os.path.basename(
+                        self.config.get("CHAR", {}).get("character_card_path", "TARS")
+                    ))[0]
+                    queue_message(f"{character_name}: {wake_response}", stream=True)
+                    if self.wake_word_callback:
+                        self.wake_word_callback(wake_response)
+                    return True
+
+        return False
     def _detect_wake_word_pocketsphinx(self) -> bool:
         """
         Detect the wake word using enhanced false-positive filtering.

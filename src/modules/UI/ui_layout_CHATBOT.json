@@ -1,102 +1,17 @@
 {
   "landscape": [
-    {
-      "name": "console",
-      "x": 0.0,
-      "y": 0.0,
-      "width": 0.6,
-      "height": 0.75,
-      "expandable": true
-    },
-    {
-      "name": "brain",
-      "x": 0,
-      "y": 0,
-      "width": 0.6,
-      "height": 0.75,
-      "expandable": true
-    },
-    {
-      "name": "spectrum",
-      "x": 0.0,
-      "y": 0.75,
-      "width": 0.6,
-      "height": 0.25,
-      "expandable": true
-    },
-    {
-      "name": "avatar",
-      "x": 0.6,
-      "y": 0.0,
-      "width": 0.4,
-      "height": 0.42,
-      "expandable": true
-    },
-    {
-      "name": "camera",
-      "x": 0.6,
-      "y": 0.42,
-      "width": 0.4,
-      "height": 0.42,
-      "expandable": true
-    },
-    {
-      "name": "buttons",
-      "x": 0.6,
-      "y": 0.85,
-      "width": 0.4,
-      "height": 0.15,
-      "expandable": true
-    }
+    { "name": "console", "x": 0.0, "y": 0.0, "width": 0.6, "height": 0.75, "expandable": true, "z_height": 1 },
+    { "name": "spectrum", "x": 0.0, "y": 0.75, "width": 0.6, "height": 0.25, "expandable": true, "z_height": 1 },
+    { "name": "avatar", "x": 0.6, "y": 0.0, "width": 0.4, "height": 0.42, "expandable": true, "z_height": 2 },
+    { "name": "brain", "x": 0.6, "y": 0.0, "width": 0.4, "height": 0.42, "expandable": true, "z_height": 1 },
+    { "name": "camera", "x": 0.6, "y": 0.42, "width": 0.4, "height": 0.42, "expandable": true, "z_height": 1 },
+    { "name": "buttons", "x": 0.6, "y": 0.85, "width": 0.4, "height": 0.15, "expandable": true, "z_height": 1 }
   ],
   "portrait": [
-    {
-      "name": "avatar",
-      "x": 0.0,
-      "y": 0.0,
-      "width": 1,
-      "height": 0.5,
-      "expandable": true
-    },
-    {
-      "name": "brain",
-      "x": 0.1,
-      "y": 0.0,
-      "width": 1,
-      "height": 0.5,
-      "expandable": true
-    },
-    {
-      "name": "buttons",
-      "x": 0.0,
-      "y": 0.9,
-      "width": 0.5,
-      "height": 0.1,
-      "expandable": true
-    },
-    {
-      "name": "console",
-      "x": 0,
-      "y": 0.5,
-      "width": 0.7,
-      "height": 0.4,
-      "expandable": true
-    },
-    {
-      "name": "camera",
-      "x": 0.7,
-      "y": 0.5,
-      "width": 0.3,
-      "height": 0.4,
-      "expandable": true
-    },
-    {
-      "name": "spectrum",
-      "x": 0.5,
-      "y": 0.9,
-      "width": 0.5,
-      "height": 0.1,
-      "expandable": true
-    }
+    { "name": "avatar", "x": 0.0, "y": 0.0, "width": 1, "height": 0.5, "expandable": true, "z_height": 2 },
+    { "name": "brain", "x": 0.7, "y": 0.2, "width": 0.3, "height": 0.3, "expandable": true, "z_height": 1 },
+    { "name": "console", "x": 0, "y": 0.5, "width": 0.7, "height": 0.5, "expandable": true, "z_height": 1 },
+    { "name": "camera", "x": 0.7, "y": 0.5, "width": 0.3, "height": 0.4, "expandable": true, "z_height": 1 },
+    { "name": "spectrum", "x": 0.7, "y": 0.9, "width": 0.3, "height": 0.1, "expandable": true, "z_height": 1 }
   ]
 }

@@ -111,8 +111,9 @@ if __name__ == "__main__":
         flask_thread.start()
     
     # Initilize BLIP to speed up initial image capture
-    if CONFIG['VISION']['server_hosted'] != "True":
+    if CONFIG['VISION']['enabled'] == "True" and CONFIG['VISION']['server_hosted'] != "True":
         initialize_blip()
+
     
     try:
         queue_message(f"LOAD: TARS-AI v"+VERSION+" running.")        
