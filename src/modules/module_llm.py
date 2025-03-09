@@ -25,6 +25,10 @@ memory_manager = None
 # Threading and Executor
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
+if CONFIG['EMOTION']['enabled']:
+    from transformers import pipeline
+    classifier = pipeline("text-classification", model="SamLowe/roberta-base-go_emotions", top_k=None)
+
 # === Core Functions ===
 
 def get_completion(user_prompt, istext=True):
@@ -161,12 +165,11 @@ def detect_emotion(text):
     Returns:
     - str: The detected emotion.
     """
-    if CONFIG['EMOTION']['enabled']:
-        from transformers import pipeline
-        classifier = pipeline("text-classification", model="SamLowe/roberta-base-go_emotions", top_k=None)
-        model_outputs = classifier(text)
-        return max(model_outputs[0], key=lambda x: x['score'])['label']
-    return None
+    model_outputs = classifier(text)
+    emotindetected = max(model_outputs[0], key=lambda x: x['score'])['label']
+    requests.post("http://127.0.0.1:5012/emotion", data=emotindetected, timeout=10)
+    return
+
 
 # === Memory Integration ===
 
@@ -185,10 +188,10 @@ def llm_process(user_input, bot_response):
     if memory_manager:
         threading.Thread(target=memory_manager.write_longterm_memory, args=(user_input, bot_response)).start()
     
-    if CONFIG['EMOTION']['enabled']:
-        emotionvalue = threading.Thread(target=detect_emotion, args=(bot_response,)).start()
-        #do something with emotionvalue (IE SAD, ANGRY)
-    
+    if CONFIG['EMOTION']['enabled']:  # No need to compare with True
+        emotion_thread = threading.Thread(target=detect_emotion, args=(bot_response,))
+        emotion_thread.start()  # Start the thread
+
     return bot_response
 
 def raw_complete_llm(user_prompt, istext=True):

@@ -72,13 +72,11 @@ server_hosted = False
 base_url = http://192.168.2.68:5678
 # URL for the vision server API
 
-[EMOTION] # Emotion detection configuration
+[EMOTION] # Emotion detection for avatars (set to false if not using avatars emotions)
 enabled = false
 # Enable or disable emotion detection
 emotion_model = SamLowe/roberta-base-go_emotions
 # Hugging Face model for emotion analysis
-storepath = ./emotions
-# Directory to store emotion-related data
 
 [TTS] # Text-to-Speech configuration 
 ttsoption = piper

@@ -183,7 +183,6 @@ def load_config():
         "EMOTION": {
             "enabled": config.getboolean('EMOTION', 'enabled'),
             "emotion_model": config['EMOTION']['emotion_model'],
-            "storepath": os.path.join(os.getcwd(), config['EMOTION']['storepath']),
         },
         "TTS": TTSConfig.from_config_dict({
             "ttsoption": config['TTS']['ttsoption'],

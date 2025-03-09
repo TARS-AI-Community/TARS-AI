@@ -192,8 +192,7 @@ def animation_loop():
         
         time.sleep(0.1)  # Update at roughly 10 fps
         
-
-
+                
 # Start the animation loop in a daemon thread.
 anim_thread = threading.Thread(target=animation_loop, daemon=True)
 anim_thread.start()
@@ -294,9 +293,52 @@ def stop_talking_endpoint():
     #queue_message("DEBUG: Talking mode disabled.")
     return Response("stopped", status=200)
 
+@flask_app.route('/emotion', methods=['POST'])
+def set_emotion():
+    """
+    Receives a single-word emotion and updates the stored emotion.
+    """
+    global CHARACTER_DIR, img_nottalking_open, img_nottalking_closed, img_talking_open, img_talking_closed
+    detected_emotion = request.data.decode("utf-8").strip()  # Read raw data as a string
+
+    if detected_emotion:  # Ensure it's not empty
+        # Build the new emotion folder path
+        new_character_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
+
+        # Check if the folder exists, otherwise, fallback to 'neutral'
+        if not os.path.exists(new_character_dir):
+            #queue_message(f"Emotion folder '{new_character_dir}' not found. Falling back to 'neutral'.")
+            detected_emotion = "neutral"
+            new_character_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
+
+        # **Update Global Emotion Directory**
+        CHARACTER_DIR = new_character_dir
+        #queue_message(f"Updated CHARACTER_DIR: {CHARACTER_DIR}")
+
+        try:
+            # **🔄 Reload Character Images for New Emotion**
+            img_nottalking_open = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{detected_emotion}_nottalking_eyes_open.png")).convert("RGBA")
+            img_nottalking_closed = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{detected_emotion}_nottalking_eyes_closed.png")).convert("RGBA")
+            img_talking_open = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{detected_emotion}_talking_eyes_open.png")).convert("RGBA")
+            img_talking_closed = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{detected_emotion}_talking_eyes_closed.png")).convert("RGBA")
+
+            # Resize images to match the frame dimensions
+            img_nottalking_open = img_nottalking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))
+            img_nottalking_closed = img_nottalking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
+            img_talking_open = img_talking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))
+            img_talking_closed = img_talking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
+
+            return jsonify({"message": "Emotion updated", "emotion": detected_emotion}), 200
+
+        except FileNotFoundError as e:
+            queue_message(f"Error loading images for {detected_emotion}: {e}")
+            return jsonify({"error": "Missing image files"}), 500
+
+    return jsonify({"error": "No emotion provided"}), 400  # Ensure a response in all cases
+
 @flask_app.route('/process_llm', methods=['POST'])
 def receive_user_message():
-    global latest_text_to_read, CHARACTER_DIR, img_nottalking_open, img_nottalking_closed, img_talking_open, img_talking_closed
+    global latest_text_to_read
 
     user_message = request.form.get('message', '')  
     file = request.files.get('file')  
@@ -324,35 +366,8 @@ def receive_user_message():
     latest_text_to_read = reply
     socketio.emit('bot_message', {'message': latest_text_to_read})
 
-    if CONFIG['CHAR']['user_name'] == "True": 
-        # **🎭 Detect Emotion and Update Animation Folder**
-        detected_emotion = detect_emotion(reply)
-        queue_message(f"Detected Emotion: {detected_emotion}")
-
-        # Build the new emotion folder path
-        new_character_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
-
-        # Check if the folder exists, otherwise, fallback to 'neutral'
-        if not os.path.exists(new_character_dir):
-            queue_message(f"Emotion folder '{new_character_dir}' not found. Falling back to 'neutral'.")
-            detected_emotion = "neutral"
-            new_character_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
-
-        # **Update Global Emotion Directory**
-        CHARACTER_DIR = new_character_dir
-        queue_message(f"Updated CHARACTER_DIR: {CHARACTER_DIR}")
-
-        # **🔄 Reload Character Images for New Emotion**
-        img_nottalking_open = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_nottalking_eyes_open.png")).convert("RGBA")
-        img_nottalking_closed = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_nottalking_eyes_closed.png")).convert("RGBA")
-        img_talking_open = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_talking_eyes_open.png")).convert("RGBA")
-        img_talking_closed = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_talking_eyes_closed.png")).convert("RGBA")
-
-        # Resize images to match the frame dimensions
-        img_nottalking_open = img_nottalking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))
-        img_nottalking_closed = img_nottalking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
-        img_talking_open = img_talking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))
-        img_talking_closed = img_talking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
+    if CONFIG['EMOTION']['enabled']:
+        detect_emotion(reply)
         
     return jsonify({"status": "success"})
 
