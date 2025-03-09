@@ -66,9 +66,11 @@ class StreamingAvatar:
                                 if png_data:
                                     try:
                                         pil_image = Image.open(BytesIO(png_data))
-                                        pil_image = pil_image.convert("RGB")
+                                        pil_image = pil_image.convert("RGBA")
                                         np_image = np.array(pil_image)
-                                        resized_image = cv2.resize(np_image, (self.width, self.height))
+                                        #resized_image = cv2.resize(np_image, (self.width, self.height))
+                                        resized_image = cv2.resize(np_image, (self.width, self.height), interpolation=cv2.INTER_AREA)
+
                                         with self.image_lock:
                                             self.raw_image = resized_image
                                     except Exception as img_err:
@@ -85,35 +87,31 @@ class StreamingAvatar:
 
     def update(self, rotation=0):
         """
-        Update the surface with the latest stream image, limiting FPS.
+        Update the surface with the latest stream image, ensuring transparency.
         """
         start_time = time.time()  # Track update start time
 
         self.rotation = rotation
-        self.surface.fill((0, 0, 0, 0))
+        self.surface.fill((0, 0, 0, 0))  # Ensure full transparency
 
         with self.image_lock:
             if self.raw_image is not None:
-                if (self.raw_image.shape[1], self.raw_image.shape[0]) != (self.width, self.height):
-                    resized = cv2.resize(self.raw_image, (self.width, self.height))
-                else:
-                    resized = self.raw_image
+                # self.raw_image is already (height, width, 4) from fetch_stream
+                # Create surface directly from RGBA data
+                self.stream_image = pygame.image.frombuffer(self.raw_image.tobytes(), (self.width, self.height), "RGBA")
 
-                self.stream_image = pygame.surfarray.make_surface(resized.swapaxes(0, 1))
-
-        if self.stream_image:
-            rotated_image = pygame.transform.rotate(self.stream_image, -self.rotation)
-            new_rect = rotated_image.get_rect(center=(self.width // 2, self.height // 2))
-            self.surface.blit(rotated_image, new_rect.topleft)
-        else:
-            self.surface.fill((255, 0, 0))
-
-        # ⏳ **Limit FPS to 10**
+                if self.stream_image:
+                    rotated_image = pygame.transform.rotate(self.stream_image, -rotation)
+                    new_rect = rotated_image.get_rect(center=(self.width // 2, self.height // 2))
+                    self.surface.blit(rotated_image, new_rect.topleft)
+            
+        # Limit FPS
         elapsed_time = time.time() - start_time
         sleep_time = max(0, (1.0 / target_fps) - elapsed_time)
         time.sleep(sleep_time)
 
         return self.surface
+
 
 
     def update_size(self, width, height):

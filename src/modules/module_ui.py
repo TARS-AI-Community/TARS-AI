@@ -226,7 +226,7 @@ class StreamingAvatar:
                                 if png_data:
                                     try:
                                         pil_image = Image.open(BytesIO(png_data))
-                                        pil_image = pil_image.convert("RGB")
+                                        pil_image = pil_image.convert("RGBA")
                                         np_image = np.array(pil_image)
                                         resized_image = cv2.resize(np_image, (self.width, self.height))
                                         with self.image_lock:
@@ -242,16 +242,18 @@ class StreamingAvatar:
                 time.sleep(1)
             time.sleep(0.01)
 
-
     def update(self, rotation=0):
-        self.surface.fill((0, 0, 0, 0))
+        """
+        Update the surface with the latest stream image, ensuring transparency.
+        """
+        self.surface.fill((0, 0, 0, 0))  # Clear with transparency
         with self.image_lock:
-            if self.raw_image is not None:  # Changed NULL to None
-                self.stream_image = pygame.surfarray.make_surface(self.raw_image.swapaxes(0, 1))
-        if self.stream_image:
-            self.surface.blit(self.stream_image, (0, 0))
-        else:
-            self.surface.fill((255, 0, 0))
+            if self.raw_image is not None:
+                # Create surface from RGBA data, no rotation needed here
+                self.stream_image = pygame.image.frombuffer(self.raw_image.tobytes(), (self.width, self.height), "RGBA")
+                if self.stream_image:
+                    # Blit the image directly at the top-left (no rotation)
+                    self.surface.blit(self.stream_image, (0, 0))
         return self.surface
 
     def stop_streaming(self):
