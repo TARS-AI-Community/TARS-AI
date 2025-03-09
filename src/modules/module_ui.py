@@ -279,6 +279,14 @@ class UIManager(threading.Thread):
         self.height = height
         self.rotate = rotation_value
 
+        # Compute logical dimensions
+        if self.rotate in (0, 180):
+            self.logical_width = self.width
+            self.logical_height = self.height
+        else:
+            self.logical_width = self.height
+            self.logical_height = self.width
+
         # Load layout from JSON.
         self.layout_config = load_layout_config('UI/ui_layout.json')
         self.layouts = get_layout_dimensions(self.layout_config, width, height, self.rotate)
@@ -332,8 +340,9 @@ class UIManager(threading.Thread):
             self.avatar_anim = None
 
         self.background_image = pygame.image.load("UI/background.png")
-        self.background_image = pygame.transform.scale(self.background_image, (self.width, self.height))
-
+        #self.background_image = pygame.transform.scale(self.background_image, (self.logical_width, self.logical_height))
+        self.stars: List[Star] = [Star(self.logical_width, self.logical_height) for _ in range(1800)]
+        
         self.scale = min(width / BASE_WIDTH, height / BASE_HEIGHT)
 
         self.spectrum = []
@@ -379,9 +388,12 @@ class UIManager(threading.Thread):
             self.start_time = time.time()
 
     def draw_starfield(self, surface):
-        for star in self.stars:
-            star.moveStars()
-            star.drawStars(surface)
+            logical_background = pygame.Surface((self.logical_width, self.logical_height), pygame.SRCALPHA)
+            for star in self.stars:
+                star.moveStars()
+                star.drawStars(logical_background)
+            rotated_background = pygame.transform.rotate(logical_background, -self.rotate)
+            surface.blit(rotated_background, (0, 0))
 
     def update_data(self, key: str, value: Any, msg_type: str = 'INFO') -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -841,11 +853,21 @@ class UIManager(threading.Thread):
 
                     GL.glClearColor(0.0, 0.0, 0.0, 0.0)
                     GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
+
+
                     original_surface.fill((0, 0, 0, 0))
                     if self.background_id == 1:
                         self.draw_starfield(original_surface)
                     elif self.background_id == 2:
-                        original_surface.blit(self.background_image, (0, 0))
+                        # Rotate the native-sized image
+                        rotated_background = pygame.transform.rotate(self.background_image, -self.rotate + 180)
+                        # Get dimensions of the rotated image
+                        rot_width, rot_height = rotated_background.get_width(), rotated_background.get_height()
+                        # Calculate centering offsets
+                        offset_x = (self.width - rot_width) // 2
+                        offset_y = (self.height - rot_height) // 2
+                        # Blit centered
+                        original_surface.blit(rotated_background, (offset_x, offset_y))
                     elif self.background_id in [3, 4, 5]:
                         video_paths = {3: "UI/video/bg1.mp4", 4: "UI/video/bg2.mp4", 5: "UI/video/bg3.mp4"}
                         new_video_path = video_paths[self.background_id]
@@ -853,6 +875,8 @@ class UIManager(threading.Thread):
                             self.load_video(new_video_path)
                             self.current_video = new_video_path
                         self.draw_video(original_surface)
+
+
                     GL.glDisable(GL.GL_DEPTH_TEST)
                     GL.glEnable(GL.GL_BLEND)
                     GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
@@ -863,8 +887,6 @@ class UIManager(threading.Thread):
                         previous_viewport = GL.glGetIntegerv(GL.GL_VIEWPORT)  # Save current viewport
                         self.brain.render(self.brain_box, screen_height)  # ✅ Pass screen height
                         GL.glViewport(*previous_viewport)  # Restore original viewport
-
-
 
                     if self.console_box:
                         self.draw_console(original_surface, font)
