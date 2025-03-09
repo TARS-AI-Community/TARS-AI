@@ -159,6 +159,10 @@ output.wav
 src/memory/flashrank_cache
 memory/initial_memory.json
 memory/initial_memory.loaded
+initial_memory.loaded
+src/memory/initial_memory.loaded
+src/memory/initial_memory.json
+initial_memory.json
 
 # Scripts
 ./tars.sh

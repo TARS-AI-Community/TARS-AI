@@ -26,6 +26,7 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
+from fastrtc import get_stt_model
 from vosk import Model, KaldiRecognizer, SetLogLevel
 from pocketsphinx import LiveSpeech
 from faster_whisper import WhisperModel
@@ -100,6 +101,7 @@ class STTManager:
 
         # Wake word and model settings
         self.WAKE_WORD = config.get("STT", {}).get("wake_word", "default_wake_word")
+        self.fastrtc_model = None
         self.vosk_model = None
         self.faster_whisper_model = None
         self.silero_model = None  # For Silero STT (if used)
@@ -116,7 +118,9 @@ class STTManager:
         """
         self._measure_background_noise()
         stt_processor = self.config.get("STT", {}).get("stt_processor", "vosk")
-        # Map "whisper" to "faster-whisper" for compatibility
+
+        if stt_processor == "fastrtc":
+            self._load_fastrtc_model()
         if stt_processor in ["whisper", "faster-whisper"]:
             self._load_fasterwhisper_model()
         elif stt_processor == "silero":
@@ -283,13 +287,26 @@ class STTManager:
             except Exception as e:
                 queue_message(f"ERROR: Failed to load Silero VAD with torch.hub: {e}")
 
+    def _load_fastrtc_model(self):
+        """
+        Initialize FastRTC STT model.
+        """
+        try:
+            self.fastrtc_model = get_stt_model()
+            queue_message("INFO: FastRTC STT model loaded successfully.")
+        except Exception as e:
+            queue_message(f"ERROR: Failed to load FastRTC STT model: {e}")
+            self.fastrtc_model = None
+    
     # === Transcription Methods ===
 
     def _transcribe_utterance(self):
         """Transcribe the user's utterance using the selected STT processor."""
         try:
-            # Map "whisper" to faster-whisper as well.
             processor = self.config["STT"].get("stt_processor", "vosk")
+
+            if processor == "fastrtc":
+                result = self._transcribe_with_fastrtc()     
             if processor in ["whisper", "faster-whisper"]:
                 result = self._transcribe_with_faster_whisper()
             elif processor == "silero":
@@ -303,6 +320,51 @@ class STTManager:
                 self.post_utterance_callback()
         except Exception as e:
             queue_message(f"ERROR: Transcription failed: {e}")
+
+    def _transcribe_with_fastrtc(self):
+        """Transcribe audio using FastRTC STT."""
+        audio_buffer = BytesIO()
+        detected_speech = False
+        silent_frames = 0
+
+        with sd.InputStream(
+            samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+        ) as stream, wave.open(audio_buffer, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(self.SAMPLE_RATE)
+
+            for _ in range(self.MAX_RECORDING_FRAMES):
+                data, _ = stream.read(4000)
+
+                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
+                if is_silence:
+                    if not detected_speech:
+                        return None
+                    break
+
+                wf.writeframes(data.tobytes())
+
+        audio_buffer.seek(0)
+        if audio_buffer.getbuffer().nbytes == 0:
+            queue_message("ERROR: No audio recorded.")
+            return None
+
+        # Convert recorded audio for STT model
+        audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
+        audio_data = np.clip(audio_data, -1.0, 1.0)
+
+        # Run FastRTC STT Model
+        transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
+
+        if transcript:
+            formatted_result = {"text": transcript}
+            if self.utterance_callback:
+                self.utterance_callback(json.dumps(formatted_result))
+            return formatted_result
+        else:
+            queue_message("ERROR: No transcription from FastRTC STT.")
+            return None
 
     def _transcribe_with_vosk(self):
         """Transcribe audio using the local Vosk model."""

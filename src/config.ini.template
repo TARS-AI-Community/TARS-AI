@@ -12,7 +12,7 @@ wake_word = hey tar
 sensitivity = 8
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection. 
 stt_processor = faster-whisper
-#vosk, faster-whisper, silero, or external
+#vosk, faster-whisper, silero, fastrtc, or external
 external_url = http://192.168.2.57:5678
 # URL for the STT server (if enabled)
 whisper_model = tiny
@@ -22,13 +22,13 @@ vosk_model = vosk-model-small-en-us-0.15
 use_indicators = True
 # Use beeps to indicate when listening
 vad_method = rms
-# Enable silero or rms
+# Enable silero, rms, fastrtc
 speechdelay = 20
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
 # Relative path to the Porcupine keyword file
 wake_word_processor = pocketsphinx
-# Options: picovoice, pocketsphinx
+# Options: picovoice, pocketsphinx, fastrtc
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS/TARS.json
@@ -80,7 +80,7 @@ emotion_model = SamLowe/roberta-base-go_emotions
 
 [TTS] # Text-to-Speech configuration 
 ttsoption = piper
-# Onboard Options: espeak, piper, silero 
+# Onboard Options: espeak, piper, silero
 # External SelfHosted: alltalk
 # Externally Hosted: azure, elevenlabs
 azure_region = eastus
