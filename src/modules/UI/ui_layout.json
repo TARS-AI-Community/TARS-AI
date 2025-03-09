@@ -4,132 +4,99 @@
       "name": "console",
       "x": 0.0,
       "y": 0.0,
-      "width": 0.50,
-      "height": 1.0,
+      "width": 0.6,
+      "height": 0.75,
       "expandable": true
     },
     {
       "name": "brain",
-      "x": 0.0,
-      "y": 0.0,
-      "width": 0.50,
-      "height": 1.0,
+      "x": 0,
+      "y": 0,
+      "width": 0.6,
+      "height": 0.75,
       "expandable": true
     },
     {
-      "name": "hal",
-      "x": 0.50,
-      "y": 0.0,
-      "width": 0.16,
-      "height": 0.5,
-      "expandable": false
-    },
-    {
-      "name": "fake_terminal",
-      "x": 0.66,
-      "y": 0.0,
-      "width": 0.17,
-      "height": 0.5,
-      "expandable": false
-    },
-    {
-      "name": "img",
-      "x": 0.82,
-      "y": 0.0,
-      "width": 0.18,
-      "height": 0.5,
-      "expandable": false
-    },
-    {
       "name": "spectrum",
-      "x": 0.50,
-      "y": 0.5,
-      "width": 0.25,
-      "height": 0.40,
-      "expandable": false
+      "x": 0.0,
+      "y": 0.75,
+      "width": 0.6,
+      "height": 0.25,
+      "expandable": true
+    },
+    {
+      "name": "avatar",
+      "x": 0.6,
+      "y": 0.0,
+      "width": 0.4,
+      "height": 0.42,
+      "expandable": true
     },
     {
       "name": "camera",
-      "x": 0.75,
-      "y": 0.50,
-      "width": 0.25,
-      "height": 0.40,
+      "x": 0.6,
+      "y": 0.42,
+      "width": 0.4,
+      "height": 0.42,
       "expandable": true
     },
     {
       "name": "buttons",
-      "x": 0.50,
-      "y": 0.90,
-      "width": 0.50,
-      "height": 0.10,
-      "expandable": false
+      "x": 0.6,
+      "y": 0.85,
+      "width": 0.4,
+      "height": 0.15,
+      "expandable": true
     }
   ],
-  
   "portrait": [
     {
-      "name": "console",
+      "name": "avatar",
       "x": 0.0,
       "y": 0.0,
-      "width": 1.0,
-      "height": 0.40,
+      "width": 1,
+      "height": 0.5,
       "expandable": true
     },
     {
       "name": "brain",
-      "x": 0.0,
+      "x": 0.1,
       "y": 0.0,
-      "width": 1.0,
-      "height": 0.40,
-      "expandable": true
-    },
-    {
-      "name": "hal",
-      "x": 0.0,
-      "y": 0.40,
-      "width": 0.33,
-      "height": 0.20,
-      "expandable": false
-    },
-    {
-      "name": "fake_terminal",
-      "x": 0.33,
-      "y": 0.40,
-      "width": 0.34,
-      "height": 0.20,
-      "expandable": false
-    },
-    {
-      "name": "img",
-      "x": 0.67,
-      "y": 0.40,
-      "width": 0.33,
-      "height": 0.20,
-      "expandable": false
-    },
-    {
-      "name": "spectrum",
-      "x": 0.0,
-      "y": 0.60,
-      "width": 0.50,
-      "height": 0.25,
-      "expandable": false
-    },
-    {
-      "name": "camera",
-      "x": 0.50,
-      "y": 0.60,
-      "width": 0.50,
-      "height": 0.25,
+      "width": 1,
+      "height": 0.5,
       "expandable": true
     },
     {
       "name": "buttons",
       "x": 0.0,
-      "y": 0.85,
-      "width": 1.0,
-      "height": 0.15,
-      "expandable": false
+      "y": 0.9,
+      "width": 0.5,
+      "height": 0.1,
+      "expandable": true
+    },
+    {
+      "name": "console",
+      "x": 0,
+      "y": 0.5,
+      "width": 0.7,
+      "height": 0.4,
+      "expandable": true
+    },
+    {
+      "name": "camera",
+      "x": 0.7,
+      "y": 0.5,
+      "width": 0.3,
+      "height": 0.4,
+      "expandable": true
+    },
+    {
+      "name": "spectrum",
+      "x": 0.5,
+      "y": 0.9,
+      "width": 0.5,
+      "height": 0.1,
+      "expandable": true
     }
   ]
 }

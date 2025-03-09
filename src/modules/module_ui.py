@@ -242,30 +242,17 @@ class StreamingAvatar:
                 time.sleep(1)
             time.sleep(0.01)
 
+
     def update(self, rotation=0):
-        self.rotation = rotation
         self.surface.fill((0, 0, 0, 0))
         with self.image_lock:
-            if self.raw_image is not None:
+            if self.raw_image is not None:  # Changed NULL to None
                 self.stream_image = pygame.surfarray.make_surface(self.raw_image.swapaxes(0, 1))
         if self.stream_image:
-            rotated_image = pygame.transform.rotate(self.stream_image, -self.rotation)
-            new_rect = rotated_image.get_rect(center=(self.width // 2, self.height // 2))
-            self.surface.blit(rotated_image, new_rect.topleft)
+            self.surface.blit(self.stream_image, (0, 0))
         else:
             self.surface.fill((255, 0, 0))
         return self.surface
-
-    def update_size(self, width, height):
-        self.width = max(1, width)
-        self.height = max(1, height)
-        self.scale_factor = min(self.width / self.base_width, self.height / self.base_height)
-        self.surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        with self.image_lock:
-            if self.raw_image is not None:
-                self.raw_image = cv2.resize(self.raw_image, (self.width, self.height))
-        if self.stream_image:
-            self.stream_image = pygame.transform.scale(self.stream_image, (self.width, self.height))
 
     def stop_streaming(self):
         self.running = False

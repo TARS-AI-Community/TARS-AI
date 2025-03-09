@@ -2,6 +2,9 @@ import pygame
 import math
 import numpy as np
 from collections import deque
+import time
+
+target_fps = 10
 
 class SineWaveVisualizer:
     def __init__(self, width, height, rotation, depth=22, decay=0.9, perspective_shift=(-2, 5), padding=-35):
@@ -17,6 +20,9 @@ class SineWaveVisualizer:
         self.padding = padding  
 
     def update(self, spectrum):
+        """Update and render the sine wave visualization with FPS control."""
+        start_time = time.time()  # Track update start time
+
         sinewave_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         sinewave_surface.fill((0, 0, 0, 0))
 
@@ -26,11 +32,10 @@ class SineWaveVisualizer:
             sinewave_points = []
 
             for x in range(self.padding, self.width - self.padding):
-                # Adjust the frequency bin to account for padding on both sides
                 width_adj = max(2, self.width - 2 * self.padding)
                 freq_bin = int((x - self.padding) * len(spectrum) / width_adj)
                 amplitude = spectrum[freq_bin] * self.max_amplitude
-                t = (x - self.padding) / (self.width - 2 * self.padding)
+                t = (x - self.padding) / width_adj
 
                 y = amplitude * math.sin(2 * math.pi * t * 3) + (self.height // 2)
                 sinewave_points.append((x, int(y)))
@@ -38,9 +43,8 @@ class SineWaveVisualizer:
             self.wave_history.appendleft(sinewave_points.copy())
 
         for i, wave in enumerate(reversed(self.wave_history)):
-
             alpha = int(255 * (1 - self.decay ** i))
-            color = (255, 255, 255, alpha)  
+            color = (255, 255, 255, alpha)
             x_shift = self.perspective_shift[0] * i 
             y_shift = self.perspective_shift[1] * i
             for j in range(1, len(wave)):
@@ -48,7 +52,13 @@ class SineWaveVisualizer:
                 end_pos = (wave[j][0] + x_shift, wave[j][1] + y_shift)
                 pygame.draw.line(sinewave_surface, color, start_pos, end_pos, 2)
 
+        # ⏳ **Limit FPS to 10**
+        elapsed_time = time.time() - start_time
+        sleep_time = max(0, (1.0 / target_fps) - elapsed_time)
+        time.sleep(sleep_time)
+
         return sinewave_surface
+
 
 class BarVisualizer:
     def __init__(self, width, height, num_bars=64, depth=22, bar_width=None, bar_spacing=1, smoothing_factor=0.3):
@@ -108,6 +118,9 @@ class BarVisualizer:
         return smoothed
 
     def update(self, spectrum, bar_surface):
+        """Update and render the bar visualization with FPS control."""
+        start_time = time.time()  # Track update start time
+
         if spectrum.any():
             resampled_spectrum = np.zeros(self.num_bars)
             spectrum_bins = len(spectrum)
@@ -115,23 +128,18 @@ class BarVisualizer:
             for i in range(self.num_bars):
                 start_bin = int(i * spectrum_bins / self.num_bars)
                 end_bin = int((i + 1) * spectrum_bins / self.num_bars)
-                if start_bin == end_bin:
-                    resampled_spectrum[i] = spectrum[start_bin]
-                else:
-                    resampled_spectrum[i] = np.mean(spectrum[start_bin:end_bin])
+                resampled_spectrum[i] = np.mean(spectrum[start_bin:end_bin]) if start_bin != end_bin else spectrum[start_bin]
 
             if np.max(resampled_spectrum) > 0:
-                resampled_spectrum = resampled_spectrum / np.max(resampled_spectrum)
+                resampled_spectrum /= np.max(resampled_spectrum)
 
             smoothed_spectrum = self.apply_smoothing(resampled_spectrum)
-
             smoothed_spectrum = self.apply_neighbor_smoothing(smoothed_spectrum)
 
             self.bar_history.appendleft(smoothed_spectrum.copy())
 
         for i, value in enumerate(self.bar_history[0]):
             bar_height = int(value * self.height * 0.9)
-
             x = i * (self.bar_width + self.bar_spacing)
             y = self.height - bar_height
 
@@ -143,6 +151,11 @@ class BarVisualizer:
 
             reflection_height = bar_height // 2
             reflection_rect = pygame.Rect(x, self.height, self.bar_width, reflection_height)
-            pygame.draw.rect(bar_surface, (*color, 85), reflection_rect)  
+            pygame.draw.rect(bar_surface, (*color, 85), reflection_rect)
+
+        # ⏳ **Limit FPS to 10**
+        elapsed_time = time.time() - start_time
+        sleep_time = max(0, (1.0 / target_fps) - elapsed_time)
+        time.sleep(sleep_time)
 
         return bar_surface

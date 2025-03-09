@@ -8,6 +8,8 @@ from io import BytesIO
 from PIL import Image
 import socket
 
+target_fps=10
+
 # Get local IP address
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
     s.connect(("8.8.8.8", 80))
@@ -37,29 +39,27 @@ class StreamingAvatar:
 
     def fetch_stream(self):
         """
-        Continuously fetch the PNG image stream.
-        Our server sends data with boundary '--frame\r\n' followed by headers and PNG data.
+        Continuously fetch the PNG image stream while limiting FPS.
         """
-        boundary = b"--frame\r\n"  # Must match your server exactly.
+        boundary = b"--frame\r\n"
         buffer = b""
+        frame_delay = 1.0 / target_fps  # Calculate delay per frame
+
         while self.running:
+            start_time = time.time()  # Track frame start time
+
             try:
-                #print(f"Connecting to stream at {self.stream_url}")
                 response = requests.get(self.stream_url, stream=True, timeout=5)
                 if response.status_code == 200:
-                    #print("Connected. Reading stream data...")
                     for chunk in response.iter_content(chunk_size=1024):
                         if not self.running:
                             break
-                        # Print first 50 bytes for debugging
-                        #print(f"Received chunk of size {len(chunk)}: {chunk[:50]}")
                         buffer += chunk
-                        # Process complete frames from the buffer
                         while boundary in buffer:
                             parts = buffer.split(boundary, 1)
                             frame_chunk = parts[0]
                             buffer = parts[1]
-                            # Find header end: look for \r\n\r\n
+
                             header_end = frame_chunk.find(b"\r\n\r\n")
                             if header_end != -1:
                                 png_data = frame_chunk[header_end+4:].strip()
@@ -68,45 +68,53 @@ class StreamingAvatar:
                                         pil_image = Image.open(BytesIO(png_data))
                                         pil_image = pil_image.convert("RGB")
                                         np_image = np.array(pil_image)
-                                        # Resize image to current desired dimensions
                                         resized_image = cv2.resize(np_image, (self.width, self.height))
                                         with self.image_lock:
                                             self.raw_image = resized_image
-                                        #print("Fetched and processed one PNG frame; new image shape:", resized_image.shape)
                                     except Exception as img_err:
                                         print("Error processing PNG image:", img_err)
-                else:
-                    #print(f"Failed to fetch stream: HTTP {response.status_code}")
-                    time.sleep(1)
+
             except Exception as e:
-                #print("Error fetching stream:", e)
                 time.sleep(1)
-            time.sleep(0.01)
+
+            # ⏳ **Limit FPS to 10**
+            elapsed_time = time.time() - start_time
+            sleep_time = max(0, frame_delay - elapsed_time)
+            time.sleep(sleep_time)
+
 
     def update(self, rotation=0):
         """
-        Update the surface with the latest stream image.
-        This method re-scales the raw image to the current width/height.
+        Update the surface with the latest stream image, limiting FPS.
         """
+        start_time = time.time()  # Track update start time
+
         self.rotation = rotation
         self.surface.fill((0, 0, 0, 0))
+
         with self.image_lock:
             if self.raw_image is not None:
-                # Re-scale the raw image to current dimensions if needed.
                 if (self.raw_image.shape[1], self.raw_image.shape[0]) != (self.width, self.height):
-                    # raw_image shape: (height, width, channels)
                     resized = cv2.resize(self.raw_image, (self.width, self.height))
                 else:
                     resized = self.raw_image
+
                 self.stream_image = pygame.surfarray.make_surface(resized.swapaxes(0, 1))
+
         if self.stream_image:
             rotated_image = pygame.transform.rotate(self.stream_image, -self.rotation)
             new_rect = rotated_image.get_rect(center=(self.width // 2, self.height // 2))
             self.surface.blit(rotated_image, new_rect.topleft)
         else:
-            # Fallback color so we know update() is being called.
             self.surface.fill((255, 0, 0))
+
+        # ⏳ **Limit FPS to 10**
+        elapsed_time = time.time() - start_time
+        sleep_time = max(0, (1.0 / target_fps) - elapsed_time)
+        time.sleep(sleep_time)
+
         return self.surface
+
 
     def update_size(self, width, height):
         """Update the avatar dimensions and re-create the surface."""

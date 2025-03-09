@@ -145,12 +145,21 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
 async def play_audio_chunks(text, config):
     """
     Plays audio chunks sequentially from the generate_tts_audio function.
+    Calls stop_talking when done.
     """
     async for audio_chunk in generate_tts_audio(text, config):
         try:
+            requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
             # Read the audio chunk into a format playable by sounddevice
             data, samplerate = sf.read(audio_chunk, dtype='float32')
             sd.play(data, samplerate)
             await asyncio.sleep(len(data) / samplerate)  # Wait for playback to finish
+            
         except Exception as e:
             queue_message(f"ERROR: Failed to play audio chunk: {e}")
+
+    # ✅ Call stop_talking when all audio chunks are played
+    try:
+        requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
+    except requests.exceptions.RequestException as e:
+        queue_message(f"ERROR: Failed to send stop_talking request: {e}")

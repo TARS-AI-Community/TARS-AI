@@ -76,22 +76,21 @@ FRAME_HEIGHT = 500
 
 # swayamount: 1 means off (no sway), 10 means maximum sway.
 swayamount = 1   # You can change this value from 1 to 10.
-
-# Get the base directory where the script is running
-sprite = 'tars'
 emotion = 'neutral'
 
+# Get the base directory where the script is running
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  
 character_path = CONFIG['CHAR']['character_card_path']
 character_name = os.path.splitext(os.path.basename(character_path))[0]  # Extract filename without extension
- 
 CHARACTER_DIR = os.path.join(BASE_DIR, "character", character_name, "images", emotion)
 
+sprite = character_name
+
 # Load images using the absolute path
-img_nottalking_open = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_nottalking_eyes_open.png")).convert("RGBA")
-img_nottalking_closed = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_nottalking_eyes_closed.png")).convert("RGBA")
-img_talking_open = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_talking_eyes_open.png")).convert("RGBA")
-img_talking_closed = Image.open(os.path.join(CHARACTER_DIR, f"{sprite}_talking_eyes_closed.png")).convert("RGBA")
+img_nottalking_open = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{emotion}_nottalking_eyes_open.png")).convert("RGBA")
+img_nottalking_closed = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{emotion}_nottalking_eyes_closed.png")).convert("RGBA")
+img_talking_open = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{emotion}_talking_eyes_open.png")).convert("RGBA")
+img_talking_closed = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{emotion}_talking_eyes_closed.png")).convert("RGBA")
 
 # Resize images to our frame dimensions.
 img_nottalking_open = img_nottalking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))

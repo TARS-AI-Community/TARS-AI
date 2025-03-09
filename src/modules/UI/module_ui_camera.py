@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 import time
 
+target_fps=10
 
 class CameraModule:
     _instance = None  # 🔹 Singleton Instance
@@ -57,18 +58,25 @@ class CameraModule:
             self.picam2.start()
             self.thread = threading.Thread(target=self.capture_frames, daemon=True)
             self.thread.start()
-            #print("🎥 Camera streaming started.")
+            print("🎥 Camera streaming started.")
         except Exception as e:
-            #print(f"❌ Failed to start camera: {e}")
+            print(f"❌ Failed to start camera: {e}")
             self.running = False
+            self.picam2 = None  # Reset camera instance
+
 
     def restart_camera(self):
         """Restart the camera if it encounters an error."""
-        #print("🔄 Restarting camera...")
+        print("🔄 Restarting camera...")
         self.stop()
         time.sleep(2)  # Give time before reinitializing
-        self.__init__(640, 480, self.use_camera_module)  # Reinitialize
-        self.start_camera()
+
+        try:
+            self.__init__(640, 480, self.use_camera_module)  # Reinitialize
+            self.start_camera()
+        except Exception as e:
+            print(f"❌ Camera restart failed: {e}")
+            self.running = False
 
     def update_size(self, width, height):
         """Updates the camera resolution dynamically."""
@@ -84,9 +92,13 @@ class CameraModule:
             pass
             #print(f"❌ Failed to update camera resolution: {e}")
 
-    def capture_frames(self):
-        """Continuously captures frames from the camera but only saves when manually triggered."""
+    def capture_frames(self, target_fps=target_fps):
+        """Continuously captures frames from the camera, limiting FPS to reduce CPU usage."""
+        frame_delay = 1.0 / target_fps  # Calculate time to wait per frame
+
         while self.running:
+            start_time = time.time()  # Track frame start time
+
             try:
                 if self.picam2 is None:
                     raise RuntimeError("Camera not initialized properly.")
@@ -103,15 +115,20 @@ class CameraModule:
 
                 if not self.first_frame_captured:
                     self.first_frame_captured = True
-                    #print("🎥 First valid frame captured. Camera is ready.")
 
                 with self.lock:
                     if self.save_next_frame:
                         self.last_saved_image = self.save_frame()
                         self.save_next_frame = False  # Reset flag after saving
+
             except Exception as e:
-                #print(f"⚠️ Camera frame capture error: {e}")
                 self.restart_camera()  # Attempt restart on error
+
+            # ⏳ **Limit FPS**
+            elapsed_time = time.time() - start_time  # Calculate time taken for processing
+            sleep_time = max(0, frame_delay - elapsed_time)  # Ensure positive sleep time
+            time.sleep(sleep_time)
+
 
     def capture_single_image(self):
         """Triggers a single image capture and waits for it to be saved."""

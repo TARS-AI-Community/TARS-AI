@@ -13,6 +13,9 @@ from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
 
+character_path = CONFIG['CHAR']['character_card_path']
+character_name = os.path.splitext(os.path.basename(character_path))[0]  # Extract filename without extension
+
 # Define the error handler function type
 ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(
     None, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p
@@ -30,7 +33,7 @@ asound = ctypes.cdll.LoadLibrary('libasound.so')
 
 # Load the Piper model globally
 script_dir = os.path.dirname(__file__)
-model_path = os.path.join(script_dir, '..', 'tts/TARS.onnx')
+model_path = os.path.join(script_dir, '..', f'tts/{character_name}.onnx')
 
 if CONFIG['TTS']['ttsoption'] == 'piper':
     voice = PiperVoice.load(model_path)
