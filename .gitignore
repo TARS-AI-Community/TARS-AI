@@ -178,3 +178,6 @@ character/
 *.onnx.json
 !TARS.onnx
 !TARS.onnx.json
+
+src/modules/UI/ui_layout.json
+/src/modules/UI/ui_layout.json
