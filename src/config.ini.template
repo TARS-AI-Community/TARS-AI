@@ -134,7 +134,7 @@ restore_faces = False
 negative_prompt = deformed, black and white, disfigured, low contrast, extra limbs, bad anatomy, bad hands
 # The model will attempt to avoid creating images with these characteristics.
 
-[CHATUI]
+[CHATUI]  # Required true for avatars
 enabled = True
 
 [UI]
