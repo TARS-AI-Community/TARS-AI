@@ -22,7 +22,7 @@ vosk_model = vosk-model-small-en-us-0.15
 use_indicators = True
 # Use beeps to indicate when listening
 vad_method = rms
-# Enable silero, rms, fastrtc
+# Enable silero, rms
 speechdelay = 20
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
