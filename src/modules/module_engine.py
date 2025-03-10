@@ -491,7 +491,7 @@ def adjust_persona(user_input):
         # Validate the extracted data
         if trait and value:
             if isinstance(trait, str) and isinstance(value, int):
-                queue_message(f"INFO: Saving {trait} setting")
+                queue_message(f"INFO: Saving {trait}, {value}")
                 update_character_setting(trait, value)
                 return f"Updated {trait} setting to {value}"
             else:

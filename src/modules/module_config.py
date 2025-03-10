@@ -21,6 +21,8 @@ from modules.module_messageQue import queue_message
 # === Initialization ===
 load_dotenv()  # Load environment variables from .env file
 
+character_name = "TARS"
+
 @dataclass
 class TTSConfig:
     """Configuration class for Text-to-Speech settings"""
@@ -84,6 +86,7 @@ class TTSConfig:
         )
 
 def load_config():
+    global character_name
     """
     Load configuration settings from 'config.ini' and 'persona.ini' and return them as a dictionary.
     This function will print an error and exit if any configuration is invalid or missing.
@@ -302,6 +305,7 @@ def get_api_key(llm_backend: str) -> str:
 
 
 def update_character_setting(setting, value):
+    global character_name
     """
     Update a specific setting in the [CHAR] section of the config.ini file.
 
@@ -313,12 +317,13 @@ def update_character_setting(setting, value):
     - bool: True if the update is successful, False otherwise.
     """
     # Determine the path to config.ini in the same folder as this script
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'character', 'persona.ini')
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'character', character_name, 'persona.ini')
     config = configparser.ConfigParser()
 
     try:
         # Read the config file
-        config.read(config_path)
+        config.read(config_path, encoding='utf-8')
+
 
         # Check if [CHAR] section exists
         if 'PERSONA' not in config:
