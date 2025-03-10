@@ -138,22 +138,18 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# Memory
-*.pickle.gz
-TARS.wav
-
 # PyCharm
 .idea/
 
 # LLM and Vision Files
-/llm
-/vision
 llm/
 vision/
 config.ini
 output.wav
 
 # Memory files
+*.pickle.gz
+TARS.wav
 /memory/initial_memory.json
 /memory/initial_memory.loaded
 src/memory/flashrank_cache
@@ -164,9 +160,6 @@ src/memory/initial_memory.loaded
 src/memory/initial_memory.json
 initial_memory.json
 
-# Scripts
-./tars.sh
-
 # Character Data
 character/persona.ini
 
@@ -174,9 +167,12 @@ character/persona.ini
 stt/
 !stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
 
-# Ignore entire ALAN and MORI folders
+# Ignore everything inside "character" by default
 character/
 !character/TARS/
+!character/TARS/images/
+!character/TARS/images/neutral/
+!character/TARS/images/neutral/** 
 
 *.onnx
 *.onnx.json
