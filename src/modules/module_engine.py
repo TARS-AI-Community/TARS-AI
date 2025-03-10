@@ -349,11 +349,11 @@ def predict_class_llm(user_input):
 
         if not isinstance(confidence, (int, float)):
             queue_message("[INFO] Confidence value not provided or invalid. Defaulting to 50%.")
-            confidence = 50.0
+            confidence = 50.1
 
         if confidence < 0 or confidence > 100:
             queue_message("[ERROR] Confidence value out of bounds. Setting to 50%.")
-            confidence = 50.0
+            confidence = 50.2
 
         # Normalize confidence to 0–1
         max_probability = confidence / 100.0
