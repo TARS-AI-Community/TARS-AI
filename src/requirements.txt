@@ -57,4 +57,3 @@ opencv-python           # Video classes and modifiers
 PyOpenGL                # Needed for Neural NEt
 simplejpeg              # Camera Requirement
 numpy==2.1              # Needed for image rotations
-PyOpenGL_accelerate     # NOT SURE IF NEEDED

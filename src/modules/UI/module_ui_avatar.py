@@ -7,8 +7,10 @@ import time
 from io import BytesIO
 from PIL import Image
 import socket
+from module_config import load_config
 
-target_fps=10
+CONFIG = load_config()
+target_fps = CONFIG['UI']['target_fps']
 
 # Get local IP address
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
