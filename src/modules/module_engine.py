@@ -256,7 +256,7 @@ def predict_class(user_input):
     """
     Which method to use for function calling NB (single LLM CALL) or LLM (Multiple LLM Calls)
     """
-    if CONFIG['CONTROLS']['functioncalling'] == 'NB':
+    if CONFIG['LLM']['functioncalling'] == 'NB':
         return predict_class_nb(user_input)
     else:
         return predict_class_llm(user_input)
