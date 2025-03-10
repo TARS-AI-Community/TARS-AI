@@ -40,6 +40,7 @@ fullscreen = CONFIG['UI']['fullscreen']
 font_size = CONFIG['UI']['font_size']
 neural_net = CONFIG['UI']['neural_net']
 neural_net_always_visible = CONFIG['UI']['neural_net_always_visible']
+target_fps = CONFIG['UI']['target_fps']
 
 BASE_WIDTH = 800
 BASE_HEIGHT = 600
@@ -269,6 +270,7 @@ class UIManager(threading.Thread):
     def __init__(self, shutdown_event, use_camera_module=use_camera_module, show_mouse=show_mouse, 
                  width: int = screenWidth, height: int = screenHeight, rotation_value=rotation):
         super().__init__()
+        self.target_fps = target_fps
         self.show_mouse = show_mouse
         self.use_camera_module = use_camera_module
         self.neural_net_always_visible = neural_net_always_visible 
@@ -582,11 +584,6 @@ class UIManager(threading.Thread):
             pygame.draw.rect(box_surface, progress_color,
                             (progress_bar_x, progress_bar_y, fill_width, progress_bar_height))
         #pygame.draw.rect(box_surface, (0, 0, 0), (progress_bar_x, progress_bar_y, available_width, progress_bar_height), 1)
-
-
-
-
-
 
         pygame.draw.rect(box_surface, border_color, (0, 0, box.original_width, box.original_height), int(2 * self.scale))
         rotated_surface = pygame.transform.rotate(box_surface, box.rotation)
@@ -917,7 +914,7 @@ class UIManager(threading.Thread):
                         GL.glViewport(*previous_viewport)  # Restore viewport
 
                     pygame.display.flip()
-                    clock.tick(60)
+                    clock.tick(self.target_fps)
 
                     if not self.neural_net_always_visible and self.brain_visible:
                         if time.time() - self.start_time >= 15:

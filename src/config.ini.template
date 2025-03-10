@@ -166,6 +166,8 @@ fullscreen = False
 # fullscreen or within a framed window
 font_size = 12
 # normally from 9 to 20 depending on your resolution
+target_fps = 30
+# UI Refresh max FPS speed
 
 [RAG]
 # RAG (Retrieval Augmented Generation) settings

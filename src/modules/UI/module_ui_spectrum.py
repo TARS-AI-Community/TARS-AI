@@ -3,8 +3,10 @@ import math
 import numpy as np
 from collections import deque
 import time
+from module_config import load_config
 
-target_fps = 10
+CONFIG = load_config()
+target_fps = CONFIG['UI']['target_fps']
 
 class SineWaveVisualizer:
     def __init__(self, width, height, rotation, depth=22, decay=0.9, perspective_shift=(-2, 5), padding=-35):

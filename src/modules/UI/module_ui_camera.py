@@ -5,8 +5,10 @@ import threading
 from datetime import datetime
 from pathlib import Path
 import time
+from module_config import load_config
 
-target_fps=10
+CONFIG = load_config()
+target_fps = CONFIG['UI']['target_fps']
 
 class CameraModule:
     _instance = None  # 🔹 Singleton Instance

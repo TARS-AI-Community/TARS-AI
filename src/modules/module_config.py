@@ -269,10 +269,10 @@ def load_config():
             "use_camera_module": config.getboolean('UI', 'use_camera_module'),
             "background_id": int(config['UI']['background_id']),
             "fullscreen": config.getboolean('UI', 'fullscreen'),
-            "font_size": int(config['UI']['font_size']),         
+            "font_size": int(config['UI']['font_size']),  
+            "target_fps": int(config['UI']['target_fps']),       
         }
     }
-
 
 def get_api_key(llm_backend: str) -> str:
     """
