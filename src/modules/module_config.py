@@ -175,6 +175,7 @@ def load_config():
             "seed": int(config['LLM']['seed']),
             "systemprompt": config['LLM']['systemprompt'],
             "instructionprompt": config['LLM']['instructionprompt'],
+            "functioncalling": config['LLM']['functioncalling'], 
         },
         "VISION": {
             "enabled": config.getboolean('VISION', 'enabled'),

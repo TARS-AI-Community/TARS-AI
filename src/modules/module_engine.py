@@ -53,9 +53,6 @@ TRAINING_DATA_PATH = os.path.join(BASE_DIR, 'engine/training/training_data.csv')
 
 CONFIG = load_config()
 
-#mode to use Naive Bayes or LLM for function calling
-mode = "NB"
-
 # === Load Models ===
 try:
     if not os.path.exists(VECTORIZER_FILENAME):
@@ -259,7 +256,7 @@ def predict_class(user_input):
     """
     Which method to use for function calling NB (single LLM CALL) or LLM (Multiple LLM Calls)
     """
-    if mode == 'NB':
+    if CONFIG['CONTROLS']['functioncalling'] == 'NB':
         return predict_class_nb(user_input)
     else:
         return predict_class_llm(user_input)

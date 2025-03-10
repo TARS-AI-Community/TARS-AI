@@ -65,6 +65,8 @@ systemprompt = Your task is to respond effectively and creatively within the giv
 # Prompt defining the LLM's behavior
 instructionprompt = You are {char}. Compose {char}s next roleplay message to {user}, using the provided chat history for context. Keep your response short and in plain text only, no emojis or Ascii. Avoid using {char}s name, as you are embodying {char}. Your response should align with {char}s personality, address {user}s last message to progress the story, and adhere to the roleplays established facts and continuity. Do not prepending your response with anything. You will respond in accordance with your settings defined below. Keep your response very short.
 # Instructions guiding the LLM's response style
+functioncalling = llm
+# LLM (passes it to the model to determine, results in second api call ) or NB is a algo used to guess (not context aware, super fast)
 
 [VISION] # Vision-related configuration (e.g., image recognition)
 enabled = True
