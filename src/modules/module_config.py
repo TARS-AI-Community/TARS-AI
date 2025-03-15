@@ -271,8 +271,15 @@ def load_config():
             "fullscreen": config.getboolean('UI', 'fullscreen'),
             "font_size": int(config['UI']['font_size']),  
             "target_fps": int(config['UI']['target_fps']),       
+        },
+        "BATTERY": {
+            "battery_capacity_mAh":  int(config['BATTERY']['battery_capacity_mAh']),
+            "battery_initial_voltage":  float(config['BATTERY']['battery_initial_voltage']),
+            "battery_cutoff_voltage":  float(config['BATTERY']['battery_cutoff_voltage']),
+            "auto_shutdown": config.getboolean('BATTERY', 'auto_shutdown')     
         }
     }
+
 
 def get_api_key(llm_backend: str) -> str:
     """

@@ -16,6 +16,7 @@ Run this script directly to start the application.
 import os
 import sys
 import threading
+import time
 from datetime import datetime
 
 # === Custom Modules ===
@@ -29,6 +30,7 @@ from modules.module_main import initialize_managers, wake_word_callback, utteran
 from modules.module_vision import initialize_blip
 from modules.module_llm import initialize_manager_llm
 from modules.module_ui import UIManager
+from modules.module_battery import BatteryModule
 import modules.module_chatui
 
 import logging  # This will hide INFO and DEBUG messages
@@ -74,12 +76,15 @@ if __name__ == "__main__":
     # Create a shutdown event for global threads
     shutdown_event = threading.Event()
 
+    # Initialize the battery module
+    battery = BatteryModule()
+    battery.start()
+
     # Create global UI manager instance
-    ui_manager = UIManager(shutdown_event=shutdown_event)
+    ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery)
     if CONFIG['UI']['UI_enabled']:
         ui_manager.start()
     ui_manager.update_data("System", "Initializing application...", "DEBUG")
-
 
     # Initialize CharacterManager, MemoryManager
     char_manager = CharacterManager(config=CONFIG)
@@ -133,5 +138,6 @@ if __name__ == "__main__":
     finally:
         ui_manager.stop()
         stt_manager.stop()
+        battery.stop()
         bt_controller_thread.join()
         queue_message(f"INFO: All threads and executor stopped gracefully.")
