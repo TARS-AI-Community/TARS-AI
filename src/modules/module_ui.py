@@ -29,6 +29,7 @@ from UI.module_ui_brain import BrainVisualization
 
 # --- Configuration and Constants ---
 CONFIG = load_config()
+UI_template = CONFIG['UI']['UI_template']
 screenWidth = CONFIG['UI']['screen_width']
 screenHeight = CONFIG['UI']['screen_height']
 rotation = CONFIG['UI']['rotation']
@@ -61,13 +62,14 @@ class Box:
         return (self.x, self.y, self.width, self.height)
 
 def load_layout_config(config_file):
+    config_path = os.path.join("UI", config_file)
     try:
-        with open(config_file, 'r') as f:
+        with open(config_path, 'r') as f:
             return json.load(f)
     except Exception as e:
-        print(f"Error loading layout config from {config_file}: {e}")
+        print(f"Error loading layout config from {config_path}: {e}")
         return {"landscape": [], "portrait": []}
-
+    
 def get_layout_dimensions(layout_config, screen_width, screen_height, rotation):
     """
     Calculate layout dimensions with correct rotation handling.
@@ -290,7 +292,7 @@ class UIManager(threading.Thread):
             self.logical_height = self.width
 
         # Load layout from JSON.
-        self.layout_config = load_layout_config('UI/ui_layout.json')
+        self.layout_config = load_layout_config(UI_template)
         self.layouts = get_layout_dimensions(self.layout_config, width, height, self.rotate)
         self.box_map = {box.name: box for box in self.layouts}
 

@@ -259,6 +259,7 @@ def load_config():
         },
         "UI": {
             "UI_enabled": config.getboolean('UI', 'UI_enabled'),
+            "UI_template": config['UI']['UI_template'],
             "maximize_console": config.getboolean('UI','maximize_console'),
             "neural_net": config.getboolean('UI', 'neural_net'),
             "neural_net_always_visible": config.getboolean('UI', 'neural_net_always_visible'),
