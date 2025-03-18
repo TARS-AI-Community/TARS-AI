@@ -267,7 +267,7 @@ class StreamingAvatar:
 
 # --- UIManager Class ---
 class UIManager(threading.Thread):
-    def __init__(self, shutdown_event, use_camera_module=use_camera_module, show_mouse=show_mouse, 
+    def __init__(self, shutdown_event, battery_module, use_camera_module=use_camera_module, show_mouse=show_mouse, 
                  width: int = screenWidth, height: int = screenHeight, rotation_value=rotation):
         super().__init__()
         self.target_fps = target_fps
@@ -384,6 +384,11 @@ class UIManager(threading.Thread):
         self.audio_thread.daemon = True
         self.audio_thread.start()
 
+        self.battery = battery_module
+        self.battery_percent = 100
+        status = self.battery.get_battery_status()
+        self.battery_percent = status['normalized_percentage']
+
     def silence(self, progress):
         self.silence_progress = progress
         if progress != 0:
@@ -445,7 +450,7 @@ class UIManager(threading.Thread):
         console_background = (0, 0, 0, 160)
         pygame.draw.rect(console_surface, console_background, (0, 0, width, height))
         pygame.draw.rect(console_surface, (76, 194, 230, 255), (0, 0, width, height), int(2 * self.scale))
-        title = font.render("System Console", True, (150, 150, 150))
+        title = font.render("(" + str(self.battery_percent) + "%) System Console", True, (150, 150, 150))
         console_surface.blit(title, (10, 5))
         
 
@@ -816,6 +821,7 @@ class UIManager(threading.Thread):
             original_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
 
             self.start_time = time.time()
+            self.battery_checked = time.time()
 
             while self.running:
                 try:
@@ -919,6 +925,12 @@ class UIManager(threading.Thread):
                     if not self.neural_net_always_visible and self.brain_visible:
                         if time.time() - self.start_time >= 15:
                             self.brain_visible = False
+
+                    current_time = time.time()
+                    if current_time - self.battery_checked >= 60 and self.battery.is_running:                    
+                        status = self.battery.get_battery_status()
+                        self.battery_percent = status['normalized_percentage']
+                        self.battery_checked = current_time
 
                 except Exception as e:
                     print(f"Error in main UI loop: {e}")

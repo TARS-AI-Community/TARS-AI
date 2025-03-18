@@ -229,3 +229,17 @@ neutralStarboard = 350
 backStarboard = 400
 # Fine-tuning offset for the starboard drive servo
 perfectStaroffset = 0
+
+
+[BATTERY]
+# This section is only required if you are using an INA260 Current + Voltage + Power Sensor
+# These values must match the battery you are using.
+# Wiring diagram https://learn.adafruit.com/assets/74100
+battery_capacity_mAh = 5600
+# Total battery capacity in milliampere-hours (mAh). Set this to the battery's rated capacity (e.g., 5600 mAh for a 5.6Ah battery).
+battery_initial_voltage = 12.6
+# Full charge voltage (in volts). Set this to the battery's full charge voltage (e.g., 12.6V for a fully charged 12V battery).
+battery_cutoff_voltage = 10.5
+# Minimum safe voltage before discharge should stop (in volts). Set this based on the battery's safe discharge voltage (e.g., 10.5V for a 12V battery).
+auto_shutdown = False
+# not implemented yet
