@@ -169,15 +169,37 @@ stt/
 
 # Ignore everything inside "character" by default
 character/
+# Unignore specific directories for TARS, KIPP, CASE, and PLEX
 !character/TARS/
 !character/TARS/images/
 !character/TARS/images/neutral/
-!character/TARS/images/neutral/** 
+!character/TARS/images/neutral/**
+
+!character/KIPP/
+!character/KIPP/images/
+!character/KIPP/images/neutral/
+!character/KIPP/images/neutral/**
+
+!character/CASE/
+!character/CASE/images/
+!character/CASE/images/neutral/
+!character/CASE/images/neutral/**
+
+!character/PLEX/
+!character/PLEX/images/
+!character/PLEX/images/neutral/
+!character/PLEX/images/neutral/** 
 
 *.onnx
 *.onnx.json
 !TARS.onnx
 !TARS.onnx.json
+!CASE.onnx
+!CASE.onnx.json
+!KIPP.onnx
+!KIPP.onnx.json
+!PLEX.onnx
+!PLEX.onnx.json
 
 src/modules/UI/ui_layout.json
 /src/modules/UI/ui_layout.json
