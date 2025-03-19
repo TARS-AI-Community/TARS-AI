@@ -33,7 +33,7 @@ asound = ctypes.cdll.LoadLibrary('libasound.so')
 
 # Load the Piper model globally
 script_dir = os.path.dirname(__file__)
-model_path = os.path.join(script_dir, '..', f'tts/{character_name}.onnx')
+model_path = os.path.join(script_dir, '..', f'character/{character_name}/voice/{character_name}.onnx')
 
 if CONFIG['TTS']['ttsoption'] == 'piper':
     voice = PiperVoice.load(model_path)
