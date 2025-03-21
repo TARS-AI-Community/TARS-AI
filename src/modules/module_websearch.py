@@ -125,7 +125,7 @@ def search_query(url, query, content_selector, link_selector=None):
 
 def search_google(query):
     """
-    Perform a Google search and extract featured snippets, knowledge panels, and snippets.
+    Perform a Google search for information.
 
     Parameters:
     - query (str): The search query.

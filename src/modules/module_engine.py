@@ -34,6 +34,8 @@ import os
 import joblib
 from datetime import datetime
 import threading
+import json
+import re
 
 # === Custom Modules ===
 from modules.module_websearch import search_google, search_google_news
@@ -294,18 +296,19 @@ def predict_class_nb(user_input):
 
 def predict_class_llm(user_input):
     from module_llm import raw_complete_llm
-    import json
-
 
     prompt = f"""
-    You are TARS, an AI module responsible for predicting the appropriate tool usage. Your tasks are:
+    You are an AI module tasked with predicting the appropriate tool usage based on the user's message, with a high level of accuracy and understanding of the intent behind their words. The available tools and their descriptions are as follows: {FUNCTION_REGISTRY}.
 
-    1. Identify the tool being referenced from the following list of options and their descriptions:
-    {FUNCTION_REGISTRY}
+    Your tasks are:
 
-    2. Extract the confidence level for the predicted tool usage, ensuring it is a valid percentage (0–100).
+    1. Determine if a tool should be used based on the user's message or if the user is simply chatting. If no tool is needed, the response should default to "chat".
+    
+    2. Identify the specific tool being referenced from the available list of tools and their descriptions. It is crucial to recognize when the user is just having a casual conversation and does not require any tool. In such cases, use "chat" as the tool.
 
-    3. Respond with a structured JSON output in the exact format:
+    3. Extract the confidence level for the predicted tool usage based on the user's message. Ensure the confidence is a valid percentage (0–100).
+
+    4. Respond with a structured JSON output in the following format:
     {{
         "functioncall": {{
             "tool": "<TOOL>",
@@ -314,14 +317,16 @@ def predict_class_llm(user_input):
     }}
 
     Rules:
-    - Always output a single JSON object with the fields "tool" and "confidence".
-    - If no confidence is provided or cannot be inferred, set confidence to 50 by default.
-    - Ensure the tool matches one of the listed options exactly.
-    - Do not include any explanations or extra data in the output.
+    - Always output a single JSON object containing "tool" and "confidence".
+    - If no confidence is provided, or if the tool is not explicitly referenced, set the confidence to 0.
+    - If no tool is needed or the user is just chatting, set the "tool" to "chat" with a confidence of 0.
+    - Ensure that the tool name exactly matches one from the available options, or default to "chat" if no tool is needed.
+    - Do not include any explanations, variations, or additional data in the output.
 
     Instructions:
-    - Match the tool to the intent of the input based on its description and functionality.
-    - Only use tools from the provided list.
+    - Match the appropriate tool to the intent of the user's input based on the provided descriptions.
+    - Consider context carefully—if the input is a simple greeting or chat, do not suggest any tools.
+    - Only use tools from the provided list and avoid making assumptions about the user's intent.
 
     Input: "{user_input}"
     Output:
@@ -330,52 +335,69 @@ def predict_class_llm(user_input):
     try:
         # Get the raw response from the LLM
         data = raw_complete_llm(prompt)
+        #queue_message(f"[DEBUG] Raw LLM response: {repr(data)}")  # Show exact response
 
-        # Parse the JSON response
-        extracted_data = json.loads(data)
+        # Strip out the markdown block (```) from the raw response
+        data = re.sub(r'```json\n|\n```', '', data).strip()
 
-        # Access the "functioncall" object
-        function_call = extracted_data.get("functioncall", {})
-        predicted_class = function_call.get("tool")
-        confidence = function_call.get("confidence")
+        # Parse the response
+        predicted_class = None
+        confidence = None
 
-        #queue_message(f"[DEBUG] FunctionCalling: {data}")
-        queue_message(f"[DEBUG] Extracted values: tool={predicted_class}, confidence={confidence}")
+        # Try JSON parsing first
+        try:
+            parsed_data = json.loads(data)  # Strip whitespace/newlines
+            #queue_message(f"[DEBUG] Parsed JSON: {parsed_data}")
+            function_call = parsed_data.get("functioncall")
+            if function_call and "tool" in function_call and "confidence" in function_call:
+                predicted_class = function_call["tool"]
+                confidence = function_call["confidence"]
+            else:
+                #queue_message("[ERROR] Invalid JSON structure: missing required fields.")
+                return None, 0.0
+        except json.JSONDecodeError as e:
+            #queue_message(f"[DEBUG] JSON parsing failed: {str(e)}")
+            # Fallback to string parsing
+            match = re.search(r'Tool:\s*(\w+),\s*Confidence:\s*(\d+)%', data)
+            if match:
+                predicted_class = match.group(1)
+                confidence = int(match.group(2))
+            else:
+                #queue_message("[ERROR] Failed to extract tool and confidence from response.")
+                return None, 0.0
 
-        # Validate the extracted values
-        if predicted_class not in FUNCTION_REGISTRY:
-            queue_message("[ERROR] Tool not recognized.")
+        # Validate extracted values
+        if not predicted_class or not isinstance(confidence, (int, float)):
+            #queue_message("[ERROR] Extracted tool or confidence is invalid.")
             return None, 0.0
 
-        if not isinstance(confidence, (int, float)):
-            queue_message("[INFO] Confidence value not provided or invalid. Defaulting to 50%.")
-            confidence = 50.1
+        #queue_message(f"[DEBUG] Extracted values: tool={predicted_class}, confidence={confidence}")
+
+        if predicted_class not in FUNCTION_REGISTRY:
+            #queue_message("[ERROR] Tool not recognized.")
+            return None, 0.0
 
         if confidence < 0 or confidence > 100:
-            queue_message("[ERROR] Confidence value out of bounds. Setting to 50%.")
-            confidence = 50.2
+            #queue_message("[ERROR] Confidence out of bounds. Setting to 50%.")
+            confidence = 50.0
 
         # Normalize confidence to 0–1
         max_probability = confidence / 100.0
 
         if max_probability < 0.75:
-            queue_message(f"[INFO] Confidence too low ({max_probability:.2f}). Tool not used.")
+            #queue_message(f"[INFO] Confidence too low ({max_probability:.2f}). Tool not used.")
             return None, max_probability
 
-        # Announce the decision via TTS (optional)
         formatted_probability = f"{max_probability * 100:.2f}%"
         queue_message(f"TOOL: Using Tool {predicted_class} ({formatted_probability})")
         generate_tts_audio("processing, processing, processing", CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
 
         return predicted_class, max_probability
 
-    except json.JSONDecodeError as e:
-        queue_message(f"[ERROR] Failed to parse LLM response: {e}")
-        return None, 0.0
     except Exception as e:
-        queue_message(f"[ERROR] Unexpected error in predict_class: {e}")
+        queue_message(f"[ERROR] Unexpected error: {str(e)}")
         return None, 0.0
-    
+
 def adjust_persona(user_input):
     """
     Adjust the personality traits of TARS, such as humor, empathy, or formality.
@@ -425,9 +447,7 @@ def adjust_persona(user_input):
     - Always output a single JSON object with the fields "trait" and "value".
     - Do not output explanations, variations, or multiple commands.
     - If the value is not specified, respond with:
-    {{
-        "error": "Value not provided"
-    }}
+    {{"error": "Value not provided"}}
     - Ensure the trait matches one of the listed options exactly.
 
     Examples:
@@ -476,7 +496,9 @@ def adjust_persona(user_input):
     try:
         data = raw_complete_llm(prompt)
 
-        import json
+        # Strip out the markdown block (```json) and newlines, then parse the JSON response
+        data = re.sub(r'```json\n|\n```', '', data).strip()
+
         # Parse the JSON response
         extracted_data = json.loads(data)
 
@@ -485,8 +507,8 @@ def adjust_persona(user_input):
         trait = persona_data.get("trait")
         value = persona_data.get("value")
 
-        queue_message(f"[DEBUG] FunctionCalling: {data}")
-        queue_message(f"[DEBUG] Extracted values: {trait}, {value}")
+        #queue_message(f"[DEBUG] FunctionCalling: {data}")
+        #queue_message(f"[DEBUG] Extracted values: {trait}, {value}")
 
         # Validate the extracted data
         if trait and value:
@@ -495,15 +517,15 @@ def adjust_persona(user_input):
                 update_character_setting(trait, value)
                 return f"Updated {trait} setting to {value}"
             else:
-                queue_message("[ERROR] Invalid types")
+                #queue_message("[ERROR] Invalid types")
                 return False
         else:
-            queue_message("[ERROR] Missing in the response.")
+            #queue_message("[ERROR] Missing in the response.")
             return False
     
     except Exception as e:
-        #queue_message(f"[DEBUG] Error in movement_llmcall: {e}")
         return f"Error processing the movement command: {e}"
+
  
 # === Function Calling ===
 FUNCTION_REGISTRY = {
