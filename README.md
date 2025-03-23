@@ -28,7 +28,7 @@
 
 ## To start contributing to TARS-AI
 - See our contributing guidelines: [docs-tars-ai.vercel.app/contribute](https://docs-tars-ai.vercel.app/contribute)
-- Join our Discord server: [discord.gg/AmE2Gv9EUt](https://discord.gg/AmE2Gv9EUt)
+- Join our Discord server: [Discord Invite](https://discord.gg/AmE2Gv9EUt)
 
 ## License
 
@@ -36,4 +36,4 @@ TARS-AI is licensed under the [CC-BY-NC License](./LICENSE). See the [License Pa
 
 ## Attribution 
 
-As we continue to build and expand upon the TARS project, please review the guidelines for attribution and best practices when sharing or publishing work related to the TARS project [Attribution Page](https://github.com/pyrater/TARS-AI/blob/main/ATTRIBUTION.md)
+As we continue to build and expand upon the TARS project, please review the guidelines for attribution and best practices when sharing or publishing work related to the TARS project [Attribution Page](https://docs-tars-ai.vercel.app/about#attribution)
