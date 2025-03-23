@@ -19,7 +19,7 @@
 
 </p>
 
-<p align="center"><a href="https://github.com/pyrater/TARS-AI"><img width=90% alt="" src="/media/tars-banner.png" /></a></p>
+<p align="center"><a href="https://github.com/pyrater/TARS-AI"><img width=90% alt="" src="/media/tars-banner-logo.png" /></a></p>
 
 <p align="center">A recreation of the robot TARS from Interstellar, featuring AI capabilities.</p>
 
