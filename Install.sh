@@ -26,6 +26,8 @@ retry_pip_install() {
 
 # Update and upgrade system packages
 sudo apt clean
+sudo update-initramfs -u -k all
+sudo dpkg --configure -a
 sudo apt update -y
 
 # Install necessary dependencies
@@ -92,6 +94,6 @@ export DISPLAY=:0
 echo "DISPLAY set to $DISPLAY"
 
 # Fix permissions and executable files
-sudo chown "$(id -u):$(id -g)" src/*
-chmod 755 src/*  
+sudo chown -R "$(id -u):$(id -g)" src/
+chmod -R 755 src/
 echo "Installation completed successfully!"
