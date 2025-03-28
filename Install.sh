@@ -94,6 +94,6 @@ export DISPLAY=:0
 echo "DISPLAY set to $DISPLAY"
 
 # Fix permissions and executable files
-sudo chown -R "$(id -u):$(id -g)" src/
+sudo chown -R $(whoami):$(whoami) src/
 chmod -R 755 src/
 echo "Installation completed successfully!"
