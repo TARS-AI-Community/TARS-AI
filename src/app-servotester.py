@@ -112,8 +112,84 @@ def auto_calibrate_servo(channel, is_center_servo=False):
     Automatically calibrates a servo to find min, max, and neutral PWM values.
     For a center servo, it calculates additional height values.
     """
-    # [The entire original auto_calibrate_servo function remains unchanged]
-    print("Auto-calibration is in internal testing. Use with caution!")
+    print(f"Starting auto-calibration for servo on channel {channel}...")
+
+    # Find minimum PWM value using a curved approach
+    print("Finding minimum PWM value...")
+    step = 150  # Initial large step
+    pwm_value = MAX_PULSE  # Start at the high end
+    min_pulse = None
+    while step >= 1:
+        print(f"Testing PWM: {pwm_value}")
+        set_servo_pulse(channel, pwm_value)
+        time.sleep(0.5)
+        user_input = input("Did the servo start moving? (y/n): ").strip().lower()
+        if user_input == "y":
+            min_pulse = pwm_value
+            pwm_value -= step
+        else:
+            pwm_value -= step
+        step //= 2
+
+    if min_pulse is None:
+        print("Failed to find minimum PWM value.")
+        return
+    print(f"Servo starts moving at PWM: {min_pulse}")
+
+    # Find maximum PWM value
+    print("Finding maximum PWM value...")
+    step = 50
+    pwm_value = min_pulse  # Start from the found minimum value
+    max_pulse = None
+    while step >= 1:
+        print(f"Testing PWM: {pwm_value}")
+        set_servo_pulse(channel, pwm_value)
+        time.sleep(0.5)
+        user_input = input("Did the servo stop moving? (y/n): ").strip().lower()
+        if user_input == "n":
+            max_pulse = pwm_value
+            pwm_value += step
+        else:
+            max_pulse = pwm_value - step
+            pwm_value -= step
+        step //= 2
+
+    if max_pulse is None:
+        print("Failed to find maximum PWM value.")
+        return
+    print(f"Servo stops moving at PWM: {max_pulse}")
+
+    # Calculate neutral position
+    neutral_pulse = (min_pulse + max_pulse) // 2
+    print(f"Setting servo to neutral position: {neutral_pulse}")
+    set_servo_pulse(channel, neutral_pulse)
+
+    # Output port/starboard values if not a center servo
+    if not is_center_servo:
+        neutral_port = neutral_pulse
+        neutral_starboard = neutral_pulse
+        forward_port = int(neutral_pulse + 0.1 * (max_pulse - neutral_pulse))
+        back_starboard = int(neutral_pulse + 0.1 * (neutral_pulse - min_pulse))
+        forward_starboard = int(neutral_pulse - 0.1 * (neutral_pulse - min_pulse))
+        back_port = int(neutral_pulse - 0.1 * (max_pulse - neutral_pulse))
+
+        print(f"Calibration complete for servo {channel}:")
+        print(f"  Back Port: {back_port}")
+        print(f"  Neutral Port: {neutral_port}")
+        print(f"  Forward Port: {forward_port}")
+        print(f"  Back Starboard: {back_starboard}")
+        print(f"  Neutral Starboard: {neutral_starboard}")
+        print(f"  Forward Starboard: {forward_starboard}")
+
+    else:  # Additional calculations for center servo
+        down_height = abs((min_pulse - max_pulse) // 2)
+        up_height = min_pulse
+        neutral_height = (down_height + up_height) // 2
+
+        print(f"Calibration complete for center servo {channel}:")
+        print(f"  Up Height: {up_height}")
+        print(f"  Neutral Height: {neutral_height}")
+        print(f"  Down Height: {down_height}")
 
 print("Servo Control Menu (Pulse Width)")
 
