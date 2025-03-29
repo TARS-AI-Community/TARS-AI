@@ -223,6 +223,7 @@ def load_config():
             "enabled": config['DISCORD']['enabled'],
         },
         "SERVO": {
+            "PWM_FREQUENCY": int(config['SERVO']['PWM_FREQUENCY']),
             "portMain": config['SERVO']['portMain'],
             "portForarm": config['SERVO']['portForarm'],
             "portHand": config['SERVO']['portHand'],

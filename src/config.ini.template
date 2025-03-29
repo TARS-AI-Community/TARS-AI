@@ -191,6 +191,8 @@ channel_id = 811470553139249186
 # ID of the Discord channel for communication (TARS-AI = 1311295891512098920)
 
 [SERVO]
+#!!!IMPORTANT!!! if you are building a new project, use 50, if you are updating from an early build, use 60.
+PWM_FREQUENCY = 50
 #Enable or disable movement via voice control
 voicemovement = False
 # Port for the main servo
@@ -214,6 +216,9 @@ neutralHeight = 168
 # Lower limit for the center servo (CAUTION: Setting too high may cause damage)
 downHeight = 250
 
+# !!!IMPORTANT!!! 
+# With a 60 PWM frequency the Forward and Back values are normally +50 for forward and -50 for back from the neutral value.
+# With a 50 PWM frequency the Forward and Back values are normally +60 for forward and -60 for back from the neutral value.
 # Forward position for the port drive servo
 forwardPort = 400
 # Neutral position for the port drive servo
@@ -223,6 +228,9 @@ backPort = 300
 # Fine-tuning offset for the port drive servo
 perfectportoffset = 0
 
+# !!!IMPORTANT!!! 
+# With a 60 PWM frequency the Forward and Back values are normally -50 for forward and +50 for back from the neutral value.
+# With a 50 PWM frequency the Forward and Back values are normally -60 for forward and +60 for back from the neutral value.
 # Forward position for the starboard drive servo
 forwardStarboard = 300
 # Neutral position for the starboard drive servo
@@ -231,6 +239,36 @@ neutralStarboard = 350
 backStarboard = 400
 # Fine-tuning offset for the starboard drive servo
 perfectStaroffset = 0
+
+
+#AT 60 PWM frequency MIN and MAX represents a 90 degree rotation from the middle. These are reference values
+#SERVO TYPE mg90s
+#min = 180
+#middle = 370
+#max = 580
+#SERVO TYPE LKY2
+#min = 170
+#middle = 370
+#max = 570
+#SERVO TYPE LDX-227
+#min = 220
+#middle = 370
+#max = 520
+
+#AT 50 PWM Frequency, MIN and MAX values represent a 90 rotation from the middle.
+#SERVO TYPE mg90s
+#min = 140
+#middle = 300
+#max = 490
+#SERVO TYPE LKY62
+#min = 130
+#middle = 300
+#max = 480
+#SERVO TYPE LDX-227
+#min = 170
+#middle = 300
+#max = 430
+
 
 
 [BATTERY]
