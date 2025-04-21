@@ -260,7 +260,6 @@ backPort = 220
 perfectPortoffset = 0
 
 
-
 [BATTERY]
 # This section is only required if you are using an INA260 Current + Voltage + Power Sensor
 # These values must match the battery you are using.

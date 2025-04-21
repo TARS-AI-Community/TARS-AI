@@ -8,7 +8,6 @@ This module listens to gamepad events such as button presses, joystick movements
 and D-pad directions, mapping these events to corresponding robotic movements or 
 in-app commands. 
 """
-
 import evdev
 import time
 from datetime import datetime

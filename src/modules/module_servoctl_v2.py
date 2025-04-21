@@ -78,8 +78,6 @@ forwardStarboard = int(config["SERVO"]["forwardStarboard"]) + perfectStaroffset
 neutralStarboard = int(config["SERVO"]["neutralStarboard"]) + perfectStaroffset
 backStarboard = int(config["SERVO"]["backStarboard"]) + perfectStaroffset
 
-
-
 def initialize_servos():
     """Ensure all servos start at their minimum positions with speed-controlled movement."""
     global portMain, portForarm, portHand, starMain, starForarm, starHand

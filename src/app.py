@@ -50,7 +50,6 @@ if (CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2"):
 else:
     from modules.module_btcontroller import *
 
-
 # === Helper Functions ===
 def init_app():
     """

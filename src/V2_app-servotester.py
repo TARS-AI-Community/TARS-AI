@@ -13,7 +13,6 @@ else:
     print("\n")
     sys.exit()
 
-
 global_speed = 1.0  # Adjust this to change movement speed
 MIN_PULSE = 0  # Calibrate these values
 MAX_PULSE = 600  # Calibrate these values

@@ -21,7 +21,6 @@ from module_config import load_config
 
 config = load_config()
 
-
 try:
     # Attempt to initialize the PCA9685 using I2C
     pwm = Adafruit_PCA9685.PCA9685(busnum=1)
