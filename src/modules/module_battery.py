@@ -31,7 +31,7 @@ class BatteryModule:
         # Initialize sensor
         try:
             self.i2c = board.I2C()
-            self.ina260 = adafruit_ina260.INA260(self.i2c)
+            self.ina260 = adafruit_ina260.INA260(self.i2c, address=0x41)
             self.sensor_initialized = True
         except Exception as e:
             print(f"Battery sensor initialization error: {e}")
@@ -71,7 +71,7 @@ class BatteryModule:
                     print(f"Battery percentage: {self.battery_percentage}%")
                     self.last_printed_percentage = self.battery_percentage
                 
-                time.sleep(5)
+                time.sleep(0.5)
 
             except Exception as e:
                 print(f"Battery monitoring error: {e}")
@@ -102,10 +102,30 @@ class BatteryModule:
         return False
     
     def is_charging(self):
-        """Determine if the battery is currently charging based on current flow direction."""
-        # Negative current means power is flowing out (discharging)
-        # Positive current means power is flowing in (charging)
-        return self.current > 0
+        # Thresholds
+        current_threshold = 50  # mA — adjust if needed
+        voltage_rise_threshold = 0.005  # V per sample
+
+        # Fast current-based check
+        if hasattr(self, 'current') and self.current > current_threshold:
+            return True
+
+        # Initialize voltage history if not already present
+        if not hasattr(self, 'voltage_history'):
+            self.voltage_history = deque(maxlen=6)
+
+        self.voltage_history.append(self.voltage)
+
+        if len(self.voltage_history) < 5:
+            return False
+
+        # Check if voltage is consistently rising
+        trend = [self.voltage_history[i+1] - self.voltage_history[i] for i in range(len(self.voltage_history) - 1)]
+
+        if all(x > voltage_rise_threshold for x in trend):
+            return True
+
+        return False
     
     def get_battery_status(self):
         """Return current battery status as a dictionary."""

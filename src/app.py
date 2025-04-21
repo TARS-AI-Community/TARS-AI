@@ -25,7 +25,6 @@ from modules.module_character import CharacterManager
 from modules.module_memory import MemoryManager
 from modules.module_stt import STTManager
 from modules.module_tts import update_tts_settings
-from modules.module_btcontroller import *
 from modules.module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread, start_discord_bot, process_discord_message_callback
 from modules.module_vision import initialize_blip
 from modules.module_llm import initialize_manager_llm
@@ -45,6 +44,12 @@ sys.path.append(os.getcwd())
 
 CONFIG = load_config()
 VERSION = "3.0 Dev Beta 0.1"
+
+if (CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2"):
+    from modules.module_btcontroller_v2 import *
+else:
+    from modules.module_btcontroller import *
+
 
 # === Helper Functions ===
 def init_app():

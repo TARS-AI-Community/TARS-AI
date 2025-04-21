@@ -81,8 +81,11 @@ def execute_movement(movement, times):
     """
     def movement_task():
         queue_message(f"[DEBUG] Thread started for movement: {movement} x {times}")
-        from module_btcontroller import turnRight, turnLeft, poseaction, unposeaction, stepForward
-        
+        if (CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2"):
+            from modules.module_btcontroller_v2 import turnRight, turnLeft, poseaction, unposeaction, stepForward
+        else:
+            from modules.module_btcontroller import turnRight, turnLeft, poseaction, unposeaction, stepForward
+
         action_map = {
             "turnRight": turnRight,
             "turnLeft": turnLeft,
