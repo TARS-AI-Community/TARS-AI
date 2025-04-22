@@ -1,6 +1,8 @@
 from __future__ import division
+import sys
 import time
 import Adafruit_PCA9685
+from modules.module_config import load_config
 
 try:
     pwm = Adafruit_PCA9685.PCA9685(busnum=1)
@@ -8,12 +10,20 @@ except Exception as e:
     print(f"Error initializing PCA9685: {e}")
     exit()
 
-pwm.set_pwm_freq(60)
+config = load_config()
+
+if (config["SERVO"]["MOVEMENT_VERSION"] == "V1"):
+    pwm.set_pwm_freq(60)
+else:
+    print("\nThis tool can only be used if you are using the V1 MOVEMENT Configurations.")
+    print("\n")
+    sys.exit()
 
 print("Auto calibrate is in internal testing DO NOT USE / risk it unless you know what your doing!!!!")
 
 MIN_PULSE = 0  # Calibrate these values
 MAX_PULSE = 600  # Calibrate these values
+
 
 def set_servo_pulse(channel, pulse):
     if MIN_PULSE <= pulse <= MAX_PULSE:

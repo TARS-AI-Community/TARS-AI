@@ -18,7 +18,6 @@ import soundfile as sf
 
 # === Custom Modules ===
 from modules.module_config import load_config
-from modules.module_btcontroller import start_controls
 from modules.module_discord import *
 from modules.module_llm import process_completion
 from modules.module_tts import play_audio_chunks
@@ -32,6 +31,11 @@ memory_manager = None
 stt_manager = None
 
 CONFIG = load_config()
+
+if (CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2"):
+    from modules.module_btcontroller_v2 import start_controls
+else:
+    from modules.module_btcontroller import start_controls
 
 # Global Variables (if needed)
 stop_event = threading.Event()

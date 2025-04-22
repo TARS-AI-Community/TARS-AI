@@ -191,46 +191,73 @@ channel_id = 811470553139249186
 # ID of the Discord channel for communication (TARS-AI = 1311295891512098920)
 
 [SERVO]
-#Enable or disable movement via voice control
-voicemovement = False
-# Port for the main servo
+# Enable or disable movement via voice control
+voicemovement = True
+#!!!IMPORTANT!!! IF YOUR TARS IS USING THE ORIGINAL FILES USE V1, IF YOU ARE USING THE NEW SETUP, USE V2.
+# THE V2 setup works with the original version but YOU CANNOT SWITCH FROM V1 to V2 WITHOUT RECONFIGURING AND RESETING YOUR HARDWARE
+MOVEMENT_VERSION = V2
+
+# V1 ARMS Variables
 portMain = 610
-# Port for the forearm servo
 portForarm = 570
-# Port for the hand servo
 portHand = 570
+starMain = 610
+starForarm = 570
+starHand = 570
 
-# Starting angle for the main servo
-starMain = 200
-# Starting angle for the forearm servo
-starForarm = 200
-# Starting angle for the hand servo
-starHand = 240
+# V2 ARMS Variables
+# The min and max value will control how far the arm can move, avoid having the connecting arm push against the case, the servo must not be under strain.
+# Port for the main servo.. 
+# RIGHT ARM
+portMainMin = 200
+portMainMax = 500
+portForarmMin = 200
+portForarmMax = 380
+portHandMin = 200
+portHandMax = 280
+# LEFT ARM
+starMainMin = 500
+starMainMax = 200
+starForarmMin = 380
+starForarmMax = 200
+starHandMin = 380
+starHandMax = 280
 
+# servo 0 (Main Servo - Raise and Lowers the legs)
 # Upper limit 
-upHeight = 88
+# !!!IMPORTANT!!! 
+# Install the servo so that the position of the main leg mount are centered in the hole, then adjust for the max upHeight and downHeight
+upHeight = 220
 # Neutral position for centering the servo
-neutralHeight = 168
+neutralHeight = 300
 # Lower limit for the center servo (CAUTION: Setting too high may cause damage)
-downHeight = 250
+downHeight = 350
 
-# Forward position for the port drive servo
-forwardPort = 400
-# Neutral position for the port drive servo
-neutralPort = 350
-# Reverse position for the port drive servo
-backPort = 300
-# Fine-tuning offset for the port drive servo
-perfectportoffset = 0
-
+# servo 1 (Left leg)
+# !!!IMPORTANT!!! 
+# With the V1, the Forward and Back values are normally -50 for forward and +50 for back from the neutral value with a neutral value of 350
+# With the V2, the Forward and Back values are normally -108 for forward and +108 for back from the neutral value with a neutral value of 300 for mg996r Servo Type, and +80, -80 for LDX-227 Servo
 # Forward position for the starboard drive servo
-forwardStarboard = 300
+forwardStarboard = 220
 # Neutral position for the starboard drive servo
-neutralStarboard = 350
+neutralStarboard = 300
 # Reverse position for the starboard drive servo
-backStarboard = 400
+backStarboard = 380
 # Fine-tuning offset for the starboard drive servo
 perfectStaroffset = 0
+
+# servo 2 (Right Leg)
+# !!!IMPORTANT!!! 
+# With the V1, the Forward and Back values are normally +50 for forward and -50 for back from the neutral value with a neutral value of 350
+# With the V2, the Forward and Back values are normally +108 for forward and -108 for back from the neutral value with a neutral value of 300 for mg996r Servo Type, and -80, +80 for LDX-227 Servo
+# Forward position for the port drive servo
+forwardPort = 380
+# Neutral position for the port drive servo
+neutralPort = 300
+# Reverse position for the port drive servo
+backPort = 220
+# Fine-tuning offset for the port drive servo
+perfectPortoffset = 0
 
 
 [BATTERY]

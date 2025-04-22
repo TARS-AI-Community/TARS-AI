@@ -1,5 +1,5 @@
 """
-module_btcontroller.py
+module_btcontroller_v2.py
 
 Provides functionality for managing and interpreting Bluetooth gamepad input 
 to control servos and execute specific actions in the TARS-AI system.
@@ -15,17 +15,21 @@ from evdev import InputDevice, categorize, ecodes, list_devices
 import Adafruit_PCA9685
 
 from modules.module_config import load_config
-from modules.module_servoctl import *
 from modules.module_messageQue import queue_message
 
 config = load_config()
 controller_name = config["CONTROLS"]["controller_name"]
 
+if (config["SERVO"]["MOVEMENT_VERSION"] == "V2"):
+    from modules.module_servoctl_v2 import *
+else:
+    from modules.module_servoctl import *
+
 global posevar
 
 try:
     pwm = Adafruit_PCA9685.PCA9685(busnum=1)  # Specify I2C bus 1
-    pwm.set_pwm_freq(60)  # Set frequency to 60 Hz
+    pwm.set_pwm_freq(50)  # Set frequency to 50 Hz
 except FileNotFoundError as e:
     queue_message(f"ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
     pwm = None  # Fallback if hardware is unavailable
@@ -39,13 +43,13 @@ except Exception as e:
 if pwm:
     try:
         # Port
-        pwm.set_pwm(3, 3, 610)
+        """ pwm.set_pwm(3, 3, 610)
         pwm.set_pwm(4, 4, 570)
         pwm.set_pwm(5, 5, 570)
         # Starboard
         pwm.set_pwm(6, 6, 200)
         pwm.set_pwm(7, 7, 200)
-        pwm.set_pwm(8, 8, 240)
+        pwm.set_pwm(8, 8, 240) """
     except Exception as e:
         queue_message(f"Error setting initial servo positions: {e}")
 
@@ -106,34 +110,21 @@ def check_secret_code(button_name):
 #functions to move
 def stepForward():
     queue_message("MOVE: FWD")
-    height_neutral_to_up()
-    torso_neutral_to_forwards()
-    torso_bump()
-    torso_return()
+    step_forward()
 
 def turnRight():
     queue_message("MOVE: TurnRight")
-    neutral_to_down()
     turn_right()
-    down_to_neutral()
-    neutral_from_right()
 
 def turnLeft():
     queue_message("MOVE: TurnLeft")
-    neutral_to_down()
     turn_left()
-    down_to_neutral()
-    neutral_from_left()
 
 def poseaction():
-    queue_message("MOVE: Pose")
-    neutral_to_down()
-    torso_neutral_to_backwards()
-    down_to_up()
+    pass
 
 def unposeaction():
-    queue_message("MOVE: UnPose")
-    torso_return2()  
+    pass 
         
         
 # D-Pad Actions (pressed and released)
@@ -190,49 +181,61 @@ def action_a_button_pressed():
     #queue_message(f"CTRL: A Button? Are you trying to jump?")
     global toggle
     if toggle == True:
-        starHandPlus()
+        pass
+        #starHandPlus()
     elif toggle == False:
-        starHandMinus()
+        pass
+        #starHandMinus()
 
 def action_b_button_pressed():
     #queue_message(f"CTRL: Oh no, the B! Self-destruct initiated... just kidding!")
     global toggle
     if toggle == True:
-        portHandPlus()
+        pass
+        #portHandPlus()
     elif toggle == False:
-        portHandMinus()
+        pass
+        #portHandMinus()
 
 def action_x_button_pressed():
     #queue_message(f"CTRL: Hey, stop pushing my X Button!")
     global toggle
     if toggle == True:
-        starForarmPlus()
+        pass
+        #starForarmPlus()
     elif toggle == False:
-        starForarmMinus()
+        pass
+        #starForarmMinus()
 
 def action_y_button_pressed():
     #queue_message(f"CTRL: Y Button? I hope you know what youre doing!")
     global toggle
     if toggle == True:
-        portForarmPlus()
+        pass
+        #portForarmPlus()
     elif toggle == False:
-        portForarmMinus()
+        pass
+        #portForarmMinus()
 
 def action_r1_button_pressed():
     #queue_message(f"CTRL: R1 Button pressed! Thats the turbo button!")
     global toggle
     if toggle == True:
-        starMainPlus()
+        pass
+        #starMainPlus()
     elif toggle == False:
-        starMainMinus()
+        pass
+        #starMainMinus()
 
 def action_l1_button_pressed():
     #queue_message(f"CTRL: L1 Button activated! Shields up!")
     global toggle
     if toggle == True:
-        portMainPlus()
+        pass
+        #portMainPlus()
     elif toggle == False:
-        portMainMinus()
+        pass
+        #portMainMinus()
 
 def action_r2_button_pressed():
     #queue_message(f"CTRL: R2 Button? Are we accelerating now?")
