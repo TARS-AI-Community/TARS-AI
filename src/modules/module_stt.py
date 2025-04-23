@@ -84,7 +84,7 @@ class STTManager:
             queue_message("INFO: Using 16000 Hz sample rate for VAD compatibility")
         else:
             # If VAD is disabled, use system default
-            self.DEFAULT_SAMPLE_RATE = 16000
+            self.DEFAULT_SAMPLE_RATE = 24000
             self.SAMPLE_RATE = self.find_default_mic_sample_rate()
 
         self.amp_gain = amp_gain  # Microphone amplification multiplier
