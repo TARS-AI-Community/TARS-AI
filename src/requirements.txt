@@ -11,6 +11,7 @@ azure-cognitiveservices-speech  # Azure TTS API
 # STT (Speech-to-Text) & VAD Tools
 faster-whisper          # Local STT using Faster Whisper
 silero-vad              # Voice Activity Detection (VAD) using Silero
+omegaconf               # Required for silero speech
 vosk                    # Offline speech recognition
 pocketsphinx            # Lightweight speech recognition (CMU Sphinx)
 pvporcupine             # Highly accurate speech recognitio by Picovoice
