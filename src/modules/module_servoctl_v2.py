@@ -434,6 +434,17 @@ def monster():
     time.sleep(0.2)
     disable_all_servos()
 
+def pose():
+    move_legs(50, 50, 50, 0.4)
+    move_legs(30, 40, 40, 0.4)
+    move_legs(100, 30, 30, 0.4)
+    time.sleep(3)
+    move_legs(100, 30, 30, 0.4)
+    move_legs(30, 30, 30, 0.4)
+    move_legs(30, 40, 40, 0.4)
+    move_legs(50, 50, 50, 0.4)
+    disable_all_servos()
+
 def move_legs(
     height_percent=None,
     starboard_percent=None,
