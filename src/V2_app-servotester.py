@@ -79,15 +79,16 @@ def control():
         print("2 - Move Backward.")
         print("3 - Turn Right.")
         print("4 - Turn Left.")
-        print("5 - Hi.")
-        print("6 - Laugh.")
-        print("7 - Swing Legs.")
-        print("8 - PEZZ dispenser.")
-        print("9 - Now!.")
-        print("10 - Balance.")
-        print("11 - Mic Drop.")
-        print("12 - Monster.")
-        print("13 - Pose.")
+        print("5 - Greet")
+        print("6 - Simulate Laughter")
+        print("7 - Dynamic Motion")
+        print("8 - PEZZ dispenser")
+        print("9 - Now!")
+        print("10 - Balance")
+        print("11 - Mic Drop")
+        print("12 - Defensive Posture")
+        print("13 - Pose")
+        print("14 - bow")
 
         main_input = input("> ")
         if main_input.lower() == "0":
@@ -117,7 +118,9 @@ def control():
         if main_input.lower() == "12":
             monster()          
         if main_input.lower() == "13":
-            pose()                                  
+            pose()
+        if main_input.lower() == "14":
+            bow()                                   
                 
     except ValueError:
         print("Invalid input. Please enter a valid number.")
@@ -151,4 +154,3 @@ def motion():
 
 
 motion()
-
