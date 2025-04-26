@@ -1,393 +1,365 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title id="titleid">AI</title>
-    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
-    <link href="{{ url_for('static', filename='css/index.css') }}" rel="stylesheet">
-    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
-    <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}" rel="stylesheet">
-    <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}">
-    <style>
-        /* Robot Control Panel Styles */
-        .robot-control-panel {
-            position: fixed;
-            bottom: 80px;
-            right: 20px;
-            width: 180px;
-            background-color: rgba(0, 0, 0, 0.6);
-            border-radius: 10px;
-            padding: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-            z-index: 1000;
-            transition: all 0.3s ease;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        
-        .robot-control-panel.collapsed {
-            width: 50px;
-            height: 50px;
-            overflow: hidden;
-        }
-        
-        .panel-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-            margin-bottom: 10px;
-            color: white;
-        }
-        
-        .control-buttons {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            grid-template-rows: repeat(3, 1fr);
-            gap: 5px;
-            width: 100%;
-        }
-        
-        .direction-btn {
-            width: 50px;
-            height: 50px;
-            border-radius: 8px;
-            background-color: #343a40;
-            border: none;
-            color: white;
-            font-size: 1.5rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: all 0.2s;
-        }
-        
-        .direction-btn:hover {
-            background-color: #495057;
-            transform: scale(1.05);
-        }
-        
-        .direction-btn:active {
-            background-color: #212529;
-            transform: scale(0.95);
-        }
-        
-        .btn-up {
-            grid-column: 2;
-            grid-row: 1;
-        }
-        
-        .btn-left {
-            grid-column: 1;
-            grid-row: 2;
-        }
-        
-        .btn-right {
-            grid-column: 3;
-            grid-row: 2;
-        }
-        
-        .btn-down {
-            grid-column: 2;
-            grid-row: 3;
-        }
-        
-        .toggle-panel {
-            background-color: #343a40;
-            border: none;
-            color: white;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            cursor: pointer;
-        }
-    </style>
-</head>
-<body>
-  <audio id="audioPlayer" controls hidden>
-      Your browser does not support the audio element.
-  </audio>
-        <script>
-            // Declare a global variable to store the base URL
-            let talkingheadBaseUrl = '';
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title id="titleid">AI</title>
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/index.css') }}" rel="stylesheet">
+  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
+  <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}" rel="stylesheet">
+  <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}">
 
-            // Fetch the talking head base URL from the backend
-            fetch('/get_ip')
-                .then(response => response.json())
-                .then(data => {
-                    // Store the base URL in the global variable
-                    talkingheadBaseUrl = data.talkinghead_base_url;
-
-                    // Update the image source or do other initial actions
-                    const fullUrl = talkingheadBaseUrl + "/stream";
-                    document.getElementById('backgroundImage').src = fullUrl;
-                })
-                .catch(error => console.error('Error fetching talking head URL:', error));
-        </script>
-  <script>
-    const talkinghead_url = "{{ talkinghead_base_url }}";
-    const parser = new DOMParser();
-    let decodedUrl = parser.parseFromString(`<!doctype html><body>{{ talkinghead_base_url }}`, 'text/html').body.textContent;
-    decodedUrl = decodedUrl.replace(/^"|"$/g, '');
-    console.log(decodedUrl);
-    let isMuted = false;
-    
-    function start_talking() {
-        if (!isMuted) {
-            fetch(talkingheadBaseUrl + "/start_talking")
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error('Network response was not ok');
-                            }
-                        })
-                        .catch(error => console.error('Fetch error:', error));
-            }
-        }
-    
-    function stop_talking() {
-        fetch(talkingheadBaseUrl + "/stop_talking")
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Network response was not ok');
-                        }
-                    })
-                    .catch(error => console.error('Fetch error:', error));
-        }
-
-    document.addEventListener("DOMContentLoaded", function () {
-          const audioPlayer = document.getElementById("audioPlayer");
-          const muteButton = document.getElementById("muteButton");
-
-          // Initialize the audio as unmuted
-
-          muteButton.addEventListener("click", function () {
-        const icon = this.querySelector('i'); // Find the icon within the button
-        if (isMuted) {
-            // If audio is currently muted, unmute it and switch icon to volume-up
-            audioPlayer.muted = false;
-            icon.classList.remove('bi-volume-mute-fill');
-            icon.classList.add('bi-volume-up-fill');
-            muteButton.setAttribute('aria-label', 'Mute'); // Update aria-label for accessibility
-                              // Check if the audio is playing
-            if (!audioPlayer.paused) {
-            // Send fetch request to start talking
-
-
-   
-            //const startTalkingUrl = talkingheadBaseUrl + "/start_talking";
-            start_talking();
-        }
-        } else {
-            // If audio is currently unmuted, mute it and switch icon to volume-mute
-            audioPlayer.muted = true;
-            icon.classList.remove('bi-volume-up-fill');
-            icon.classList.add('bi-volume-mute-fill');
-            muteButton.setAttribute('aria-label', 'Unmute'); // Update aria-label for accessibility
-            
-                              // Send fetch request to stop talking
-            stop_talking();
-            }
-
-        // Toggle the mute state
-        isMuted = !isMuted;
-    });
-    });
-
-      var audioPlayer = document.getElementById('audioPlayer');
-
-      // Function to handle the 'ended' event
-      function handleAudioEnd() {
-          // Call the /talking_stop endpoint right after the audio stops if not muted
-          if (!audioPlayer.muted) {
-              fetch(talkingheadBaseUrl + "/stop_talking")
-                  .then(response => {
-                      if (!response.ok) {
-                          throw new Error('Network response was not ok');
-                      }
-                      // Handle the response if necessary
-                  })
-                  .catch(error => console.error('Fetch error:', error));
-          }
-      }
-
-      // Add event listener for 'ended' event
-      audioPlayer.addEventListener('ended', handleAudioEnd);
-
-    let audioStarted = false; // Prevent multiple requests
-    let firstChunkPlayed = false; // Track if first chunk already played
-
-    function startAudioStream() {
-        if (audioStarted) {
-            // console.log("Audio stream already started, ignoring duplicate request.");
-            return; // 🚨 Prevent duplicate requests
-        }
-        audioStarted = true; // ✅ Mark that audio has started
-        firstChunkPlayed = false; // ✅ Reset for new message
-
-        fetch('/audio_stream')
-            .then(response => response.blob())
-            .then(blob => {
-                if (blob.size === 0) {
-                    // console.error("Received an empty first chunk!");
-                    return;
-                }
-
-                const audioUrl = URL.createObjectURL(blob);
-                audioPlayer.src = audioUrl;
-                audioPlayer.load();
-
-                audioPlayer.play().then(() => {
-                    // console.log("Playing first MP3 chunk...");
-                    firstChunkPlayed = true; // ✅ Mark first chunk as played
-
-                    // ✅ Wait for first chunk to finish before fetching next
-                    audioPlayer.onended = function () {
-                        // console.log("First chunk finished, requesting next...");
-                        setTimeout(() => {
-                            playNextAudioChunk();
-                        }, 500);
-                    };
-                }).catch(error => {
-                    console.error("Error playing first MP3 chunk:", error);
-                });
-            })
-            .catch(error => console.error("Error starting MP3 audio stream:", error));
+  <style>
+    /* Same robot-control-panel CSS as before */
+    .robot-control-panel {
+      margin-top: 20px;
+      width: 180px;
+      background-color: rgba(0, 0, 0, 0.6);
+      border-radius: 10px;
+      padding: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
+    .control-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 5px;
+      width: 100%;
+    }
+    .direction-btn {
+      width: 50px;
+      height: 50px;
+      border-radius: 8px;
+      background-color: #343a40;
+      border: none;
+      color: white;
+      font-size: 1.5rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: all 0.2s;
+    }
+    .direction-btn:hover {
+      background-color: #495057;
+      transform: scale(1.05);
+    }
+    .direction-btn:active {
+      background-color: #212529;
+      transform: scale(0.95);
+    }
+    .btn-up { grid-column: 2; grid-row: 1; }
+    .btn-left { grid-column: 1; grid-row: 2; }
+    .btn-right { grid-column: 3; grid-row: 2; }
+    .btn-down { grid-column: 2; grid-row: 3; }
 
-    function playNextAudioChunk() {
-    fetch('/get_next_audio_chunk')
-        .then(response => {
-            if (response.status === 204) {
-                // console.log("No more audio chunks.");
-                stop_talking()
-                audioStarted = false; // ✅ Reset audio system after last chunk
-                return null; // No more content
-            }
-            return response.blob();
-        })
-        .then(blob => {
-            if (blob) {
-                const audioUrl = URL.createObjectURL(blob);
-                audioPlayer.src = audioUrl;
-                audioPlayer.load();
+    .custom-tab {
+    font-weight: bold;
+    color: #adb5bd; /* light gray for inactive */
+    background-color: #343a40; /* darker background for tabs */
+    border: none;
+    border-radius: 0;
+    margin-right: 5px;
+    padding: 10px 15px;
+    transition: all 0.3s ease;
+  }
+  .custom-tab.active {
+    color: white;
+    background-color: #495057; /* slightly lighter bg for active tab */
+    border-bottom: 3px solid #0d6efd; /* Bootstrap blue */
+  }
+  .nav-tabs {
+    border-bottom: none;
+  }
+  </style>
+</head>
 
-                audioPlayer.play().then(() => {
-                    // console.log("Playing next MP3 chunk...");
-                        start_talking()
-                    // ✅ Ensure we reset audioStarted only after the last chunk
-                    audioPlayer.onended = function () {
-                        // console.log("Chunk finished, requesting next...");
-                        setTimeout(() => playNextAudioChunk(), 500);
-                    };
-                });
-            }
-        })
-        .catch(error => console.error("Error fetching next MP3 chunk:", error));
-}
+<body>
 
-  </script>
-        <div class="chat-container">
-            <div class="card h-100 gradient-custom">
-                <div class="card-body" data-mdb-perfect-scrollbar="true">
-                    <div class="chat-messages" style="padding: 0%; margin: 0%;">
-                        <div class="d-flex justify-content-left" style="padding: 0px; margin: 0px;">
-                            <p class="small mb-1 name" id="bot name" style="padding: 0px; margin: 0px;">$CHARNAME</p>
-                            <p class="small mb-1 text-muted" id="timestamp first" style="padding: 0px; margin: 0px;"></p>
-                        </div>
-                        <div class="d-flex flex-row justify-content-left mb-4 pt-1" style="display: inline-block;">
-                            <img src="{{ url_for('static', filename='imgs/user.png') }}" id="bot png" alt="avatar 1"
-                                style="width: 45px; height: 100%;">
-                            <div class="d-flex flex-row"
-                                style="box-shadow: 0 2px 4px rgb(0, 0, 0, 0.404); border: 0px solid rgb(129, 129, 129); margin-bottom: 0px; background-color: rgba(0, 0, 0, 0.404); border-radius: 10px; padding: 1%;">
-                                <p class="firstmess" id="bot firstmess"
-                                    style="margin: 0px; padding: 0px; align-items: center; justify-content: center; color: rgb(204, 204, 204);">$REPLACEFIRSTMEMESSAGE</p>
-                            </div>
-                        </div>
-                        <div id="output"></div>
-                    </div>
+  <audio id="audioPlayer" controls hidden></audio>
+
+<!-- TABS HEADER -->
+<ul class="nav nav-tabs" id="myTab" role="tablist" style="background-color: #212529; border-bottom: none;">
+    <li class="nav-item" role="presentation">
+      <button style="width:fit-content;" class="nav-link active d-flex align-items-center gap-2 custom-tab" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button" role="tab">
+        <i class="bi bi-chat-dots-fill"></i> Chat UI
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button style="width:fit-content;" class="nav-link d-flex align-items-center gap-2 custom-tab" id="motion-tab" data-bs-toggle="tab" data-bs-target="#motion" type="button" role="tab">
+        <i class="bi bi-joystick"></i> Motion Control
+      </button>
+    </li>
+  </ul>
+
+  <!-- TABS CONTENT -->
+  <div class="tab-content" id="myTabContent">
+    
+    <!-- CHAT UI TAB -->
+    <div class="tab-pane fade show active p-3" id="chat" role="tabpanel">
+      <div class="chat-container">
+        <div class="card h-100 gradient-custom">
+          <div class="card-body" data-mdb-perfect-scrollbar="true">
+            <div class="chat-messages" style="padding: 0%; margin: 0%;">
+              <div class="d-flex justify-content-left" style="padding: 0px; margin: 0px;">
+                <p class="small mb-1 name" id="bot name" style="padding: 0px; margin: 0px;">$CHARNAME</p>
+                <p class="small mb-1 text-muted" id="timestamp first" style="padding: 0px; margin: 0px;"></p>
+              </div>
+              <div class="d-flex flex-row justify-content-left mb-4 pt-1" style="display: inline-block;">
+                <img src="{{ url_for('static', filename='imgs/user.png') }}" id="bot png" alt="avatar 1" style="width: 45px; height: 100%;">
+                <div class="d-flex flex-row" style="box-shadow: 0 2px 4px rgb(0, 0, 0, 0.404); border: 0px solid rgb(129, 129, 129); margin-bottom: 0px; background-color: rgba(0, 0, 0, 0.404); border-radius: 10px; padding: 1%;">
+                  <p class="firstmess" id="bot firstmess" style="margin: 0px; padding: 0px; color: rgb(204, 204, 204);">$REPLACEFIRSTMEMESSAGE</p>
                 </div>
+              </div>
+              <div id="output"></div>
             </div>
+          </div>
         </div>
-        <img id="backgroundImage" src="" alt="Background Image">
-    </div>
+      </div>
 
-    <!-- Robot Control Panel -->
-    <div class="robot-control-panel" id="robotControlPanel">
-        <div class="panel-header">
-            <span>Robot Controls</span>
-            <button class="toggle-panel" id="togglePanel">
-                <i class="bi bi-arrows-collapse"></i>
-            </button>
-        </div>
-        <div class="control-buttons">
-            <button class="direction-btn btn-up" id="btnUp" aria-label="Move Forward">
-                <i class="bi bi-arrow-up"></i>
-            </button>
-            <button class="direction-btn btn-left" id="btnLeft" aria-label="Move Left">
-                <i class="bi bi-arrow-left"></i>
-            </button>
-            <button class="direction-btn btn-right" id="btnRight" aria-label="Move Right">
-                <i class="bi bi-arrow-right"></i>
-            </button>
-            <button class="direction-btn btn-down" id="btnDown" aria-label="Move Backward">
-                <i class="bi bi-arrow-down"></i>
-            </button>
-        </div>
-    </div>
+      <img style="top:25%; height:50%;" id="backgroundImage" src="" alt="Background Image">
 
-    <form id="imageUploadForm" method="POST" enctype="multipart/form-data" action="/upload" hidden>
+      <form id="imageUploadForm" method="POST" enctype="multipart/form-data" action="/upload" hidden>
         <input class="form-control" type="file" id="imageUpload" name="file" accept="image/*">
-        <!-- The label is not needed if the form is hidden and triggered by another button -->
-    </form>
+      </form>
 
-    <!-- Image Preview Container -->
-    <div id="imagePreviewContainer">
+      <div id="imagePreviewContainer">
         <img id="imagePreview" src="" alt="Preview">
         <button id="removeImageButton">
-            <i class="bi bi-x"></i>
+          <i class="bi bi-x"></i>
         </button>
+      </div>
+
+      <div class="input-group">
+        <input type="text" id="prompt" class="form-control border-end-0" placeholder="Type message" />
+        <button id="muteButton" class="btn btn-secondary" type="button">
+          <i class="bi bi-volume-up-fill"></i>
+        </button>
+        <button id="uploadImageButton" class="btn btn-primary" type="button">
+          <i class="bi bi-upload"></i>
+        </button>
+        <button class="btn btn-primary" type="button" id="button-addon2">
+          <i class="bi bi-arrow-right-circle-fill"></i>
+        </button>
+      </div>
     </div>
 
-    <div class="input-group">
-        <input type="text" id="prompt" class="form-control border-end-0" placeholder="Type message" aria-label="Recipient's username" aria-describedby="button-addon2" />
-        <button id="muteButton" class="btn btn-secondary" type="button" aria-label="Mute">
-            <i class="bi bi-volume-up-fill"></i>
-        </button>
-        <button id="uploadImageButton" class="btn btn-primary" type="button" aria-label="Upload">
-            <i class="bi bi-upload"></i> <!-- Changed icon to better reflect action -->
-        </button>
-        <button class="btn btn-primary" type="button" id="button-addon2" aria-label="Send">
-            <i class="bi bi-arrow-right-circle-fill"></i>
-        </button>
+    <!-- MOTION CONTROL TAB -->
+    <div class="tab-pane fade p-3" id="motion" role="tabpanel">
+      <div class="robot-control-panel" id="robotControlPanel">
+        <div class="control-buttons">
+          <button class="direction-btn btn-up" id="btnUp" aria-label="Move Forward">
+            <i class="bi bi-arrow-up"></i>
+          </button>
+          <button class="direction-btn btn-left" id="btnLeft" aria-label="Move Left">
+            <i class="bi bi-arrow-left"></i>
+          </button>
+          <button class="direction-btn btn-right" id="btnRight" aria-label="Move Right">
+            <i class="bi bi-arrow-right"></i>
+          </button>
+          <button class="direction-btn btn-down" id="btnDown" aria-label="Move Backward">
+            <i class="bi bi-arrow-down"></i>
+          </button>
+        </div>
+      </div>
     </div>
+
+  </div>
+
+
 
 <script>
-    
+// Declare a global variable to store the base URL
+let talkingheadBaseUrl = '';
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Robot Control Panel Toggle
-    const controlPanel = document.getElementById('robotControlPanel');
-    const toggleButton = document.getElementById('togglePanel');
-    const toggleIcon = toggleButton.querySelector('i');
-    
-    toggleButton.addEventListener('click', function() {
-        controlPanel.classList.toggle('collapsed');
-        
-        if (controlPanel.classList.contains('collapsed')) {
-            toggleIcon.classList.remove('bi-arrows-collapse');
-            toggleIcon.classList.add('bi-arrows-expand');
-        } else {
-            toggleIcon.classList.remove('bi-arrows-expand');
-            toggleIcon.classList.add('bi-arrows-collapse');
-        }
+const tabButtons = document.querySelectorAll('.custom-tab');
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
     });
-    
+  });
+
+// Fetch the talking head base URL from the backend
+fetch('/get_ip')
+    .then(response => response.json())
+    .then(data => {
+        // Store the base URL in the global variable
+        talkingheadBaseUrl = data.talkinghead_base_url;
+
+        // Update the image source or do other initial actions
+        const fullUrl = talkingheadBaseUrl + "/stream";
+        document.getElementById('backgroundImage').src = fullUrl;
+    })
+    .catch(error => console.error('Error fetching talking head URL:', error));
+
+const talkinghead_url = "{{ talkinghead_base_url }}";
+const parser = new DOMParser();
+let decodedUrl = parser.parseFromString(`<!doctype html><body>{{ talkinghead_base_url }}`, 'text/html').body.textContent;
+decodedUrl = decodedUrl.replace(/^"|"$/g, '');
+console.log(decodedUrl);
+let isMuted = false;
+
+function start_talking() {
+if (!isMuted) {
+fetch(talkingheadBaseUrl + "/start_talking")
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+            })
+            .catch(error => console.error('Fetch error:', error));
+}
+}
+
+function stop_talking() {
+fetch(talkingheadBaseUrl + "/stop_talking")
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+        })
+        .catch(error => console.error('Fetch error:', error));
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+const audioPlayer = document.getElementById("audioPlayer");
+const muteButton = document.getElementById("muteButton");
+
+// Initialize the audio as unmuted
+
+muteButton.addEventListener("click", function () {
+const icon = this.querySelector('i'); // Find the icon within the button
+if (isMuted) {
+// If audio is currently muted, unmute it and switch icon to volume-up
+audioPlayer.muted = false;
+icon.classList.remove('bi-volume-mute-fill');
+icon.classList.add('bi-volume-up-fill');
+muteButton.setAttribute('aria-label', 'Mute'); // Update aria-label for accessibility
+                  // Check if the audio is playing
+if (!audioPlayer.paused) {
+// Send fetch request to start talking
+
+
+
+//const startTalkingUrl = talkingheadBaseUrl + "/start_talking";
+start_talking();
+}
+} else {
+// If audio is currently unmuted, mute it and switch icon to volume-mute
+audioPlayer.muted = true;
+icon.classList.remove('bi-volume-up-fill');
+icon.classList.add('bi-volume-mute-fill');
+muteButton.setAttribute('aria-label', 'Unmute'); // Update aria-label for accessibility
+
+                  // Send fetch request to stop talking
+stop_talking();
+}
+
+// Toggle the mute state
+isMuted = !isMuted;
+});
+});
+
+var audioPlayer = document.getElementById('audioPlayer');
+
+// Function to handle the 'ended' event
+function handleAudioEnd() {
+// Call the /talking_stop endpoint right after the audio stops if not muted
+if (!audioPlayer.muted) {
+  fetch(talkingheadBaseUrl + "/stop_talking")
+      .then(response => {
+          if (!response.ok) {
+              throw new Error('Network response was not ok');
+          }
+          // Handle the response if necessary
+      })
+      .catch(error => console.error('Fetch error:', error));
+}
+}
+
+// Add event listener for 'ended' event
+audioPlayer.addEventListener('ended', handleAudioEnd);
+
+let audioStarted = false; // Prevent multiple requests
+let firstChunkPlayed = false; // Track if first chunk already played
+
+function startAudioStream() {
+if (audioStarted) {
+// console.log("Audio stream already started, ignoring duplicate request.");
+return; // 🚨 Prevent duplicate requests
+}
+audioStarted = true; // ✅ Mark that audio has started
+firstChunkPlayed = false; // ✅ Reset for new message
+
+fetch('/audio_stream')
+.then(response => response.blob())
+.then(blob => {
+    if (blob.size === 0) {
+        // console.error("Received an empty first chunk!");
+        return;
+    }
+
+    const audioUrl = URL.createObjectURL(blob);
+    audioPlayer.src = audioUrl;
+    audioPlayer.load();
+
+    audioPlayer.play().then(() => {
+        // console.log("Playing first MP3 chunk...");
+        firstChunkPlayed = true; // ✅ Mark first chunk as played
+
+        // ✅ Wait for first chunk to finish before fetching next
+        audioPlayer.onended = function () {
+            // console.log("First chunk finished, requesting next...");
+            setTimeout(() => {
+                playNextAudioChunk();
+            }, 500);
+        };
+    }).catch(error => {
+        console.error("Error playing first MP3 chunk:", error);
+    });
+})
+.catch(error => console.error("Error starting MP3 audio stream:", error));
+}
+
+function playNextAudioChunk() {
+fetch('/get_next_audio_chunk')
+.then(response => {
+if (response.status === 204) {
+    // console.log("No more audio chunks.");
+    stop_talking()
+    audioStarted = false; // ✅ Reset audio system after last chunk
+    return null; // No more content
+}
+return response.blob();
+})
+.then(blob => {
+if (blob) {
+    const audioUrl = URL.createObjectURL(blob);
+    audioPlayer.src = audioUrl;
+    audioPlayer.load();
+
+    audioPlayer.play().then(() => {
+        // console.log("Playing next MP3 chunk...");
+            start_talking()
+        // ✅ Ensure we reset audioStarted only after the last chunk
+        audioPlayer.onended = function () {
+            // console.log("Chunk finished, requesting next...");
+            setTimeout(() => playNextAudioChunk(), 500);
+        };
+    });
+}
+})
+.catch(error => console.error("Error fetching next MP3 chunk:", error));
+}
+
+
+document.addEventListener('DOMContentLoaded', function() {   
     // Robot Direction Controls
     const btnUp = document.getElementById('btnUp');
     const btnDown = document.getElementById('btnDown');
@@ -754,13 +726,8 @@ function sendUserMessage(message, imageFile) {
 
     chatBody.scrollTop = chatBody.scrollHeight;
 }
-
-
 });
-
-
-
-  </script>
+</script>
   
 </body>
 
