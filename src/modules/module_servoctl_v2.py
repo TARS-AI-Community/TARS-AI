@@ -1,19 +1,7 @@
-"""
-module_servoctl.py
-
-Servo Control Module for TARS-AI Application.
-
-This module provides a comprehensive set of functions to control servos in TARS, enabling complex movements such as:
-- Torso height adjustment.
-- Torso rotation to forward/backward positions.
-- Controlled arm and hand movements.
-- Synchronized servo adjustments for smooth motion transitions.
-"""
-
 from __future__ import division
 import time
 import Adafruit_PCA9685
-from threading import Thread
+from multiprocessing import Process, Manager
 from datetime import datetime
 
 from modules.module_messageQue import queue_message
@@ -23,7 +11,10 @@ config = load_config()
 
 # Global speed factor (1.0 = max speed, 0.1 = slowest, must be > 0)
 global_arm_speed = 0.5
-servo_positions = {}
+
+# Use a Manager to share the servo_positions dictionary between processes
+manager = Manager()
+servo_positions = manager.dict()
 
 try:
     # Attempt to initialize the PCA9685 using I2C
@@ -78,6 +69,8 @@ forwardStarboard = int(config["SERVO"]["forwardStarboard"]) + perfectStaroffset
 neutralStarboard = int(config["SERVO"]["neutralStarboard"]) + perfectStaroffset
 backStarboard = int(config["SERVO"]["backStarboard"]) + perfectStaroffset
 
+MOVING = False
+
 def initialize_servos():
     """Ensure all servos start at their minimum positions with speed-controlled movement."""
     global portMain, portForarm, portHand, starMain, starForarm, starHand
@@ -89,42 +82,40 @@ def initialize_servos():
     print("All servos initialized to minimum positions")
 
 def disable_all_servos():
-    for ch in range(16):
-        time.sleep(0.05)
-        pwm.set_pwm(ch, 0, 0)
+    move_arm(1, 1, 1, 1, 1, 1, 0.4)
+    time.sleep(0.2)
+    move_legs(50, 50, 50, 0.4)
+    pwm.set_all_pwm(0, 0)
+    time.sleep(0.2)
+    #for ch in range(16):
+    #    time.sleep(0.1)
+    #    pwm.set_pwm(ch, 0, 0)
 
-def reset_positions():    
+def reset_positions():  
+    move_legs(20, 0, 0, 0.2)  
     move_legs(30, 50, 50, 0.2)
     move_legs(50, 50, 50, 0.2)
     time.sleep(0.5)
-    move_arm(1, 1, 1, 1, 1, 1, 0.4)
+    move_arm(1, 1, 1, 1, 1, 1, 0.3)
     time.sleep(0.5)
     disable_all_servos()
 
 def step_forward():
-    """ #smooth move
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(30, 0, 0, 0.6)
-    time.sleep(0.2)
-    move_legs(45, 20, 20, 0.6)
-    time.sleep(0.2)
-    move_legs(52, 60, 60, 0.2)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 0.8)
-    disable_all_servos() """
-    #fast move
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(22, 50, 50, 0.6)
-    time.sleep(0.2)
-    move_legs(40, 15, 15, 0.65)
-    time.sleep(0.2)
-    move_legs(85, 50, 50, 0.7)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        move_legs(50, 50, 50, 0.4)
+        time.sleep(0.2)
+        move_legs(22, 50, 50, 0.6)
+        time.sleep(0.2)
+        move_legs(40, 17, 17, 0.65)
+        time.sleep(0.2)
+        move_legs(85, 50, 50, 0.7)
+        time.sleep(0.2)
+        move_legs(50, 50, 50, 1)
+        time.sleep(0.5)
+        disable_all_servos()
+        MOVING = False
 
 def step_backward():
     move_legs(50, 50, 50, 0.4)
@@ -154,7 +145,6 @@ def turn_right():
     time.sleep(0.2)
     disable_all_servos()
 
-
 def turn_left():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
@@ -170,7 +160,6 @@ def turn_left():
     time.sleep(0.2)
     disable_all_servos()
 
-        
 def right_hi():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
@@ -255,7 +244,6 @@ def swing_legs():
     move_legs(50, 50, 50, 0.7)
     time.sleep(0.2)
     disable_all_servos()
-
 
 def pezz_dispenser():
     move_legs(50, 50, 50, 0.4)
@@ -348,7 +336,6 @@ def balance():
     time.sleep(0.5)
     disable_all_servos()
 
-
 def mic_drop():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
@@ -371,7 +358,6 @@ def mic_drop():
     move_legs(50, 50, 50, 0.8)
     time.sleep(0.5)
     disable_all_servos()
-
 
 def monster():
     move_legs(50, 50, 50, 0.4)
@@ -434,6 +420,28 @@ def monster():
     time.sleep(0.2)
     disable_all_servos()
 
+def pose():
+    move_legs(50, 50, 50, 0.4)
+    move_legs(30, 40, 40, 0.4)
+    move_legs(100, 30, 30, 0.4)
+    time.sleep(3)
+    move_legs(100, 30, 30, 0.4)
+    move_legs(30, 30, 30, 0.4)
+    move_legs(30, 40, 40, 0.4)
+    move_legs(50, 50, 50, 0.4)
+    disable_all_servos()
+
+def bow():
+    move_legs(50, 50, 50, 0.4)
+    move_legs(15, 50, 50, 0.7)
+    move_legs(15, 70, 70, 0.7)
+    move_legs(60, 70, 70, 0.7)
+    move_legs(95, 65, 65, 0.7)
+    time.sleep(3)
+    move_legs(15, 65, 65, 0.7)
+    move_legs(50, 50, 50, 0.4)
+    disable_all_servos()
+
 def move_legs(
     height_percent=None,
     starboard_percent=None,
@@ -441,7 +449,7 @@ def move_legs(
     speed_factor=1.0
 ):
     """
-    Controls 3 leg servos using percentage values.
+    Controls 3 leg servos using percentage values with multiprocessing.
     
     Parameters:
         height_percent: Percentage for servo 0 (middle servo that raises/lowers the legs).
@@ -464,20 +472,31 @@ def move_legs(
             value = min_val - ((min_val - max_val) * (percent - 1) / 99)
         return int(round(value))
 
-    def move_servo_gradually(channel, target_value, speed_factor):
+    def move_servo_gradually(channel, target_value, speed_factor, positions):
         """Moves the servo gradually to the target value at the given speed."""
         if target_value is None:
             return
-        current_value = servo_positions.get(channel, None)
+        current_value = positions.get(channel, None)
         if current_value is None or current_value == target_value:
+            # Need to check if pwm is available in this process
+            global pwm
+            if pwm is None:
+                try:
+                    pwm = Adafruit_PCA9685.PCA9685(busnum=1)
+                    pwm.set_pwm_freq(50)
+                except Exception as e:
+                    print(f"Error initializing PWM in child process: {e}")
+                    return
+            
             pwm.set_pwm(channel, 0, target_value)
-            servo_positions[channel] = target_value
+            positions[channel] = target_value
             return
+        
         step = 1 if target_value > current_value else -1
         for value in range(current_value, target_value + step, step):
             pwm.set_pwm(channel, 0, value)
             time.sleep(0.02 * (1.0 - speed_factor))
-        servo_positions[channel] = target_value
+        positions[channel] = target_value
 
     # Define min/max for each servo
     movements = [
@@ -486,17 +505,16 @@ def move_legs(
         (port_percent, forwardPort, backPort, 2),
     ]
 
-    threads = []
+    processes = []
     for percent, min_val, max_val, channel in movements:
         if percent is not None and percent != 0:
             target_value = percentage_to_value(percent, min_val, max_val)
-            thread = Thread(target=move_servo_gradually, args=(channel, target_value, speed_factor))
-            threads.append(thread)
+            process = Process(target=move_servo_gradually, args=(channel, target_value, speed_factor, servo_positions))
+            processes.append(process)
+            process.start()
 
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    for process in processes:
+        process.join()
 
 def move_arm(
     port_main=None, port_forearm=None, port_hand=None,
@@ -504,7 +522,7 @@ def move_arm(
     speed_factor=1.0
 ):
     """
-    Moves both port and starboard arm servos using percentage values (1-100).
+    Moves both port and starboard arm servos using percentage values (1-100) with multiprocessing.
     
     Parameters:
         port_main, port_forearm, port_hand: Percentages for port arm servos.
@@ -526,20 +544,31 @@ def move_arm(
             value = min_val - ((min_val - max_val) * (percent - 1) / 99)
         return int(round(value))
     
-    def move_servo_gradually(channel, target_value, speed_factor):
+    def move_servo_gradually(channel, target_value, speed_factor, positions):
         """Moves the servo gradually to the target value at the given speed."""
         if target_value is None:
             return
-        current_value = servo_positions.get(channel, None)
+        current_value = positions.get(channel, None)
         if current_value is None or current_value == target_value:
+            # Need to check if pwm is available in this process
+            global pwm
+            if pwm is None:
+                try:
+                    pwm = Adafruit_PCA9685.PCA9685(busnum=1)
+                    pwm.set_pwm_freq(50)
+                except Exception as e:
+                    print(f"Error initializing PWM in child process: {e}")
+                    return
+                    
             pwm.set_pwm(channel, 0, target_value)
-            servo_positions[channel] = target_value
+            positions[channel] = target_value
             return
+        
         step = 1 if target_value > current_value else -1
         for value in range(current_value, target_value + step, step):
             pwm.set_pwm(channel, 0, value)
             time.sleep(0.02 * (1.0 - speed_factor))
-        servo_positions[channel] = target_value
+        positions[channel] = target_value
 
     # Create a list of all desired movements: (percent, min, max, channel)
     movements = [
@@ -551,15 +580,20 @@ def move_arm(
         (star_hand, starHandMin, starHandMax, 8),
     ]
 
-    threads = []
+    processes = []
     for percent, min_val, max_val, channel in movements:
         if percent is not None and percent != 0:
             target_value = percentage_to_value(percent, min_val, max_val)
-            thread = Thread(target=move_servo_gradually, args=(channel, target_value, speed_factor))
-            threads.append(thread)
+            process = Process(target=move_servo_gradually, args=(channel, target_value, speed_factor, servo_positions))
+            processes.append(process)
+            process.start()
 
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    for process in processes:
+        process.join()
 
+def cleanup():
+    """Clean up function to terminate any leftover processes"""
+    disable_all_servos()
+
+if __name__ == "__main__":
+    initialize_servos()

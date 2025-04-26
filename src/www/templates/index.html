@@ -10,6 +10,104 @@
     <script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
     <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}" rel="stylesheet">
     <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}">
+    <style>
+        /* Robot Control Panel Styles */
+        .robot-control-panel {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 180px;
+            background-color: rgba(0, 0, 0, 0.6);
+            border-radius: 10px;
+            padding: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .robot-control-panel.collapsed {
+            width: 50px;
+            height: 50px;
+            overflow: hidden;
+        }
+        
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 10px;
+            color: white;
+        }
+        
+        .control-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 5px;
+            width: 100%;
+        }
+        
+        .direction-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            background-color: #343a40;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.2s;
+        }
+        
+        .direction-btn:hover {
+            background-color: #495057;
+            transform: scale(1.05);
+        }
+        
+        .direction-btn:active {
+            background-color: #212529;
+            transform: scale(0.95);
+        }
+        
+        .btn-up {
+            grid-column: 2;
+            grid-row: 1;
+        }
+        
+        .btn-left {
+            grid-column: 1;
+            grid-row: 2;
+        }
+        
+        .btn-right {
+            grid-column: 3;
+            grid-row: 2;
+        }
+        
+        .btn-down {
+            grid-column: 2;
+            grid-row: 3;
+        }
+        
+        .toggle-panel {
+            background-color: #343a40;
+            border: none;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
   <audio id="audioPlayer" controls hidden>
@@ -219,6 +317,29 @@
         <img id="backgroundImage" src="" alt="Background Image">
     </div>
 
+    <!-- Robot Control Panel -->
+    <div class="robot-control-panel" id="robotControlPanel">
+        <div class="panel-header">
+            <span>Robot Controls</span>
+            <button class="toggle-panel" id="togglePanel">
+                <i class="bi bi-arrows-collapse"></i>
+            </button>
+        </div>
+        <div class="control-buttons">
+            <button class="direction-btn btn-up" id="btnUp" aria-label="Move Forward">
+                <i class="bi bi-arrow-up"></i>
+            </button>
+            <button class="direction-btn btn-left" id="btnLeft" aria-label="Move Left">
+                <i class="bi bi-arrow-left"></i>
+            </button>
+            <button class="direction-btn btn-right" id="btnRight" aria-label="Move Right">
+                <i class="bi bi-arrow-right"></i>
+            </button>
+            <button class="direction-btn btn-down" id="btnDown" aria-label="Move Backward">
+                <i class="bi bi-arrow-down"></i>
+            </button>
+        </div>
+    </div>
 
     <form id="imageUploadForm" method="POST" enctype="multipart/form-data" action="/upload" hidden>
         <input class="form-control" type="file" id="imageUpload" name="file" accept="image/*">
@@ -250,7 +371,62 @@
     
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Robot Control Panel Toggle
+    const controlPanel = document.getElementById('robotControlPanel');
+    const toggleButton = document.getElementById('togglePanel');
+    const toggleIcon = toggleButton.querySelector('i');
     
+    toggleButton.addEventListener('click', function() {
+        controlPanel.classList.toggle('collapsed');
+        
+        if (controlPanel.classList.contains('collapsed')) {
+            toggleIcon.classList.remove('bi-arrows-collapse');
+            toggleIcon.classList.add('bi-arrows-expand');
+        } else {
+            toggleIcon.classList.remove('bi-arrows-expand');
+            toggleIcon.classList.add('bi-arrows-collapse');
+        }
+    });
+    
+    // Robot Direction Controls
+    const btnUp = document.getElementById('btnUp');
+    const btnDown = document.getElementById('btnDown');
+    const btnLeft = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    
+    btnUp.addEventListener('click', function() {
+        moveRobot('forward');
+    });
+    
+    btnDown.addEventListener('click', function() {
+        moveRobot('backward');
+    });
+    
+    btnLeft.addEventListener('click', function() {
+        moveRobot('left');
+    });
+    
+    btnRight.addEventListener('click', function() {
+        moveRobot('right');
+    });
+    
+    function moveRobot(direction) {
+        // Send the movement command to the server
+        fetch('/robot_move', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ direction: direction }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Robot movement response:', data);
+        })
+        .catch(error => {
+            console.error('Error moving robot:', error);
+        });
+    }
 
     let selectedImageFile = null; // Store the image file
 

@@ -121,9 +121,10 @@ def turnLeft():
     turn_left()
 
 def poseaction():
-    pass
+    pose()
 
 def unposeaction():
+    #no unpose as the pose action already does it.
     pass 
         
         

@@ -79,14 +79,16 @@ def control():
         print("2 - Move Backward.")
         print("3 - Turn Right.")
         print("4 - Turn Left.")
-        print("5 - Hi.")
-        print("6 - Laugh.")
-        print("7 - Swing Legs.")
-        print("8 - PEZZ dispenser.")
-        print("9 - Now!.")
-        print("10 - Balance.")
-        print("11 - Mic Drop.")
-        print("12 - Monster.")
+        print("5 - Greet")
+        print("6 - Simulate Laughter")
+        print("7 - Dynamic Motion")
+        print("8 - PEZZ dispenser")
+        print("9 - Now!")
+        print("10 - Balance")
+        print("11 - Mic Drop")
+        print("12 - Defensive Posture")
+        print("13 - Pose")
+        print("14 - bow")
 
         main_input = input("> ")
         if main_input.lower() == "0":
@@ -114,37 +116,41 @@ def control():
         if main_input.lower() == "11":
             mic_drop()                                        
         if main_input.lower() == "12":
-            monster()                                           
+            monster()          
+        if main_input.lower() == "13":
+            pose()
+        if main_input.lower() == "14":
+            bow()                                   
                 
     except ValueError:
         print("Invalid input. Please enter a valid number.")
 
+def motion():
+    print("V2 Servo Controller")
+    while True:
+        print("\nSelect an option:")
+        print("1. Set all servos to preset position")
+        print("2. Manually set servo and position")
+        print("3. Manually set Channel 15 Servo position")
+        print("4. Disable all servos")
+        print("5. Movements")
 
 
-print("V2 Servo Controller")
-while True:
-    print("\nSelect an option:")
-    print("1. Set all servos to preset position")
-    print("2. Manually set servo and position")
-    print("3. Manually set Channel 15 Servo position")
-    print("4. Disable all servos")
-    print("5. Movements")
+        choice = input("> ")
+
+        if choice == '1':
+            set_all_servos_preset()
+        elif choice == '2':
+            set_single_servo()
+        elif choice == '3':
+            pulse = int(input(f"Enter pulse width for servo on channel 15 ({MIN_PULSE}-{MAX_PULSE}): "))
+            set_servo_pulse(15, pulse)
+        elif choice == '4':
+            for ch in range(16):
+                time.sleep(0.1)
+                pwm.set_pwm(ch, 0, 0)
+        elif choice == '5':
+            control()
 
 
-    choice = input("> ")
-
-    if choice == '1':
-        set_all_servos_preset()
-    elif choice == '2':
-        set_single_servo()
-    elif choice == '3':
-        pulse = int(input(f"Enter pulse width for servo on channel 15 ({MIN_PULSE}-{MAX_PULSE}): "))
-        set_servo_pulse(15, pulse)
-    elif choice == '4':
-        for ch in range(16):
-            time.sleep(0.1)
-            pwm.set_pwm(ch, 0, 0)
-    elif choice == '5':
-        control()
-
-
+motion()

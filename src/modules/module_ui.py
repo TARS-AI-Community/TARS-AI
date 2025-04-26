@@ -934,6 +934,7 @@ class UIManager(threading.Thread):
                         self.battery_percent = status['normalized_percentage']
                         self.battery_checked = current_time
 
+
                 except Exception as e:
                     print(f"Error in main UI loop: {e}")
                     self.running = False

@@ -70,6 +70,11 @@ engineio_logger.setLevel(logging.ERROR)
 
 CONFIG = load_config()
 
+if (CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2"):
+    from modules.module_servoctl_v2 import *
+else:
+    from modules.module_servoctl import *
+
 # Frame dimensions (as requested)
 FRAME_WIDTH = 500
 FRAME_HEIGHT = 500
@@ -495,6 +500,45 @@ def get_next_audio_chunk():
     else:
         #queue_message(f"Chunk {current_chunk_index} not available yet.")
         return Response(status=204)  # No content available yet
+
+# Add these routes to your Flask application
+
+@flask_app.route('/robot_move', methods=['POST'])
+def robot_move():
+    """
+    Handles robot movement commands.
+    Expects JSON with a 'direction' field containing one of: 'forward', 'backward', 'left', 'right'
+    """
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    
+    data = request.get_json()
+    direction = data.get('direction')
+    
+    if direction not in ['forward', 'backward', 'left', 'right']:
+        return jsonify({"error": "Invalid direction. Must be one of: forward, backward, left, right"}), 400
+    
+    # Execute the robot movement command
+    # This is where you would add code to control your actual robot
+    # For example, you might send commands to a GPIO interface, a robot API, etc.
+    
+    try:
+        if direction == 'forward':
+            step_forward()
+        elif direction == 'backward':
+            # Code to move robot backward 
+            pass 
+        elif direction == 'left':
+            turn_left()
+        elif direction == 'right':
+            turn_right()
+            
+        return jsonify({"success": True, "message": f"Robot moved {direction}"}), 200
+        
+    except Exception as e:
+        queue_message(f"Error moving robot: {e}")
+        return jsonify({"error": f"Failed to move robot: {str(e)}"}), 500
+
 
 def start_flask_app():
     import eventlet
