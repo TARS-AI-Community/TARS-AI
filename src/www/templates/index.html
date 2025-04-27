@@ -166,6 +166,28 @@
             <i class="bi bi-arrow-down"></i>
           </button>
         </div>
+        <!-- Action Selection Dropdown -->
+        <div class="mt-3" style="text-align: center;">
+          <select id="actionSelect" class="form-select mb-2" style="width: 100%;">
+            <option value="0">Reset Position</option>
+            <option value="1">Move Forward</option>
+            <option value="2">Move Backward</option>
+            <option value="3">Turn Right</option>
+            <option value="4">Turn Left</option>
+            <option value="5">Greet</option>
+            <option value="6">Simulate Laughter</option>
+            <option value="7">Dynamic Motion</option>
+            <option value="8">PEZZ Dispenser</option>
+            <option value="9">Now!</option>
+            <option value="10">Balance</option>
+            <option value="11">Mic Drop</option>
+            <option value="12">Defensive Posture</option>
+            <option value="13">Pose</option>
+            <option value="14">Bow</option>
+          </select>
+          <button class="btn btn-primary" onclick="executeAction()" style="width: 100%;">Execute Action</button>
+        </div>
+
       </div>
     </div>
 
@@ -358,6 +380,25 @@ if (blob) {
 .catch(error => console.error("Error fetching next MP3 chunk:", error));
 }
 
+function executeAction() {
+  const selectedAction = document.getElementById('actionSelect').value;
+
+  fetch('/execute_action', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: selectedAction }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Action execution response:', data);
+  })
+  .catch(error => {
+    console.error('Error executing action:', error);
+  });
+}
+
 
 document.addEventListener('DOMContentLoaded', function() {   
     // Robot Direction Controls
@@ -381,7 +422,8 @@ document.addEventListener('DOMContentLoaded', function() {
     btnRight.addEventListener('click', function() {
         moveRobot('right');
     });
-    
+
+
     function moveRobot(direction) {
         // Send the movement command to the server
         fetch('/robot_move', {
@@ -399,6 +441,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error moving robot:', error);
         });
     }
+
 
     let selectedImageFile = null; // Store the image file
 
@@ -536,6 +579,7 @@ promptInput.addEventListener('keyup', function(event) {
         sendMessage();
     }
 });
+
 
 
     function delay(ms) {
