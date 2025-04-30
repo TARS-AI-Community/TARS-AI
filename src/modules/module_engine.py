@@ -142,10 +142,8 @@ def movement_llmcall(user_input):
     2. Extract the number of steps or the angle of turn if applicable, where 180 degrees equals 2 steps (90 degrees = 1 step).
     3. Respond with a structured JSON output in the exact format:
     {{
-        "movement": "{{
-            "movement": "<MOVEMENT>",
-            "times": <TIMES>
-        }}
+        "movement": "<MOVEMENT>",
+        "times": <TIMES>
     }}
 
     Rules:
