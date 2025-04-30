@@ -110,7 +110,7 @@ def step_forward():
         time.sleep(0.2)
         move_legs(40, 17, 17, 0.65)
         time.sleep(0.2)
-        move_legs(85, 50, 50, 0.7)
+        move_legs(85, 50, 50, 0.8)
         time.sleep(0.2)
         move_legs(50, 50, 50, 1)
         time.sleep(0.5)

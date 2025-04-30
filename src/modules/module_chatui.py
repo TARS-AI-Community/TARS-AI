@@ -539,6 +539,63 @@ def robot_move():
         queue_message(f"Error moving robot: {e}")
         return jsonify({"error": f"Failed to move robot: {str(e)}"}), 500
 
+@flask_app.route('/execute_action', methods=['POST'])
+def execute_action():
+    """
+    Handles execution of predefined actions selected from dropdown.
+    Expects JSON with an 'action' field containing an integer 0-14.
+    """
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+    action = data.get('action')
+
+    try:
+        action = int(action)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid action format."}), 400
+
+    try:
+        if action == 0:
+            reset_positions()
+        elif action == 1:
+            step_forward()
+        elif action == 2:
+            step_backward()
+        elif action == 3:
+            turn_right()
+        elif action == 4:
+            turn_left()
+        elif action == 5:
+            right_hi()
+        elif action == 6:
+            laugh()
+        elif action == 7:
+            swing_legs()
+        elif action == 8:
+            pezz_dispenser()
+        elif action == 9:
+            now()
+        elif action == 10:
+            balance()
+        elif action == 11:
+            mic_drop()
+        elif action == 12:
+            monster()
+        elif action == 13:
+            pose()
+        elif action == 14:
+            bow()
+        else:
+            return jsonify({"error": "Invalid action number."}), 400
+
+        return jsonify({"success": True, "message": f"Action {action} executed successfully."}), 200
+
+    except Exception as e:
+        queue_message(f"Error executing action: {e}")
+        return jsonify({"error": f"Failed to execute action: {str(e)}"}), 500
+
 
 def start_flask_app():
     import eventlet

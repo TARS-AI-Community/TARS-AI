@@ -1,6 +1,8 @@
 This V2 version of TARS is very different from the first version.
-The 3d printed parts are designed to use heat inserts. Another version without heat inserts is in the works.
-You cannot mix and match the parts from the original version as the sizes are different.
+
+There are 2 version, a normal one and one with heat inserts, the heat inserts version takes more time to build. Heats inserts are brass fittings that are fused in the plastic.
+
+You cannot mix and match the parts from the original version and the V2 as the sizes are different. 
 
 For the main servo (legs and middle) using 3 LDX-227 servo is suggested as they are stronger and more precise but MG996R or LYK62 will work too.
 It is highly recommended that you use the same battery used because of it size and weight. It comes with a charger and is safer.
@@ -11,7 +13,7 @@ The Footpad are identified with (TPU) on the 3d printed filename, they are requi
 
 It is possible to use the V2 servo motion control on the original TARS but you will need to reset the servo positions using the presets and following the instructions in the assembly guide.
 
-The space in the case is very restricted and there will not be much room if you choose to use other modules.
+The space in the case is very restricted and there will not be much room if you choose to use other modules. You also need to consider how much wire you use because this also takes room in the case.
 
 The screw length is not specified in many places, use your judgement, normally it's mostly 10mm long. At the time I did this documentation, I had already assembled the robot.
 
