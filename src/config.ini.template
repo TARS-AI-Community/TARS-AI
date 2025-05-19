@@ -86,7 +86,7 @@ emotion_model = SamLowe/roberta-base-go_emotions
 ttsoption = piper
 # Onboard Options: espeak, piper, silero
 # External SelfHosted: alltalk
-# Externally Hosted: azure, elevenlabs
+# Externally Hosted: azure, elevenlabs, openai
 azure_region = eastus
 # Azure region for Azure TTS (e.g., eastus)
 ttsurl = http://192.168.2.57:7852
@@ -99,6 +99,8 @@ voice_id = JBFqnCBsd6RMkjVDRZzb
 # Voice ID of ElevenLabs (e.g.,JBFqnCBsd6RMkjVDRZzb)
 model_id = eleven_multilingual_v2
 # Model ID of ElevenLabs (e.g.,eleven_multilingual_v2)
+openai_voice = onyx
+# openai voice : alloy, echo, fable, onyx, nova, shimmer
 voice_only = False
 # If True, only generate voice responses (no text)
 is_talking_override = False

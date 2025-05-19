@@ -46,6 +46,12 @@ class TTSConfig:
     # Server specific settings
     ttsurl: Optional[str] = None
 
+    #openai tts
+    openai_voice: Optional[str] = None
+    openai_api_key: Optional[str] = None
+
+
+
     def __getitem__(self, key):
         """Enable dictionary-like access for backward compatibility"""
         return getattr(self, key)
@@ -82,7 +88,9 @@ class TTSConfig:
             elevenlabs_api_key=config_dict.get('elevenlabs_api_key'),
             voice_id=config_dict.get('voice_id'),
             model_id=config_dict.get('model_id'),
-            ttsurl=config_dict.get('ttsurl')
+            ttsurl=config_dict.get('ttsurl'),
+            openai_voice=config_dict.get('openai_voice'),
+            openai_api_key=config_dict.get('openai_api_key')
         )
 
 def load_config():
@@ -203,6 +211,8 @@ def load_config():
             "is_talking_override": config.getboolean('TTS', 'is_talking_override'),
             "is_talking": config.getboolean('TTS', 'is_talking'),
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
+            "openai_voice" : config['TTS']['openai_voice'],
+            "openai_api_key": os.getenv('OPENAI_API_KEY'),
         }),
         "CHATUI": {
             "enabled": config['CHATUI']['enabled'],
