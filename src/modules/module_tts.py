@@ -26,6 +26,7 @@ from modules.module_espeak import text_to_speech_with_pipelining_espeak
 from modules.module_alltalk import text_to_speech_with_pipelining_alltalk
 from modules.module_elevenlabs import text_to_speech_with_pipelining_elevenlabs
 from modules.module_azure import text_to_speech_with_pipelining_azure
+from modules.module_openai import text_to_speech_with_pipelining_openai
 from modules.module_messageQue import queue_message
 
 def update_tts_settings(ttsurl):
@@ -135,6 +136,10 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
         elif ttsoption == "silero":
             async for chunk in text_to_speech_with_pipelining_silero(text):
                 yield chunk 
+
+        elif ttsoption == "openai":
+            async for chunk in text_to_speech_with_pipelining_openai(text):
+                yield chunk
 
         else:
             raise ValueError(f"ERROR: Invalid TTS option.")
