@@ -27,7 +27,7 @@
 - See our documentation for more information: [docs-tars-ai.vercel.app](https://docs-tars-ai.vercel.app)
 
 ## To start contributing to TARS-AI
-- See our contributing guidelines: [docs-tars-ai.vercel.app/contribute/guidelines](https://docs-tars-ai.vercel.app/contribute/guidelines)
+- See our contributing guidelines: [docs-tars-ai.vercel.app/contribute/contribution_guidelines](https://docs-tars-ai.vercel.app/contribute/guidelines)
 - Join our Discord server: [Discord Invite](https://discord.gg/AmE2Gv9EUt)
 
 ## License
