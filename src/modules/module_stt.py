@@ -71,16 +71,15 @@ class STTManager:
         self.shutdown_event = shutdown_event
         self.running = False
 
-        # Audio settings - Set sample rate based on VAD configuration
-        if self.config["STT"].get("vad_enabled", False):
-            # If VAD is enabled, force 16000 Hz sample rate
-            self.SAMPLE_RATE = 16000
-            self.DEFAULT_SAMPLE_RATE = 16000
-            queue_message("INFO: Using 16000 Hz sample rate for VAD compatibility")
-        else:
-            # If VAD is disabled, use system default
-            self.DEFAULT_SAMPLE_RATE = 16000
-            self.SAMPLE_RATE = self.find_default_mic_sample_rate()
+        # Audio settings – record at the mic’s native rate, then down-sample to 16 kHz
+        mic_rate = self.find_default_mic_sample_rate()
+        self.SAMPLE_RATE = mic_rate            # what ALSA/PortAudio will actually open
+        self.DEFAULT_SAMPLE_RATE = 16_000      # what VAD/ASR engines expect
+
+        queue_message(
+            f"INFO: Recording at device rate {mic_rate} Hz "
+            f"(will downsample to {self.DEFAULT_SAMPLE_RATE} Hz for VAD/ASR)"
+        )
 
         self.amp_gain = amp_gain  # Microphone amplification multiplier
         self.silence_margin = 3.5  # Noise floor multiplier
