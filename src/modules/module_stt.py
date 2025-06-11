@@ -33,6 +33,7 @@ import requests
 
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config
+from modules.stt_speech_recognition import module_speech_recognition
 
 CONFIG = load_config()
 
@@ -285,6 +286,8 @@ class STTManager:
                 result = self._transcribe_silero()
             elif processor == "external":
                 result = self._transcribe_with_server()
+            elif processor == "speech_recognition":
+                result = transcribe_with_speech_recognition(self.utterance_callback)
             else:
                 result = self._transcribe_with_vosk()
 
