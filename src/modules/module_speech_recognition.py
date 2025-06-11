@@ -1,5 +1,6 @@
 import json
 import speech_recognition as sr
+
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config
 
