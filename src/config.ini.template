@@ -12,7 +12,7 @@ wake_word = hey tar
 sensitivity = 8
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection. 
 stt_processor = faster-whisper
-#vosk, faster-whisper, silero, or external
+#vosk, faster-whisper, silero, external, or speech_recognition
 external_url = http://192.168.2.57:5678
 # URL for the STT server (if enabled)
 whisper_model = tiny
