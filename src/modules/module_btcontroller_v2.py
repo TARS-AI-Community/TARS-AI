@@ -126,6 +126,10 @@ def poseaction():
 def unposeaction():
     #no unpose as the pose action already does it.
     pass 
+
+def stepBackward():
+    queue_message("MOVE: BWD")
+    step_backward()
         
         
 # D-Pad Actions (pressed and released)
