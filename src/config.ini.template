@@ -146,7 +146,7 @@ enabled = True
 [UI]
 UI_enabled = True
 #Enable or Disable the visuals
-UI_template = "ui_layout.json"
+UI_template = "ui_layout_DEFAULT.json"
 #determine which UI layout you want to us
 maximize_console = False
 # start with the console using all the screen
@@ -154,9 +154,9 @@ neural_net = True
 # Show the neural net animation 
 neural_net_always_visible = False
 # keep the neural net active all the time
-screen_width = 480
+screen_width = 1024
 # Adjust based on your screen resolution
-screen_height = 320
+screen_height = 600
 # Adjust based on your screen resolution
 rotation = 0
 # rotation can be 0, 90, 180, 270
@@ -164,9 +164,9 @@ use_camera_module = False
 # enable the camera
 show_mouse = True
 # enable the software mouse
-background_id = 0
+background_id = 1
 # 0 = no background animation, # 1 = background image, # 2 = stars, # 3 = video 3 , 4 = video, 5 = video
-fullscreen = False
+fullscreen = True
 # fullscreen or within a framed window
 font_size = 12
 # normally from 9 to 20 depending on your resolution
