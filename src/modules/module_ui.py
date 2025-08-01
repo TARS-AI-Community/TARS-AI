@@ -1,3 +1,7 @@
+# ----------------------------------------------
+# atomikspace (discord)
+# olivierdion1@hotmail.com
+# ----------------------------------------------
 import pygame
 from pygame.locals import DOUBLEBUF, OPENGL
 import OpenGL.GL as GL
