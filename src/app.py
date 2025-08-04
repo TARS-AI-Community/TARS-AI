@@ -43,7 +43,7 @@ sys.path.insert(0, BASE_DIR)
 sys.path.append(os.getcwd())
 
 CONFIG = load_config()
-VERSION = "3.0 Dev Beta 0.1"
+VERSION = "4.0"
 
 if (CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2"):
     from modules.module_btcontroller_v2 import *
