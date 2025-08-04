@@ -1,175 +1,154 @@
-from __future__ import division
 import sys
-import time
-import Adafruit_PCA9685
-from modules.module_config import load_config
 
-try:
-    pwm = Adafruit_PCA9685.PCA9685(busnum=1)
-except Exception as e:
-    print(f"Error initializing PCA9685: {e}")
-    exit()
+# === Custom Modules ===
+from modules.module_config import load_config
+from modules.module_tts import update_tts_settings
 
 config = load_config()
 
-if (config["SERVO"]["MOVEMENT_VERSION"] == "V1"):
-    pwm.set_pwm_freq(60)
+if (config["SERVO"]["MOVEMENT_VERSION"] == "V2"):
+    from modules.module_btcontroller_v2 import *
 else:
-    print("\nThis tool can only be used if you are using the V1 MOVEMENT Configurations.")
+    print("\nThis tool can only be used if you are using the V2 MOVEMENT Configurations.")
     print("\n")
     sys.exit()
 
-print("Auto calibrate is in internal testing DO NOT USE / risk it unless you know what your doing!!!!")
-
+global_speed = 1.0  # Adjust this to change movement speed
 MIN_PULSE = 0  # Calibrate these values
 MAX_PULSE = 600  # Calibrate these values
 
+# Store last known positions of servos
+servo_positions = {i: (MIN_PULSE + MAX_PULSE) // 2 for i in range(16)}
 
-def set_servo_pulse(channel, pulse):
-    if MIN_PULSE <= pulse <= MAX_PULSE:
-        pwm.set_pwm(channel, 0, pulse)
-        print(f"Set servo on channel {channel} to pulse {pulse}")
+def set_servo_pulse(channel, target_pulse):
+    """
+    Moves the servo gradually to the target pulse width at the global speed rate.
+    """
+    if MIN_PULSE <= target_pulse <= MAX_PULSE:
+        current_pulse = servo_positions.get(channel, (MIN_PULSE + MAX_PULSE) // 2)
+        step = 1 if target_pulse > current_pulse else -1
+
+        for pulse in range(current_pulse, target_pulse + step, step):
+            pwm.set_pwm(channel, 0, pulse)
+            time.sleep(0.02 * (1.0 - global_speed))  # Slows down movement when global_speed < 1
+
+        servo_positions[channel] = target_pulse  # Save the new position
+        print(f"Set servo on channel {channel} to pulse {target_pulse}")
     else:
         print(f"Pulse out of range ({MIN_PULSE}-{MAX_PULSE}).")
 
 def set_all_servos_preset():
-    set_servo_pulse(0, 128)  # Example preset pulse for servo 0
-    set_servo_pulse(1, 350)  # Example preset pulse for servo 1
-    set_servo_pulse(2, 350)  # Example preset pulse for servo 2
+    set_servo_pulse(0, 300)  
+    set_servo_pulse(1, 300)  
+    set_servo_pulse(2, 300)
+    
+    set_servo_pulse(3, 200)  
+    set_servo_pulse(4, 200)  
+    set_servo_pulse(5, 200)
+    
+    set_servo_pulse(6, 500)  
+    set_servo_pulse(7, 380)  
+    set_servo_pulse(8, 380)
+    
     print("All servos set to preset pulse widths.")
 
-def set_single_servo(channel):
+def set_single_servo():
     while True:
         try:
+            print("#0 -Main Legs - Raise legs up and down")
+            print("#1 -Left Leg Rotation")
+            print("#2 -Right Leg Rotation")
+            print("#3 -Right Leg Main Arm")
+            print("#4 -Right Leg Forearm")
+            print("#5 -Right Leg Hand")
+            print("#6 -Left Leg Main Arm")
+            print("#7 -Left Leg Forearm")
+            print("#8 -Left Leg Hand")
+            channel = int(input(f"Enter servo number: "))
             pulse = int(input(f"Enter pulse width for servo {channel} ({MIN_PULSE}-{MAX_PULSE}): "))
             set_servo_pulse(channel, pulse)
-            break  # Exit the loop after a valid pulse is entered
+            break
         except ValueError:
-            print("Invalid input. Please enter a number.")
+            break
+def control():
+    try:
+        print("0 - Reset Position.")
+        print("1 - Move Forward.")
+        print("2 - Move Backward.")
+        print("3 - Turn Right.")
+        print("4 - Turn Left.")
+        print("5 - Greet")
+        print("6 - Simulate Laughter")
+        print("7 - Dynamic Motion")
+        print("8 - PEZZ dispenser")
+        print("9 - Now!")
+        print("10 - Balance")
+        print("11 - Mic Drop")
+        print("12 - Defensive Posture")
+        print("13 - Pose")
+        print("14 - bow")
 
-def auto_calibrate_servo(channel, is_center_servo=False):
-    """
-    Automatically calibrates a servo to find min, max, and neutral PWM values.
-    For a center servo, it calculates additional height values.
-    """
-    print(f"Starting auto-calibration for servo on channel {channel}...")
+        main_input = input("> ")
+        if main_input.lower() == "0":
+            reset_positions()
+        if main_input.lower() == "1":
+            step_forward()
+        if main_input.lower() == "2":
+            step_backward()
+        if main_input.lower() == "3":
+            turn_right()
+        if main_input.lower() == "4":
+            turn_left()                
+        if main_input.lower() == "5":
+            right_hi()
+        if main_input.lower() == "6":
+            laugh()    
+        if main_input.lower() == "7":
+            swing_legs()         
+        if main_input.lower() == "8":
+            pezz_dispenser()
+        if main_input.lower() == "9":
+            now()         
+        if main_input.lower() == "10":
+            balance()         
+        if main_input.lower() == "11":
+            mic_drop()                                        
+        if main_input.lower() == "12":
+            monster()          
+        if main_input.lower() == "13":
+            pose()
+        if main_input.lower() == "14":
+            bow()                                   
+                
+    except ValueError:
+        print("Invalid input. Please enter a valid number.")
 
-    # Find minimum PWM value using a curved approach
-    print("Finding minimum PWM value...")
-    step = 150  # Initial large step
-    pwm_value = MAX_PULSE  # Start at the high end
-    min_pulse = None
-    while step >= 1:
-        print(f"Testing PWM: {pwm_value}")
-        set_servo_pulse(channel, pwm_value)
-        time.sleep(0.5)
-        user_input = input("Did the servo start moving? (y/n): ").strip().lower()
-        if user_input == "y":
-            min_pulse = pwm_value
-            pwm_value -= step
-        else:
-            pwm_value -= step
-        step //= 2
+def motion():
+    print("V2 Servo Controller")
+    while True:
+        print("\nSelect an option:")
+        print("1. Set all servos to preset position")
+        print("2. Manually set servo and position")
+        print("3. Manually set Channel 15 Servo position")
+        print("4. Disable all servos")
+        print("5. Movements")
 
-    if min_pulse is None:
-        print("Failed to find minimum PWM value.")
-        return
-    print(f"Servo starts moving at PWM: {min_pulse}")
 
-    # Find maximum PWM value
-    print("Finding maximum PWM value...")
-    step = 50
-    pwm_value = min_pulse  # Start from the found minimum value
-    max_pulse = None
-    while step >= 1:
-        print(f"Testing PWM: {pwm_value}")
-        set_servo_pulse(channel, pwm_value)
-        time.sleep(0.5)
-        user_input = input("Did the servo stop moving? (y/n): ").strip().lower()
-        if user_input == "n":
-            max_pulse = pwm_value
-            pwm_value += step
-        else:
-            max_pulse = pwm_value - step
-            pwm_value -= step
-        step //= 2
+        choice = input("> ")
 
-    if max_pulse is None:
-        print("Failed to find maximum PWM value.")
-        return
-    print(f"Servo stops moving at PWM: {max_pulse}")
+        if choice == '1':
+            set_all_servos_preset()
+        elif choice == '2':
+            set_single_servo()
+        elif choice == '3':
+            pulse = int(input(f"Enter pulse width for servo on channel 15 ({MIN_PULSE}-{MAX_PULSE}): "))
+            set_servo_pulse(15, pulse)
+        elif choice == '4':
+            for ch in range(16):
+                time.sleep(0.1)
+                pwm.set_pwm(ch, 0, 0)
+        elif choice == '5':
+            control()
 
-    # Calculate neutral position
-    neutral_pulse = (min_pulse + max_pulse) // 2
-    print(f"Setting servo to neutral position: {neutral_pulse}")
-    set_servo_pulse(channel, neutral_pulse)
 
-    # Output port/starboard values if not a center servo
-    if not is_center_servo:
-        neutral_port = neutral_pulse
-        neutral_starboard = neutral_pulse
-        forward_port = int(neutral_pulse + 0.1 * (max_pulse - neutral_pulse))
-        back_starboard = int(neutral_pulse + 0.1 * (neutral_pulse - min_pulse))
-        forward_starboard = int(neutral_pulse - 0.1 * (neutral_pulse - min_pulse))
-        back_port = int(neutral_pulse - 0.1 * (max_pulse - neutral_pulse))
-
-        print(f"Calibration complete for servo {channel}:")
-        print(f"  Back Port: {back_port}")
-        print(f"  Neutral Port: {neutral_port}")
-        print(f"  Forward Port: {forward_port}")
-        print(f"  Back Starboard: {back_starboard}")
-        print(f"  Neutral Starboard: {neutral_starboard}")
-        print(f"  Forward Starboard: {forward_starboard}")
-
-    else:  # Additional calculations for center servo
-        down_height = abs((min_pulse - max_pulse) // 2)
-        up_height = min_pulse
-        neutral_height = (down_height + up_height) // 2
-
-        print(f"Calibration complete for center servo {channel}:")
-        print(f"  Up Height: {up_height}")
-        print(f"  Neutral Height: {neutral_height}")
-        print(f"  Down Height: {down_height}")
-
-print("Servo Control Menu (Pulse Width)")
-
-while True:
-    print("\nSelect an option:")
-    print("1. Set all servos to preset pulse widths")
-    print("2. Manually set servo 0 pulse width")
-    print("3. Manually set servo 1 pulse width")
-    print("4. Manually set servo 2 pulse width")
-    print("5. Manually set servo 15 pulse width")
-    print("6. Auto-calibrate servo")
-    print("7. Exit")
-
-    choice = input("> ")
-
-    if choice == '1':
-        set_all_servos_preset()
-    elif choice == '2':
-        set_single_servo(0)
-    elif choice == '3':
-        set_single_servo(1)
-    elif choice == '4':
-        set_single_servo(2)
-    elif choice == '5':
-        set_single_servo(15)
-    elif choice == '6':
-        try:
-            print("WARNING: This auto-calibration will only work on channel 15 for safety reasons.")
-            print("Before continuing, ensure you have a servo connected to channel 15 that is NOT attached or installed to anything!")
-            confirmation = input("Type 'confirm' to proceed: ").strip().lower()
-            if confirmation == "confirm":
-                channel = 15
-                print(f"Proceeding with auto-calibration for channel {channel}...")
-                auto_calibrate_servo(channel)
-            else:
-                print("Calibration aborted. Please ensure all safety measures are in place before retrying.")
-        except ValueError:
-            print("Exiting...")
-    elif choice == '6':
-        print("Exiting...")
-        break
-    else:
-        print("Invalid choice. Please try again.")
+motion()

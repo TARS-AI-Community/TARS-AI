@@ -2,7 +2,7 @@
 
 <p align="center">
     <a href="https://discord.gg/AmE2Gv9EUt">
-      <img alt="Discord Invitation Link" src="https://dcbadge.vercel.app/api/server/uXkqkz3mJJ?style=flat" align="center" />
+      <img alt="Discord Invitation Link" src="https://img.shields.io/discord/1311295890182508605" align="center" />
     </a>
     <a href="https://www.youtube.com/@TARS-AI.py.youtube">
         <img src="https://img.shields.io/badge/YouTube-red?style=flat-square&logo=youtube&logoColor=white" alt="YouTube" align="center" />
@@ -37,3 +37,4 @@ TARS-AI is licensed under the [CC-BY-NC License](./LICENSE). See the [License Pa
 ## Attribution 
 
 As we continue to build and expand upon the TARS project, please review the guidelines for attribution and best practices when sharing or publishing work related to the TARS project [Attribution Page](https://github.com/pyrater/TARS-AI/blob/main/ATTRIBUTION.md)
+
