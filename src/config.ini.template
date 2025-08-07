@@ -1,5 +1,5 @@
 [CONTROLS] # Controller settings
-controller_name = 8BitDo2
+controller_name = 8BitDo
 # Name of the controller used for interaction
 enabled = False
 # enable use of controller used for interaction
