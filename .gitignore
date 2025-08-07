@@ -145,6 +145,7 @@ cython_debug/
 llm/
 vision/
 config.ini
+config_backup.ini
 output.wav
 
 # Memory files
