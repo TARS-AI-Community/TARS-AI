@@ -42,11 +42,11 @@ def set_all_servos_preset():
     set_servo_pulse(1, 300)  
     set_servo_pulse(2, 300)
     
-    set_servo_pulse(3, 200)  
+    set_servo_pulse(3, 135)  # was 200 to 500
     set_servo_pulse(4, 200)  
     set_servo_pulse(5, 200)
     
-    set_servo_pulse(6, 500)  
+    set_servo_pulse(6, 440)  
     set_servo_pulse(7, 380)  
     set_servo_pulse(8, 380)
     
