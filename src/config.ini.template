@@ -211,15 +211,15 @@ starHand = 570
 # The min and max value will control how far the arm can move, avoid having the connecting arm push against the case, the servo must not be under strain.
 # Port for the main servo.. 
 # RIGHT ARM
-portMainMin = 200
-portMainMax = 500
+portMainMin = 135
+portMainMax = 440
 portForarmMin = 200
 portForarmMax = 380
 portHandMin = 200
 portHandMax = 280
 # LEFT ARM
-starMainMin = 500
-starMainMax = 200
+starMainMin = 440
+starMainMax = 135
 starForarmMin = 380
 starForarmMax = 200
 starHandMin = 380
