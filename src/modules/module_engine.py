@@ -83,7 +83,7 @@ def execute_movement(movement, times):
     def movement_task():
         queue_message(f"[DEBUG] Thread started for movement: {movement} x {times}")
         if (CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2"):
-            from modules.module_btcontroller_v2 import turnRight, turnLeft, poseaction, unposeaction, stepForward, stepBackward
+            from modules.module_btcontroller_v2 import turnRight, turnLeft, poseaction, unposeaction, stepForward
         else:
             from modules.module_btcontroller import turnRight, turnLeft, poseaction, unposeaction, stepForward
 
@@ -92,8 +92,7 @@ def execute_movement(movement, times):
             "turnLeft": turnLeft,
             "poseaction": poseaction,
             "unposeaction": unposeaction,
-            "stepForward": stepForward,
-            "stepBackward": stepBackward
+            "stepForward": stepForward
         }
         
         try:
@@ -140,7 +139,6 @@ def movement_llmcall(user_input):
     - turnLeft
     - poseaction
     - unposeaction
-    - stepBackward
     2. Extract the number of steps or the angle of turn if applicable, where 180 degrees equals 2 steps (90 degrees = 1 step).
     3. Respond with a structured JSON output in the exact format:
     {{
@@ -172,13 +170,6 @@ def movement_llmcall(user_input):
         "times": 2
     }}
 
-    Input: "Can you please move backwards 3 times"
-    Output:
-    {{ 
-        "movment": "stepBackward",
-        "times": 3
-    }}
-
     Input: "Hey TARS, turn right twice"
     Output:
     {{
@@ -200,17 +191,10 @@ def movement_llmcall(user_input):
         "times": 1
     }}
 
-    Input: "Hey Tars, can you take 2 steps backwards"
-    Output:
-    {{
-        "movment": "stepBackward",
-        "times": 2
-    }}
-
     Input: "Hey Tars, can you please move 2 steps forward"
     Output:
     {{ 
-        "movment": "stepForward"
+        "movement": "stepForward"
         "times": 2
     }}
 
