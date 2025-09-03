@@ -111,6 +111,11 @@ def stepForward():
     torso_bump()
     torso_return()
 
+def stepBackward():
+    queue_message("MOVE: BWD")
+    # this move is not coded for V1
+          
+
 def turnRight():
     queue_message("MOVE: TurnRight")
     neutral_to_down()
