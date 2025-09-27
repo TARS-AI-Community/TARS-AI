@@ -567,7 +567,10 @@ class UIManager(threading.Thread):
     def draw_spectrum(self, surface, font):
         if not self.spectrum_box or self.expanded_box not in ["", "spectrum"]:
             return
+
         box = self.spectrum_box
+
+        # choose a surface to draw (your visualizer or a fallback)
         if self.sineWaveVisualizer:
             box_surface = self.sineWaveVisualizer.update(self.spectrum)
         else:
@@ -576,27 +579,26 @@ class UIManager(threading.Thread):
 
         border_color = (76, 194, 230, 255)
 
-
-        #Progress bar for listening
-        x, y = box.x, box.y
+        # --- Progress bar for listening ---
+        # Use the spectrum box dimensions, not brain_box (which may be None)
         width, height = box.original_width, box.original_height
-        pygame.draw.rect(box_surface, border_color, (0, 0, width, height), int(2 * self.scale))
-        max_frames = 20
         padding = int(15 * self.scale)
         progress_bar_height = int(10 * self.scale)
-        available_width = self.brain_box.original_width - (padding * 2)
+        available_width = width - (padding * 2)          # <- changed
         progress_bar_x = padding
-        progress_bar_y = padding                    
+        progress_bar_y = padding
+        max_frames = 20
+
         if self.silence_progress > 0:
-            pygame.draw.rect(box_surface, (100, 100, 100), (progress_bar_x, progress_bar_y, available_width, progress_bar_height), 1)
+            pygame.draw.rect(box_surface, (100, 100, 100),
+                            (progress_bar_x, progress_bar_y, available_width, progress_bar_height), 1)
             progress_fraction = self.silence_progress / max_frames
             fill_width = int(available_width * progress_fraction)
-            progress_color = (76, 194, 230)
-            pygame.draw.rect(box_surface, progress_color,
+            pygame.draw.rect(box_surface, (76, 194, 230),
                             (progress_bar_x, progress_bar_y, fill_width, progress_bar_height))
-        #pygame.draw.rect(box_surface, (0, 0, 0), (progress_bar_x, progress_bar_y, available_width, progress_bar_height), 1)
 
-        pygame.draw.rect(box_surface, border_color, (0, 0, box.original_width, box.original_height), int(2 * self.scale))
+        # border & blit
+        pygame.draw.rect(box_surface, border_color, (0, 0, width, height), int(2 * self.scale))
         rotated_surface = pygame.transform.rotate(box_surface, box.rotation)
         surface.blit(rotated_surface, (box.x, box.y))
 
