@@ -48,7 +48,7 @@ async def synthesize(voice, chunk):
         wav_file.setsampwidth(2)  # 16-bit samples
         wav_file.setframerate(voice.config.sample_rate)
         try:
-            voice.synthesize(chunk, wav_file)
+            voice.synthesize_wav(chunk, wav_file)
         except TypeError as e:
             queue_message(f"ERROR: {e}")
     wav_buffer.seek(0)
