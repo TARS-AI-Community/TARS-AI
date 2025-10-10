@@ -76,6 +76,56 @@
   .nav-tabs {
     border-bottom: none;
   }
+  
+  /* Config Form Styles */
+  .config-section {
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 15px;
+  }
+  
+  .config-section h6 {
+    color: #0d6efd;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .config-section .form-label {
+    color: #adb5bd;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+  }
+  
+  .config-section .form-control,
+  .config-section .form-select {
+    background-color: #1a1d20;
+    border-color: #343a40;
+    color: #f8f9fa;
+  }
+  
+  .config-section .form-control:focus,
+  .config-section .form-select:focus {
+    background-color: #212529;
+    border-color: #0d6efd;
+    color: #f8f9fa;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  }
+  
+  .config-section .form-check-input {
+    background-color: #343a40;
+    border-color: #495057;
+  }
+  
+  .config-section .form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+  }
+  
+  .config-section .form-text {
+    color: #6c757d;
+    font-size: 0.8rem;
+  }
   </style>
 </head>
 
@@ -93,6 +143,11 @@
     <li class="nav-item" role="presentation">
       <button style="width:fit-content;" class="nav-link d-flex align-items-center gap-2 custom-tab" id="motion-tab" data-bs-toggle="tab" data-bs-target="#motion" type="button" role="tab">
         <i class="bi bi-joystick"></i> Motion Control
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button style="width:fit-content;" class="nav-link d-flex align-items-center gap-2 custom-tab" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab">
+        <i class="bi bi-gear-fill"></i> Configuration
       </button>
     </li>
   </ul>
@@ -188,6 +243,34 @@
           <button class="btn btn-primary" onclick="executeAction()" style="width: 100%;">Execute Action</button>
         </div>
 
+      </div>
+    </div>
+
+    <!-- CONFIG TAB -->
+    <div class="tab-pane fade p-3" id="config" role="tabpanel">
+      <div class="container-fluid">
+        <div class="row">
+          <div class="col-12">
+            <div class="card bg-dark text-light">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-gear-fill me-2"></i>Configuration Settings</h5>
+                <button class="btn btn-sm btn-success" id="saveConfigBtn" onclick="saveConfiguration()">
+                  <i class="bi bi-save me-1"></i>Save Changes
+                </button>
+              </div>
+              <div class="card-body" style="max-height: 70vh; overflow-y: auto;">
+                <div id="configForm">
+                  <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading configuration...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -770,6 +853,137 @@ function sendUserMessage(message, imageFile) {
 
     chatBody.scrollTop = chatBody.scrollHeight;
 }
+
+// Configuration Management Functions
+function loadConfiguration() {
+    fetch('/get_config')
+        .then(response => response.json())
+        .then(data => {
+            const configForm = document.getElementById('configForm');
+            let formHtml = '';
+            
+            for (const [section, fields] of Object.entries(data.config)) {
+                formHtml += `
+                    <div class="config-section mb-4">
+                        <h6 class="border-bottom pb-2 mb-3 text-primary">
+                            <i class="bi bi-folder me-2"></i>${section}
+                        </h6>
+                        <div class="row g-3">
+                `;
+                
+                for (const [key, value] of Object.entries(fields)) {
+                    const fieldId = `config_${section}_${key}`;
+                    const fieldInfo = data.field_options[`${section}.${key}`];
+                    
+                    formHtml += '<div class="col-md-6">';
+                    formHtml += `<label for="${fieldId}" class="form-label small">${key}</label>`;
+                    
+                    if (fieldInfo && fieldInfo.options) {
+                        // Dropdown for fields with predefined options
+                        formHtml += `<select class="form-select form-select-sm bg-dark text-light border-secondary" id="${fieldId}" data-section="${section}" data-key="${key}">`;
+                        fieldInfo.options.forEach(option => {
+                            const selected = String(value) === String(option) ? 'selected' : '';
+                            formHtml += `<option value="${option}" ${selected}>${option}</option>`;
+                        });
+                        formHtml += '</select>';
+                    } else if (typeof value === 'boolean' || value === 'True' || value === 'False') {
+                        // Checkbox for boolean values
+                        const checked = (value === true || value === 'True') ? 'checked' : '';
+                        formHtml += `
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="${fieldId}" data-section="${section}" data-key="${key}" ${checked}>
+                            </div>
+                        `;
+                    } else {
+                        // Text input for other values
+                        formHtml += `<input type="text" class="form-control form-control-sm bg-dark text-light border-secondary" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+                    }
+                    
+                    if (fieldInfo && fieldInfo.description) {
+                        formHtml += `<small class="form-text text-muted">${fieldInfo.description}</small>`;
+                    }
+                    
+                    formHtml += '</div>';
+                }
+                
+                formHtml += '</div></div>';
+            }
+            
+            configForm.innerHTML = formHtml;
+        })
+        .catch(error => {
+            console.error('Error loading configuration:', error);
+            document.getElementById('configForm').innerHTML = `
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Error loading configuration: ${error.message}
+                </div>
+            `;
+        });
+}
+
+function saveConfiguration() {
+    const configData = {};
+    const inputs = document.querySelectorAll('#configForm input, #configForm select');
+    
+    inputs.forEach(input => {
+        const section = input.getAttribute('data-section');
+        const key = input.getAttribute('data-key');
+        
+        if (!configData[section]) {
+            configData[section] = {};
+        }
+        
+        if (input.type === 'checkbox') {
+            configData[section][key] = input.checked;
+        } else {
+            configData[section][key] = input.value;
+        }
+    });
+    
+    fetch('/save_config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(configData),
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            const saveBtn = document.getElementById('saveConfigBtn');
+            const originalHtml = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved!';
+            saveBtn.classList.remove('btn-success');
+            saveBtn.classList.add('btn-outline-success');
+            
+            setTimeout(() => {
+                saveBtn.innerHTML = originalHtml;
+                saveBtn.classList.remove('btn-outline-success');
+                saveBtn.classList.add('btn-success');
+            }, 2000);
+        } else {
+            alert('Error saving configuration: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error saving configuration:', error);
+        alert('Error saving configuration: ' + error.message);
+    });
+}
+
+// Load configuration when the config tab is clicked
+document.addEventListener('DOMContentLoaded', function() {
+    const configTab = document.getElementById('config-tab');
+    if (configTab) {
+        configTab.addEventListener('click', function() {
+            // Only load if the form hasn't been loaded yet
+            if (document.getElementById('configForm').innerHTML.includes('Loading')) {
+                loadConfiguration();
+            }
+        });
+    }
+});
 });
 </script>
   
