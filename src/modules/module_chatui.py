@@ -596,6 +596,56 @@ def execute_action():
         queue_message(f"Error executing action: {e}")
         return jsonify({"error": f"Failed to execute action: {str(e)}"}), 500
 
+def parse_config_with_comments(file_path):
+    """Parse config file and extract comments for each field"""
+    comments = {}
+    
+    if not os.path.exists(file_path):
+        return comments
+    
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+    
+    current_section = None
+    pending_comment = []
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Track section
+        if stripped.startswith('[') and ']' in stripped:
+            current_section = stripped[1:stripped.index(']')]
+            # Extract inline comment for section
+            if '#' in stripped:
+                section_comment = stripped.split('#', 1)[1].strip()
+                comments[f"{current_section}.__section__"] = section_comment
+            pending_comment = []
+        # Collect comment lines
+        elif stripped.startswith('#'):
+            pending_comment.append(stripped[1:].strip())
+        # Parse field with value
+        elif '=' in stripped and current_section:
+            field_name = stripped.split('=')[0].strip()
+            
+            # Get inline comment if exists
+            inline_comment = ""
+            if '#' in stripped.split('=', 1)[1]:
+                inline_comment = stripped.split('#', 1)[1].strip()
+            
+            # Combine pending comments and inline comment
+            full_comment = ' '.join(pending_comment)
+            if inline_comment:
+                full_comment = inline_comment if not full_comment else f"{full_comment} {inline_comment}"
+            
+            if full_comment:
+                comments[f"{current_section}.{field_name}"] = full_comment
+            
+            pending_comment = []
+        elif stripped == "":
+            pending_comment = []
+    
+    return comments
+
 @flask_app.route('/get_config', methods=['GET'])
 def get_config():
     """
@@ -603,12 +653,23 @@ def get_config():
     """
     import configparser
     
-    # Define field options for dropdowns
+    # Define field options for dropdowns and hardcoded hints
     field_options = {
+        # CONTROLS Section
+        'CONTROLS.__section__': {'description': 'Controller settings'},
+        'CONTROLS.controller_name': {'description': 'Name of the controller used for interaction'},
+        'CONTROLS.enabled': {'description': 'Enable use of controller used for interaction'},
+        'CONTROLS.voicemovement': {'description': 'Enable or disable movement via voice control'},
+        
+        # STT Section
+        'STT.__section__': {'description': 'Speech-to-Text configuration'},
+        'STT.wake_word': {'description': 'Wake word for activating the system'},
+        'STT.sensitivity': {'description': 'Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection'},
         'STT.stt_processor': {
             'options': ['vosk', 'faster-whisper', 'silero', 'fastrtc', 'external'],
-            'description': 'Speech-to-text processor'
+            'description': 'vosk, faster-whisper, silero, fastrtc, or external'
         },
+        'STT.external_url': {'description': 'URL for the STT server (if enabled)'},
         'STT.whisper_model': {
             'options': ['tiny', 'base', 'small', 'medium', 'large'],
             'description': 'Whisper model size'
@@ -626,8 +687,7 @@ def get_config():
             'description': 'LLM backend service'
         },
         'LLM.openai_model': {
-            'options': ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo', 'gpt-4'],
-            'description': 'OpenAI model to use'
+            'description': 'OpenAI model to use for LLM if backend = openai (e.g., gpt-4o-mini, gpt-4o, gpt-3.5-turbo, gpt-4)'
         },
         'LLM.override_encoding_model': {
             'options': ['cl100k_base', 'p50k_base', 'r50k_base', 'gpt2'],
@@ -689,13 +749,27 @@ def get_config():
         if not os.path.exists(file_to_read):
             return jsonify({"error": "No configuration file found"}), 404
         
-        config = configparser.ConfigParser()
+        config = configparser.RawConfigParser()
+        config.optionxform = str  # Preserve case
         config.read(file_to_read)
         
         # Convert to dictionary
         config_dict = {}
         for section in config.sections():
             config_dict[section] = dict(config[section])
+        
+        # Parse comments from template
+        template_comments = parse_config_with_comments(template_file)
+        
+        # Merge comments with field_options
+        for key, comment in template_comments.items():
+            if key in field_options:
+                # Keep existing dropdown options, just update description if not set
+                if 'description' not in field_options[key] or not field_options[key]['description']:
+                    field_options[key]['description'] = comment
+            else:
+                # Add new field option with just description
+                field_options[key] = {'description': comment}
         
         return jsonify({
             "config": config_dict,
@@ -721,12 +795,14 @@ def save_config():
         template_file = os.path.join(BASE_DIR, 'config.ini.template')
         
         # Read the template to get comments and structure
-        template_config = configparser.ConfigParser()
+        template_config = configparser.RawConfigParser()
+        template_config.optionxform = str  # Preserve case
         if os.path.exists(template_file):
             template_config.read(template_file)
         
         # Create new config
-        new_config = configparser.ConfigParser()
+        new_config = configparser.RawConfigParser()
+        new_config.optionxform = str  # Preserve case
         
         # If config.ini exists, read it first to preserve any custom sections
         if os.path.exists(config_file):

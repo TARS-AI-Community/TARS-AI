@@ -77,44 +77,211 @@
     border-bottom: none;
   }
   
-  /* Config Form Styles */
-  .config-section {
-    background-color: rgba(0, 0, 0, 0.3);
-    border-radius: 8px;
-    padding: 15px;
+  /* Config Container Styles */
+  .tab-content {
+    height: calc(100vh - 40px);
+    overflow: hidden;
+    background-color: #0d1117;
   }
   
-  .config-section h6 {
-    color: #0d6efd;
+  #config {
+    height: 100%;
+    background-color: #0d1117;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .config-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background-color: #0d1117;
+  }
+  
+  .config-header {
+    background: linear-gradient(135deg, #1a1d20 0%, #0d1117 100%);
+    padding: 16px 20px;
+    border-bottom: 2px solid rgba(13, 110, 253, 0.3);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    flex-shrink: 0;
+  }
+  
+  .config-header h4 {
+    color: #f8f9fa;
     font-weight: 600;
+    font-size: 18px;
+  }
+  
+  .save-config-btn {
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 12px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #0d6efd 0%, #0056b3 100%);
+    border: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(13, 110, 253, 0.3);
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: fit-content;
+    flex-shrink: 0;
+  }
+  
+  .save-config-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(13, 110, 253, 0.4);
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+  }
+  
+  .save-config-btn:active {
+    transform: translateY(0);
+  }
+  
+  .save-config-btn-success {
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 12px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #198754 0%, #0f5132 100%) !important;
+    border: none !important;
+    box-shadow: 0 4px 15px rgba(25, 135, 84, 0.4) !important;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: fit-content;
+    flex-shrink: 0;
+  }
+
+  /* Spinning animation for saving state */
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+  
+  .config-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px 25px;
+    background-color: #0d1117;
+  }
+  
+  #configAccordion {
+    margin-bottom: 0 !important;
+  }
+  
+  /* Config Accordion Styles */
+  .config-accordion-item {
+    background: linear-gradient(145deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.2));
+    border: 1px solid rgba(13, 110, 253, 0.2) !important;
+    border-radius: 8px !important;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  
+  .config-accordion-item:last-child {
+    margin-bottom: 0 !important;
+  }
+  
+  .config-accordion-item:hover {
+    border-color: rgba(13, 110, 253, 0.4) !important;
+    box-shadow: 0 4px 12px rgba(13, 110, 253, 0.15);
+  }
+  
+  .config-accordion-button {
+    background: rgba(13, 110, 253, 0.1) !important;
+    color: #0d6efd !important;
+    font-size: 14px;
+    padding: 12px 16px;
+    border: none !important;
+  }
+  
+  .config-accordion-button:not(.collapsed) {
+    background: rgba(13, 110, 253, 0.2) !important;
+    color: #0d6efd !important;
+    box-shadow: none !important;
+  }
+  
+  .config-accordion-button:focus {
+    box-shadow: none !important;
+    border: none !important;
+  }
+  
+  .config-accordion-button::after {
+    filter: brightness(0) invert(1);
+  }
+  
+  .config-accordion-body {
+    background: transparent;
+    padding: 16px;
+  }
+  
+  .field-wrapper {
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 10px;
+    transition: background-color 0.2s ease;
+  }
+  
+  .field-wrapper:hover {
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+  
+  .config-accordion-body .form-label {
+    color: #adb5bd;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
     text-transform: uppercase;
+    font-size: 11px;
     letter-spacing: 0.5px;
   }
   
-  .config-section .form-label {
-    color: #adb5bd;
-    font-weight: 500;
-    margin-bottom: 0.25rem;
+  /* Servo Group Styles */
+  .servo-group {
+    background: rgba(13, 110, 253, 0.05);
+    border-radius: 8px;
+    padding: 15px;
+    border: 1px solid rgba(13, 110, 253, 0.15);
   }
   
-  .config-section .form-control,
-  .config-section .form-select {
-    background-color: #1a1d20;
-    border-color: #343a40;
-    color: #f8f9fa;
+  .servo-group-title {
+    color: #0d6efd;
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(13, 110, 253, 0.2);
+    display: flex;
+    align-items: center;
   }
   
-  .config-section .form-control:focus,
-  .config-section .form-select:focus {
-    background-color: #212529;
-    border-color: #0d6efd;
-    color: #f8f9fa;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  .config-input {
+    background-color: #1a1d20 !important;
+    border: 1px solid #343a40 !important;
+    color: #f8f9fa !important;
+    transition: all 0.2s ease;
+  }
+  
+  .config-input:focus {
+    background-color: #212529 !important;
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
   }
   
   .config-section .form-check-input {
     background-color: #343a40;
     border-color: #495057;
+    width: 3rem;
+    height: 1.5rem;
+    cursor: pointer;
   }
   
   .config-section .form-check-input:checked {
@@ -122,9 +289,23 @@
     border-color: #0d6efd;
   }
   
-  .config-section .form-text {
+  .config-hint {
+    display: flex;
+    align-items: start;
+    gap: 4px;
     color: #6c757d;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+    line-height: 1.3;
+    padding: 6px 8px;
+    background-color: rgba(108, 117, 125, 0.1);
+    border-radius: 4px;
+    border-left: 2px solid rgba(13, 110, 253, 0.4);
+  }
+  
+  .config-hint i {
+    color: #0d6efd;
+    margin-top: 2px;
+    flex-shrink: 0;
   }
   </style>
 </head>
@@ -247,27 +428,29 @@
     </div>
 
     <!-- CONFIG TAB -->
-    <div class="tab-pane fade p-3" id="config" role="tabpanel">
-      <div class="container-fluid">
-        <div class="row">
-          <div class="col-12">
-            <div class="card bg-dark text-light">
-              <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-gear-fill me-2"></i>Configuration Settings</h5>
-                <button class="btn btn-sm btn-success" id="saveConfigBtn" onclick="saveConfiguration()">
-                  <i class="bi bi-save me-1"></i>Save Changes
-                </button>
+    <div class="tab-pane fade p-0" id="config" role="tabpanel" style="position: relative;">
+      <div class="config-container">
+        <div class="config-header">
+          <div class="d-flex justify-content-between align-items-center w-100">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-gear-fill me-2" style="color: #0d6efd; font-size: 24px;"></i>
+              <h4 class="mb-0">Configuration Settings</h4>
+            </div>
+            <div class="ms-auto">
+              <button class="btn btn-primary save-config-btn" id="saveConfigBtn">
+                <i class="bi bi-save"></i>
+                <span>Save Changes</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="config-body">
+          <div id="configForm">
+            <div class="text-center py-5">
+              <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                <span class="visually-hidden">Loading...</span>
               </div>
-              <div class="card-body" style="max-height: 70vh; overflow-y: auto;">
-                <div id="configForm">
-                  <div class="text-center">
-                    <div class="spinner-border text-primary" role="status">
-                      <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2">Loading configuration...</p>
-                  </div>
-                </div>
-              </div>
+              <p class="mt-3 text-muted">Loading configuration...</p>
             </div>
           </div>
         </div>
@@ -860,27 +1043,317 @@ function loadConfiguration() {
         .then(response => response.json())
         .then(data => {
             const configForm = document.getElementById('configForm');
-            let formHtml = '';
+            let formHtml = '<div class="accordion" id="configAccordion">';
+            let sectionIndex = 0;
             
             for (const [section, fields] of Object.entries(data.config)) {
+                // Get section description
+                const sectionDesc = data.field_options[`${section}.__section__`];
+                const accordionId = `collapse${sectionIndex}`;
+                const isFirstSection = sectionIndex === 0;
+                
                 formHtml += `
-                    <div class="config-section mb-4">
-                        <h6 class="border-bottom pb-2 mb-3 text-primary">
-                            <i class="bi bi-folder me-2"></i>${section}
-                        </h6>
-                        <div class="row g-3">
+                    <div class="accordion-item config-accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button config-accordion-button ${isFirstSection ? '' : 'collapsed'}" type="button" 
+                                    data-bs-toggle="collapse" data-bs-target="#${accordionId}" 
+                                    aria-expanded="${isFirstSection ? 'true' : 'false'}" aria-controls="${accordionId}">
+                                <i class="bi bi-folder-fill me-2"></i>
+                                <span class="fw-bold">${section}</span>
+                                ${sectionDesc ? `<small class="ms-2 text-muted opacity-75">- ${sectionDesc.description || sectionDesc}</small>` : ''}
+                            </button>
+                        </h2>
+                        <div id="${accordionId}" class="accordion-collapse collapse ${isFirstSection ? 'show' : ''}" data-bs-parent="#configAccordion">
+                            <div class="accordion-body config-accordion-body">
                 `;
                 
-                for (const [key, value] of Object.entries(fields)) {
-                    const fieldId = `config_${section}_${key}`;
-                    const fieldInfo = data.field_options[`${section}.${key}`];
+                // Special handling for SERVO section - organize into groups
+                if (section === 'SERVO') {
+                    console.log('SERVO fields:', fields);
+                    const generalFields = ['voicemovement', 'MOVEMENT_VERSION'];
+                    const v1Fields = ['portMain', 'portForarm', 'portHand', 'starMain', 'starForarm', 'starHand'];
+                    const v2RightFields = ['portMainMin', 'portMainMax', 'portForarmMin', 'portForarmMax', 'portHandMin', 'portHandMax'];
+                    const v2LeftFields = ['starMainMin', 'starMainMax', 'starForarmMin', 'starForarmMax', 'starHandMin', 'starHandMax'];
+                    const torsoFields = ['upHeight', 'neutralHeight', 'downHeight'];
+                    const leftLegFields = ['forwardStarboard', 'neutralStarboard', 'backStarboard', 'perfectStaroffset'];
+                    const rightLegFields = ['forwardPort', 'neutralPort', 'backPort', 'perfectPortoffset'];
                     
-                    formHtml += '<div class="col-md-6">';
-                    formHtml += `<label for="${fieldId}" class="form-label small">${key}</label>`;
+                    // General Settings
+                    formHtml += `
+                        <div class="servo-group mb-3">
+                            <h6 class="servo-group-title"><i class="bi bi-sliders me-2"></i>General Settings</h6>
+                            <div class="row g-3">
+                    `;
+                    generalFields.forEach(key => {
+                        if (fields[key] !== undefined) {
+                            const fieldId = `config_${section}_${key}`;
+                            const fieldInfo = data.field_options[`${section}.${key}`];
+                            const description = fieldInfo?.description || '';
+                            const value = fields[key];
+                            
+                            formHtml += `<div class="col-md-6">
+                                <div class="field-wrapper">
+                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
+                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+                                        <span>${key}</span>
+                                    </label>`;
+                            
+                            if (fieldInfo && fieldInfo.options) {
+                                formHtml += `<select class="form-select form-select-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}">`;
+                                fieldInfo.options.forEach(option => {
+                                    const selected = String(value) === String(option) ? 'selected' : '';
+                                    formHtml += `<option value="${option}" ${selected}>${option}</option>`;
+                                });
+                                formHtml += '</select>';
+                            } else if (typeof value === 'boolean' || value === 'True' || value === 'False') {
+                                const checked = (value === true || value === 'True') ? 'checked' : '';
+                                formHtml += `
+                                    <div class="form-check form-switch mt-2">
+                                        <input class="form-check-input config-toggle" type="checkbox" id="${fieldId}" data-section="${section}" data-key="${key}" ${checked}>
+                                        <label class="form-check-label small text-white" for="${fieldId}" id="${fieldId}_label">
+                                            ${checked ? 'Enabled' : 'Disabled'}
+                                        </label>
+                                    </div>
+                                `;
+                            } else {
+                                formHtml += `<input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+                            }
+                            
+                            if (description) {
+                                formHtml += `
+                                    <div class="config-hint mt-1">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <small>${description}</small>
+                                    </div>
+                                `;
+                            }
+                            formHtml += '</div></div>';
+                        }
+                    });
+                    formHtml += '</div></div>';
+                    
+                    // V1 ARMS Variables
+                    formHtml += `
+                        <div class="servo-group mb-3">
+                            <h6 class="servo-group-title"><i class="bi bi-joystick me-2"></i>V1 ARMS Variables (Legacy)</h6>
+                            <div class="row g-3">
+                    `;
+                    v1Fields.forEach(key => {
+                        if (fields[key] !== undefined) {
+                            const fieldId = `config_${section}_${key}`;
+                            const fieldInfo = data.field_options[`${section}.${key}`];
+                            const description = fieldInfo?.description || '';
+                            const value = fields[key];
+                            
+                            formHtml += `<div class="col-md-4">
+                                <div class="field-wrapper">
+                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
+                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+                                        <span>${key}</span>
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+                            
+                            if (description) {
+                                formHtml += `
+                                    <div class="config-hint mt-1">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <small>${description}</small>
+                                    </div>
+                                `;
+                            }
+                            formHtml += '</div></div>';
+                        }
+                    });
+                    formHtml += '</div></div>';
+                    
+                    // V2 RIGHT ARM Variables
+                    formHtml += `
+                        <div class="servo-group mb-3">
+                            <h6 class="servo-group-title"><i class="bi bi-arrow-right-circle me-2"></i>V2 RIGHT ARM Variables</h6>
+                            <div class="row g-3">
+                    `;
+                    v2RightFields.forEach(key => {
+                        if (fields[key] !== undefined) {
+                            const fieldId = `config_${section}_${key}`;
+                            const fieldInfo = data.field_options[`${section}.${key}`];
+                            const description = fieldInfo?.description || '';
+                            const value = fields[key];
+                            
+                            formHtml += `<div class="col-md-4">
+                                <div class="field-wrapper">
+                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
+                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+                                        <span>${key}</span>
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+                            
+                            if (description) {
+                                formHtml += `
+                                    <div class="config-hint mt-1">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <small>${description}</small>
+                                    </div>
+                                `;
+                            }
+                            formHtml += '</div></div>';
+                        }
+                    });
+                    formHtml += '</div></div>';
+                    
+                    // V2 LEFT ARM Variables
+                    formHtml += `
+                        <div class="servo-group mb-3">
+                            <h6 class="servo-group-title"><i class="bi bi-arrow-left-circle me-2"></i>V2 LEFT ARM Variables</h6>
+                            <div class="row g-3">
+                    `;
+                    v2LeftFields.forEach(key => {
+                        if (fields[key] !== undefined) {
+                            const fieldId = `config_${section}_${key}`;
+                            const fieldInfo = data.field_options[`${section}.${key}`];
+                            const description = fieldInfo?.description || '';
+                            const value = fields[key];
+                            
+                            formHtml += `<div class="col-md-4">
+                                <div class="field-wrapper">
+                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
+                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+                                        <span>${key}</span>
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+                            
+                            if (description) {
+                                formHtml += `
+                                    <div class="config-hint mt-1">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <small>${description}</small>
+                                    </div>
+                                `;
+                            }
+                            formHtml += '</div></div>';
+                        }
+                    });
+                    formHtml += '</div></div>';
+                    
+                    // Torso Height Variables
+                    formHtml += `
+                        <div class="servo-group mb-3">
+                            <h6 class="servo-group-title"><i class="bi bi-arrow-up-down me-2"></i>Torso Height Variables</h6>
+                            <div class="row g-3">
+                    `;
+                    torsoFields.forEach(key => {
+                        if (fields[key] !== undefined) {
+                            const fieldId = `config_${section}_${key}`;
+                            const fieldInfo = data.field_options[`${section}.${key}`];
+                            const description = fieldInfo?.description || '';
+                            const value = fields[key];
+                            
+                            formHtml += `<div class="col-md-4">
+                                <div class="field-wrapper">
+                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
+                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+                                        <span>${key}</span>
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+                            
+                            if (description) {
+                                formHtml += `
+                                    <div class="config-hint mt-1">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <small>${description}</small>
+                                    </div>
+                                `;
+                            }
+                            formHtml += '</div></div>';
+                        }
+                    });
+                    formHtml += '</div></div>';
+                    
+                    // Left Leg Variables
+                    formHtml += `
+                        <div class="servo-group mb-3">
+                            <h6 class="servo-group-title"><i class="bi bi-arrow-left me-2"></i>Left Leg Variables</h6>
+                            <div class="row g-3">
+                    `;
+                    leftLegFields.forEach(key => {
+                        if (fields[key] !== undefined) {
+                            const fieldId = `config_${section}_${key}`;
+                            const fieldInfo = data.field_options[`${section}.${key}`];
+                            const description = fieldInfo?.description || '';
+                            const value = fields[key];
+                            
+                            formHtml += `<div class="col-md-4 col-lg-3">
+                                <div class="field-wrapper">
+                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
+                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+                                        <span>${key}</span>
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+                            
+                            if (description) {
+                                formHtml += `
+                                    <div class="config-hint mt-1">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <small>${description}</small>
+                                    </div>
+                                `;
+                            }
+                            formHtml += '</div></div>';
+                        }
+                    });
+                    formHtml += '</div></div>';
+                    
+                    // Right Leg Variables
+                    formHtml += `
+                        <div class="servo-group mb-3">
+                            <h6 class="servo-group-title"><i class="bi bi-arrow-right me-2"></i>Right Leg Variables</h6>
+                            <div class="row g-3">
+                    `;
+                    rightLegFields.forEach(key => {
+                        if (fields[key] !== undefined) {
+                            const fieldId = `config_${section}_${key}`;
+                            const fieldInfo = data.field_options[`${section}.${key}`];
+                            const description = fieldInfo?.description || '';
+                            const value = fields[key];
+                            
+                            formHtml += `<div class="col-md-4 col-lg-3">
+                                <div class="field-wrapper">
+                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
+                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+                                        <span>${key}</span>
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+                            
+                            if (description) {
+                                formHtml += `
+                                    <div class="config-hint mt-1">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <small>${description}</small>
+                                    </div>
+                                `;
+                            }
+                            formHtml += '</div></div>';
+                        }
+                    });
+                    formHtml += '</div></div>';
+                } else {
+                    // Regular sections - use standard layout
+                    formHtml += '<div class="row g-3">';
+                    
+                    for (const [key, value] of Object.entries(fields)) {
+                        const fieldId = `config_${section}_${key}`;
+                        const fieldInfo = data.field_options[`${section}.${key}`];
+                        const description = fieldInfo?.description || '';
+                    
+                    formHtml += `<div class="col-md-6 col-lg-4">
+                        <div class="field-wrapper">
+                            <label for="${fieldId}" class="form-label small d-flex align-items-center">
+                                <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+                                <span>${key}</span>
+                            </label>`;
                     
                     if (fieldInfo && fieldInfo.options) {
                         // Dropdown for fields with predefined options
-                        formHtml += `<select class="form-select form-select-sm bg-dark text-light border-secondary" id="${fieldId}" data-section="${section}" data-key="${key}">`;
+                        formHtml += `<select class="form-select form-select-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}">`;
                         fieldInfo.options.forEach(option => {
                             const selected = String(value) === String(option) ? 'selected' : '';
                             formHtml += `<option value="${option}" ${selected}>${option}</option>`;
@@ -890,26 +1363,49 @@ function loadConfiguration() {
                         // Checkbox for boolean values
                         const checked = (value === true || value === 'True') ? 'checked' : '';
                         formHtml += `
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="${fieldId}" data-section="${section}" data-key="${key}" ${checked}>
+                            <div class="form-check form-switch mt-2">
+                                <input class="form-check-input config-toggle" type="checkbox" id="${fieldId}" data-section="${section}" data-key="${key}" ${checked}>
+                                <label class="form-check-label small text-white" for="${fieldId}" id="${fieldId}_label">
+                                    ${checked ? 'Enabled' : 'Disabled'}
+                                </label>
                             </div>
                         `;
                     } else {
                         // Text input for other values
-                        formHtml += `<input type="text" class="form-control form-control-sm bg-dark text-light border-secondary" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+                        formHtml += `<input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
                     }
                     
-                    if (fieldInfo && fieldInfo.description) {
-                        formHtml += `<small class="form-text text-muted">${fieldInfo.description}</small>`;
+                    if (description) {
+                        formHtml += `
+                            <div class="config-hint mt-1">
+                                <i class="bi bi-info-circle me-1"></i>
+                                <small>${description}</small>
+                            </div>
+                        `;
                     }
                     
-                    formHtml += '</div>';
+                    formHtml += '</div></div>';
+                    }
+                    
+                    formHtml += '</div>';  // Close row
                 }
                 
-                formHtml += '</div></div>';
+                formHtml += '</div></div></div>';  // Close accordion-body, accordion-collapse, accordion-item
+                sectionIndex++;
             }
             
+            formHtml += '</div>';  // Close accordion
             configForm.innerHTML = formHtml;
+            
+            // Add event listeners for toggle switches to update label text dynamically
+            document.querySelectorAll('.config-toggle').forEach(toggle => {
+                toggle.addEventListener('change', function() {
+                    const label = document.getElementById(this.id + '_label');
+                    if (label) {
+                        label.textContent = this.checked ? 'Enabled' : 'Disabled';
+                    }
+                });
+            });
         })
         .catch(error => {
             console.error('Error loading configuration:', error);
@@ -922,6 +1418,13 @@ function loadConfiguration() {
 }
 
 function saveConfiguration() {
+    const saveBtn = document.getElementById('saveConfigBtn');
+    
+    // Prevent double-clicking
+    if (saveBtn.disabled) {
+        return;
+    }
+    
     const configData = {};
     const inputs = document.querySelectorAll('#configForm input, #configForm select');
     
@@ -940,6 +1443,12 @@ function saveConfiguration() {
         }
     });
     
+    // Disable button while saving
+    const originalHtml = saveBtn.innerHTML;
+    const originalClass = saveBtn.className;
+    saveBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i><span>Saving...</span>';
+    saveBtn.disabled = true;
+    
     fetch('/save_config', {
         method: 'POST',
         headers: {
@@ -951,39 +1460,52 @@ function saveConfiguration() {
     .then(data => {
         if (data.success) {
             // Show success message
-            const saveBtn = document.getElementById('saveConfigBtn');
-            const originalHtml = saveBtn.innerHTML;
-            saveBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved!';
-            saveBtn.classList.remove('btn-success');
-            saveBtn.classList.add('btn-outline-success');
+            saveBtn.innerHTML = '<i class="bi bi-check-circle-fill"></i><span>Saved Successfully!</span>';
+            saveBtn.className = 'btn save-config-btn-success';
             
             setTimeout(() => {
                 saveBtn.innerHTML = originalHtml;
-                saveBtn.classList.remove('btn-outline-success');
-                saveBtn.classList.add('btn-success');
+                saveBtn.className = originalClass;
+                saveBtn.disabled = false;
             }, 2000);
         } else {
+            // Re-enable button on error
+            saveBtn.innerHTML = originalHtml;
+            saveBtn.className = originalClass;
+            saveBtn.disabled = false;
             alert('Error saving configuration: ' + (data.error || 'Unknown error'));
         }
     })
     .catch(error => {
+        // Re-enable button on error
+        saveBtn.innerHTML = originalHtml;
+        saveBtn.className = originalClass;
+        saveBtn.disabled = false;
         console.error('Error saving configuration:', error);
         alert('Error saving configuration: ' + error.message);
     });
 }
 
 // Load configuration when the config tab is clicked
-document.addEventListener('DOMContentLoaded', function() {
-    const configTab = document.getElementById('config-tab');
-    if (configTab) {
-        configTab.addEventListener('click', function() {
-            // Only load if the form hasn't been loaded yet
-            if (document.getElementById('configForm').innerHTML.includes('Loading')) {
-                loadConfiguration();
-            }
-        });
-    }
-});
+const configTab = document.getElementById('config-tab');
+if (configTab) {
+    configTab.addEventListener('click', function() {
+        const configForm = document.getElementById('configForm');
+        if (configForm && configForm.innerHTML.includes('Loading')) {
+            loadConfiguration();
+        }
+    });
+}
+
+// Add save button event listener
+const saveBtn = document.getElementById('saveConfigBtn');
+if (saveBtn) {
+    saveBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        console.log('Save button clicked!');
+        saveConfiguration();
+    });
+}
 });
 </script>
   
