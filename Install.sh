@@ -4,6 +4,9 @@
 
 set -e  # Exit on any error
 
+# Trap to reset terminal on exit
+trap 'tput sgr0 2>/dev/null || echo -e "\033[0m"' EXIT
+
 # Color codes for futuristic display
 CYAN='\033[0;36m'
 GREEN='\033[0;32m'
@@ -78,7 +81,7 @@ tars_say() {
 # System diagnostic display
 show_system_diagnostic() {
     echo -e "${CYAN}+===============================================================+${NC}"
-    echo -e "${CYAN}|${NC}           ${BOLD}SYSTEM DIAGNOSTIC INITIATED${NC}                  ${CYAN}${NC}"
+    echo -e "${CYAN}|${NC}           ${BOLD}SYSTEM DIAGNOSTIC INITIATED${NC}                  ${CYAN}|${NC}"
     echo -e "${CYAN}+===============================================================+${NC}"
     echo -e "${CYAN}|${NC} CPU Architecture: ${GREEN}$(uname -m)${NC}"
     echo -e "${CYAN}|${NC} Kernel Version:   ${GREEN}$(uname -r)${NC}"
@@ -303,7 +306,7 @@ verify_installations() {
 main() {
     show_tars_boot
     
-    tars_say "Initializing installation sequence." "info"
+    tars_say "This is no time for caution. Initializing installation sequence." "info"
     
     show_system_diagnostic
     
@@ -320,19 +323,20 @@ main() {
     install_chromium
     verify_installations
     
-    # Directory check
+    # Directory check and permissions setup
     tars_say "Verifying project structure..." "info"
     if [ ! -d "src" ]; then
         tars_say "Critical error: 'src' directory not found. Installation cannot proceed." "error"
         exit 1
     fi
-    
-    # Set permissions on src BEFORE entering it
-    tars_say "Setting directory permissions..." "info"
-    sudo chown -R $(whoami):$(whoami) src/ > /dev/null 2>&1
-    chmod -R 755 src/ > /dev/null 2>&1
-    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} src/ directory is now fully writable"
     echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} Project directory confirmed: ${WHITE}src/${NC}\n"
+    
+    # Set permissions on ENTIRE project directory (same commands that worked manually)
+    tars_say "Setting project permissions..." "info"
+    sudo chown -R $(whoami):$(whoami) . > /dev/null 2>&1
+    chmod -R 755 src/ > /dev/null 2>&1
+    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} Ownership set to: ${WHITE}$(whoami)${NC}"
+    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} All src/ directories are now writable (755)\n"
     
     cd src
     
@@ -351,22 +355,12 @@ main() {
     fi
     
     # Permissions
-    tars_say "Configuring file permissions..." "info"
-    sudo chown -R $(id -u):$(id -g) .venv/ > /dev/null 2>&1 &
-    spin_loader $! "Setting ownership permissions"
-    echo ""
-    
-    # Ensure all src directories are writable
-    tars_say "Setting write permissions for all TARS directories..." "info"
+    tars_say "Configuring virtual environment permissions..." "info"
     cd ..
-    sudo chown -R $(whoami):$(whoami) src/ > /dev/null 2>&1 &
-    spin_loader $! "Setting directory ownership"
-    chmod -R u+w src/ > /dev/null 2>&1 &
-    spin_loader $! "Enabling write permissions for all directories"
-    find src/ -type d -exec chmod 755 {} \; > /dev/null 2>&1 &
-    spin_loader $! "Configuring directory access permissions"
-    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} All directories in src/ are now writable\n"
+    sudo chown -R $(whoami):$(whoami) src/.venv/ > /dev/null 2>&1 &
+    spin_loader $! "Setting venv ownership"
     cd src
+    echo ""
     
     # Clean system packages
     tars_say "Removing conflicting system packages..." "info"
@@ -418,31 +412,22 @@ main() {
     export DISPLAY=:0
     echo -e "${CYAN}|${NC}  Display configuration: ${WHITE}$DISPLAY${NC}\n"
     
-    # Final permissions check - make entire src/ writable
-    tars_say "Final permissions verification..." "info"
+    # Final verification
+    tars_say "Final system verification..." "info"
     cd ..
     
-    # Set ownership recursively for everything
+    # One more time to be absolutely sure
     sudo chown -R $(whoami):$(whoami) . > /dev/null 2>&1
+    chmod -R 755 src/ > /dev/null 2>&1
     
-    # Make src/ directory itself writable (critical for creating new subdirectories)
-    chmod 755 src/ > /dev/null 2>&1
-    
-    # Make all existing directories writable
-    find src/ -type d -exec chmod 755 {} \; > /dev/null 2>&1
-    
-    # Make all files readable/writable by owner
-    find src/ -type f -exec chmod 644 {} \; > /dev/null 2>&1
-    
-    # Verify src/ is writable by testing
+    # Verify it worked
     if [ -w "src/" ]; then
-        echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} src/ is writable - new directories can be created"
+        echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} src/ is writable - can create new directories"
     else
-        echo -e "${CYAN}|${NC}  ${RED}[X]${NC} WARNING: src/ may not be writable"
+        echo -e "${CYAN}|${NC}  ${YELLOW}[!]${NC} WARNING: src/ permissions may need manual fix"
+        echo -e "${CYAN}|${NC}  ${YELLOW}Run:${NC} sudo chown -R \$(whoami):\$(whoami) ."
     fi
-    
-    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} All permissions verified"
-    echo -e "${CYAN}|${NC}  Owner: ${WHITE}$(whoami)${NC}, Permissions: ${WHITE}755${NC}\n"
+    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} All systems verified\n"
     cd src
     
     # Success message
@@ -464,8 +449,14 @@ main() {
 EOF
     echo -e "${NC}"
     
+    # Reset terminal to normal state
+    tput sgr0 2>/dev/null || echo -e "\033[0m"
+    
     sleep 2
 }
 
 # Execute main installation
 main
+
+# Final terminal reset
+tput sgr0 2>/dev/null || echo -e "\033[0m"
