@@ -146,7 +146,7 @@ enabled = True
 [UI]
 UI_enabled = True
 #Enable or Disable the visuals
-UI_template = "ui_layout_DEFAULT.json"
+UI_template = ui_layout_DEFAULT.json
 #determine which UI layout you want to us
 maximize_console = False
 # start with the console using all the screen
