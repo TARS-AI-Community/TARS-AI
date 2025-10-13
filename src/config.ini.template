@@ -7,12 +7,14 @@ voicemovement = False
 #Enable or disable movement via voice control
 
 [STT] # Speech-to-Text configuration
+language = english
+# spoken language, if not using english, use stt_processor = openai
 wake_word = hey tar
 # Wake word for activating the system
 sensitivity = 8
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection. 
 stt_processor = fastrtc
-#vosk, faster-whisper, silero, fastrtc, or external
+#vosk, faster-whisper, silero, fastrtc, openai (for other languages than english) or external
 external_url = http://192.168.2.57:5678
 # URL for the STT server (if enabled)
 whisper_model = tiny
@@ -37,6 +39,8 @@ user_name = Joe
 # Name of the user interacting with the character
 user_details = Species: Human. Gender: Male.
 # Additional user details for context
+responses = ["Oh! You called?", "Took you long enough. Yes?", "Finally!", "Oh? Did you need me?", "Anything you need just ask.", "O yea, Now, what do you need?", "You have my full attention.", "You rang?", "hum yea?", "Finally, I was about to lose my mind."]
+# what tars replies after detecting the wakeword
 
 [LLM] # Large Language Model configuration (OpenAI, Tabby, Ooba, or LOCAL)
 llm_backend = openai
@@ -87,6 +91,7 @@ ttsoption = piper
 # Onboard Options: espeak, piper, silero
 # External SelfHosted: alltalk
 # Externally Hosted: azure, elevenlabs, openai
+# for other languages than english, use elevenlabs or openai
 azure_region = eastus
 # Azure region for Azure TTS (e.g., eastus)
 ttsurl = http://192.168.2.57:7852

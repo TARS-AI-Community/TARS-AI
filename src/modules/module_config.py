@@ -154,6 +154,7 @@ def load_config():
             "voicemovement": config['CONTROLS']['voicemovement'],         
         },
         "STT": {
+            "language" : config['STT']['language'],
             "wake_word": config['STT']['wake_word'],
             "sensitivity": config['STT']['sensitivity'],
             "stt_processor": config['STT']['stt_processor'],
@@ -172,6 +173,7 @@ def load_config():
             "user_name": config['CHAR']['user_name'],
             "user_details": config['CHAR']['user_details'],
             "traits": persona_traits,  # Include the traits from persona.ini
+            "responses": config['CHAR']['responses'],
         },
         "LLM": {
             "llm_backend": config['LLM']['llm_backend'],

@@ -1,8 +1,5 @@
-# modules/module_openai-tts.py
-
 import io
 import re
-import asyncio
 import openai
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config
@@ -12,9 +9,6 @@ openai.api_key = CONFIG["TTS"]["openai_api_key"]
 VOICE = CONFIG["TTS"]["openai_voice"]
 
 async def text_to_speech_with_pipelining_openai(text):
-    """
-    Converts text to speech using OpenAI's TTS and streams audio chunks.
-    """
     chunks = re.split(r'(?<=\.)\s+', text)
 
     for chunk in chunks:
@@ -23,7 +17,7 @@ async def text_to_speech_with_pipelining_openai(text):
                 continue
 
             response = openai.audio.speech.create(
-                model="tts-1",  # or "tts-1-hd" if desired
+                model="tts-1",
                 voice=VOICE,
                 input=chunk.strip()
             )
