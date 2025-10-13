@@ -32,6 +32,7 @@ from pocketsphinx import LiveSpeech
 from faster_whisper import WhisperModel
 import pvporcupine
 from pvrecorder import PvRecorder
+from openai import OpenAI
 import requests
 
 from modules.module_messageQue import queue_message
@@ -49,18 +50,27 @@ class STTManager:
     Manages Speech-to-Text processing for TARS-AI.
     """
 
-    WAKE_WORD_RESPONSES = [
-        "Oh! You called?",
-        "Took you long enough. Yes?",
-        "Finally!",
-        "Oh? Did you need me?",
-        "Anything you need just ask.",
-        "O yea, Now, what do you need?",
-        "You have my full attention.",
-        "You rang?",
-        "hum yea?",
-        "Finally, I was about to lose my mind.",
-    ]
+    # Load wake word responses from config
+    try:
+        responses_config = CONFIG["CHAR"]['responses']
+        queue_message(responses_config)
+        if responses_config:
+            WAKE_WORD_RESPONSES = json.loads(responses_config)
+        else:
+            # Fallback defaults
+            WAKE_WORD_RESPONSES = [
+                "Oh! You called?",
+                "Took you long enough. Yes?",
+                "Finally!",
+            ]
+    except (json.JSONDecodeError, Exception) as e:
+        queue_message(f"WARNING: Failed to load wake word responses from config: {e}. Using defaults.")
+        WAKE_WORD_RESPONSES = [
+                "Oh! You called?",
+                "Took you long enough. Yes?",
+                "Finally!",
+        ]
+
 
     def __init__(self, config, shutdown_event: threading.Event, ui_manager, amp_gain: float = 4.0):
         """
@@ -319,6 +329,8 @@ class STTManager:
                 result = self._transcribe_with_server()
             elif processor == "vosk":
                 result = self._transcribe_with_vosk()
+            elif processor == "openai":
+                result = self._transcribe_with_openAi()
             else:
                 queue_message(f"WARNING: Unknown STT processor '{processor}', falling back to FastRTC")
                 result = self._transcribe_with_fastrtc()
@@ -406,6 +418,84 @@ class STTManager:
                         self.utterance_callback(result)
                     return result
         return None
+    
+    def _transcribe_with_openAi(self):
+        """Transcribe and translate audio using OpenAI's Whisper API."""
+        
+        language = CONFIG['STT']['language']
+        client = OpenAI(api_key=CONFIG["TTS"]["openai_api_key"])
+        
+        detected_speech = False
+        silent_frames = 0
+        audio_buffer = []  # Store audio chunks
+
+        with sd.InputStream(samplerate=self.SAMPLE_RATE,
+                            channels=1, dtype="int16",
+                            blocksize=4000, latency='high') as stream:
+            for _ in range(self.MAX_RECORDING_FRAMES):  # Limit recording duration
+                data, _ = stream.read(4000)
+                
+                is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(
+                    data, detected_speech, silent_frames
+                )
+                
+                if is_silence:
+                    if not detected_speech:
+                        return None
+                    break
+                
+                # Amplify and store audio data
+                data = self.amplify_audio(data)
+                audio_buffer.append(data)
+        
+        if not audio_buffer:
+            return None
+        
+        # Combine all audio chunks
+        audio_data = np.concatenate(audio_buffer)
+        
+        # Save to temporary WAV file (OpenAI requires a file)
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
+            with wave.open(temp_audio.name, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(self.SAMPLE_RATE)
+                wf.writeframes(audio_data.tobytes())
+            
+            # Transcribe with OpenAI Whisper
+            try:
+                with open(temp_audio.name, 'rb') as audio_file:
+                    transcription = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        response_format="text"
+                    )
+            finally:
+                # Clean up temp file
+                os.unlink(temp_audio.name)
+        
+        # Translate to target language if not English
+        if language and language.lower() not in ["english", "anglais"]:
+            translation = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": f"Translate the following text to {language}. Only provide the translation, nothing else."},
+                    {"role": "user", "content": transcription}
+                ]
+            )
+            result_text = translation.choices[0].message.content
+        else:
+            result_text = transcription
+        
+        # Format result to match your existing format
+        formatted_result = {"text": result_text}
+        
+        # Call utterance callback if it exists
+        if self.utterance_callback:
+            self.utterance_callback(json.dumps(formatted_result))
+        
+        return formatted_result
 
     def _transcribe_with_faster_whisper(self):
         """Transcribe audio using Faster-Whisper."""

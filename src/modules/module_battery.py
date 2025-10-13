@@ -67,11 +67,11 @@ class BatteryModule:
                 self.normalized_percentage = self.normalize_percentage(self.battery_percentage)
                 
                 # Print the battery percentage every time it drops by 5%
-                if self.last_printed_percentage is None or self.battery_percentage <= self.last_printed_percentage - 5:
+                if self.last_printed_percentage is None or self.battery_percentage <= self.last_printed_percentage - 20:
                     print(f"Battery percentage: {self.battery_percentage}%")
                     self.last_printed_percentage = self.battery_percentage
                 
-                time.sleep(0.5)
+                time.sleep(3)
 
             except Exception as e:
                 print(f"Battery monitoring error: {e}")
