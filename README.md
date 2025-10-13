@@ -13,21 +13,20 @@
     <a href="https://www.tiktok.com/@tars.ai.py">
         <img src="https://img.shields.io/badge/TikTok-black?style=flat-square&logo=tiktok&logoColor=white" alt="TikTok" align="center" />   
     </a>
-    <a href="https://docs-tars-ai.vercel.app">
+    <a href="https://github.com/TARS-AI-Community/TARS-AI/wiki/HOME-%E2%80%90-TARS%E2%80%90AI-Wiki">
         <img src="https://img.shields.io/badge/Docs-grey?style=flat-square&logo=readthedocs&logoColor=white" alt="Documentation" align="center" />
     </a>
 
 </p>
 
-<p align="center"><a href="https://github.com/pyrater/TARS-AI"><img width=90% alt="" src="/media/tars-banner.png" /></a></p>
+<p align="center"><a href="https://github.com/TARS-AI-Community/TARS-AI"><img width=90% alt="" src="/blob/V2/media/tars-banner.png" /></a></p>
 
 <p align="center">A recreation of the robot TARS from Interstellar, featuring AI capabilities.</p>
 
 ## To start building TARS-AI
-- See our documentation for more information: [docs-tars-ai.vercel.app](https://docs-tars-ai.vercel.app)
+- See our documentation for more information: [TARS-AI Wiki](https://github.com/TARS-AI-Community/TARS-AI/wiki/HOME-%E2%80%90-TARS%E2%80%90AI-Wiki)
 
 ## To start contributing to TARS-AI
-- See our contributing guidelines: [docs-tars-ai.vercel.app/contribute](https://docs-tars-ai.vercel.app/contribute)
 - Join our Discord server: [discord.gg/AmE2Gv9EUt](https://discord.gg/AmE2Gv9EUt)
 
 ## License
@@ -36,5 +35,5 @@ TARS-AI is licensed under the [CC-BY-NC License](./LICENSE). See the [License Pa
 
 ## Attribution 
 
-As we continue to build and expand upon the TARS project, please review the guidelines for attribution and best practices when sharing or publishing work related to the TARS project [Attribution Page](https://github.com/pyrater/TARS-AI/blob/main/ATTRIBUTION.md)
+As we continue to build and expand upon the TARS project, please review the guidelines for attribution and best practices when sharing or publishing work related to the TARS project [Attribution Page](https://github.com/TARS-AI-Community/TARS-AI/blob/V2/ATTRIBUTION.md)
 
