@@ -19,7 +19,7 @@
 
 </p>
 
-<p align="center"><a href="https://github.com/TARS-AI-Community/TARS-AI"><img width=90% alt="" src="/V2/media/tars-banner.png" /></a></p>
+<p align="center"><a href="https://github.com/TARS-AI-Community/TARS-AI"><img width=90% alt="" src="https://github.com/TARS-AI-Community/TARS-AI/blob/V2/media/tars-banner.png" /></a></p>
 
 <p align="center">A recreation of the robot TARS from Interstellar, featuring AI capabilities.</p>
 
@@ -36,5 +36,6 @@ TARS-AI is licensed under the [CC-BY-NC License](./LICENSE). See the [License Pa
 ## Attribution 
 
 As we continue to build and expand upon the TARS project, please review the guidelines for attribution and best practices when sharing or publishing work related to the TARS project [Attribution Page](https://github.com/TARS-AI-Community/TARS-AI/blob/V2/ATTRIBUTION.md)
+
 
 
