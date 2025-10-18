@@ -4,20 +4,18 @@
 
 set -e  # Exit on any error
 
-# Trap to reset terminal on exit
-trap 'tput sgr0 2>/dev/null || echo -e "\033[0m"' EXIT
-
-# Color codes for futuristic display
-CYAN='\033[0;36m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-WHITE='\033[1;37m'
-GRAY='\033[0;90m'
-NC='\033[0m' # No Color
-BOLD='\033[1m'
+# Detect the actual user (even if run with sudo)
+if [ -n "$SUDO_USER" ]; then
+    ACTUAL_USER="$SUDO_USER"
+    echo ""
+    echo "+================================================================+"
+    echo "| NOTICE: Script run with sudo - will set ownership to: $SUDO_USER"
+    echo "+================================================================+"
+    echo ""
+    sleep 2
+else
+    ACTUAL_USER="$(whoami)"
+fi
 
 # Animation delay
 DELAY=0.02
@@ -25,7 +23,6 @@ DELAY=0.02
 # TARS ASCII Art
 show_tars_boot() {
     clear
-    echo -e "${CYAN}"
     cat << "EOF"
     +=============================================+
     |                                             |
@@ -44,7 +41,6 @@ show_tars_boot() {
     |                                             |
     +=============================================+
 EOF
-    echo -e "${NC}"
     sleep 2
 }
 
@@ -55,24 +51,24 @@ tars_say() {
     
     case $type in
         "info")
-            echo -e "${CYAN}+=== TARS ====================================================+${NC}"
-            echo -e "${CYAN}|${NC} ${WHITE}${message}${NC}"
-            echo -e "${CYAN}+=============================================================+${NC}"
+            echo "+=== TARS ====================================================+"
+            echo "| ${message}"
+            echo "+=============================================================+"
             ;;
         "success")
-            echo -e "${GREEN}+=== TARS ====================================================+${NC}"
-            echo -e "${GREEN}|${NC} ${WHITE}[OK] ${message}${NC}"
-            echo -e "${GREEN}+=============================================================+${NC}"
+            echo "+=== TARS ====================================================+"
+            echo "| [OK] ${message}"
+            echo "+=============================================================+"
             ;;
         "warning")
-            echo -e "${YELLOW}+=== TARS ====================================================+${NC}"
-            echo -e "${YELLOW}|${NC} ${WHITE}[!] ${message}${NC}"
-            echo -e "${YELLOW}+=============================================================+${NC}"
+            echo "+=== TARS ====================================================+"
+            echo "| [!] ${message}"
+            echo "+=============================================================+"
             ;;
         "error")
-            echo -e "${RED}+=== TARS ====================================================+${NC}"
-            echo -e "${RED}|${NC} ${WHITE}[X] ${message}${NC}"
-            echo -e "${RED}+=============================================================+${NC}"
+            echo "+=== TARS ====================================================+"
+            echo "| [X] ${message}"
+            echo "+=============================================================+"
             ;;
     esac
     echo ""
@@ -80,13 +76,13 @@ tars_say() {
 
 # System diagnostic display
 show_system_diagnostic() {
-    echo -e "${CYAN}+===============================================================+${NC}"
-    echo -e "${CYAN}|${NC}           ${BOLD}SYSTEM DIAGNOSTIC INITIATED${NC}                  ${CYAN}|${NC}"
-    echo -e "${CYAN}+===============================================================+${NC}"
-    echo -e "${CYAN}|${NC} CPU Architecture: ${GREEN}$(uname -m)${NC}"
-    echo -e "${CYAN}|${NC} Kernel Version:   ${GREEN}$(uname -r)${NC}"
-    echo -e "${CYAN}|${NC} Hostname:         ${GREEN}$(hostname)${NC}"
-    echo -e "${CYAN}+===============================================================+${NC}"
+    echo "+===============================================================+"
+    echo "|           SYSTEM DIAGNOSTIC INITIATED                         |"
+    echo "+===============================================================+"
+    echo "| CPU Architecture: $(uname -m)"
+    echo "| Kernel Version:   $(uname -r)"
+    echo "| Hostname:         $(hostname)"
+    echo "+===============================================================+"
     echo ""
 }
 
@@ -97,13 +93,13 @@ spin_loader() {
     local spin='|/-\'
     local i=0
     
-    echo -ne "${CYAN}|${NC}  "
+    echo -ne "|  "
     while kill -0 $pid 2>/dev/null; do
         i=$(( (i+1) %4 ))
-        echo -ne "\r${CYAN}|${NC}  ${YELLOW}${spin:$i:1}${NC} ${WHITE}${message}${NC}"
+        echo -ne "\r|  ${spin:$i:1} ${message}"
         sleep .1
     done
-    echo -ne "\r${CYAN}|${NC}  ${GREEN}[OK]${NC} ${WHITE}${message}${NC}\n"
+    echo -ne "\r|  [OK] ${message}\n"
 }
 
 # Function to retry pip install
@@ -115,9 +111,9 @@ retry_pip_install() {
     tars_say "Initiating Python dependency installation protocol..." "info"
     
     while true; do
-        echo -e "${CYAN}+===============================================================+${NC}"
-        echo -e "${CYAN}|${NC} Attempt: ${WHITE}$n${NC}/${WHITE}$max${NC}"
-        echo -e "${CYAN}+===============================================================+${NC}"
+        echo "+===============================================================+"
+        echo "| Attempt: $n/$max"
+        echo "+===============================================================+"
         
         if pip install -r requirements.txt; then
             tars_say "Python dependencies synchronized successfully." "success"
@@ -126,7 +122,7 @@ retry_pip_install() {
             if [[ $n -lt $max ]]; then
                 tars_say "Connection interference detected. Retrying in $delay seconds..." "warning"
                 for ((i=delay; i>0; i--)); do
-                    echo -ne "\r${CYAN}|${NC}  ${YELLOW}>>>${NC} Retry countdown: ${WHITE}$i${NC} seconds... "
+                    echo -ne "\r|  >>> Retry countdown: $i seconds... "
                     sleep 1
                 done
                 echo ""
@@ -148,13 +144,13 @@ detect_os_version() {
         OS_VERSION_ID=$VERSION_ID
         OS_VERSION_CODENAME=$VERSION_CODENAME
         
-        echo -e "${CYAN}+===============================================================+${NC}"
-        echo -e "${CYAN}|${NC} ${BOLD}OPERATING SYSTEM DETECTED${NC}"
-        echo -e "${CYAN}+===============================================================+${NC}"
-        echo -e "${CYAN}|${NC} System:   ${GREEN}$PRETTY_NAME${NC}"
-        echo -e "${CYAN}|${NC} Codename: ${GREEN}$VERSION_CODENAME${NC}"
-        echo -e "${CYAN}|${NC} Version:  ${GREEN}$VERSION_ID${NC}"
-        echo -e "${CYAN}+===============================================================+${NC}"
+        echo "+===============================================================+"
+        echo "| OPERATING SYSTEM DETECTED"
+        echo "+===============================================================+"
+        echo "| System:   $PRETTY_NAME"
+        echo "| Codename: $VERSION_CODENAME"
+        echo "| Version:  $VERSION_ID"
+        echo "+===============================================================+"
         echo ""
         sleep 1
     else
@@ -167,17 +163,17 @@ detect_os_version() {
 install_chromium() {
     tars_say "Initiating chromium installation sequence..." "info"
     
-    echo -e "${CYAN}+===============================================================+${NC}"
-    echo -e "${CYAN}|${NC} ${BOLD}CHROMIUM INSTALLATION PROTOCOL${NC}"
-    echo -e "${CYAN}+===============================================================+${NC}"
+    echo "+===============================================================+"
+    echo "| CHROMIUM INSTALLATION PROTOCOL"
+    echo "+===============================================================+"
     
     if apt-cache show chromium &>/dev/null; then
-        echo -e "${CYAN}|${NC}  Package detected: ${GREEN}chromium${NC} (Latest variant)"
+        echo "|  Package detected: chromium (Latest variant)"
         sudo apt install -y chromium sox libsox-fmt-all portaudio19-dev espeak-ng --fix-missing > /dev/null 2>&1 &
         spin_loader $! "Installing chromium runtime environment"
         CHROMIUM_CMD="chromium"
     elif apt-cache show chromium-browser &>/dev/null; then
-        echo -e "${CYAN}|${NC}  Package detected: ${GREEN}chromium-browser${NC} (Legacy variant)"
+        echo "|  Package detected: chromium-browser (Legacy variant)"
         sudo apt install -y chromium-browser sox libsox-fmt-all portaudio19-dev espeak-ng --fix-missing > /dev/null 2>&1 &
         spin_loader $! "Installing chromium-browser runtime environment"
         CHROMIUM_CMD="chromium-browser"
@@ -198,23 +194,23 @@ install_chromium() {
 install_chromedriver() {
     tars_say "ChromeDriver installation protocol engaged..." "info"
     
-    echo -e "${CYAN}+===============================================================+${NC}"
-    echo -e "${CYAN}|${NC} ${BOLD}CHROMEDRIVER CONFIGURATION${NC}"
-    echo -e "${CYAN}+===============================================================+${NC}"
+    echo "+===============================================================+"
+    echo "| CHROMEDRIVER CONFIGURATION"
+    echo "+===============================================================+"
     
     # Check if already installed
     if command -v chromedriver &>/dev/null; then
-        echo -e "${CYAN}|${NC} Status: ${GREEN}Already present in system${NC}"
+        echo "| Status: Already present in system"
         VERSION=$(chromedriver --version 2>/dev/null | head -1)
-        echo -e "${CYAN}|${NC} Version: ${WHITE}$VERSION${NC}"
-        echo -e "${CYAN}+===============================================================+${NC}"
+        echo "| Version: $VERSION"
+        echo "+===============================================================+"
         return 0
     fi
     
     # Try new package name first (chromium-driver)
     if apt-cache show chromium-driver &>/dev/null; then
-        echo -e "${CYAN}|${NC} Method: ${WHITE}Package Manager${NC} (chromium-driver)"
-        echo -e "${CYAN}+===============================================================+${NC}"
+        echo "| Method: Package Manager (chromium-driver)"
+        echo "+===============================================================+"
         sudo apt install -y chromium-driver --fix-missing > /dev/null 2>&1 &
         spin_loader $! "Installing chromium-driver from repository"
         
@@ -228,8 +224,8 @@ install_chromedriver() {
     
     # Try old package name (chromium-chromedriver)
     if apt-cache show chromium-chromedriver &>/dev/null; then
-        echo -e "${CYAN}|${NC} Method: ${WHITE}Package Manager${NC} (chromium-chromedriver)"
-        echo -e "${CYAN}+===============================================================+${NC}"
+        echo "| Method: Package Manager (chromium-chromedriver)"
+        echo "+===============================================================+"
         sudo apt install -y chromium-chromedriver --fix-missing > /dev/null 2>&1 &
         spin_loader $! "Installing chromium-chromedriver from repository"
         
@@ -242,26 +238,26 @@ install_chromedriver() {
     fi
     
     # If we get here, ChromeDriver is not available via package manager
-    echo -e "${CYAN}|${NC} Method: ${YELLOW}Not Available${NC}"
-    echo -e "${CYAN}+===============================================================+${NC}"
+    echo "| Method: Not Available"
+    echo "+===============================================================+"
     
     CHROMIUM_VERSION=$($CHROMIUM_CMD --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+\.\d+' | head -1 || echo "")
     
     if [ -n "$CHROMIUM_VERSION" ]; then
         MAJOR_VERSION=$(echo $CHROMIUM_VERSION | cut -d. -f1)
-        echo -e "${CYAN}|${NC}  Chromium Version: ${WHITE}$CHROMIUM_VERSION${NC} (Major: ${WHITE}$MAJOR_VERSION${NC})"
+        echo "|  Chromium Version: $CHROMIUM_VERSION (Major: $MAJOR_VERSION)"
     fi
     
     # Detect architecture
     ARCH=$(uname -m)
-    echo -e "${CYAN}|${NC}  Architecture: ${WHITE}$ARCH${NC}"
+    echo "|  Architecture: $ARCH"
     
-    echo -e "${CYAN}|${NC}  "
-    echo -e "${CYAN}|${NC}  ${YELLOW}ChromeDriver Status: OPTIONAL${NC}"
-    echo -e "${CYAN}|${NC}  - Only needed for Selenium/web browser automation"
-    echo -e "${CYAN}|${NC}  - Most TARS functions work without it"
-    echo -e "${CYAN}|${NC}  - If needed, install manually or use 'chromium --headless'"
-    echo -e "${CYAN}|${NC}  "
+    echo "|  "
+    echo "|  ChromeDriver Status: OPTIONAL"
+    echo "|  - Only needed for Selenium/web browser automation"
+    echo "|  - Most TARS functions work without it"
+    echo "|  - If needed, install manually or use 'chromium --headless'"
+    echo "|  "
     echo ""
 }
 
@@ -269,35 +265,35 @@ install_chromedriver() {
 verify_installations() {
     tars_say "Running system verification protocols..." "info"
     
-    echo -e "${CYAN}+===============================================================+${NC}"
-    echo -e "${CYAN}|${NC} ${BOLD}INSTALLATION VERIFICATION${NC}"
-    echo -e "${CYAN}+===============================================================+${NC}"
+    echo "+===============================================================+"
+    echo "| INSTALLATION VERIFICATION"
+    echo "+===============================================================+"
     
     if command -v chromium &>/dev/null; then
         VERSION=$(chromium --version 2>/dev/null)
-        echo -e "${CYAN}|${NC} ${GREEN}[OK]${NC} Chromium:     ${WHITE}$VERSION${NC}"
+        echo "| [OK] Chromium:     $VERSION"
     elif command -v chromium-browser &>/dev/null; then
         VERSION=$(chromium-browser --version 2>/dev/null)
-        echo -e "${CYAN}|${NC} ${GREEN}[OK]${NC} Chromium:     ${WHITE}$VERSION${NC}"
+        echo "| [OK] Chromium:     $VERSION"
     else
-        echo -e "${CYAN}|${NC} ${RED}[X]${NC} Chromium:     ${RED}Not found${NC}"
+        echo "| [X] Chromium:     Not found"
     fi
     
     if command -v chromedriver &>/dev/null; then
         VERSION=$(chromedriver --version 2>/dev/null | head -1)
-        echo -e "${CYAN}|${NC} ${GREEN}[OK]${NC} ChromeDriver: ${WHITE}$VERSION${NC}"
+        echo "| [OK] ChromeDriver: $VERSION"
     else
-        echo -e "${CYAN}|${NC} ${GRAY}[--]${NC} ChromeDriver: ${GRAY}Not installed (optional)${NC}"
+        echo "| [--] ChromeDriver: Not installed (optional)"
     fi
     
     if command -v sox &>/dev/null; then
         VERSION=$(sox --version 2>/dev/null | head -1)
-        echo -e "${CYAN}|${NC} ${GREEN}[OK]${NC} SoX:          ${WHITE}$VERSION${NC}"
+        echo "| [OK] SoX:          $VERSION"
     else
-        echo -e "${CYAN}|${NC} ${RED}[X]${NC} SoX:          ${RED}Not found${NC}"
+        echo "| [X] SoX:          Not found"
     fi
     
-    echo -e "${CYAN}+===============================================================+${NC}"
+    echo "+===============================================================+"
     echo ""
     sleep 1
 }
@@ -329,14 +325,26 @@ main() {
         tars_say "Critical error: 'src' directory not found. Installation cannot proceed." "error"
         exit 1
     fi
-    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} Project directory confirmed: ${WHITE}src/${NC}\n"
+    echo "|  [OK] Project directory confirmed: src/"
+    echo ""
     
-    # Set permissions on ENTIRE project directory (same commands that worked manually)
+    # Set permissions on ENTIRE project directory - AGGRESSIVE
     tars_say "Setting project permissions..." "info"
-    sudo chown -R $(whoami):$(whoami) . > /dev/null 2>&1
-    chmod -R 755 src/ > /dev/null 2>&1
-    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} Ownership set to: ${WHITE}$(whoami)${NC}"
-    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} All src/ directories are now writable (755)\n"
+    # Remove any restrictive attributes
+    sudo chattr -R -i . 2>/dev/null || true
+    # Set ownership on everything to the actual user (not root)
+    sudo chown -R $ACTUAL_USER:$ACTUAL_USER .
+    # Set permissions - 775 is more permissive
+    chmod -R 775 .
+    echo "|  [OK] Ownership set to: $ACTUAL_USER"
+    echo "|  [OK] All directories now writable (775)"
+    
+    # Specifically ensure critical subdirectories exist and are writable
+    mkdir -p src/modules src/logs src/data 2>/dev/null || true
+    sudo chown -R $ACTUAL_USER:$ACTUAL_USER src/modules src/logs src/data 2>/dev/null || true
+    chmod -R 775 src/modules src/logs src/data 2>/dev/null || true
+    echo "|  [OK] Critical subdirectories verified"
+    echo ""
     
     cd src
     
@@ -348,7 +356,8 @@ main() {
     
     if [ -f ".venv/bin/activate" ]; then
         source .venv/bin/activate
-        echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} Virtual environment activated\n"
+        echo "|  [OK] Virtual environment activated"
+        echo ""
     else
         tars_say "Virtual environment activation failed. Critical system error." "error"
         exit 1
@@ -357,15 +366,17 @@ main() {
     # Permissions
     tars_say "Configuring virtual environment permissions..." "info"
     cd ..
-    sudo chown -R $(whoami):$(whoami) src/.venv/ > /dev/null 2>&1 &
-    spin_loader $! "Setting venv ownership"
+    sudo chown -R $ACTUAL_USER:$ACTUAL_USER src/.venv/
+    chmod -R 775 src/.venv/
+    echo "|  [OK] Virtual environment permissions set (775)"
     cd src
     echo ""
     
     # Clean system packages
     tars_say "Removing conflicting system packages..." "info"
     sudo apt remove -y python3-simplejpeg python3-picamera2 > /dev/null 2>&1 || true
-    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} System package conflicts resolved\n"
+    echo "|  [OK] System package conflicts resolved"
+    echo ""
     
     # Pip upgrade
     tars_say "Upgrading package installer..." "info"
@@ -391,9 +402,9 @@ main() {
         cp config.ini.template config.ini
     fi
     # Always set proper permissions (fixes read-only issues)
-    chown $(whoami):$(whoami) config.ini 2>/dev/null || sudo chown $(whoami):$(whoami) config.ini
+    sudo chown $ACTUAL_USER:$ACTUAL_USER config.ini 2>/dev/null
     chmod 664 config.ini
-    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} config.ini (writable, run: nano config.ini)"
+    echo "|  [OK] config.ini (writable, run: nano config.ini)"
     
     # Create .env in parent directory
     cd ..
@@ -401,37 +412,62 @@ main() {
         cp .env.template .env
     fi
     # Always set proper permissions (fixes read-only issues)
-    chown $(whoami):$(whoami) .env 2>/dev/null || sudo chown $(whoami):$(whoami) .env
+    sudo chown $ACTUAL_USER:$ACTUAL_USER .env 2>/dev/null
     chmod 664 .env
-    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} .env (writable, run: nano .env)"
-    echo -e "${CYAN}|${NC}  ${YELLOW}Note:${NC} .env is hidden (starts with .) - use 'ls -la' to see it"
+    echo "|  [OK] .env (writable, run: nano .env)"
+    echo "|  Note: .env is hidden (starts with .) - use 'ls -la' to see it"
+    
+    # One more permission sweep on the entire directory
+    sudo chown -R $ACTUAL_USER:$ACTUAL_USER . 2>/dev/null || true
+    chmod -R 775 . 2>/dev/null || true
+    
     cd src
     echo ""
     
     # Display setup
     export DISPLAY=:0
-    echo -e "${CYAN}|${NC}  Display configuration: ${WHITE}$DISPLAY${NC}\n"
+    echo "|  Display configuration: $DISPLAY"
+    echo ""
     
     # Final verification
     tars_say "Final system verification..." "info"
     cd ..
     
-    # One more time to be absolutely sure
-    sudo chown -R $(whoami):$(whoami) . > /dev/null 2>&1
-    chmod -R 755 src/ > /dev/null 2>&1
+    # Final aggressive permission setting
+    sudo chattr -R -i . 2>/dev/null || true
+    sudo chown -R $ACTUAL_USER:$ACTUAL_USER .
+    chmod -R 775 .
     
-    # Verify it worked
-    if [ -w "src/" ]; then
-        echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} src/ is writable - can create new directories"
+    # Test that we can actually create files
+    TEST_DIRS=("src/modules" "src/logs" "src/data" "src")
+    ALL_WRITABLE=true
+    
+    for dir in "${TEST_DIRS[@]}"; do
+        if [ -d "$dir" ]; then
+            if sudo -u $ACTUAL_USER touch "$dir/.test_write" 2>/dev/null; then
+                rm "$dir/.test_write"
+                echo "|  [OK] $dir is writable"
+            else
+                echo "|  [X] $dir is NOT writable - manual fix needed"
+                ALL_WRITABLE=false
+            fi
+        fi
+    done
+    
+    if [ "$ALL_WRITABLE" = false ]; then
+        echo "|  "
+        echo "|  [!] WARNING: Some directories are not writable!"
+        echo "|  Run these commands manually:"
+        echo "|      cd ~/TARS-AI"
+        echo "|      sudo chown -R $ACTUAL_USER:$ACTUAL_USER ."
+        echo "|      chmod -R 775 ."
     else
-        echo -e "${CYAN}|${NC}  ${YELLOW}[!]${NC} WARNING: src/ permissions may need manual fix"
-        echo -e "${CYAN}|${NC}  ${YELLOW}Run:${NC} sudo chown -R \$(whoami):\$(whoami) ."
+        echo "|  [OK] All directories verified writable"
     fi
-    echo -e "${CYAN}|${NC}  ${GREEN}[OK]${NC} All systems verified\n"
+    echo ""
     cd src
     
     # Success message
-    echo -e "${GREEN}"
     cat << "EOF"
     +==============================================================+
     |                                                              |
@@ -447,16 +483,20 @@ main() {
     |                                                              |
     +==============================================================+
 EOF
-    echo -e "${NC}"
     
-    # Reset terminal to normal state
-    tput sgr0 2>/dev/null || echo -e "\033[0m"
+    # Final permission lockdown to ensure no issues
+    cd ..
+    sudo chown -R $ACTUAL_USER:$ACTUAL_USER . 2>/dev/null || true
+    chmod -R 775 . 2>/dev/null || true
+    cd src
+    
+    echo ""
+    echo "IMPORTANT: Run your application as user '$ACTUAL_USER' (without sudo)"
+    echo "Enable the virtual environment: source .venv/bin/activate "
+    echo "Start the program: python app.py"
     
     sleep 2
 }
 
 # Execute main installation
 main
-
-# Final terminal reset
-tput sgr0 2>/dev/null || echo -e "\033[0m"
