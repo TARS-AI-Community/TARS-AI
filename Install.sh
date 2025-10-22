@@ -33,12 +33,6 @@ show_tars_boot() {
     |        ██║   ██║  ██║██║  ██║███████║       |
     |        ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝       |
     |                                             |
-    |     TACTICAL AEROSPACE ROBOTICS             |
-    |     SYSTEM INITIALIZATION                   |
-    |                                             |
-    |     [ HUMOR SETTING: 75% ]                  |
-    |     [ HONESTY: 90% ]                        |
-    |                                             |
     +=============================================+
 EOF
     sleep 2

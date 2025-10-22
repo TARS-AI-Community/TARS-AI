@@ -120,7 +120,7 @@ def utterance_callback(message):
         #Print or stream the response
         #queue_message(f"USER: {message_dict['text']}")
         ui_manager.update_data("USER", message_dict['text'], "USER")
-        queue_message(f"USER: {message_dict['text']}", stream=True) 
+        queue_message(f"USER: {message_dict['text']}", stream=False) 
 
         # Check for shutdown command
         if "shutdown pc" in message_dict['text'].lower():
@@ -148,7 +148,7 @@ def utterance_callback(message):
 
         # Stream the AI's reply
         ui_manager.update_data("TARS", reply, "TARS")
-        queue_message(f"TARS: {reply}", stream=True) 
+        queue_message(f"TARS: {reply}", stream=False) 
 
         # Strip special chars so he doesnt say them
         reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-]', '', reply)

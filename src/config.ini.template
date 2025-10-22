@@ -9,7 +9,7 @@ voicemovement = False
 [STT] # Speech-to-Text configuration
 language = english
 # spoken language, if not using english, use stt_processor = openai
-wake_word = hey tar
+wake_word = hey tars
 # Wake word for activating the system
 sensitivity = 8
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection. 
@@ -29,8 +29,8 @@ speechdelay = 20
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
 # Relative path to the Porcupine keyword file
-wake_word_processor = pocketsphinx
-# Options: picovoice, pocketsphinx, fastrtc
+wake_word_processor = atomik
+# Options: picovoice, pocketsphinx, fastrtc, atomik
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS/TARS.json
@@ -149,7 +149,7 @@ negative_prompt = deformed, black and white, disfigured, low contrast, extra lim
 enabled = True
 
 [UI]
-UI_enabled = True
+UI_enabled = False
 #Enable or Disable the visuals
 UI_template = ui_layout_DEFAULT.json
 #determine which UI layout you want to us
@@ -163,7 +163,7 @@ screen_width = 1024
 # Adjust based on your screen resolution
 screen_height = 600
 # Adjust based on your screen resolution
-rotation = 0
+rotation = 270
 # rotation can be 0, 90, 180, 270
 use_camera_module = False
 # enable the camera
