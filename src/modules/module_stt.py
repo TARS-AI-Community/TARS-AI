@@ -38,6 +38,7 @@ import requests
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config
 from modules.module_main import ui_manager
+from modules.module_atomik import WakeWordSystem
 
 CONFIG = load_config()
 
@@ -147,7 +148,9 @@ class STTManager:
                 keyword_paths=[CONFIG["STT"]["picovoice_keyword_path"]]
             )
         elif wake_word_processor == "fastrtc" and not self.fastrtc_model:
-            self._load_fastrtc_model()  # Ensure FastRTC is loaded if used for wake word
+            self._load_fastrtc_model() 
+        elif wake_word_processor == "atomik":
+            self._load_atomik_model() 
 
         if self.config["STT"].get("vad_enabled", False):
             self._load_silero_vad()
@@ -209,6 +212,10 @@ class STTManager:
 
             self.vosk_model = Model(vosk_model_path)
             queue_message(f"INFO: Vosk model loaded successfully.")
+
+    def _load_atomik_model(self):
+        detector = WakeWordSystem(self.WAKE_WORD)
+        detector.createModel()
 
     def _load_fasterwhisper_model(self):
         """Load the Faster-Whisper model for local transcription."""
@@ -674,6 +681,8 @@ class STTManager:
             return self._detect_wake_word_pocketsphinx()
         elif wake_word_processor == "fastrtc":
             return self._detect_wake_word_fastrtc()
+        elif wake_word_processor == "atomik":
+            return self._detect_wake_word_atomik()
         else:
             return self._detect_wake_word_picovoice()
 
@@ -876,6 +885,27 @@ class STTManager:
         #         pass
 
         return False
+    
+
+    def _detect_wake_word_atomik(self) -> bool:
+        detector = WakeWordSystem(self.WAKE_WORD)
+        detector.createModel()
+        if detector.listenForWakeWord():
+            if self.config["STT"].get("use_indicators"):
+                self.play_beep(1200, 0.1, 44100, 0.8)
+                try:
+                    requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
+                except Exception:
+                    pass
+                wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                character_name = os.path.splitext(os.path.basename(
+                    self.config.get("CHAR", {}).get("character_card_path", "TARS")
+                ))[0]
+                queue_message(f"{character_name}: {wake_response}", stream=True)
+                if self.wake_word_callback:
+                    self.wake_word_callback(wake_response)
+                return True
+        
 
     def _init_progress_bar(self):
         """Initialize progress bar settings and functions"""
