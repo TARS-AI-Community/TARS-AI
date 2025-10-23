@@ -1,95 +1,156 @@
+"""
+module_servoctl_v2.py
+Atomikspace
+"""
+
 from __future__ import division
 import time
-import Adafruit_PCA9685
-from multiprocessing import Process, Manager
-from datetime import datetime
+from threading import Thread, Lock
+
+# Modern CircuitPython imports
+import board
+import busio
+from adafruit_pca9685 import PCA9685
 
 from modules.module_messageQue import queue_message
 from module_config import load_config
 
 config = load_config()
 
-# Global speed factor (1.0 = max speed, 0.1 = slowest, must be > 0)
+# Global speed factor
 global_arm_speed = 0.5
 
-# Use a Manager to share the servo_positions dictionary between processes
-manager = Manager()
-servo_positions = manager.dict()
+i2c_lock = Lock()
+servo_positions = {}
 
-try:
-    # Attempt to initialize the PCA9685 using I2C
-    pwm = Adafruit_PCA9685.PCA9685(busnum=1)
-    pwm.set_pwm_freq(50)
-except FileNotFoundError as e:
-    queue_message(f"ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
-    pwm = None  # Fallback if hardware is unavailable
-except Exception as e:
-    queue_message(f"ERROR: Unexpected error during PCA9685 initialization: {e}")
-    pwm = None  # Fallback if hardware is unavailable
+pca = None
+MAX_RETRIES = 3
 
-# Servo Configuration Mapping with Integer Casting
-portMain = int(config["SERVO"]["portMainMin"])
+
+def initialize_pca9685():
+    global pca
+    
+    try:
+        i2c = busio.I2C(board.SCL, board.SDA)
+        pca = PCA9685(i2c, address=0x40)
+        pca.frequency = 50
+        queue_message("LOAD: PCA9685 initialized successfully")
+        return True
+        
+    except OSError as e:
+        if e.errno == 121:
+            queue_message(f"ERROR: I2C Remote I/O error - Check connections and power!")
+        else:
+            queue_message(f"ERROR: I2C error {e.errno}: {e}")
+        return False
+        
+    except Exception as e:
+        queue_message(f"ERROR: Failed to initialize PCA9685: {e}")
+        return False
+
+
+# Initialize once at module load
+if not initialize_pca9685():
+    queue_message("WARNING: PCA9685 initialization failed - check hardware")
+
+# Servo Configuration
 portMainMin = int(config["SERVO"]["portMainMin"])
 portMainMax = int(config["SERVO"]["portMainMax"])
-
-portForarm = int(config["SERVO"]["portForarmMin"])
 portForarmMin = int(config["SERVO"]["portForarmMin"])
 portForarmMax = int(config["SERVO"]["portForarmMax"])
-
-portHand = int(config["SERVO"]["portHandMin"])
 portHandMin = int(config["SERVO"]["portHandMin"])
 portHandMax = int(config["SERVO"]["portHandMax"])
 
-starMain = int(config["SERVO"]["starMainMin"])
 starMainMin = int(config["SERVO"]["starMainMin"])
 starMainMax = int(config["SERVO"]["starMainMax"])
-
-starForarm = int(config["SERVO"]["starForarmMin"])
 starForarmMin = int(config["SERVO"]["starForarmMin"])
 starForarmMax = int(config["SERVO"]["starForarmMax"])
-
-starHand = int(config["SERVO"]["starHandMin"])
 starHandMin = int(config["SERVO"]["starHandMin"])
 starHandMax = int(config["SERVO"]["starHandMax"])
 
-# Center Lift Servo (0) Values
 upHeight = int(config["SERVO"]["upHeight"])
 neutralHeight = int(config["SERVO"]["neutralHeight"])
 downHeight = int(config["SERVO"]["downHeight"])
 
-# Port Drive Servo (1) Values
-perfectPortoffset = int(config["SERVO"]["perfectPortoffset"])  # Offset for fine-tuning
+perfectPortoffset = int(config["SERVO"]["perfectPortoffset"])
 forwardPort = int(config["SERVO"]["forwardPort"]) + perfectPortoffset
 neutralPort = int(config["SERVO"]["neutralPort"]) + perfectPortoffset
 backPort = int(config["SERVO"]["backPort"]) + perfectPortoffset
 
-# Starboard Drive Servo (2) Values
-perfectStaroffset = int(config["SERVO"]["perfectStaroffset"])  # Offset for fine-tuning
+perfectStaroffset = int(config["SERVO"]["perfectStaroffset"])
 forwardStarboard = int(config["SERVO"]["forwardStarboard"]) + perfectStaroffset
 neutralStarboard = int(config["SERVO"]["neutralStarboard"]) + perfectStaroffset
 backStarboard = int(config["SERVO"]["backStarboard"]) + perfectStaroffset
 
 MOVING = False
 
-def initialize_servos():
-    """Ensure all servos start at their minimum positions with speed-controlled movement."""
-    global portMain, portForarm, portHand, starMain, starForarm, starHand
 
-    # Disable all servos momentarily
-    pwm.set_all_pwm(0, 0)  
-    time.sleep(0.1)  # Allow servos to settle
+def pwm_to_duty_cycle(pwm_value):
+    return int((pwm_value / 4095.0) * 65535)
+
+
+def set_servo_pwm(channel, pwm_value):
+    if pca is None:
+        return False
+    
+    duty_cycle = pwm_to_duty_cycle(pwm_value)
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            with i2c_lock:
+                pca.channels[channel].duty_cycle = duty_cycle
+            return True
+            
+        except OSError as e:
+            if e.errno == 121:
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(0.05)  # Small delay before retry
+                    continue
+                else:
+                    queue_message(f"I2C error on channel {channel} after {MAX_RETRIES} attempts")
+            return False
+            
+        except Exception as e:
+            queue_message(f"Error setting PWM on channel {channel}: {e}")
+            return False
+    
+    return False
+
+
+def initialize_servos():
+    if pca is None:
+        queue_message("WARNING: Cannot initialize servos - PCA9685 not available")
+        return
+    
+    try:
+        with i2c_lock:
+            for channel in range(16):
+                pca.channels[channel].duty_cycle = 0
+    except Exception as e:
+        queue_message(f"Error initializing servos: {e}")
+    
+    time.sleep(0.1)
     reset_positions()
-    print("All servos initialized to minimum positions")
+    print("All servos initialized")
+
 
 def disable_all_servos():
+    if pca is None:
+        return
+    
     move_arm(1, 1, 1, 1, 1, 1, 0.4)
     time.sleep(0.2)
     move_legs(50, 50, 50, 0.4)
-    pwm.set_all_pwm(0, 0)
+    
+    try:
+        with i2c_lock:
+            for channel in range(16):
+                pca.channels[channel].duty_cycle = 0
+    except Exception as e:
+        queue_message(f"Error disabling servos: {e}")
+    
     time.sleep(0.2)
-    #for ch in range(16):
-    #    time.sleep(0.1)
-    #    pwm.set_pwm(ch, 0, 0)
+
 
 def reset_positions():  
     move_legs(20, 0, 0, 0.2)  
@@ -99,6 +160,7 @@ def reset_positions():
     move_arm(1, 1, 1, 1, 1, 1, 0.3)
     time.sleep(0.5)
     disable_all_servos()
+
 
 def step_forward():
     global MOVING
@@ -117,6 +179,7 @@ def step_forward():
         disable_all_servos()
         MOVING = False
 
+
 def step_backward():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
@@ -129,6 +192,7 @@ def step_backward():
     move_legs(50, 50, 50, 0.8)
     time.sleep(0.2)
     disable_all_servos()
+
 
 def turn_right():
     move_legs(50, 50, 50, 0.4)
@@ -145,6 +209,7 @@ def turn_right():
     time.sleep(0.2)
     disable_all_servos()
 
+
 def turn_left():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
@@ -159,6 +224,7 @@ def turn_left():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
     disable_all_servos()
+
 
 def right_hi():
     move_legs(50, 50, 50, 0.4)
@@ -185,7 +251,7 @@ def right_hi():
     time.sleep(0.2)
     move_arm(100, 50, 1, 0, 0, 0, 1)
     time.sleep(0.2)
-    move_arm(100, 1, 1, 0, 0, 0,1)
+    move_arm(100, 1, 1, 0, 0, 0, 1)
     time.sleep(0.2)
     move_arm(1, 1, 1, 0, 0, 0, 0.6)
     time.sleep(0.2)
@@ -197,157 +263,51 @@ def right_hi():
     time.sleep(0.2)
     disable_all_servos()
 
+
 def laugh():
-    move_legs(50, 50, 50, 1)
-    time.sleep(0.1)
-    move_legs(1, 50, 50, 1)
-    time.sleep(0.1)
-    move_legs(50, 50, 50, 1)
-    time.sleep(0.1)
-    move_legs(1, 50, 50, 1)
-    time.sleep(0.1)
-    move_legs(50, 50, 50, 1)
-    time.sleep(0.1)
-    move_legs(1, 50, 50, 1)
-    time.sleep(0.1)
-    move_legs(50, 50, 50, 1)
-    time.sleep(0.1)
-    move_legs(1, 50, 50, 1)
-    time.sleep(0.1)
-    move_legs(50, 50, 50, 1)
-    time.sleep(0.1)
-    move_legs(1, 50, 50, 1)
-    time.sleep(0.1)
+    for _ in range(5):
+        move_legs(50, 50, 50, 1)
+        time.sleep(0.1)
+        move_legs(1, 50, 50, 1)
+        time.sleep(0.1)
     move_legs(50, 50, 50, 1)
     time.sleep(0.2)
     disable_all_servos()
+
 
 def swing_legs():
     move_legs(50, 50, 50, 1)
     time.sleep(0.1)
     move_legs(100, 50, 50, 1)
     time.sleep(0.1)
-    move_legs(0, 20, 80, 0.6)
-    time.sleep(0.1)
-    move_legs(0, 80, 20, 0.6)
-    time.sleep(0.1)
-    move_legs(0, 20, 80, 0.6)
-    time.sleep(0.1)
-    move_legs(0, 80, 20, 0.6)
-    time.sleep(0.1)
-    move_legs(0, 20, 80, 0.6)
-    time.sleep(0.1)
-    move_legs(0, 80, 20, 0.6)
-    time.sleep(0.1)
+    for _ in range(3):
+        move_legs(0, 20, 80, 0.6)
+        time.sleep(0.1)
+        move_legs(0, 80, 20, 0.6)
+        time.sleep(0.1)
     move_legs(0, 50, 50, 0.6)
     time.sleep(0.1)
     move_legs(50, 50, 50, 0.7)
     time.sleep(0.2)
     disable_all_servos()
 
+
 def pezz_dispenser():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
-    move_legs(80, 50, 70, 0.6)
-    move_arm(1, 1, 1, 1, 1, 1, 0.6)
-    time.sleep(0.2)
-    move_legs(50, 50, 70, 0.6)
-    time.sleep(0.2)
-    move_arm(100, 1, 1, 1, 1, 1, 0.8)
-    time.sleep(0.2)
-    move_arm(100, 100, 1, 1, 1, 1, 0.8)
-    time.sleep(0.2)
-    move_arm(100, 100, 100, 1, 1, 1, 0.8)
-    time.sleep(10)
-    move_arm(100, 100, 1, 1, 1, 1, 0.8)
-    time.sleep(0.2)
-    move_arm(100, 1, 1, 1, 1, 1, 0.8)
-    time.sleep(0.2)
-    move_legs(80, 50, 70, 0.6)
-    time.sleep(0.2)
-    move_arm(1, 1, 1, 1, 1, 1, 0.8)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
-    disable_all_servos()
-
-def now():
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
     move_legs(80, 50, 50, 0.8)
     time.sleep(0.2)
     move_legs(80, 50, 70, 0.8)
     time.sleep(0.2)
-    move_arm(75, 1, 1, 0, 0, 0, 1)
+    move_legs(50, 50, 70, 0.8)
     time.sleep(0.2)
-    move_legs(50, 50, 65, 0.8)
+    move_arm(1, 1, 1, 1, 1, 1, 0.5)
     time.sleep(0.2)
-    move_arm(75, 80, 1, 0, 0, 0, 0.9)
+    move_arm(40, 1, 1, 40, 1, 1, 0.6)
     time.sleep(0.2)
-    move_arm(60, 80, 0, 0, 0, 0, 0.9)
-    time.sleep(0.2)
-    move_arm(75, 80, 0, 0, 0, 0, 0.9)
-    time.sleep(0.2)
-    move_arm(60, 80, 0, 0, 0, 0, 0.9)
-    time.sleep(0.2)
-    move_arm(75, 80, 0, 0, 0, 0, 0.9)
-    time.sleep(0.2)
-    move_arm(60, 80, 0, 0, 0, 0, 0.9)
-    time.sleep(0.2)
-    move_arm(75, 80, 0, 0, 0, 0, 0.9)
-    time.sleep(0.2)
-    move_arm(75, 1, 1, 0, 0, 0, 1)
-    time.sleep(0.2)        
-    move_legs(50, 50, 80, 0.8)
-    time.sleep(0.2)
-    move_arm(1, 1, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_legs(80, 50, 70, 0.8)
-    time.sleep(0.2)
-    move_legs(80, 50, 50, 0.8)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
-    disable_all_servos()
-
-def balance():
-    # up
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(30, 50, 50, 0.8)
-    # balance
-    time.sleep(0.2)
-    move_legs(30, 60, 60, 0.5)
-    time.sleep(0.2)
-    move_legs(30, 40, 40, 0.5)
-    time.sleep(0.2)
-    move_legs(30, 60, 60, 0.5)
-    time.sleep(0.2)
-    move_legs(30, 40, 40, 0.5)
-    time.sleep(0.2)
-    move_legs(30, 60, 60, 0.5)
-    time.sleep(0.2)
-    move_legs(30, 40, 40, 0.5)
-    # down
-    time.sleep(0.2)
-    move_legs(30, 50, 50, 0.8)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 0.8)
-    time.sleep(0.5)
-    disable_all_servos()
-
-def mic_drop():
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(80, 50, 50, 0.8)
-    time.sleep(0.2)
-    move_legs(80, 50, 100, 0.8)
-    time.sleep(0.2)
-    move_arm(1, 1, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_arm(60, 50, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_arm(60, 70, 1, 0, 0, 0, 1)
+    move_arm(60, 70, 100, 40, 1, 1, 1)
+    time.sleep(1)
+    move_arm(60, 70, 100, 60, 70, 100, 1)
     time.sleep(1)
     move_arm(60, 70, 100, 0, 0, 0, 1)
     time.sleep(2)
@@ -359,20 +319,18 @@ def mic_drop():
     time.sleep(0.5)
     disable_all_servos()
 
+
 def monster():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
     move_legs(80, 50, 50, 0.4)
     time.sleep(0.2)
     move_legs(80, 70, 70, 0.4)
-
     move_arm(1, 1, 1, 1, 1, 1, 0.8)
     time.sleep(0.2)
     move_arm(100, 1, 1, 100, 1, 1, 0.8)
-
     time.sleep(0.2)
     move_legs(50, 70, 70, 0.4)
-
     time.sleep(0.2)
     move_arm(100, 100, 1, 100, 100, 1, 1)
     time.sleep(0.2)
@@ -388,7 +346,6 @@ def monster():
     time.sleep(0.2)
     move_arm(100, 100, 100, 100, 100, 100, 1)
     time.sleep(0.2)
-
     move_arm(100, 100, 1, 100, 100, 1, 1)
     time.sleep(0.2)
     move_arm(100, 100, 100, 100, 100, 100, 1)
@@ -401,24 +358,20 @@ def monster():
     time.sleep(0.2)
     move_arm(100, 100, 100, 100, 100, 100, 1)
     time.sleep(0.2)
-
     move_arm(100, 100, 1, 100, 100, 1, 1)
     time.sleep(0.2)
     move_arm(100, 1, 1, 100, 1, 1, 1)
-
     move_legs(50, 70, 70, 0.4)
     time.sleep(0.2)
-
     time.sleep(0.2)
     move_arm(1, 1, 1, 1, 1, 1, 0.8)
     time.sleep(0.2)
-
     move_legs(80, 50, 50, 0.4)
     time.sleep(0.2)
-
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
     disable_all_servos()
+
 
 def pose():
     move_legs(50, 50, 50, 0.4)
@@ -431,6 +384,7 @@ def pose():
     move_legs(50, 50, 50, 0.4)
     disable_all_servos()
 
+
 def bow():
     move_legs(50, 50, 50, 0.4)
     move_legs(15, 50, 50, 0.7)
@@ -442,24 +396,31 @@ def bow():
     move_legs(50, 50, 50, 0.4)
     disable_all_servos()
 
-def move_legs(
-    height_percent=None,
-    starboard_percent=None,
-    port_percent=None,
-    speed_factor=1.0
-):
-    """
-    Controls 3 leg servos using percentage values with multiprocessing.
-    
-    Parameters:
-        height_percent: Percentage for servo 0 (middle servo that raises/lowers the legs).
-        starboard_percent: Percentage for servo 1 (starboard leg).
-        port_percent: Percentage for servo 2 (port leg).
-        speed_factor: Speed factor for smooth movement (0.1 = slow, 1.0 = fast).
-    """
 
+def move_servo_gradually_thread(channel, target_value, speed_factor):
+    if target_value is None:
+        return
+    
+    with i2c_lock:
+        current_value = servo_positions.get(channel, None)
+    
+    if current_value is None or current_value == target_value:
+        if set_servo_pwm(channel, target_value):
+            with i2c_lock:
+                servo_positions[channel] = target_value
+        return
+    
+    step = 1 if target_value > current_value else -1
+    for value in range(current_value, target_value + step, step):
+        set_servo_pwm(channel, value)
+        time.sleep(0.02 * (1.0 - speed_factor))
+    
+    with i2c_lock:
+        servo_positions[channel] = target_value
+
+
+def move_legs(height_percent=None, starboard_percent=None, port_percent=None, speed_factor=1.0):
     def percentage_to_value(percent, min_val, max_val):
-        """Convert percentage (1-100) to a value between min and max."""
         if percent == 0:
             return None
         if percent == 1:
@@ -472,66 +433,27 @@ def move_legs(
             value = min_val - ((min_val - max_val) * (percent - 1) / 99)
         return int(round(value))
 
-    def move_servo_gradually(channel, target_value, speed_factor, positions):
-        """Moves the servo gradually to the target value at the given speed."""
-        if target_value is None:
-            return
-        current_value = positions.get(channel, None)
-        if current_value is None or current_value == target_value:
-            # Need to check if pwm is available in this process
-            global pwm
-            if pwm is None:
-                try:
-                    pwm = Adafruit_PCA9685.PCA9685(busnum=1)
-                    pwm.set_pwm_freq(50)
-                except Exception as e:
-                    print(f"Error initializing PWM in child process: {e}")
-                    return
-            
-            pwm.set_pwm(channel, 0, target_value)
-            positions[channel] = target_value
-            return
-        
-        step = 1 if target_value > current_value else -1
-        for value in range(current_value, target_value + step, step):
-            pwm.set_pwm(channel, 0, value)
-            time.sleep(0.02 * (1.0 - speed_factor))
-        positions[channel] = target_value
-
-    # Define min/max for each servo
     movements = [
         (height_percent, upHeight, downHeight, 0),
         (starboard_percent, forwardStarboard, backStarboard, 1),
         (port_percent, forwardPort, backPort, 2),
     ]
 
-    processes = []
+    threads = []
     for percent, min_val, max_val, channel in movements:
         if percent is not None and percent != 0:
             target_value = percentage_to_value(percent, min_val, max_val)
-            process = Process(target=move_servo_gradually, args=(channel, target_value, speed_factor, servo_positions))
-            processes.append(process)
-            process.start()
+            thread = Thread(target=move_servo_gradually_thread, args=(channel, target_value, speed_factor))
+            threads.append(thread)
+            thread.start()
 
-    for process in processes:
-        process.join()
+    for thread in threads:
+        thread.join()
 
-def move_arm(
-    port_main=None, port_forearm=None, port_hand=None,
-    star_main=None, star_forearm=None, star_hand=None,
-    speed_factor=1.0
-):
-    """
-    Moves both port and starboard arm servos using percentage values (1-100) with multiprocessing.
-    
-    Parameters:
-        port_main, port_forearm, port_hand: Percentages for port arm servos.
-        star_main, star_forearm, star_hand: Percentages for starboard arm servos.
-        speed_factor: Speed factor for movement (0.1 = slow, 1.0 = fast).
-    """
 
+def move_arm(port_main=None, port_forearm=None, port_hand=None,
+             star_main=None, star_forearm=None, star_hand=None, speed_factor=1.0):
     def percentage_to_value(percent, min_val, max_val):
-        """Convert percentage (1-100) to a value within min/max range."""
         if percent == 0:
             return None
         if percent == 1:
@@ -543,34 +465,7 @@ def move_arm(
         else:
             value = min_val - ((min_val - max_val) * (percent - 1) / 99)
         return int(round(value))
-    
-    def move_servo_gradually(channel, target_value, speed_factor, positions):
-        """Moves the servo gradually to the target value at the given speed."""
-        if target_value is None:
-            return
-        current_value = positions.get(channel, None)
-        if current_value is None or current_value == target_value:
-            # Need to check if pwm is available in this process
-            global pwm
-            if pwm is None:
-                try:
-                    pwm = Adafruit_PCA9685.PCA9685(busnum=1)
-                    pwm.set_pwm_freq(50)
-                except Exception as e:
-                    print(f"Error initializing PWM in child process: {e}")
-                    return
-                    
-            pwm.set_pwm(channel, 0, target_value)
-            positions[channel] = target_value
-            return
-        
-        step = 1 if target_value > current_value else -1
-        for value in range(current_value, target_value + step, step):
-            pwm.set_pwm(channel, 0, value)
-            time.sleep(0.02 * (1.0 - speed_factor))
-        positions[channel] = target_value
 
-    # Create a list of all desired movements: (percent, min, max, channel)
     movements = [
         (port_main, portMainMin, portMainMax, 3),
         (port_forearm, portForarmMin, portForarmMax, 4),
@@ -580,20 +475,22 @@ def move_arm(
         (star_hand, starHandMin, starHandMax, 8),
     ]
 
-    processes = []
+    threads = []
     for percent, min_val, max_val, channel in movements:
         if percent is not None and percent != 0:
             target_value = percentage_to_value(percent, min_val, max_val)
-            process = Process(target=move_servo_gradually, args=(channel, target_value, speed_factor, servo_positions))
-            processes.append(process)
-            process.start()
+            thread = Thread(target=move_servo_gradually_thread, args=(channel, target_value, speed_factor))
+            threads.append(thread)
+            thread.start()
 
-    for process in processes:
-        process.join()
+    for thread in threads:
+        thread.join()
+
 
 def cleanup():
-    """Clean up function to terminate any leftover processes"""
+    """Clean up function"""
     disable_all_servos()
+
 
 if __name__ == "__main__":
     initialize_servos()
