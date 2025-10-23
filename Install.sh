@@ -584,11 +584,14 @@ EOF
     chmod -R 775 . 2>/dev/null || true
     cd src
     
+    echo ""    
+    echo "*** Set your .env variables (API Keys) before running the program"
     echo ""
-    echo "IMPORTANT: Run your application as user '$ACTUAL_USER' (without sudo)"
-    echo "Enable the virtual environment: source .venv/bin/activate if not using App-Start.py"
     echo "*** Run the program in Terminal mode the first times in the App-Start Menu ***"
+    echo "IMPORTANT: Run your application as user '$ACTUAL_USER' (without sudo)"    
     echo "Start the program: python App-Start.py"
+    echo ""
+    echo "Enable the virtual environment: source .venv/bin/activate if not using App-Start.py"
     
     sleep 2
 }
