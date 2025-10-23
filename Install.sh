@@ -2,9 +2,9 @@
 # TARS System Installation Protocol
 # Atomikspace / Pyrater / TeknikL
 
-set -e  # Exit on any error
 
-# Detect the actual user (even if run with sudo)
+set -e
+
 if [ -n "$SUDO_USER" ]; then
     ACTUAL_USER="$SUDO_USER"
     echo ""
@@ -17,10 +17,8 @@ else
     ACTUAL_USER="$(whoami)"
 fi
 
-# Animation delay
 DELAY=0.02
 
-# TARS ASCII Art
 show_tars_boot() {
     clear
     cat << "EOF"
@@ -33,18 +31,11 @@ show_tars_boot() {
     |        ██║   ██║  ██║██║  ██║███████║       |
     |        ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝       |
     |                                             |
-    |     TACTICAL AEROSPACE ROBOTICS             |
-    |     SYSTEM INITIALIZATION                   |
-    |                                             |
-    |     [ HUMOR SETTING: 75% ]                  |
-    |     [ HONESTY: 90% ]                        |
-    |                                             |
     +=============================================+
 EOF
     sleep 2
 }
 
-# TARS-style status message
 tars_say() {
     local message=$1
     local type=${2:-"info"}
@@ -74,7 +65,6 @@ tars_say() {
     echo ""
 }
 
-# System diagnostic display
 show_system_diagnostic() {
     echo "+===============================================================+"
     echo "|           SYSTEM DIAGNOSTIC INITIATED                         |"
@@ -86,23 +76,40 @@ show_system_diagnostic() {
     echo ""
 }
 
-# Simple spinning loader
 spin_loader() {
     local pid=$1
     local message=$2
+    local timeout=${3:-300}
     local spin='|/-\'
     local i=0
+    local elapsed=0
     
     echo -ne "|  "
     while kill -0 $pid 2>/dev/null; do
         i=$(( (i+1) %4 ))
-        echo -ne "\r|  ${spin:$i:1} ${message}"
-        sleep .1
+        echo -ne "\r|  ${spin:$i:1} ${message} (${elapsed}s)"
+        sleep 1
+        elapsed=$((elapsed + 1))
+        
+        if [ $elapsed -ge $timeout ]; then
+            kill -9 $pid 2>/dev/null || true
+            echo -ne "\r|  [X] ${message} - TIMEOUT after ${timeout}s\n"
+            return 1
+        fi
     done
-    echo -ne "\r|  [OK] ${message}\n"
+    
+    wait $pid
+    local exit_code=$?
+    
+    if [ $exit_code -eq 0 ]; then
+        echo -ne "\r|  [OK] ${message} (${elapsed}s)\n"
+        return 0
+    else
+        echo -ne "\r|  [X] ${message} - FAILED with exit code $exit_code\n"
+        return 1
+    fi
 }
 
-# Function to retry pip install
 retry_pip_install() {
     local n=1
     local max=5
@@ -135,7 +142,6 @@ retry_pip_install() {
     done
 }
 
-# Detect OS version
 detect_os_version() {
     tars_say "Analyzing operating system parameters..." "info"
     
@@ -159,7 +165,6 @@ detect_os_version() {
     fi
 }
 
-# Install Chromium
 install_chromium() {
     tars_say "Initiating chromium installation sequence..." "info"
     
@@ -169,13 +174,17 @@ install_chromium() {
     
     if apt-cache show chromium &>/dev/null; then
         echo "|  Package detected: chromium (Latest variant)"
-        sudo apt install -y chromium sox libsox-fmt-all portaudio19-dev espeak-ng --fix-missing > /dev/null 2>&1 &
-        spin_loader $! "Installing chromium runtime environment"
+        
+        if ! sudo apt install -y chromium sox libsox-fmt-all portaudio19-dev espeak-ng --fix-missing 2>&1 | tee /tmp/chromium-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
+            tars_say "Chromium installation encountered issues. Check /tmp/chromium-install.log" "warning"
+        fi
         CHROMIUM_CMD="chromium"
     elif apt-cache show chromium-browser &>/dev/null; then
         echo "|  Package detected: chromium-browser (Legacy variant)"
-        sudo apt install -y chromium-browser sox libsox-fmt-all portaudio19-dev espeak-ng --fix-missing > /dev/null 2>&1 &
-        spin_loader $! "Installing chromium-browser runtime environment"
+        
+        if ! sudo apt install -y chromium-browser sox libsox-fmt-all portaudio19-dev espeak-ng --fix-missing 2>&1 | tee /tmp/chromium-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
+            tars_say "Chromium-browser installation encountered issues. Check /tmp/chromium-install.log" "warning"
+        fi
         CHROMIUM_CMD="chromium-browser"
     else
         tars_say "Chromium package not found in repositories. Manual intervention required." "error"
@@ -184,13 +193,13 @@ install_chromium() {
     
     install_chromedriver
     
-    sudo apt install -y xterm libcap-dev --fix-missing > /dev/null 2>&1 &
-    spin_loader $! "Installing auxiliary dependencies"
+    if ! sudo apt install -y xterm libcap-dev --fix-missing 2>&1 | tee /tmp/aux-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
+        tars_say "Auxiliary dependency installation encountered issues. Check /tmp/aux-install.log" "warning"
+    fi
     
     echo ""
 }
 
-# Install ChromeDriver
 install_chromedriver() {
     tars_say "ChromeDriver installation protocol engaged..." "info"
     
@@ -198,7 +207,6 @@ install_chromedriver() {
     echo "| CHROMEDRIVER CONFIGURATION"
     echo "+===============================================================+"
     
-    # Check if already installed
     if command -v chromedriver &>/dev/null; then
         echo "| Status: Already present in system"
         VERSION=$(chromedriver --version 2>/dev/null | head -1)
@@ -207,12 +215,13 @@ install_chromedriver() {
         return 0
     fi
     
-    # Try new package name first (chromium-driver)
     if apt-cache show chromium-driver &>/dev/null; then
         echo "| Method: Package Manager (chromium-driver)"
         echo "+===============================================================+"
-        sudo apt install -y chromium-driver --fix-missing > /dev/null 2>&1 &
-        spin_loader $! "Installing chromium-driver from repository"
+        
+        if ! sudo apt install -y chromium-driver --fix-missing 2>&1 | tee /tmp/chromedriver-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
+            tars_say "ChromeDriver installation encountered issues. Check /tmp/chromedriver-install.log" "warning"
+        fi
         
         if command -v chromedriver &>/dev/null; then
             tars_say "ChromeDriver successfully installed." "success"
@@ -222,12 +231,13 @@ install_chromedriver() {
         return 0
     fi
     
-    # Try old package name (chromium-chromedriver)
-    if apt-cache show chromium-chromedriver &>/dev/null; then
-        echo "| Method: Package Manager (chromium-chromedriver)"
+    if apt-cache show chromedriver-chromium &>/dev/null; then
+        echo "| Method: Package Manager (chromedriver-chromium)"
         echo "+===============================================================+"
-        sudo apt install -y chromium-chromedriver --fix-missing > /dev/null 2>&1 &
-        spin_loader $! "Installing chromium-chromedriver from repository"
+        
+        if ! sudo apt install -y chromedriver-chromium --fix-missing 2>&1 | tee /tmp/chromedriver-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
+            tars_say "ChromeDriver installation encountered issues. Check /tmp/chromedriver-install.log" "warning"
+        fi
         
         if command -v chromedriver &>/dev/null; then
             tars_say "ChromeDriver successfully installed." "success"
@@ -237,43 +247,26 @@ install_chromedriver() {
         return 0
     fi
     
-    # If we get here, ChromeDriver is not available via package manager
-    echo "| Method: Not Available"
-    echo "+===============================================================+"
-    
-    CHROMIUM_VERSION=$($CHROMIUM_CMD --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+\.\d+' | head -1 || echo "")
-    
-    if [ -n "$CHROMIUM_VERSION" ]; then
-        MAJOR_VERSION=$(echo $CHROMIUM_VERSION | cut -d. -f1)
-        echo "|  Chromium Version: $CHROMIUM_VERSION (Major: $MAJOR_VERSION)"
-    fi
-    
-    # Detect architecture
-    ARCH=$(uname -m)
-    echo "|  Architecture: $ARCH"
-    
-    echo "|  "
-    echo "|  ChromeDriver Status: OPTIONAL"
-    echo "|  - Only needed for Selenium/web browser automation"
-    echo "|  - Most TARS functions work without it"
-    echo "|  - If needed, install manually or use 'chromium --headless'"
-    echo "|  "
+    tars_say "ChromeDriver not available in package repositories. Skipping..." "warning"
     echo ""
 }
 
-# Verify installations
 verify_installations() {
-    tars_say "Running system verification protocols..." "info"
+    tars_say "Verifying installed components..." "info"
     
     echo "+===============================================================+"
-    echo "| INSTALLATION VERIFICATION"
+    echo "| COMPONENT STATUS"
     echo "+===============================================================+"
     
-    if command -v chromium &>/dev/null; then
-        VERSION=$(chromium --version 2>/dev/null)
-        echo "| [OK] Chromium:     $VERSION"
-    elif command -v chromium-browser &>/dev/null; then
-        VERSION=$(chromium-browser --version 2>/dev/null)
+    if command -v python3 &>/dev/null; then
+        VERSION=$(python3 --version 2>&1)
+        echo "| [OK] Python3:      $VERSION"
+    else
+        echo "| [X] Python3:      Not found"
+    fi
+    
+    if command -v ${CHROMIUM_CMD:-chromium} &>/dev/null; then
+        VERSION=$(${CHROMIUM_CMD:-chromium} --version 2>/dev/null | head -1)
         echo "| [OK] Chromium:     $VERSION"
     else
         echo "| [X] Chromium:     Not found"
@@ -298,7 +291,41 @@ verify_installations() {
     sleep 1
 }
 
-# Main installation
+check_network() {
+    tars_say "Testing network connectivity..." "info"
+    
+    echo "+===============================================================+"
+    echo "| NETWORK DIAGNOSTICS"
+    echo "+===============================================================+"
+    
+    if ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
+        echo "| [OK] Internet connectivity working"
+    else
+        echo "| [X] Internet connectivity FAILED"
+        echo "| "
+        echo "| Check your network connection and try again"
+        tars_say "No internet connection detected. Cannot proceed." "error"
+        exit 1
+    fi
+    
+    if getent hosts deb.debian.org >/dev/null 2>&1 || getent hosts archive.ubuntu.com >/dev/null 2>&1; then
+        echo "| [OK] DNS resolution working"
+    else
+        echo "| [!] DNS resolution check failed"
+        echo "|     Will attempt to continue anyway..."
+    fi
+    
+    if timeout 10 curl -s -o /dev/null -w "%{http_code}" http://deb.debian.org > /dev/null 2>&1; then
+        echo "| [OK] Repository connectivity working"
+    else
+        echo "| [!] Repository connectivity check failed or slow"
+        echo "|     This may cause apt operations to hang"
+    fi
+    
+    echo "+===============================================================+"
+    echo ""
+}
+
 main() {
     show_tars_boot
     
@@ -306,20 +333,102 @@ main() {
     
     show_system_diagnostic
     
-    # System update
-    tars_say "Synchronizing package databases..." "info"
-    sudo apt clean > /dev/null 2>&1
-    sudo update-initramfs -u -k all > /dev/null 2>&1 || true
-    sudo dpkg --configure -a > /dev/null 2>&1
-    sudo apt update -y > /dev/null 2>&1 &
-    spin_loader $! "Updating package repositories"
+    check_network
+    
+    tars_say "Checking for conflicting package manager processes..." "info"
+    sudo killall apt apt-get dpkg 2>/dev/null || true
+    sleep 2
     echo ""
+    
+    tars_say "Preparing package management system..." "info"
+    echo "+===============================================================+"
+    echo "| CLEANING APT CACHE"
+    echo "+===============================================================+"
+    
+    sudo apt clean 2>&1 | head -10
+    echo "| [OK] Cache cleaned"
+    
+    echo "| Updating initramfs (this may take a moment)..."
+    sudo update-initramfs -u -k all 2>&1 | tail -5 || true
+    echo "| [OK] Initramfs updated"
+    
+    echo "| Configuring packages..."
+    if ! sudo dpkg --configure -a 2>&1 | tee /tmp/dpkg-configure.log | tail -10; then
+        echo "| [!] dpkg configure had issues - see /tmp/dpkg-configure.log"
+    else
+        echo "| [OK] Packages configured"
+    fi
+    echo "+===============================================================+"
+    echo ""
+    
+    tars_say "Synchronizing package databases with apt-get update..." "info"
+    echo "+===============================================================+"
+    echo "| APT-GET UPDATE OUTPUT"
+    echo "+===============================================================+"
+    
+    UPDATE_LOG_FILE="/tmp/tars-apt-update.log"
+    
+    echo ""
+    if ! sudo apt-get update 2>&1 | tee "$UPDATE_LOG_FILE"; then
+        echo ""
+        echo "+===============================================================+"
+        echo "| [X] APT-GET UPDATE FAILED!"
+        echo "+===============================================================+"
+        echo "| Full log saved to: $UPDATE_LOG_FILE"
+        echo "| "
+        echo "| Common fixes:"
+        echo "|   1. Check your internet connection"
+        echo "|   2. Run: sudo rm -rf /var/lib/apt/lists/*"
+        echo "|   3. Run: sudo mkdir -p /var/lib/apt/lists/partial"
+        echo "|   4. Run: sudo apt-get update"
+        echo "|   5. Check /etc/apt/sources.list for errors"
+        echo "+===============================================================+"
+        
+        tars_say "Package database synchronization failed. Cannot proceed." "error"
+        exit 1
+    fi
+    
+    echo ""
+    echo "+===============================================================+"
+    echo "| [OK] Package databases synchronized successfully"
+    echo "+===============================================================+"
+    echo ""
+    sleep 2
+    
+    tars_say "Upgrading system packages with apt-get upgrade..." "info"
+    echo "+===============================================================+"
+    echo "| APT-GET UPGRADE OUTPUT"
+    echo "+===============================================================+"
+    echo "| NOTE: This may take several minutes depending on updates..."
+    echo "+===============================================================+"
+    
+    UPGRADE_LOG_FILE="/tmp/tars-apt-upgrade.log"
+    
+    echo ""
+    if ! sudo apt-get upgrade -y 2>&1 | tee "$UPGRADE_LOG_FILE"; then
+        echo ""
+        echo "+===============================================================+"
+        echo "| [!] APT-GET UPGRADE HAD ISSUES"
+        echo "+===============================================================+"
+        echo "| Full log saved to: $UPGRADE_LOG_FILE"
+        echo "| "
+        echo "| The script will continue, but some packages may not be current"
+        echo "+===============================================================+"
+        tars_say "Package upgrade completed with warnings. Continuing..." "warning"
+        sleep 3
+    else
+        echo ""
+        echo "+===============================================================+"
+        echo "| [OK] System packages upgraded successfully"
+        echo "+===============================================================+"
+        echo ""
+        sleep 2
+    fi
     
     detect_os_version
     install_chromium
     verify_installations
     
-    # Directory check and permissions setup
     tars_say "Verifying project structure..." "info"
     if [ ! -d "src" ]; then
         tars_say "Critical error: 'src' directory not found. Installation cannot proceed." "error"
@@ -328,18 +437,13 @@ main() {
     echo "|  [OK] Project directory confirmed: src/"
     echo ""
     
-    # Set permissions on ENTIRE project directory - AGGRESSIVE
     tars_say "Setting project permissions..." "info"
-    # Remove any restrictive attributes
     sudo chattr -R -i . 2>/dev/null || true
-    # Set ownership on everything to the actual user (not root)
     sudo chown -R $ACTUAL_USER:$ACTUAL_USER .
-    # Set permissions - 775 is more permissive
     chmod -R 775 .
     echo "|  [OK] Ownership set to: $ACTUAL_USER"
     echo "|  [OK] All directories now writable (775)"
     
-    # Specifically ensure critical subdirectories exist and are writable
     mkdir -p src/modules src/logs src/data 2>/dev/null || true
     sudo chown -R $ACTUAL_USER:$ACTUAL_USER src/modules src/logs src/data 2>/dev/null || true
     chmod -R 775 src/modules src/logs src/data 2>/dev/null || true
@@ -348,10 +452,13 @@ main() {
     
     cd src
     
-    # Virtual environment
     tars_say "Constructing Python virtual environment..." "info"
-    python3 -m venv .venv --system-site-packages > /dev/null 2>&1 &
-    spin_loader $! "Building isolated Python environment"
+    
+    if ! python3 -m venv .venv --system-site-packages 2>&1 | tee /tmp/venv-creation.log | tail -10; then
+        echo "| [X] Virtual environment creation failed"
+        echo "| See /tmp/venv-creation.log for details"
+        exit 1
+    fi
     echo ""
     
     if [ -f ".venv/bin/activate" ]; then
@@ -363,7 +470,6 @@ main() {
         exit 1
     fi
     
-    # Permissions
     tars_say "Configuring virtual environment permissions..." "info"
     cd ..
     sudo chown -R $ACTUAL_USER:$ACTUAL_USER src/.venv/
@@ -372,73 +478,63 @@ main() {
     cd src
     echo ""
     
-    # Clean system packages
     tars_say "Removing conflicting system packages..." "info"
-    sudo apt remove -y python3-simplejpeg python3-picamera2 > /dev/null 2>&1 || true
+    sudo apt remove -y python3-simplejpeg python3-picamera2 2>&1 | tail -5 || true
     echo "|  [OK] System package conflicts resolved"
     echo ""
     
-    # Pip upgrade
     tars_say "Upgrading package installer..." "info"
-    pip install --upgrade pip > /dev/null 2>&1 &
-    spin_loader $! "Updating pip to latest version"
+    if ! pip install --upgrade pip 2>&1 | tail -10; then
+        echo "| [!] Pip upgrade had issues but continuing..."
+    fi
     echo ""
     
-    # Core dependencies
     tars_say "Installing critical Python modules..." "info"
-    pip uninstall -y numpy simplejpeg picamera2 > /dev/null 2>&1 || true
-    pip install --no-cache-dir numpy==2.1 simplejpeg picamera2 > /dev/null 2>&1 &
-    spin_loader $! "Installing NumPy, SimpleJPEG, and PiCamera2"
+    pip uninstall -y numpy simplejpeg picamera2 2>/dev/null || true
+    
+    if ! pip install --no-cache-dir numpy==2.1 simplejpeg picamera2 2>&1 | tee /tmp/core-deps.log | tail -20; then
+        echo "| [!] Core dependency installation had issues"
+        echo "| See /tmp/core-deps.log for details"
+    fi
     echo ""
     
-    # Requirements
     retry_pip_install
     
-    # Configuration files
     tars_say "Initializing configuration files..." "info"
     
-    # Create config.ini
     if [ ! -f "config.ini" ]; then
         cp config.ini.template config.ini
     fi
-    # Always set proper permissions (fixes read-only issues)
     sudo chown $ACTUAL_USER:$ACTUAL_USER config.ini 2>/dev/null
     chmod 664 config.ini
     echo "|  [OK] config.ini (writable, run: nano config.ini)"
     
-    # Create .env in parent directory
     cd ..
     if [ ! -f ".env" ]; then
         cp .env.template .env
     fi
-    # Always set proper permissions (fixes read-only issues)
     sudo chown $ACTUAL_USER:$ACTUAL_USER .env 2>/dev/null
     chmod 664 .env
     echo "|  [OK] .env (writable, run: nano .env)"
     echo "|  Note: .env is hidden (starts with .) - use 'ls -la' to see it"
     
-    # One more permission sweep on the entire directory
     sudo chown -R $ACTUAL_USER:$ACTUAL_USER . 2>/dev/null || true
     chmod -R 775 . 2>/dev/null || true
     
     cd src
     echo ""
     
-    # Display setup
     export DISPLAY=:0
     echo "|  Display configuration: $DISPLAY"
     echo ""
     
-    # Final verification
     tars_say "Final system verification..." "info"
     cd ..
     
-    # Final aggressive permission setting
     sudo chattr -R -i . 2>/dev/null || true
     sudo chown -R $ACTUAL_USER:$ACTUAL_USER .
     chmod -R 775 .
     
-    # Test that we can actually create files
     TEST_DIRS=("src/modules" "src/logs" "src/data" "src")
     ALL_WRITABLE=true
     
@@ -467,7 +563,6 @@ main() {
     echo ""
     cd src
     
-    # Success message
     cat << "EOF"
     +==============================================================+
     |                                                              |
@@ -484,7 +579,6 @@ main() {
     +==============================================================+
 EOF
     
-    # Final permission lockdown to ensure no issues
     cd ..
     sudo chown -R $ACTUAL_USER:$ACTUAL_USER . 2>/dev/null || true
     chmod -R 775 . 2>/dev/null || true
@@ -492,11 +586,11 @@ EOF
     
     echo ""
     echo "IMPORTANT: Run your application as user '$ACTUAL_USER' (without sudo)"
-    echo "Enable the virtual environment: source .venv/bin/activate "
-    echo "Start the program: python app.py"
+    echo "Enable the virtual environment: source .venv/bin/activate if not using App-Start.py"
+    echo "*** Run the program in Terminal mode the first times in the App-Start Menu ***"
+    echo "Start the program: python App-Start.py"
     
     sleep 2
 }
 
-# Execute main installation
 main
