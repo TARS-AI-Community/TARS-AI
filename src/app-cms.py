@@ -80,15 +80,15 @@ class TarsConfigManager:
 ╚══════════════════════════════════════════════════════════════⠞⠁⠗⠎═════╝
         """
         print(tars_cms_art)
-        print("🤖 TARS: Initiating configuration synchronization protocol...")
+        print("TARS: Initiating configuration synchronization protocol...")
         time.sleep(0.5)
 
     def display_loading(self, message: str):
         chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         for i in range(20):
-            print(f"\r🤖 TARS: {message} {chars[i % len(chars)]}", end="", flush=True)
+            print(f"\rTARS: {message} {chars[i % len(chars)]}", end="", flush=True)
             time.sleep(0.1)
-        print(f"\r🤖 TARS: {message} ✓")
+        print(f"\rTARS: {message} ✓")
 
     def parse_config_structure(self, filename: str) -> Dict[str, ConfigSection]:
         """Parse config file manually to preserve ALL comments and structure"""
@@ -101,7 +101,7 @@ class TarsConfigManager:
             with open(filename, 'r', encoding='utf-8') as file:
                 lines = file.readlines()
         except Exception as e:
-            print(f"🤖 TARS: Error reading file {filename}: {e}")
+            print(f"TARS: Error reading file {filename}: {e}")
             return sections
         
         current_section = None
@@ -159,8 +159,8 @@ class TarsConfigManager:
                     pending_comments = []
         
         except Exception as e:
-            print(f"🤖 TARS: Error parsing line {line_num} in {filename}: {e}")
-            print(f"🤖 TARS: Line content: '{original_line}'")
+            print(f"TARS: Error parsing line {line_num} in {filename}: {e}")
+            print(f"TARS: Line content: '{original_line}'")
             raise
 
         return sections
@@ -300,19 +300,19 @@ class TarsConfigManager:
             try:
                 import shutil
                 shutil.copy2(self.config_file, self.backup_file)
-                print(f"🤖 TARS: Configuration backup created at config_backup.ini")
-                print(f"🤖 TARS: Your original configuration is safe in the tesseract, Cooper.")
+                print(f"TARS: Configuration backup created at config_backup.ini")
+                print(f"TARS: Your original configuration is safe in the tesseract, Cooper.")
                 return True
             except Exception as e:
-                print(f"🤖 TARS: Warning - Could not create backup: {e}")
-                print("🤖 TARS: Proceeding without backup. Humor setting: 25%")
+                print(f"TARS: Warning - Could not create backup: {e}")
+                print("TARS: Proceeding without backup. Humor setting: 25%")
                 return False
         return True
 
     def confirm_removals(self, actions: List[ConfigAction]) -> List[ConfigAction]:
         """Ask user for confirmation before removing sections/fields"""
         if actions is None:
-            print("🤖 TARS: Debug - Actions is None, returning empty list")
+            print("TARS: Debug - Actions is None, returning empty list")
             return []
         
         remove_actions = [a for a in actions if a.action in [ActionType.REMOVE_SECTION, ActionType.REMOVE_FIELD]]
@@ -336,8 +336,8 @@ class TarsConfigManager:
             for action in fields_to_remove:
                 print(f"   └─ [{action.section}] {action.field} = {action.value}")
         
-        print(f"\n🤖 TARS: These items exist in your config but not in the template.")
-        print("🤖 TARS: They might be obsolete... or they might be important.")
+        print(f"\nTARS: These items exist in your config but not in the template.")
+        print("TARS: They might be obsolete... or they might be important.")
         
         while True:
             print(f"\nOptions:")
@@ -345,38 +345,38 @@ class TarsConfigManager:
             print("  [n] No, keep everything (skip removals)")
             print("  [i] Interactive - ask me about each item")
             
-            choice = input("🤖 TARS: What's your preference, Cooper? [y/n/i]: ").strip().lower()
+            choice = input("TARS: What's your preference, Cooper? [y/n/i]: ").strip().lower()
             
             if choice == 'y':
-                print("🤖 TARS: Roger that. Preparing for removal sequence.")
+                print("TARS: Roger that. Preparing for removal sequence.")
                 return actions
             
             elif choice == 'n':
-                print("🤖 TARS: Understood. Keeping all existing items.")
+                print("TARS: Understood. Keeping all existing items.")
                 return [a for a in actions if a.action not in [ActionType.REMOVE_SECTION, ActionType.REMOVE_FIELD]]
             
             elif choice == 'i':
-                print("🤖 TARS: Initiating interactive removal protocol...")
+                print("TARS: Initiating interactive removal protocol...")
                 return self.interactive_removal_selection(actions, remove_actions)
             
             else:
-                print("🤖 TARS: Invalid input detected. Please choose y, n, or i.")
+                print("TARS: Invalid input detected. Please choose y, n, or i.")
 
     def interactive_removal_selection(self, all_actions: List[ConfigAction], remove_actions: List[ConfigAction]) -> List[ConfigAction]:
         """Let user decide on each removal individually"""
         actions_to_keep = [a for a in all_actions if a not in remove_actions]
         
-        print(f"\n🤖 TARS: Entering interactive mode. Processing {len(remove_actions)} items...")
+        print(f"\nTARS: Entering interactive mode. Processing {len(remove_actions)} items...")
         
         for i, action in enumerate(remove_actions, 1):
             print(f"\n── Item {i}/{len(remove_actions)} ──")
             
             if action.action == ActionType.REMOVE_SECTION:
-                print(f"📁 Section: [{action.section}]")
-                print(f"🤖 TARS: This entire section would be removed.")
+                print(f"* Section: [{action.section}]")
+                print(f"TARS: This entire section would be removed.")
             else:
-                print(f"📄 Field: [{action.section}] {action.field} = {action.value}")
-                print(f"🤖 TARS: This field would be removed from section [{action.section}].")
+                print(f"*Field: [{action.section}] {action.field} = {action.value}")
+                print(f"TARS: This field would be removed from section [{action.section}].")
             
             while True:
                 keep_choice = input(f"   Keep this item? [y/n]: ").strip().lower()
@@ -390,17 +390,17 @@ class TarsConfigManager:
                 else:
                     print("   Please enter 'y' or 'n'")
         
-        print(f"\n🤖 TARS: Interactive selection complete!")
+        print(f"\nTARS: Interactive selection complete!")
         return actions_to_keep
 
     def display_action_summary(self, actions: List[ConfigAction]):
         print("\n" + "="*70)
-        print("🤖 TARS: Configuration Analysis Complete")
+        print("TARS: Configuration Analysis Complete")
         print("="*70)
         
         if not actions:
-            print("\n✨ Cooper, the configuration is already synchronized!")
-            print("🤖 TARS: No actions required. Humor setting: 75%")
+            print("\n✨ The configuration is already synchronized!")
+            print("TARS: No actions required.")
             return False
         
         add_sections = [a for a in actions if a.action == ActionType.ADD_SECTION]
@@ -411,17 +411,17 @@ class TarsConfigManager:
         preserve_fields = [a for a in actions if a.action == ActionType.PRESERVE_VALUE]
         preserve_comments = [a for a in actions if a.action == ActionType.PRESERVE_COMMENT]
         
-        print(f"\n📊 MISSION SUMMARY:")
-        print(f"   🆕 Sections to add: {len(add_sections)}")
+        print(f"\nMISSION SUMMARY:")
+        print(f"   @ Sections to add: {len(add_sections)}")
         print(f"   ➕ Fields to add: {len(add_fields)}")
-        print(f"   💬 Comments to add: {len(add_comments)}")
+        print(f"   # Comments to add: {len(add_comments)}")
         print(f"   🗑️  Sections to remove: {len(remove_sections)}")
         print(f"   ➖ Fields to remove: {len(remove_fields)}")
         print(f"   🔒 Values to preserve: {len(preserve_fields)}")
-        print(f"   📝 Comments to preserve: {len(preserve_comments)}")
+        print(f"   * Comments to preserve: {len(preserve_comments)}")
         
         if add_sections:
-            print(f"\n🆕 NEW SECTIONS:")
+            print(f"\n@ NEW SECTIONS:")
             for action in add_sections:
                 comment_info = f" # {action.comment}" if action.comment else ""
                 print(f"   └─ [{action.section}]{comment_info}")
@@ -433,7 +433,7 @@ class TarsConfigManager:
                 print(f"   └─ [{action.section}] {action.field} = {action.value}{comment_info}")
         
         if add_comments:
-            print(f"\n💬 NEW COMMENTS:")
+            print(f"\n# NEW COMMENTS:")
             for action in add_comments:
                 comment_type = "section" if action.field == "__section_desc__" else "field"
                 field_name = action.field.replace("__", "").replace("_desc", "") if action.field != "__section_desc__" else ""
@@ -458,7 +458,7 @@ class TarsConfigManager:
                 print(f"   └─ ... and {len(preserve_fields) - 5} more")
         
         if preserve_comments:
-            print(f"\n📝 COMMENTS TO PRESERVE:")
+            print(f"\n* COMMENTS TO PRESERVE:")
             for action in preserve_comments[:5]:
                 comment_type = "section" if action.field == "__section_desc__" else "field"
                 field_name = action.field.replace("__", "").replace("_desc", "") if action.field != "__section_desc__" else ""
@@ -470,13 +470,13 @@ class TarsConfigManager:
         return True
 
     def apply_changes(self, actions: List[ConfigAction]):
-        print(f"\n🚀 TARS: Initiating configuration update sequence...")
+        print(f"\nTARS: Initiating configuration update sequence...")
         
         backup_created = self.create_backup()
         if not backup_created:
-            proceed = input("🤖 TARS: Continue without backup? [y/N]: ").strip().lower()
+            proceed = input("TARS: Continue without backup? [y/N]: ").strip().lower()
             if proceed not in ['y', 'yes']:
-                print("🤖 TARS: Mission aborted for safety reasons.")
+                print("TARS: Mission aborted for safety reasons.")
                 return
             
         template_sections = self.parse_config_structure(self.template_file)
@@ -515,7 +515,7 @@ class TarsConfigManager:
         self.write_config_file(final_sections)
         
         print(f"\n✅ TARS: Configuration synchronization complete!")
-        print(f"🤖 TARS: The cosmic dance of data alignment is finished, Cooper.")
+        print(f"TARS: The cosmic dance of data alignment is finished, Cooper.")
 
     def write_config_file(self, sections: Dict[str, ConfigSection]):
         """Write config file with complete comment preservation"""
@@ -547,46 +547,45 @@ class TarsConfigManager:
             self.display_tars_header()
             
             if not os.path.exists(self.template_file):
-                print(f"🤖 TARS: Houston, we have a problem. Template file '{self.template_file}' not found.")
-                print("🤖 TARS: Humor setting reduced to 0%. This is serious, Cooper.")
+                print(f"TARS: Houston, we have a problem. Template file '{self.template_file}' not found.")
+                print("TARS: Humor setting reduced to 0%. This is serious.")
                 sys.exit(1)
             
-            print("🤖 TARS: Debug - About to analyze differences...")
+            print("TARS: Debug - About to analyze differences...")
             actions = self.analyze_differences()
-            print(f"🤖 TARS: Debug - Got {len(actions) if actions else 0} actions")
+            print(f"TARS: Debug - Got {len(actions) if actions else 0} actions")
             
-            print("🤖 TARS: Debug - About to confirm removals...")
+            print("TARS: Debug - About to confirm removals...")
             actions = self.confirm_removals(actions)
-            print(f"🤖 TARS: Debug - After removal confirmation: {len(actions) if actions else 0} actions")
+            print(f"TARS: Debug - After removal confirmation: {len(actions) if actions else 0} actions")
             
-            print("🤖 TARS: Debug - About to display summary...")
+            print("TARS: Debug - About to display summary...")
             has_changes = self.display_action_summary(actions)
             
             if not has_changes:
                 return
             
             print(f"\n{'─'*70}")
-            print("🤖 TARS: Cooper, shall I proceed with the synchronization?")
+            print("TARS: Shall I proceed with the synchronization?")
             response = input("   Continue? [Y/n]: ").strip().lower()
             
             if response in ['', 'y', 'yes']:
                 self.apply_changes(actions)
             else:
-                print("🤖 TARS: Mission aborted. Configuration remains unchanged.")
-                print("🤖 TARS: Sometimes discretion is the better part of valor.")
+                print("TARS: Mission aborted. Configuration remains unchanged.")
+                print("TARS: Sometimes discretion is the better part of valor.")
                 
         except Exception as e:
-            print(f"\n🤖 TARS: Debug - Error occurred at: {e}")
+            print(f"\nTARS: Debug - Error occurred at: {e}")
             import traceback
             traceback.print_exc()
             raise
 
     def show_interstellar_goodbye(self):
         goodbye_art = """
-        
-    ⭐ TARS: "Cooper, the bulk beings are closing the tesseract..." ⭐
-    
-         🌌 Configuration mission accomplished! 🌌
+
+         * Configuration mission accomplished! *
+
         """
         print(goodbye_art)
 
@@ -596,8 +595,8 @@ if __name__ == "__main__":
         manager.run()
         manager.show_interstellar_goodbye()
     except KeyboardInterrupt:
-        print("\n\n🤖 TARS: Mission interrupted by user.")
-        print("🤖 TARS: Remember Cooper, love is the one thing we're capable of perceiving that transcends dimensions of time and space... and config files.")
+        print("\n\nTARS: Mission interrupted by user.")
+        print("TARS: Remember, love is the one thing we're capable of perceiving that transcends dimensions of time and space... and config files.")
     except Exception as e:
-        print(f"\n🤖 TARS: Critical system error: {e}")
-        print("🤖 TARS: Humor setting: 100%. At least we tried, Cooper!")
+        print(f"\nTARS: Critical system error: {e}")
+        print("TARS: Humor setting: 100%. At least we tried!")
