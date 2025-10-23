@@ -7,6 +7,8 @@ to control servos and execute specific actions in the TARS-AI system.
 This module listens to gamepad events such as button presses, joystick movements, 
 and D-pad directions, mapping these events to corresponding robotic movements or 
 in-app commands. 
+
+UPGRADED: Now uses adafruit-circuitpython-pca9685 library
 """
 # ----------------------------------------------
 # atomikspace (discord)
@@ -17,7 +19,11 @@ import evdev
 import time
 from datetime import datetime
 from evdev import InputDevice, categorize, ecodes, list_devices
-import Adafruit_PCA9685
+
+# Modern CircuitPython imports
+import board
+import busio
+from adafruit_pca9685 import PCA9685
 
 from modules.module_config import load_config
 from modules.module_messageQue import queue_message
@@ -33,28 +39,29 @@ else:
 global posevar
 
 try:
-    pwm = Adafruit_PCA9685.PCA9685(busnum=1)  # Specify I2C bus 1
-    pwm.set_pwm_freq(50)  # Set frequency to 50 Hz
-except FileNotFoundError as e:
-    queue_message(f"ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
-    pwm = None  # Fallback if hardware is unavailable
+    i2c = busio.I2C(board.SCL, board.SDA)
+    pca = PCA9685(i2c)
+    pca.frequency = 50
+    queue_message("LOAD: PCA9685 initialized successfully")
+except (FileNotFoundError, OSError, ValueError) as e:
+    queue_message(f"ERROR: I2C device not found. Ensure that I2C is enabled. Details: {e}")
+    pca = None
 except Exception as e:
     queue_message(f"ERROR: Unexpected error during PCA9685 initialization: {e}")
-    pwm = None  # Fallback if hardware is unavailable
+    pca = None
 
-
-
-# Set initial servo positions
-if pwm:
+if pca:
     try:
-        # Port
-        """ pwm.set_pwm(3, 3, 610)
-        pwm.set_pwm(4, 4, 570)
-        pwm.set_pwm(5, 5, 570)
-        # Starboard
-        pwm.set_pwm(6, 6, 200)
-        pwm.set_pwm(7, 7, 200)
-        pwm.set_pwm(8, 8, 240) """
+        """ 
+        # Port servos
+        pca.channels[3].duty_cycle = int(610 * 65535 / 4095)
+        pca.channels[4].duty_cycle = int(570 * 65535 / 4095)
+        pca.channels[5].duty_cycle = int(570 * 65535 / 4095)
+        # Starboard servos
+        pca.channels[6].duty_cycle = int(200 * 65535 / 4095)
+        pca.channels[7].duty_cycle = int(200 * 65535 / 4095)
+        pca.channels[8].duty_cycle = int(240 * 65535 / 4095)
+        """
     except Exception as e:
         queue_message(f"Error setting initial servo positions: {e}")
 
@@ -447,21 +454,15 @@ def start_controls():
     except KeyboardInterrupt:
         queue_message("\nExiting...")
 
-    # Clean up
-    gamepad.close()
-
-    # Clean up
     gamepad.close()
 
 device = find_controller(controller_name)
 
-#Delete this is for testing
 if __name__ == "__main__":
     while True:
         try:
             start_controls()
         except Exception as e:
             queue_message(f"An error occurred: {e}")
-            # Optionally add a small delay to prevent tight infinite loops in case of failure
             import time
             time.sleep(1)
