@@ -563,6 +563,49 @@ main() {
     echo ""
     cd src
     
+    if [ -f "config.ini" ]; then
+        echo ""
+        echo "+===============================================================+"
+        echo "| CONFIGURATION UPDATE PROTOCOL"
+        echo "+===============================================================+"
+        echo "| "
+        echo "| TARS can now update your config.ini file with new fields"
+        echo "| and remove deprecated ones using the app-cms.py utility."
+        echo "| "
+        echo "| This will:"
+        echo "|   - Add any new configuration fields"
+        echo "|   - Remove obsolete/unused configuration entries"
+        echo "|   - Preserve your existing settings"
+        echo "| "
+        echo "+===============================================================+"
+        echo ""
+        
+        read -p "Would you like to synchronize the config.ini with the potential new settings? (y/n): " -n 1 -r
+        echo ""
+        
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            tars_say "Initiating configuration synchronization sequence..." "info"
+            
+            if [ -f "app-cms.py" ]; then
+                echo "+===============================================================+"
+                echo "| Running app-cms.py..."
+                echo "+===============================================================+"
+                
+                if python app-cms.py 2>&1 | tee /tmp/config-update.log; then
+                    tars_say "Configuration synchronization completed successfully." "success"
+                else
+                    tars_say "Configuration synchronization encountered issues. Check /tmp/config-update.log" "warning"
+                fi
+            else
+                tars_say "app-cms.py not found in src directory. Skipping configuration update." "warning"
+            fi
+        else
+            tars_say "Configuration synchronization skipped. You can run it manually later with: python app-cms.py" "info"
+        fi
+    fi
+    
+    echo ""
+    
     cat << "EOF"
     +==============================================================+
     |                                                              |
@@ -573,7 +616,6 @@ main() {
     |                                                              |
     |              "Safety first."                                 |
     |                                                              |
-    |              [ HUMOR SETTING: 75% ]                          |
     |              [ SYSTEM STATUS: OPTIMAL ]                      |
     |                                                              |
     +==============================================================+
@@ -584,11 +626,13 @@ EOF
     chmod -R 775 . 2>/dev/null || true
     cd src
     
+    echo ""    
+    echo "*** Set your .env variables (API Keys) before running the program"
     echo ""
-    echo "IMPORTANT: Run your application as user '$ACTUAL_USER' (without sudo)"
-    echo "Enable the virtual environment: source .venv/bin/activate if not using App-Start.py"
-    echo "*** Run the program in Terminal mode the first times in the App-Start Menu ***"
-    echo "Start the program: python App-Start.py"
+    echo "*** IMPORTANT: Run the program in Terminal mode the first times in the App-Start Menu ***"
+    echo "    Run your application as user '$ACTUAL_USER' (without sudo)"    
+    echo "    Start the program: python App-Start.py"
+    echo ""
     
     sleep 2
 }
