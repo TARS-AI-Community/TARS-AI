@@ -48,9 +48,16 @@ async def synthesize(voice, chunk):
         wav_file.setsampwidth(2)  # 16-bit samples
         wav_file.setframerate(voice.config.sample_rate)
         try:
-            voice.synthesize(chunk, wav_file)
-        except TypeError as e:
-            queue_message(f"ERROR: {e}")
+            # need both methods for compatibility
+            if hasattr(voice, "synthesize_wav"):
+                voice.synthesize_wav(chunk, wav_file)
+            elif hasattr(voice, "synthesize"):
+                voice.synthesize(chunk, wav_file)
+            else:
+                raise AttributeError("Neither synthesize_wav nor synthesize found in voice object")
+
+        except Exception as e:
+            queue_message(f"ERROR during synthesis: {e}")
     wav_buffer.seek(0)
     return wav_buffer
 

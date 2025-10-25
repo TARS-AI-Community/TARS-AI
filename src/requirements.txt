@@ -43,14 +43,17 @@ python-dotenv           # Load environment variables from a .env file
 pygame                  # Game development & multimedia support
 evdev                   # Handle Linux input devices (keyboards, mice, controllers)
 moviepy                 # Video editing and playback support
-adafruit-pca9685        # Servo driver for hardware integration
+adafruit-circuitpython-pca9685
+adafruit-blinka
+adafruit-circuitpython-busdevice
+adafruit-circuitpython-servokit # Servo libraries (high-level servo control)
+adafruit-pca9685        # Servo driver for hardware integration *** LEGACY ***
 selenium                # Web automation for browser control
 discord.py              # Discord bot API
 discord.py[voice]       # Voice chat functionality for Discord bots
 requests                # HTTP library for API interactions
 pandas                  # Data analysis and manipulation
 joblib                  # Efficient serialization of Python objects
-adafruit-pca9685        # Servo Control
 
 # ui / camera module
 picamera2               # PI camera module, can interface with hailo module
