@@ -75,7 +75,6 @@ class TarsConfigManager:
 ║                                                                       ║
 ║                   Configuration Management System                     ║
 ║                                                                       ║
-║      "Cooper, this is no time for caution... but for configs!"        ║
 ║                                                                       ║
 ╚══════════════════════════════════════════════════════════════⠞⠁⠗⠎═════╝
         """
