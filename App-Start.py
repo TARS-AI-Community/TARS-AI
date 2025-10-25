@@ -738,5 +738,19 @@ def create_touch_menu():
         pygame.display.flip()
         clock.tick(60)
 
+def run_tars_ai_normal():
+    # Set environment variables to suppress logs
+    os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
+    os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+    
+    # Run directly in current terminal
+    command = (
+        "cd src && "
+        "source .venv/bin/activate && "
+        "python app.py"
+    )
+    
+    subprocess.run(command, shell=True, executable="/bin/bash")
+
 if __name__ == "__main__":
     create_touch_menu()

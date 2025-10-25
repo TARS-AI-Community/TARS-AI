@@ -596,6 +596,259 @@ def execute_action():
         queue_message(f"Error executing action: {e}")
         return jsonify({"error": f"Failed to execute action: {str(e)}"}), 500
 
+def parse_config_with_comments(file_path):
+    """Parse config file and extract comments for each field"""
+    comments = {}
+    
+    if not os.path.exists(file_path):
+        return comments
+    
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+    
+    current_section = None
+    pending_comment = []
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Track section
+        if stripped.startswith('[') and ']' in stripped:
+            current_section = stripped[1:stripped.index(']')]
+            # Extract inline comment for section
+            if '#' in stripped:
+                section_comment = stripped.split('#', 1)[1].strip()
+                comments[f"{current_section}.__section__"] = section_comment
+            pending_comment = []
+        # Collect comment lines
+        elif stripped.startswith('#'):
+            pending_comment.append(stripped[1:].strip())
+        # Parse field with value
+        elif '=' in stripped and current_section:
+            field_name = stripped.split('=')[0].strip()
+            
+            # Get inline comment if exists
+            inline_comment = ""
+            if '#' in stripped.split('=', 1)[1]:
+                inline_comment = stripped.split('#', 1)[1].strip()
+            
+            # Combine pending comments and inline comment
+            full_comment = ' '.join(pending_comment)
+            if inline_comment:
+                full_comment = inline_comment if not full_comment else f"{full_comment} {inline_comment}"
+            
+            if full_comment:
+                comments[f"{current_section}.{field_name}"] = full_comment
+            
+            pending_comment = []
+        elif stripped == "":
+            pending_comment = []
+    
+    return comments
+
+@flask_app.route('/get_config', methods=['GET'])
+def get_config():
+    """
+    Returns the current configuration with field options for dropdowns
+    """
+    import configparser
+    
+    # Define field options for dropdowns and hardcoded hints
+    field_options = {
+        # CONTROLS Section
+        'CONTROLS.__section__': {'description': 'Controller settings'},
+        'CONTROLS.controller_name': {'description': 'Name of the controller used for interaction'},
+        'CONTROLS.enabled': {'description': 'Enable use of controller used for interaction'},
+        'CONTROLS.voicemovement': {'description': 'Enable or disable movement via voice control'},
+        
+        # STT Section
+        'STT.__section__': {'description': 'Speech-to-Text configuration'},
+        'STT.wake_word': {'description': 'Wake word for activating the system'},
+        'STT.sensitivity': {'description': 'Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection'},
+        'STT.stt_processor': {
+            'options': ['vosk', 'faster-whisper', 'silero', 'fastrtc', 'external'],
+            'description': 'vosk, faster-whisper, silero, fastrtc, or external'
+        },
+        'STT.external_url': {'description': 'URL for the STT server (if enabled)'},
+        'STT.whisper_model': {
+            'options': ['tiny', 'base', 'small', 'medium', 'large'],
+            'description': 'Whisper model size'
+        },
+        'STT.vad_method': {
+            'options': ['silero', 'rms'],
+            'description': 'Voice activity detection method'
+        },
+        'STT.wake_word_processor': {
+            'options': ['picovoice', 'pocketsphinx', 'fastrtc'],
+            'description': 'Wake word detection processor'
+        },
+        'LLM.llm_backend': {
+            'options': ['openai', 'tabby', 'ooba', 'deepinfra'],
+            'description': 'LLM backend service'
+        },
+        'LLM.openai_model': {
+            'description': 'OpenAI model to use for LLM if backend = openai (e.g., gpt-4o-mini, gpt-4o, gpt-3.5-turbo, gpt-4)'
+        },
+        'LLM.override_encoding_model': {
+            'options': ['cl100k_base', 'p50k_base', 'r50k_base', 'gpt2'],
+            'description': 'Token encoding model'
+        },
+        'LLM.functioncalling': {
+            'options': ['llm', 'nb'],
+            'description': 'Function calling method'
+        },
+        'TTS.ttsoption': {
+            'options': ['espeak', 'piper', 'silero', 'alltalk', 'azure', 'elevenlabs', 'openai'],
+            'description': 'Text-to-speech service'
+        },
+        'TTS.azure_region': {
+            'options': ['eastus', 'westus', 'westus2', 'eastus2', 'centralus'],
+            'description': 'Azure region for TTS'
+        },
+        'TTS.openai_voice': {
+            'options': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
+            'description': 'OpenAI TTS voice'
+        },
+        'TTS.model_id': {
+            'options': ['eleven_multilingual_v2', 'eleven_monolingual_v1', 'eleven_turbo_v2'],
+            'description': 'ElevenLabs model ID'
+        },
+        'STABLE_DIFFUSION.service': {
+            'options': ['automatic1111', 'openai'],
+            'description': 'Image generation service'
+        },
+        'STABLE_DIFFUSION.sampler_name': {
+            'options': ['Euler a', 'Euler', 'DPM++ 2M Karras', 'DPM++ SDE Karras', 'DDIM'],
+            'description': 'Stable Diffusion sampler'
+        },
+        'UI.background_id': {
+            'options': ['0', '1', '2', '3', '4', '5'],
+            'description': 'Background animation (0=none, 1=image, 2=stars, 3-5=video)'
+        },
+        'UI.rotation': {
+            'options': ['0', '90', '180', '270'],
+            'description': 'Screen rotation in degrees'
+        },
+        'RAG.strategy': {
+            'options': ['naive', 'hybrid'],
+            'description': 'RAG retrieval strategy'
+        },
+        'SERVO.MOVEMENT_VERSION': {
+            'options': ['V1', 'V2'],
+            'description': 'Servo movement version'
+        }
+    }
+    
+    try:
+        config_file = os.path.join(BASE_DIR, 'config.ini')
+        template_file = os.path.join(BASE_DIR, 'config.ini.template')
+        
+        # Use template if config.ini doesn't exist
+        file_to_read = config_file if os.path.exists(config_file) else template_file
+        
+        if not os.path.exists(file_to_read):
+            return jsonify({"error": "No configuration file found"}), 404
+        
+        config = configparser.RawConfigParser()
+        config.optionxform = str  # Preserve case
+        config.read(file_to_read)
+        
+        # Convert to dictionary
+        config_dict = {}
+        for section in config.sections():
+            config_dict[section] = dict(config[section])
+        
+        # Parse comments from template
+        template_comments = parse_config_with_comments(template_file)
+        
+        # Merge comments with field_options
+        for key, comment in template_comments.items():
+            if key in field_options:
+                # Keep existing dropdown options, just update description if not set
+                if 'description' not in field_options[key] or not field_options[key]['description']:
+                    field_options[key]['description'] = comment
+            else:
+                # Add new field option with just description
+                field_options[key] = {'description': comment}
+        
+        return jsonify({
+            "config": config_dict,
+            "field_options": field_options
+        })
+    except Exception as e:
+        queue_message(f"Error reading config: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@flask_app.route('/save_config', methods=['POST'])
+def save_config():
+    """
+    Saves the configuration to config.ini using TARS Configuration Management System
+    """
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Request must be JSON"}), 400
+        
+        data = request.get_json()
+        
+        # Import the TARS CMS integration from module_config
+        from modules.module_config import update_config_from_web_ui
+        
+        # Use TARS CMS to save configuration
+        result = update_config_from_web_ui(data, create_backup=True)
+        
+        if result["success"]:
+            queue_message(f"INFO: Configuration saved successfully using TARS CMS - {result['message']}")
+            if result.get("backup_location"):
+                queue_message(f"INFO: Backup created at {result['backup_location']}")
+            
+            return jsonify({
+                "success": True, 
+                "message": result["message"],
+                "actions_taken": result.get("actions_taken", []),
+                "backup_location": result.get("backup_location"),
+                "tars_cms_enabled": True
+            })
+        else:
+            queue_message(f"ERROR: Configuration save failed - {result['message']}")
+            return jsonify({
+                "success": False, 
+                "error": result["message"],
+                "errors": result.get("errors", []),
+                "tars_cms_enabled": True
+            }), 500
+    
+    except Exception as e:
+        queue_message(f"ERROR: Configuration save error - {str(e)}")
+        return jsonify({
+            "success": False, 
+            "error": str(e),
+            "tars_cms_enabled": False
+        }), 500
+
+
+@flask_app.route('/config_sync_status', methods=['GET'])
+def config_sync_status():
+    """
+    Get configuration synchronization status using TARS CMS
+    """
+    try:
+        from modules.module_config import get_config_sync_status
+        
+        status = get_config_sync_status()
+        
+        return jsonify({
+            "success": True,
+            "sync_status": status,
+            "tars_cms_enabled": True
+        })
+    
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "tars_cms_enabled": False
+        }), 500
+
 
 def start_flask_app():
     import eventlet
