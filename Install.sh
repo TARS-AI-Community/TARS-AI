@@ -219,164 +219,113 @@ install_chromedriver() {
         echo "| Method: Package Manager (chromium-driver)"
         echo "+===============================================================+"
         
-        if ! sudo apt install -y chromium-driver --fix-missing 2>&1 | tee /tmp/chromedriver-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
+        if ! sudo apt install -y chromium-driver 2>&1 | tee /tmp/chromedriver-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
             tars_say "ChromeDriver installation encountered issues. Check /tmp/chromedriver-install.log" "warning"
         fi
         
         if command -v chromedriver &>/dev/null; then
-            tars_say "ChromeDriver successfully installed." "success"
+            tars_say "ChromeDriver installed successfully." "success"
         else
-            tars_say "ChromeDriver package installed but binary not found in PATH." "warning"
+            tars_say "ChromeDriver installation verification failed." "error"
+            exit 1
         fi
-        return 0
-    fi
-    
-    if apt-cache show chromedriver-chromium &>/dev/null; then
-        echo "| Method: Package Manager (chromedriver-chromium)"
+    else
+        echo "| Method: Manual Installation (Latest Stable)"
         echo "+===============================================================+"
         
-        if ! sudo apt install -y chromedriver-chromium --fix-missing 2>&1 | tee /tmp/chromedriver-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
-            tars_say "ChromeDriver installation encountered issues. Check /tmp/chromedriver-install.log" "warning"
+        tars_say "Fetching latest stable ChromeDriver version..." "info"
+        
+        LATEST_STABLE=$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE)
+        
+        if [ -z "$LATEST_STABLE" ]; then
+            tars_say "Unable to determine ChromeDriver version. Manual installation required." "error"
+            exit 1
         fi
         
-        if command -v chromedriver &>/dev/null; then
-            tars_say "ChromeDriver successfully installed." "success"
-        else
-            tars_say "ChromeDriver package installed but binary not found in PATH." "warning"
+        echo "| Target Version: $LATEST_STABLE"
+        
+        DRIVER_URL="https://chromedriver.storage.googleapis.com/${LATEST_STABLE}/chromedriver_linux64.zip"
+        TEMP_DIR=$(mktemp -d)
+        
+        echo "| Downloading from: $DRIVER_URL"
+        
+        if ! wget -q "$DRIVER_URL" -O "$TEMP_DIR/chromedriver.zip" 2>&1 | tail -5; then
+            tars_say "ChromeDriver download failed. Check network connection." "error"
+            rm -rf "$TEMP_DIR"
+            exit 1
         fi
-        return 0
+        
+        if ! unzip -q "$TEMP_DIR/chromedriver.zip" -d "$TEMP_DIR"; then
+            tars_say "ChromeDriver extraction failed." "error"
+            rm -rf "$TEMP_DIR"
+            exit 1
+        fi
+        
+        sudo mv "$TEMP_DIR/chromedriver" /usr/local/bin/
+        sudo chmod +x /usr/local/bin/chromedriver
+        
+        rm -rf "$TEMP_DIR"
+        
+        if command -v chromedriver &>/dev/null; then
+            VERSION=$(chromedriver --version 2>/dev/null | head -1)
+            echo "| Status: Installation Complete"
+            echo "| Version: $VERSION"
+            echo "+===============================================================+"
+            tars_say "ChromeDriver deployed successfully." "success"
+        else
+            tars_say "ChromeDriver verification failed after installation." "error"
+            exit 1
+        fi
     fi
-    
-    tars_say "ChromeDriver not available in package repositories. Skipping..." "warning"
-    echo ""
 }
 
 verify_installations() {
-    tars_say "Verifying installed components..." "info"
+    tars_say "Verifying system dependencies..." "info"
     
     echo "+===============================================================+"
-    echo "| COMPONENT STATUS"
+    echo "| DEPENDENCY VERIFICATION"
     echo "+===============================================================+"
     
-    if command -v python3 &>/dev/null; then
-        VERSION=$(python3 --version 2>&1)
-        echo "| [OK] Python3:      $VERSION"
-    else
-        echo "| [X] Python3:      Not found"
-    fi
+    local MISSING_DEPS=()
     
-    if command -v ${CHROMIUM_CMD:-chromium} &>/dev/null; then
-        VERSION=$(${CHROMIUM_CMD:-chromium} --version 2>/dev/null | head -1)
-        echo "| [OK] Chromium:     $VERSION"
-    else
-        echo "| [X] Chromium:     Not found"
-    fi
-    
-    if command -v chromedriver &>/dev/null; then
-        VERSION=$(chromedriver --version 2>/dev/null | head -1)
-        echo "| [OK] ChromeDriver: $VERSION"
-    else
-        echo "| [--] ChromeDriver: Not installed (optional)"
-    fi
-    
-    if command -v sox &>/dev/null; then
-        VERSION=$(sox --version 2>/dev/null | head -1)
-        echo "| [OK] SoX:          $VERSION"
-    else
-        echo "| [X] SoX:          Not found"
-    fi
+    for cmd in python3 pip chromium chromedriver sox portaudio19-dev espeak-ng; do
+        if command -v $cmd &>/dev/null || dpkg -l | grep -q $cmd; then
+            echo "|  [OK] $cmd"
+        else
+            echo "|  [X] $cmd - NOT FOUND"
+            MISSING_DEPS+=("$cmd")
+        fi
+    done
     
     echo "+===============================================================+"
-    echo ""
-    sleep 1
-}
-
-check_network() {
-    tars_say "Testing network connectivity..." "info"
     
-    echo "+===============================================================+"
-    echo "| NETWORK DIAGNOSTICS"
-    echo "+===============================================================+"
-    
-    if ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
-        echo "| [OK] Internet connectivity working"
-    else
-        echo "| [X] Internet connectivity FAILED"
-        echo "| "
-        echo "| Check your network connection and try again"
-        tars_say "No internet connection detected. Cannot proceed." "error"
+    if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
+        tars_say "Critical dependencies missing: ${MISSING_DEPS[*]}" "error"
         exit 1
-    fi
-    
-    if getent hosts deb.debian.org >/dev/null 2>&1 || getent hosts archive.ubuntu.com >/dev/null 2>&1; then
-        echo "| [OK] DNS resolution working"
     else
-        echo "| [!] DNS resolution check failed"
-        echo "|     Will attempt to continue anyway..."
+        tars_say "All dependencies verified and operational." "success"
     fi
-    
-    if timeout 10 curl -s -o /dev/null -w "%{http_code}" http://deb.debian.org > /dev/null 2>&1; then
-        echo "| [OK] Repository connectivity working"
-    else
-        echo "| [!] Repository connectivity check failed or slow"
-        echo "|     This may cause apt operations to hang"
-    fi
-    
-    echo "+===============================================================+"
-    echo ""
 }
 
 main() {
     show_tars_boot
-    
-    tars_say "This is no time for caution. Initializing installation sequence." "info"
-    
     show_system_diagnostic
     
-    check_network
-    
-    tars_say "Checking for conflicting package manager processes..." "info"
-    sudo killall apt apt-get dpkg 2>/dev/null || true
-    sleep 2
-    echo ""
-    
-    tars_say "Preparing package management system..." "info"
-    echo "+===============================================================+"
-    echo "| CLEANING APT CACHE"
-    echo "+===============================================================+"
-    
-    sudo apt clean 2>&1 | head -10
-    echo "| [OK] Cache cleaned"
-    
-    echo "| Updating initramfs (this may take a moment)..."
-    sudo update-initramfs -u -k all 2>&1 | tail -5 || true
-    echo "| [OK] Initramfs updated"
-    
-    echo "| Configuring packages..."
-    if ! sudo dpkg --configure -a 2>&1 | tee /tmp/dpkg-configure.log | tail -10; then
-        echo "| [!] dpkg configure had issues - see /tmp/dpkg-configure.log"
-    else
-        echo "| [OK] Packages configured"
-    fi
-    echo "+===============================================================+"
-    echo ""
-    
-    tars_say "Synchronizing package databases with apt-get update..." "info"
+    tars_say "Synchronizing package databases with repositories..." "info"
     echo "+===============================================================+"
     echo "| APT-GET UPDATE OUTPUT"
     echo "+===============================================================+"
     
-    UPDATE_LOG_FILE="/tmp/tars-apt-update.log"
+    INITIAL_UPDATE_LOG="/tmp/tars-apt-initial-update.log"
     
-    echo ""
-    if ! sudo apt-get update 2>&1 | tee "$UPDATE_LOG_FILE"; then
+    if ! sudo apt-get update 2>&1 | tee "$INITIAL_UPDATE_LOG"; then
         echo ""
         echo "+===============================================================+"
-        echo "| [X] APT-GET UPDATE FAILED!"
+        echo "| [X] APT-GET UPDATE FAILED"
         echo "+===============================================================+"
-        echo "| Full log saved to: $UPDATE_LOG_FILE"
+        echo "| Full error log saved to: $INITIAL_UPDATE_LOG"
         echo "| "
-        echo "| Common fixes:"
+        echo "| Troubleshooting steps:"
         echo "|   1. Check your internet connection"
         echo "|   2. Run: sudo rm -rf /var/lib/apt/lists/*"
         echo "|   3. Run: sudo mkdir -p /var/lib/apt/lists/partial"
@@ -563,6 +512,66 @@ main() {
     echo ""
     cd src
     
+
+    # Check current directory and config.ini status
+    CURRENT_DIR=$(pwd)
+    echo "+===============================================================+"
+    echo "| DEBUG: Current directory: $CURRENT_DIR"
+    
+    if [ -f "config.ini" ]; then
+        echo "| DEBUG: config.ini FOUND in current directory"
+        echo "+===============================================================+"
+        echo ""
+        echo "+===============================================================+"
+        echo "| CMS APPLICATION LAUNCHER"
+        echo "+===============================================================+"
+        echo ""
+        
+        # Use a more explicit prompt with timeout
+        read -t 30 -p "Would you like to run synchronize the config.ini file (recommended)? [y/n]: " -r REPLY
+        echo ""
+        
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            tars_say "Launching CMS application..." "info"
+            echo ""
+            
+            # Ensure we're in the correct directory and virtual environment is active
+            if [ -f ".venv/bin/activate" ]; then
+                source .venv/bin/activate
+                echo "| Virtual environment activated"
+            fi
+            
+            # Check if app_csm.py exists
+            if [ -f "app_cms.py" ]; then
+                echo "| Executing: python app_csm.py"
+                echo "+===============================================================+"
+                echo ""
+                python app_cms.py
+            else
+                tars_say "Error: app_cms.py not found in src directory." "error"
+                echo "| Expected location: $CURRENT_DIR/app_cms.py"
+                echo "| Contents of directory:"
+                ls -la | grep "app_"
+            fi
+        else
+            echo ""
+            echo "CMS application launch skipped."
+            echo "You can run it later with:"
+            echo "  cd $(dirname $CURRENT_DIR)/src"
+            echo "  source .venv/bin/activate"
+            echo "  python app_cms.py"
+        fi
+    else
+        echo "| DEBUG: config.ini NOT FOUND in current directory"
+        echo "| Contents of current directory:"
+        ls -la config* 2>/dev/null || echo "| No config files found"
+        echo "+===============================================================+"
+        echo ""
+        echo "Note: CMS launcher requires config.ini to be present."
+    fi
+    
+    echo ""
+
     cat << "EOF"
     +==============================================================+
     |                                                              |
@@ -571,10 +580,6 @@ main() {
     |              All systems operational.                        |
     |              TARS unit ready for deployment.                 |
     |                                                              |
-    |              "Safety first."                                 |
-    |                                                              |
-    |              [ HUMOR SETTING: 75% ]                          |
-    |              [ SYSTEM STATUS: OPTIMAL ]                      |
     |                                                              |
     +==============================================================+
 EOF
@@ -592,8 +597,9 @@ EOF
     echo "Start the program: python App-Start.py"
     echo ""
     echo "Enable the virtual environment: source .venv/bin/activate if not using App-Start.py"
+    echo ""
     
-    sleep 2
+    
 }
 
 main
