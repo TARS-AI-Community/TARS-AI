@@ -782,53 +782,72 @@ def get_config():
 @flask_app.route('/save_config', methods=['POST'])
 def save_config():
     """
-    Saves the configuration to config.ini
+    Saves the configuration to config.ini using TARS Configuration Management System
     """
-    import configparser
-    
     try:
         if not request.is_json:
             return jsonify({"error": "Request must be JSON"}), 400
         
         data = request.get_json()
-        config_file = os.path.join(BASE_DIR, 'config.ini')
-        template_file = os.path.join(BASE_DIR, 'config.ini.template')
         
-        # Read the template to get comments and structure
-        template_config = configparser.RawConfigParser()
-        template_config.optionxform = str  # Preserve case
-        if os.path.exists(template_file):
-            template_config.read(template_file)
+        # Import the TARS CMS integration from module_config
+        from modules.module_config import update_config_from_web_ui
         
-        # Create new config
-        new_config = configparser.RawConfigParser()
-        new_config.optionxform = str  # Preserve case
+        # Use TARS CMS to save configuration
+        result = update_config_from_web_ui(data, create_backup=True)
         
-        # If config.ini exists, read it first to preserve any custom sections
-        if os.path.exists(config_file):
-            new_config.read(config_file)
-        
-        # Update with new values from the request
-        for section, fields in data.items():
-            if not new_config.has_section(section):
-                new_config.add_section(section)
+        if result["success"]:
+            queue_message(f"INFO: Configuration saved successfully using TARS CMS - {result['message']}")
+            if result.get("backup_location"):
+                queue_message(f"INFO: Backup created at {result['backup_location']}")
             
-            for key, value in fields.items():
-                # Convert boolean to string
-                if isinstance(value, bool):
-                    value = str(value)
-                new_config.set(section, key, str(value))
-        
-        # Write to file
-        with open(config_file, 'w') as f:
-            new_config.write(f)
-        
-        queue_message("INFO: Configuration saved successfully")
-        return jsonify({"success": True, "message": "Configuration saved successfully"})
+            return jsonify({
+                "success": True, 
+                "message": result["message"],
+                "actions_taken": result.get("actions_taken", []),
+                "backup_location": result.get("backup_location"),
+                "tars_cms_enabled": True
+            })
+        else:
+            queue_message(f"ERROR: Configuration save failed - {result['message']}")
+            return jsonify({
+                "success": False, 
+                "error": result["message"],
+                "errors": result.get("errors", []),
+                "tars_cms_enabled": True
+            }), 500
     
     except Exception as e:
-        queue_message(f"Error saving config: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        queue_message(f"ERROR: Configuration save error - {str(e)}")
+        return jsonify({
+            "success": False, 
+            "error": str(e),
+            "tars_cms_enabled": False
+        }), 500
+
+
+@flask_app.route('/config_sync_status', methods=['GET'])
+def config_sync_status():
+    """
+    Get configuration synchronization status using TARS CMS
+    """
+    try:
+        from modules.module_config import get_config_sync_status
+        
+        status = get_config_sync_status()
+        
+        return jsonify({
+            "success": True,
+            "sync_status": status,
+            "tars_cms_enabled": True
+        })
+    
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "tars_cms_enabled": False
+        }), 500
 
 
 def start_flask_app():
