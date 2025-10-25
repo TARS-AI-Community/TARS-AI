@@ -581,6 +581,138 @@ class TarsConfigManager:
             traceback.print_exc()
             raise
 
+    def update_config_programmatically(self, config_data: Dict, create_backup: bool = True) -> Tuple[bool, str, List[str]]:
+        """
+        Update configuration programmatically without user interaction
+        
+        Args:
+            config_data: Dictionary of configuration sections and fields
+            create_backup: Whether to create a backup before updating
+            
+        Returns:
+            Tuple of (success, message, actions_taken)
+        """
+        try:
+            # Create backup if requested
+            if create_backup:
+                if not self.create_backup():
+                    return False, "Failed to create backup", []
+            
+            # Load configurations
+            template_sections = self.parse_config_structure(self.template_file)
+            existing_sections = self.parse_config_structure(self.config_file)
+            
+            # Create updated configuration structure
+            final_sections = {}
+            actions_taken = []
+            
+            for section_name, template_section in template_sections.items():
+                final_section = ConfigSection(
+                    name=section_name,
+                    inline_comment=template_section.inline_comment,
+                    description_comments=template_section.description_comments.copy() if template_section.description_comments else []
+                )
+                
+                for field_name, template_field in template_section.fields.items():
+                    # Determine value to use
+                    if section_name in config_data and field_name in config_data[section_name]:
+                        new_value = str(config_data[section_name][field_name])
+                        actions_taken.append(f"Updated [{section_name}] {field_name}")
+                    elif section_name in existing_sections and field_name in existing_sections[section_name].fields:
+                        existing_value = existing_sections[section_name].fields[field_name].value
+                        new_value = existing_value
+                        actions_taken.append(f"Preserved [{section_name}] {field_name}")
+                    else:
+                        new_value = template_field.value
+                        actions_taken.append(f"Used template [{section_name}] {field_name}")
+                    
+                    final_field = ConfigField(
+                        name=field_name,
+                        value=new_value,
+                        inline_comment=template_field.inline_comment,
+                        description_comments=template_field.description_comments.copy() if template_field.description_comments else []
+                    )
+                    
+                    final_section.fields[field_name] = final_field
+                
+                final_sections[section_name] = final_section
+            
+            # Write configuration
+            self.write_config_file(final_sections)
+            
+            return True, f"Configuration updated successfully ({len(actions_taken)} changes)", actions_taken
+            
+        except Exception as e:
+            return False, f"Configuration update failed: {str(e)}", []
+    
+    def validate_config_data(self, config_data: Dict) -> Tuple[bool, List[str]]:
+        """
+        Validate configuration data against template structure
+        
+        Args:
+            config_data: Dictionary of configuration sections and fields
+            
+        Returns:
+            Tuple of (is_valid, list_of_errors)
+        """
+        errors = []
+        
+        try:
+            template_sections = self.parse_config_structure(self.template_file)
+            
+            for section_name, section_data in config_data.items():
+                if section_name not in template_sections:
+                    errors.append(f"Unknown section: [{section_name}]")
+                    continue
+                    
+                template_section = template_sections[section_name]
+                
+                for field_name, field_value in section_data.items():
+                    if field_name not in template_section.fields:
+                        errors.append(f"Unknown field: [{section_name}] {field_name}")
+                        continue
+                        
+        except Exception as e:
+            errors.append(f"Validation error: {str(e)}")
+            
+        return len(errors) == 0, errors
+    
+    def get_config_sync_status(self) -> Dict:
+        """
+        Get configuration synchronization status for programmatic access
+        
+        Returns:
+            Dictionary with sync status information
+        """
+        try:
+            actions = self.analyze_differences()
+            
+            return {
+                "is_synchronized": len(actions) == 0,
+                "total_actions": len(actions),
+                "add_sections": len([a for a in actions if a.action == ActionType.ADD_SECTION]),
+                "add_fields": len([a for a in actions if a.action == ActionType.ADD_FIELD]),
+                "add_comments": len([a for a in actions if a.action == ActionType.ADD_COMMENT]),
+                "remove_sections": len([a for a in actions if a.action == ActionType.REMOVE_SECTION]),
+                "remove_fields": len([a for a in actions if a.action == ActionType.REMOVE_FIELD]),
+                "preserve_values": len([a for a in actions if a.action == ActionType.PRESERVE_VALUE]),
+                "actions": [
+                    {
+                        "action": action.action.value,
+                        "section": action.section,
+                        "field": action.field,
+                        "value": action.value,
+                        "comment": action.comment
+                    } for action in actions
+                ]
+            }
+            
+        except Exception as e:
+            return {
+                "error": str(e),
+                "is_synchronized": False
+            }
+
     def show_interstellar_goodbye(self):
         goodbye_art = """
 
