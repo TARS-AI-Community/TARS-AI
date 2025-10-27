@@ -98,7 +98,7 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
         queue_message(f"ERROR: Error during audio playback: {e}")
 
 
-async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
+async def generate_tts_audio(text, ttsoption, is_wakeword=False, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
     """
     Generate TTS audio for the given text using the specified TTS system.
 
@@ -108,6 +108,7 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
     - ttsurl (str): The base URL of the TTS server (for server-based TTS).
     - toggle_charvoice (bool): Flag indicating whether to use character voice for TTS.
     - tts_voice (str): The TTS speaker/voice configuration.
+    - is_wakeword (bool): use to store the cache in order to save tokens / speed up things
     """
     try:
         # Azure TTS generation
@@ -130,7 +131,7 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
                 yield chunk  
 
         elif ttsoption == "elevenlabs":
-            async for chunk in text_to_speech_with_pipelining_elevenlabs(text):
+            async for chunk in text_to_speech_with_pipelining_elevenlabs(text, is_wakeword):
                 yield chunk
 
         elif ttsoption == "silero":
@@ -138,7 +139,7 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
                 yield chunk 
 
         elif ttsoption == "openai":
-            async for chunk in text_to_speech_with_pipelining_openai(text):
+            async for chunk in text_to_speech_with_pipelining_openai(text, is_wakeword):
                 yield chunk
 
         else:
@@ -147,12 +148,13 @@ async def generate_tts_audio(text, ttsoption, azure_api_key=None, azure_region=N
     except Exception as e:
         queue_message(f"ERROR: Text-to-speech generation failed: {e}")
 
-async def play_audio_chunks(text, config):
+async def play_audio_chunks(text, config, is_wakeword=False):
     """
     Plays audio chunks sequentially from the generate_tts_audio function.
     Calls stop_talking when done.
-    """
-    async for audio_chunk in generate_tts_audio(text, config):
+    """  
+
+    async for audio_chunk in generate_tts_audio(text, config, is_wakeword):
         try:
             requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
             # Read the audio chunk into a format playable by sounddevice

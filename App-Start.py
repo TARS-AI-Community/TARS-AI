@@ -406,7 +406,7 @@ def run_tars_ai_normal():
     command = (
         "cd src && "
         "source .venv/bin/activate && "
-        "python app.py"
+        "python app.py show_ui=false"
     )
 
     subprocess.run(command, shell=True, executable="/bin/bash")

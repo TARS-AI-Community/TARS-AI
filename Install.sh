@@ -571,6 +571,37 @@ main() {
     fi
     
     echo ""
+    
+    # Check for wakeword template and offer deletion
+    WAKEWORD_DIR="$HOME/.local/share/tars_ai"
+    
+    if [ -d "$WAKEWORD_DIR" ]; then
+        echo "+===============================================================+"
+        echo "| WAKEWORD TEMPLATE DETECTED"
+        echo "+===============================================================+"
+        echo "| Location: $WAKEWORD_DIR"
+        echo "+===============================================================+"
+        echo ""
+        
+        read -t 30 -p "Would you like to delete the wakeword template in order to create a new one? [y/n]: " -r WAKEWORD_REPLY
+        echo ""
+        
+        if [[ $WAKEWORD_REPLY =~ ^[Yy]$ ]]; then
+            tars_say "Removing wakeword template directory..." "info"
+            
+            if rm -rf "$WAKEWORD_DIR" 2>/dev/null; then
+                tars_say "Wakeword template directory successfully removed." "success"
+            else
+                tars_say "Failed to remove wakeword template directory. You may need to remove it manually." "warning"
+                echo "| Run manually: rm -rf $WAKEWORD_DIR"
+            fi
+        else
+            echo ""
+            echo "Wakeword template directory preserved."
+            echo "You can delete it later with: rm -rf $WAKEWORD_DIR"
+        fi
+        echo ""
+    fi
 
     cat << "EOF"
     +==============================================================+
