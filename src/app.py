@@ -45,6 +45,13 @@ sys.path.append(os.getcwd())
 CONFIG = load_config()
 VERSION = "4.0"
 
+show_ui = True
+for arg in sys.argv[1:]:  # skip script name
+    if "=" in arg:
+        key, value = arg.split("=", 1)
+        if key == "show_ui":
+            show_ui = value.lower() in ["1", "true", "yes", "on"]
+
 if (CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2"):
     from modules.module_btcontroller_v2 import *
 else:
@@ -87,7 +94,8 @@ if __name__ == "__main__":
     # Create global UI manager instance
     ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery)
     if CONFIG['UI']['UI_enabled']:
-        ui_manager.start()
+        if show_ui:
+            ui_manager.start()
     ui_manager.update_data("System", "Initializing application...", "DEBUG")
 
     # Initialize CharacterManager, MemoryManager

@@ -301,7 +301,7 @@ def predict_class_nb(user_input):
     # Format the value as a percentage with 2 decimal places
     formatted_probability = "{:.2f}%".format(max_probability * 100)
     queue_message(f"TOOL: Using Tool {predicted_class} ({formatted_probability})")
-    generate_tts_audio("processing, processing, processing", CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
+    generate_tts_audio("processing, processing, processing", False, CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
 
     return predicted_class, max_probability
 
@@ -401,7 +401,7 @@ def predict_class_llm(user_input):
 
         formatted_probability = f"{max_probability * 100:.2f}%"
         queue_message(f"TOOL: Using Tool {predicted_class} ({formatted_probability})")
-        generate_tts_audio("processing, processing, processing", CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
+        generate_tts_audio("processing, processing, processing", False, CONFIG['TTS']['ttsoption'], CONFIG['TTS']['azure_api_key'], CONFIG['TTS']['azure_region'], CONFIG['TTS']['ttsurl'], CONFIG['TTS']['toggle_charvoice'], CONFIG['TTS']['tts_voice'])
 
         return predicted_class, max_probability
 
