@@ -46,7 +46,7 @@ CONFIG = load_config()
 VERSION = "4.0"
 
 show_ui = True
-for arg in sys.argv[1:]:  # skip script name
+for arg in sys.argv[1:]: 
     if "=" in arg:
         key, value = arg.split("=", 1)
         if key == "show_ui":
