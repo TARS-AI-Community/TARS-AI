@@ -86,8 +86,8 @@ def get_config():
         'STT.speechdelay': {'description': 'Tenths of seconds to wait before going to sleep (20 = 2 seconds)'},
         'STT.picovoice_keyword_path': {'description': 'Relative path to the Porcupine keyword file'},
         'STT.wake_word_processor': {
-            'options': ['picovoice', 'pocketsphinx', 'fastrtc'],
-            'description': 'Options: picovoice, pocketsphinx, fastrtc'
+            'options': ['picovoice', 'fastrtc' , 'atomik'],
+            'description': 'Options: picovoice, fastrtc, atomik'
         },
         
         # CHAR Section

@@ -89,7 +89,6 @@ class CameraModule:
             self.picam2.start()
             self.thread = threading.Thread(target=self.capture_frames, daemon=True)
             self.thread.start()
-            print("🎥 Camera streaming started.")
         except Exception as e:
             print(f"Failed to start camera: {e}")
             self.running = False
