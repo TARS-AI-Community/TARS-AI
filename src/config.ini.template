@@ -30,7 +30,7 @@ speechdelay = 20
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
 # Relative path to the Porcupine keyword file
 wake_word_processor = atomik
-# Options: picovoice, pocketsphinx, fastrtc, atomik
+# Options: picovoice, fastrtc, atomik
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS/TARS.json

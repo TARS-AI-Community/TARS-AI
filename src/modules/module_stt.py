@@ -28,7 +28,6 @@ import soundfile as sf
 
 from fastrtc import get_stt_model
 from vosk import Model, KaldiRecognizer, SetLogLevel
-from pocketsphinx import LiveSpeech
 from faster_whisper import WhisperModel
 import pvporcupine
 from pvrecorder import PvRecorder
@@ -677,9 +676,7 @@ class STTManager:
         queue_message(f"{character_name}: Sleeping...")
 
         wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
-        if wake_word_processor == "pocketsphinx":
-            return self._detect_wake_word_pocketsphinx()
-        elif wake_word_processor == "fastrtc":
+        if wake_word_processor == "fastrtc":
             return self._detect_wake_word_fastrtc()
         elif wake_word_processor == "atomik":
             return self._detect_wake_word_atomik()
@@ -756,77 +753,7 @@ class STTManager:
                     return True
 
         return False
-    def _detect_wake_word_pocketsphinx(self) -> bool:
-        """
-        Detect the wake word using enhanced false-positive filtering.
-        """
-        # Notify external service to stop talking.
-        try:
-            requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
-        except Exception:
-            pass
-
-        silent_frames = 0
-        max_iterations = 100  # Prevent infinite loops
-
-        try:
-            threshold_map = {
-                1: 1e-20,
-                2: 1e-18,
-                3: 1e-16,
-                4: 1e-14,
-                5: 1e-12,
-                6: 1e-10,
-                7: 1e-8,
-                8: 1e-6,
-                9: 1e-4,
-                10: 1e-2,
-            }
-            kws_threshold = threshold_map.get(int(self.config["STT"]["sensitivity"]), 1)
-            speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
-            
-            for phrase in speech:
-                text = phrase.hypothesis().lower()
-                if self.WAKE_WORD in text:
-                    silent_frames = 0
-                    if self.config["STT"].get("use_indicators"):
-                        self.play_beep(1200, 0.1, 44100, 0.8)
-                    try:
-                        requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
-                    except Exception:
-                        pass
-                    wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-
-                    character_path = self.config.get("CHAR", {}).get("character_card_path")
-                    character_name = os.path.splitext(os.path.basename(character_path))[0]
-                    
-                    queue_message(f"{character_name}: {wake_response}", stream=True)
-                    if self.wake_word_callback:
-                        self.wake_word_callback(wake_response)
-                    return True
-
-            # Fallback: check silence over iterations.
-            with sd.InputStream(
-                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-            ) as stream:
-                for iteration, _ in enumerate(speech):
-                    if iteration >= max_iterations:
-                        queue_message("DEBUG: Maximum iterations reached for wake word detection.")
-                        break
-                    data, _ = stream.read(4000)
-                    rms = self.prepare_audio_data(self.amplify_audio(data))
-                    if rms > self.silence_threshold:
-                        detected_speech = True
-                        silent_frames = 0
-                    else:
-                        silent_frames += 1
-                    if silent_frames > self.MAX_SILENT_FRAMES:
-                        break
-
-        except Exception as e:
-            queue_message(f"ERROR: Wake word detection failed: {e}")
-
-        return False
+    
 
     def _detect_wake_word_picovoice(self) -> bool:
         """
