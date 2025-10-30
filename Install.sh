@@ -175,14 +175,14 @@ install_chromium() {
     if apt-cache show chromium &>/dev/null; then
         echo "|  Package detected: chromium (Latest variant)"
         
-        if ! sudo apt install -y chromium sox libsox-fmt-all portaudio19-dev espeak-ng --fix-missing 2>&1 | tee /tmp/chromium-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
+        if ! sudo apt install -y chromium sox libsox-fmt-all portaudio19-dev espeak-ng libcap-dev --fix-missing 2>&1 | tee /tmp/chromium-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
             tars_say "Chromium installation encountered issues. Check /tmp/chromium-install.log" "warning"
         fi
         CHROMIUM_CMD="chromium"
     elif apt-cache show chromium-browser &>/dev/null; then
         echo "|  Package detected: chromium-browser (Legacy variant)"
         
-        if ! sudo apt install -y chromium-browser sox libsox-fmt-all portaudio19-dev espeak-ng --fix-missing 2>&1 | tee /tmp/chromium-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
+        if ! sudo apt install -y chromium-browser sox libsox-fmt-all portaudio19-dev espeak-ng libcap-dev --fix-missing 2>&1 | tee /tmp/chromium-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
             tars_say "Chromium-browser installation encountered issues. Check /tmp/chromium-install.log" "warning"
         fi
         CHROMIUM_CMD="chromium-browser"
@@ -192,10 +192,6 @@ install_chromium() {
     fi
     
     install_chromedriver
-    
-    if ! sudo apt install -y xterm libcap-dev --fix-missing 2>&1 | tee /tmp/aux-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
-        tars_say "Auxiliary dependency installation encountered issues. Check /tmp/aux-install.log" "warning"
-    fi
     
     echo ""
 }
@@ -473,8 +469,13 @@ main() {
     cd src
     echo ""
     
-    export DISPLAY=:0
-    echo "|  Display configuration: $DISPLAY"
+    # Set DISPLAY only if not already set (preserve existing terminal)
+    if [ -z "$DISPLAY" ]; then
+        export DISPLAY=:0
+        echo "|  Display configuration set: $DISPLAY"
+    else
+        echo "|  Display configuration preserved: $DISPLAY"
+    fi
     echo ""
     
     tars_say "Final system verification..." "info"
@@ -543,7 +544,7 @@ main() {
             
             # Check if app_csm.py exists
             if [ -f "app_cms.py" ]; then
-                echo "| Executing: python app_csm.py"
+                echo "| Executing: python app_cms.py"
                 echo "+===============================================================+"
                 echo ""
                 python app_cms.py
@@ -609,7 +610,7 @@ main() {
     |              [OK] INSTALLATION COMPLETE                      |
     |                                                              |
     |              All systems operational.                        |
-    |              TARS unit ready for deployment.                 |
+    |              TARS unit ALMOST ready for deployment.          |
     |                                                              |
     |                                                              |
     +==============================================================+
