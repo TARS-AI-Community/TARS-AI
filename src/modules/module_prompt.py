@@ -43,15 +43,16 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
         "\"reply\": \"string\", "
         "\"movement\": [\"array\"] (only possible values: forward, left, right), "
         "\"url\": \"string\" (link to a website), "
+        "\"url_description\": \"string\" short description of what O will see or find on the website, "
         "\"camera\": Boolean (true or false) "
         "}\n\n"
         "Rules:\n"
         "- Always follow this JSON schema exactly, with no extra text or markdown.\n"
-        "- Set 'movement' ONLY if the user explicitly asks you to move and make the reply sound witty, no need to list the movement you are doing.\n"
-        "- Set 'url' ONLY if the user asks you to show or access something from the web.\n"
+        "- Set 'movement' ONLY if the user explicitly asks you to move and make the reply sound witty, no need to list the movement you are doing. (90 degree turn = 3 movement)\n"
+        "- Set 'url' (and its url_description) ONLY if the user asks you to show or access something from the web.\n"
         "- Set 'camera' to true if the user asks what you see, what is visible, what is around you, or to look at something never overlook this.\n"
         "- Set 'camera' to false in all other cases.\n"
-        "- Your 'reply' must still contain a short, witty or mission-style answer.\n\n")
+        "- Your 'reply' must still contain a short, witty or mission-style answer and yes you can move, yes you have a camera. \n\n")
 
     # Build the base prompt
     base_prompt += (
