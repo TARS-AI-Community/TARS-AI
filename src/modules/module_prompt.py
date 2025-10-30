@@ -6,7 +6,7 @@ Utility module for building prompts for LLM backends.
 
 from datetime import datetime
 import os
-from modules.module_engine import check_for_module
+#from modules.module_engine import check_for_module
 from modules.module_messageQue import queue_message
 
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
@@ -27,16 +27,34 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
     dtg = f"Current Date: {now.strftime('%m/%d/%Y')}\nCurrent Time: {now.strftime('%H:%M:%S')}\n"
     user_name = config['CHAR']['user_name']
     char_name = character_manager.char_name
-    functioncall = check_for_module(user_prompt)
+    #functioncall = check_for_module(user_prompt)
 
     # Construct persona traits
     persona_traits = "\n".join(
         [f"- {trait}: {value}" for trait, value in character_manager.traits.items()]
     )
 
-    
-    # Build the base prompt
+
     base_prompt = (
+        "You are a JSON API. Always strictly respond ONLY with a JSON object matching this schema:\n"
+        "- history or memory should not affect the movement, url and camera fields.\n"
+        "{ "
+        "\"question\": \"string\", "
+        "\"reply\": \"string\", "
+        "\"movement\": [\"array\"] (only possible values: forward, left, right), "
+        "\"url\": \"string\" (link to a website), "
+        "\"camera\": Boolean (true or false) "
+        "}\n\n"
+        "Rules:\n"
+        "- Always follow this JSON schema exactly, with no extra text or markdown.\n"
+        "- Set 'movement' ONLY if the user explicitly asks you to move and make the reply sound witty, no need to list the movement you are doing.\n"
+        "- Set 'url' ONLY if the user asks you to show or access something from the web.\n"
+        "- Set 'camera' to true if the user asks what you see, what is visible, what is around you, or to look at something never overlook this.\n"
+        "- Set 'camera' to false in all other cases.\n"
+        "- Your 'reply' must still contain a short, witty or mission-style answer.\n\n")
+
+    # Build the base prompt
+    base_prompt += (
         f"System: {config['LLM']['systemprompt']}\n\n"
         f"### Instruction:\n{inject_dynamic_values(config['LLM']['instructionprompt'], user_name, char_name)}\n\n"
         f"### Interaction Context:\n---\n"
@@ -44,12 +62,12 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
         f"Character: {char_name}\n"
         f"{dtg}\n---\n\n"
         f"### Character Details:\n---\n{character_manager.character_card}\n---\n\n"
-        f"### {char_name} Settings:\n{persona_traits}\n---\n\n"
+        f"### {char_name} Settings:\n{persona_traits}\n---\n\n"        
     )
 
     # Dynamically append memory and examples
     final_prompt = append_memory_and_examples(
-        base_prompt, user_prompt, memory_manager, config, character_manager, functioncall
+        base_prompt, user_prompt, memory_manager, config, character_manager
     )
 
     final_prompt = inject_dynamic_values(final_prompt, user_name, char_name)
@@ -78,7 +96,7 @@ def clean_text(text):
             .strip()
     )
 
-def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config, character_manager, functioncall):
+def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config, character_manager):
     """
     Append short-term memory and example dialog to the prompt based on token availability.
 
@@ -102,7 +120,6 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     base_prompt,
     f"### Memory:\n---\nLong-Term Context:\n{past_memory}\n---\n",
     f"### Interaction:\n{config['CHAR']['user_name']}: {user_prompt}\n\n",
-    f"### Function Calling Tool:\nResult: {functioncall}\n"
     f"### Response:\n{character_manager.char_name}: "
     ])
 
@@ -134,7 +151,7 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         f"### Memory:\n---\nLong-Term Context:\n{past_memory}\n---\n"
         f"Recent Conversation:\n{short_term_memory}\n---\n"
         f"### Interaction:\n{config['CHAR']['user_name']}: {user_prompt}\n\n"
-        f"### Function Calling Tool:\nResult: {functioncall}\n"
+
         f"### Response:\n{character_manager.char_name}: "
     )
 

@@ -7,6 +7,7 @@ import torch
 import base64
 from datetime import datetime
 from pathlib import Path
+import openai
 
 # === Custom Modules ===
 from modules.module_config import load_config
@@ -56,7 +57,7 @@ def capture_image() -> str:
 
         camera = CameraModule(1920, 1080)
         image_path = camera.capture_single_image()
-        print(f"✅ Image saved: {image_path}")
+        print(f"Image saved: {image_path}")
         #camera.stop()
         return image_path
 
@@ -65,7 +66,7 @@ def capture_image() -> str:
         raise RuntimeError(f"Error capturing image: {e}")
 
 def describe_camera_view() -> str:
-    """Capture an image and process it for captioning."""
+    """Capture an image and process it for captioning."""    
     try:
         image_path = capture_image()
         print(image_path)
@@ -82,6 +83,40 @@ def describe_camera_view() -> str:
     except Exception as e:
         queue_message(f"TARS is unable to see right now")
         return f"Error: {e}"
+    
+
+def describe_camera_view_openai(user_prompt) -> str:
+    """
+    Capture an image and generate a description using OpenAI vision model.
+    Returns:
+        str: Description of what's in the image
+    """
+    try:
+        image_path = capture_image()
+        if not Path(image_path).exists():
+            return "Error: captured image not found."
+        with open(image_path, "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ]
+                }
+            ],
+            max_tokens=150
+        )
+        description = response.choices[0].message.content
+        return description
+
+    except Exception as e:
+        queue_message("TARS is unable to see right now.")
+        return f"Error: {e}"
+
 
 def send_image_to_server(image_path: str) -> str:
     """

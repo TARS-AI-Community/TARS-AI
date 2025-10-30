@@ -11,9 +11,12 @@ Provides:
 # === Standard Libraries ===
 import requests
 import threading
+import json
 import concurrent.futures
 from modules.module_config import load_config
 from modules.module_prompt import build_prompt
+from modules.module_engine  import execute_movement
+from modules.module_vision import describe_camera_view_openai
 
 from modules.module_messageQue import queue_message
 
@@ -58,8 +61,8 @@ def get_completion(user_prompt, istext=True):
         response.raise_for_status()
         bot_reply = _extract_text(response.json(), istext)
         
-        llm_process(user_prompt, bot_reply)
-        return bot_reply
+        finalReply = llm_process(user_prompt, bot_reply)
+        return finalReply
     
     except requests.RequestException as e:
         queue_message(f"ERROR: LLM request failed: {e}")
@@ -173,6 +176,15 @@ def detect_emotion(text):
 
 # === Memory Integration ===
 
+import json
+import threading
+
+import json
+import threading
+
+import json
+import threading
+
 def llm_process(user_input, bot_response):
     global memory_manager
     """
@@ -180,19 +192,75 @@ def llm_process(user_input, bot_response):
 
     Parameters:
     - user_input (str): The user's input.
-    - bot_response (str): The bot's response.
+    - bot_response (str): The bot's response (JSON string).
 
     Returns:
-    - str: The processed bot response.
+    - str: The processed bot reply.
     """
-    if memory_manager:
-        threading.Thread(target=memory_manager.write_longterm_memory, args=(user_input, bot_response)).start()
-    
-    if CONFIG['EMOTION']['enabled']:  # No need to compare with True
-        emotion_thread = threading.Thread(target=detect_emotion, args=(bot_response,))
-        emotion_thread.start()  # Start the thread
 
-    return bot_response
+    if isinstance(bot_response, str):
+        try:
+            bot_response = bot_response.replace("True", "true").replace("False", "false")
+            bot_response = json.loads(bot_response)
+        except json.JSONDecodeError:
+            print(bot_response)
+            return "[Error: Invalid JSON from LLM.]"
+
+    if isinstance(bot_response, dict) and len(bot_response.keys()) == 1:
+        sole_value = list(bot_response.values())[0]
+        if isinstance(sole_value, str) and sole_value.strip().startswith("{"):
+            try:
+                bot_response = json.loads(sole_value)
+            except json.JSONDecodeError:
+                pass
+
+    def normalize_field(value):
+        if isinstance(value, list) and value:
+            return str(value[0])
+        elif isinstance(value, str):
+            return value
+        else:
+            return ""
+
+    bot_response["question"] = normalize_field(bot_response.get("question"))
+    bot_response["reply"] = normalize_field(bot_response.get("reply"))
+    bot_response["movement"] = bot_response.get("movement", [])
+    bot_response["url"] = bot_response.get("url", [])
+    bot_response["camera"] = bot_response.get("camera", False)
+
+    print(f"TARS: {bot_response}")
+
+    # Execute movements if the array is not empty.
+    if bot_response["movement"]:
+        try:
+            execute_movement(bot_response["movement"])
+        except Exception as e:
+            print(f"Movement execution failed: {e}")
+
+    # If camera is triggered, wait for description and replace reply
+    if bot_response["camera"]:
+        description = describe_camera_view_openai(bot_response["question"])
+        if description and not description.startswith("Error:"):
+            bot_response["reply"] = description
+        else:
+            bot_response["reply"] = "I tried to look but couldn't process the image."
+
+    if memory_manager:
+        threading.Thread(
+            target=memory_manager.write_longterm_memory,
+            args=(user_input, bot_response["reply"])
+        ).start()
+
+    if CONFIG["EMOTION"]["enabled"]:
+        threading.Thread(
+            target=detect_emotion,
+            args=(bot_response["reply"],)
+        ).start()
+
+    return bot_response["reply"]
+
+
+
 
 def raw_complete_llm(user_prompt, istext=True):
     """

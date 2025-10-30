@@ -95,7 +95,7 @@ class CameraModule:
             self.picam2 = None
 
     def restart_camera(self):
-        print("🔄 Restarting camera...")
+        print("Restarting camera...")
         self.stop()
         time.sleep(2)
         try:
