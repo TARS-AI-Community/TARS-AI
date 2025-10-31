@@ -354,12 +354,10 @@ class STTManager:
         detected_speech = False
         silent_frames = 0
         speech_frames = 0
-        
-        # Pre-roll buffer to capture audio before speech detection
         pre_roll_buffer = []
-        PRE_ROLL_FRAMES = 10  # ~0.8 seconds of pre-roll at 4000 samples/frame
-        MIN_SPEECH_FRAMES = 5  # Minimum frames of speech before we consider it valid
-        MAX_SILENT_FRAMES = 20  # Frames of silence before stopping
+        PRE_ROLL_FRAMES = 10
+        MIN_SPEECH_FRAMES = 5
+        MAX_SILENT_FRAMES = 20
 
         with sd.InputStream(
             samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
@@ -374,35 +372,32 @@ class STTManager:
                 is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(
                     data, detected_speech, silent_frames
                 )
-                
-                # Cap silent_frames at maximum
                 silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
                 
+                # Add the same early exit check as other functions
+                if is_silence:
+                    if not detected_speech:
+                        return None  # Exit early if silence detected before any speech
+                    # If speech was detected, check if we should stop recording
+                    if speech_frames >= MIN_SPEECH_FRAMES and silent_frames >= MAX_SILENT_FRAMES:
+                        print()
+                        break
+                
                 if not detected_speech:
-                    # Before speech detected: maintain pre-roll buffer
                     pre_roll_buffer.append(data.tobytes())
                     if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
                         pre_roll_buffer.pop(0)
                 else:
-                    # Speech detected!
                     if speech_frames == 0:
-                        # First frame of speech - write pre-roll buffer
                         for pre_roll_data in pre_roll_buffer:
                             wf.writeframes(pre_roll_data)
                         pre_roll_buffer = []
-                    
-                    # Write current frame
+
                     wf.writeframes(data.tobytes())
                     
                     if not is_silence:
                         speech_frames += 1
-                    
-                    # Stop immediately when we hit max silence with minimum speech
-                    if speech_frames >= MIN_SPEECH_FRAMES and silent_frames >= MAX_SILENT_FRAMES:
-                        print()  # Clear the silence progress bar
-                        break
             
-            # Check if we got enough speech
             if speech_frames < MIN_SPEECH_FRAMES:
                 return None
 
@@ -410,17 +405,14 @@ class STTManager:
         if audio_buffer.getbuffer().nbytes == 0:
             return None
 
-        # Convert recorded audio for STT model
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
         
-        # Boost quiet audio
         audio_max = np.abs(audio_data).max()
         if audio_max < 0.1:
             audio_data = audio_data * (0.3 / max(audio_max, 0.001))
         
         audio_data = np.clip(audio_data, -1.0, 1.0)
 
-        # Run FastRTC STT Model
         transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
 
         if transcript:
