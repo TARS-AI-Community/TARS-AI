@@ -1,4 +1,8 @@
 import sys
+import time
+import board
+import busio
+from adafruit_pca9685 import PCA9685
 
 # === Custom Modules ===
 from modules.module_config import load_config
@@ -7,11 +11,22 @@ from modules.module_tts import update_tts_settings
 config = load_config()
 
 if (config["SERVO"]["MOVEMENT_VERSION"] == "V2"):
-    from modules.module_btcontroller_v2 import *
+    # Import other necessary functions from the V2 module if needed
+    # but we'll handle PWM setup here
+    try:
+        from modules.module_btcontroller_v2 import *
+    except ImportError:
+        # If the module doesn't have the PWM setup anymore, we can skip it
+        pass
 else:
     print("\nThis tool can only be used if you are using the V2 MOVEMENT Configurations.")
     print("\n")
     sys.exit()
+
+# Initialize I2C and PCA9685
+i2c = busio.I2C(board.SCL, board.SDA)
+pca = PCA9685(i2c)
+pca.frequency = 50  # Standard servo frequency (50Hz)
 
 global_speed = 1.0  # Adjust this to change movement speed
 MIN_PULSE = 0  # Calibrate these values
@@ -19,6 +34,19 @@ MAX_PULSE = 600  # Calibrate these values
 
 # Store last known positions of servos
 servo_positions = {i: (MIN_PULSE + MAX_PULSE) // 2 for i in range(16)}
+
+def pulse_to_duty_cycle(pulse):
+    """
+    Convert pulse width value to 16-bit duty cycle.
+    Assumes pulse values are mapped to microseconds range.
+    For typical servos: 500-2500 microseconds
+    """
+    # Map your pulse range (0-600) to typical servo range (500-2500 microseconds)
+    pulse_us = 500 + (pulse / MAX_PULSE) * 2000
+    # Convert microseconds to duty cycle (16-bit value for 50Hz)
+    # At 50Hz, period is 20000 microseconds
+    duty_cycle = int((pulse_us / 20000.0) * 65535)
+    return duty_cycle
 
 def set_servo_pulse(channel, target_pulse):
     """
@@ -29,7 +57,8 @@ def set_servo_pulse(channel, target_pulse):
         step = 1 if target_pulse > current_pulse else -1
 
         for pulse in range(current_pulse, target_pulse + step, step):
-            pwm.set_pwm(channel, 0, pulse)
+            duty = pulse_to_duty_cycle(pulse)
+            pca.channels[channel].duty_cycle = duty
             time.sleep(0.02 * (1.0 - global_speed))  # Slows down movement when global_speed < 1
 
         servo_positions[channel] = target_pulse  # Save the new position
@@ -70,6 +99,7 @@ def set_single_servo():
             break
         except ValueError:
             break
+
 def control():
     try:
         print("0 - Reset Position.")
@@ -133,7 +163,6 @@ def motion():
         print("4. Disable all servos")
         print("5. Movements")
 
-
         choice = input("> ")
 
         if choice == '1':
@@ -144,11 +173,12 @@ def motion():
             pulse = int(input(f"Enter pulse width for servo on channel 15 ({MIN_PULSE}-{MAX_PULSE}): "))
             set_servo_pulse(15, pulse)
         elif choice == '4':
+            # Disable all servos by setting duty cycle to 0
             for ch in range(16):
                 time.sleep(0.1)
-                pwm.set_pwm(ch, 0, 0)
+                pca.channels[ch].duty_cycle = 0
         elif choice == '5':
             control()
 
-
-motion()
+if __name__ == "__main__":
+    motion()
