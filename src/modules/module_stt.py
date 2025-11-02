@@ -846,23 +846,36 @@ class STTManager:
     
 
     def _detect_wake_word_atomik(self) -> bool:
-        detector = WakeWordSystem(self.WAKE_WORD)
+        sensitivity = float(CONFIG["STT"]["sensitivity"])  # 1–10
+        norm = (sensitivity - 1) / 9
+
+        # Smooth curve so that sensitivity=8 → threshold≈0.55
+        curve = norm ** 1.6
+
+        # Scale to 0.2–0.7 range
+        threshold = 0.2 + curve * (0.7 - 0.2)
+
+        # Clamp and round to 2 decimal places
+        threshold = round(max(0.2, min(threshold, 0.7)), 2)
+
+        detector = WakeWordSystem(self.WAKE_WORD, 16000, threshold)
+        print(threshold)
         detector.createModel()
         if detector.listenForWakeWord():
             if self.config["STT"].get("use_indicators"):
                 self.play_beep(1200, 0.1, 44100, 0.8)
-                try:
-                    requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
-                except Exception:
-                    pass
-                wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                character_name = os.path.splitext(os.path.basename(
-                    self.config.get("CHAR", {}).get("character_card_path", "TARS")
-                ))[0]
-                queue_message(f"{character_name}: {wake_response}", stream=True)
-                if self.wake_word_callback:
-                    self.wake_word_callback(wake_response)
-                return True
+            try:
+                requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
+            except Exception:
+                pass
+            wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+            character_name = os.path.splitext(os.path.basename(
+                self.config.get("CHAR", {}).get("character_card_path", "TARS")
+            ))[0]
+            queue_message(f"{character_name}: {wake_response}", stream=True)
+            if self.wake_word_callback:
+                self.wake_word_callback(wake_response)
+            return True
         
 
     def _init_progress_bar(self):

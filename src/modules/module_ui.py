@@ -103,6 +103,8 @@ class UIManager(threading.Thread):
 
     def silence(self, progress):
         self.silence_progress = progress
+        if self.spectrum_system is not None:
+            self.spectrum_system.silence(progress, self.speechdelay)
 
     def save_memory(self):
         """Trigger add_memory animation on active background and terminal"""
@@ -241,7 +243,7 @@ class UIManager(threading.Thread):
     def cycle_spectrum_style(self):
         """Cycle through spectrum visualization styles"""
         if self.spectrum_system:
-            styles = ['bars', 'wave', 'circular']
+            styles = ['bars', 'wave', 'circular', 'spectrogram']
             current_idx = styles.index(self.spectrum_system.style)
             next_idx = (current_idx + 1) % len(styles)
             self.spectrum_system.style = styles[next_idx]

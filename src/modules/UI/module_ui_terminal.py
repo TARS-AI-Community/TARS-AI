@@ -204,7 +204,6 @@ class TerminalSystem:
         """Trigger spectrum style change"""
         if self.on_spectrum_change:
             self.on_spectrum_change()
-            self.add_message("SYS", "Spectrum visualization changed", "INFO")
     
     def toggle_camera(self):
         """Toggle camera (placeholder for now)"""

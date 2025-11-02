@@ -15,22 +15,30 @@ import threading
 class SpectrumSystem:
     """Audio spectrum analyzer overlay system with microphone input"""
     
-    def __init__(self, width, height, style='wave', bg_alpha=0, sample_rate=44100, chunk_size=2048):
+    def __init__(self, width, height, style='wave', bg_alpha=0, sample_rate=44100, chunk_size=1024):
         """
         Initialize spectrum analyzer with audio input
         
         Args:
             width: Screen width
             height: Screen height
-            style: 'bars', 'wave', or 'circular'
+            style: 'bars', 'wave', 'circular', or 'spectrogram'
             bg_alpha: Background transparency (0-255)
             sample_rate: Audio sample rate (Hz)
             chunk_size: Audio buffer size
         """
+        # Initialize stream early to avoid AttributeError in __del__ if init fails
+        self.stream = None
+        self.audio_running = False
+        
         self.width = width
         self.height = height
         self.style = style
         self.bg_alpha = bg_alpha
+        
+        # Position - bottom 30% of screen (define early as it's needed by other settings)
+        self.spectrum_height = int(height * 0.3)
+        self.spectrum_y = height - self.spectrum_height
         
         # Audio settings
         self.sample_rate = sample_rate
@@ -49,16 +57,38 @@ class SpectrumSystem:
         self.bar_width = (width - (self.num_bars - 1) * self.bar_spacing) / self.num_bars
         
         # Wave visualizer settings
-        self.wave_history = deque(maxlen=20)
-        self.wave_decay = 0.9
-        self.max_amplitude = 80
+        self.wave_history = deque(maxlen=8)  # Reduced from 20 for faster response
+        self.wave_decay = 0.85  # Faster decay from 0.9
+        self.max_amplitude = 100  # Increased from 80 for more visible changes
+        
+        # Spectrogram visualizer settings
+        self.spectrogram_history = deque(maxlen=100)  # Reduced from 200 for better performance
+        self.spectrogram_height = int(self.spectrum_height * 0.9)  # Use 90% of height
+        self.spectrogram_freq_resolution = 4  # Only draw every 4th frequency bin for speed
+        
+        # Pre-fill history with zeros so screen fills immediately
+        for _ in range(100):
+            self.spectrogram_history.append(np.zeros(64))
+        
+        # Spectrogram color map (audio fingerprinting style - purple to orange)
+        self.spectrogram_colormap = [
+            (20, 0, 40),      # Dark purple/black
+            (60, 0, 80),      # Purple
+            (100, 20, 120),   # Medium purple
+            (140, 40, 140),   # Bright purple
+            (180, 60, 120),   # Purple-pink
+            (220, 80, 80),    # Pink-red
+            (255, 120, 40),   # Orange
+            (255, 180, 80),   # Light orange
+            (255, 220, 150),  # Pale yellow
+        ]
         
         # Colors - cyan/blue theme to match UI
         self.primary_color = (0, 255, 255)  # Cyan
         self.secondary_color = (100, 200, 255)  # Light blue
         self.accent_color = (0, 200, 255)  # Bright cyan
         
-        # Gradient colors for bars
+        # Gradient colors for bars (normal state)
         self.gradient_colors = [
             (0, 100, 150),   # Dark blue
             (0, 150, 200),   # Medium blue
@@ -71,16 +101,31 @@ class SpectrumSystem:
         self.thinking = False
         self.action_flash = 0
         
-        # Position - bottom 30% of screen
-        self.spectrum_height = int(height * 0.3)
-        self.spectrum_y = height - self.spectrum_height
+        # Silence detection progress
+        self.silence_progress = 0
+        self.silence_max = 20  # Will be updated from UI manager
+        self.color_fade = 0.0  # 0.0 = normal colors, 1.0 = silence colors
+        self.fade_speed = 0.08
+        self.time_at_zero = 0  # Track how long we've been at zero
+        self.zero_delay = 0.9  # Wait 0.9 seconds at zero before fading colors back
+        self.max_reached = False  # Track if we've reached max value
+        self.waiting_for_reset = False  # Track if we're waiting for zero after max
+        
+        # Silence detection colors - warmer orange/amber theme
+        self.silence_gradient_colors = [
+            (150, 50, 0),    # Dark orange
+            (200, 80, 0),    # Medium orange
+            (255, 120, 0),   # Bright orange
+            (255, 160, 40),  # Light orange
+            (255, 200, 80),  # Amber
+        ]
         
         # Surfaces
-        self.spectrum_surface = pygame.Surface((width, self.spectrum_height), pygame.SRCALPHA)
+        # Use HWSURFACE for GPU acceleration and SRCALPHA for transparency
+        self.spectrum_surface = pygame.Surface((width, self.spectrum_height), pygame.HWSURFACE | pygame.SRCALPHA)
+        self.spectrum_surface = self.spectrum_surface.convert_alpha()  # Pre-convert for faster blitting
         
-        # Audio stream
-        self.stream = None
-        self.audio_running = False
+        # Start audio stream (stream and audio_running already initialized at top of __init__)
         self.start_audio_stream()
     
     def audio_callback(self, indata, frames, time_info, status):
@@ -201,21 +246,64 @@ class SpectrumSystem:
         
         self.spectrum = self.spectrum_smoothed
     
-    def get_gradient_color(self, position):
+    def silence(self, progress, max_value=20):
+        """
+        Update silence detection progress
+        
+        Args:
+            progress: Current silence counter (0 to max_value)
+            max_value: Maximum silence value (speechdelay)
+        """
+        self.silence_progress = progress
+        self.silence_max = max_value
+        
+        # Check if we've reached max
+        if progress >= max_value and max_value > 0:
+            self.max_reached = True
+            self.waiting_for_reset = True
+        elif progress == 0 and self.waiting_for_reset:
+            # We're at zero after reaching max - stay in waiting state
+            # Don't clear flags yet
+            pass
+        elif progress > 0 and self.waiting_for_reset:
+            # We've gone from max -> 0 -> positive again, now we can reset
+            self.max_reached = False
+            self.waiting_for_reset = False
+        elif progress > 0:
+            # Normal operation - just ensure flags are clear
+            self.max_reached = False
+            self.waiting_for_reset = False
+    
+    def get_gradient_color(self, position, use_silence_colors=False):
         """Get color from gradient (0.0 to 1.0)"""
         position = max(0, min(1, position))
-        num_colors = len(self.gradient_colors)
+        
+        # Choose color palette based on state and fade
+        if self.color_fade > 0:
+            # Blend between normal and silence colors
+            normal_color = self._get_color_from_palette(position, self.gradient_colors)
+            silence_color = self._get_color_from_palette(position, self.silence_gradient_colors)
+            
+            r = int(normal_color[0] * (1 - self.color_fade) + silence_color[0] * self.color_fade)
+            g = int(normal_color[1] * (1 - self.color_fade) + silence_color[1] * self.color_fade)
+            b = int(normal_color[2] * (1 - self.color_fade) + silence_color[2] * self.color_fade)
+            
+            return (r, g, b)
+        else:
+            return self._get_color_from_palette(position, self.gradient_colors)
+    
+    def _get_color_from_palette(self, position, palette):
+        """Get interpolated color from a palette"""
+        position = max(0, min(1, position))
+        num_colors = len(palette)
         scaled_pos = position * (num_colors - 1)
         idx1 = int(scaled_pos)
         idx2 = min(idx1 + 1, num_colors - 1)
         fraction = scaled_pos - idx1
         
-        r = int(self.gradient_colors[idx1][0] * (1 - fraction) + 
-                self.gradient_colors[idx2][0] * fraction)
-        g = int(self.gradient_colors[idx1][1] * (1 - fraction) + 
-                self.gradient_colors[idx2][1] * fraction)
-        b = int(self.gradient_colors[idx1][2] * (1 - fraction) + 
-                self.gradient_colors[idx2][2] * fraction)
+        r = int(palette[idx1][0] * (1 - fraction) + palette[idx2][0] * fraction)
+        g = int(palette[idx1][1] * (1 - fraction) + palette[idx2][1] * fraction)
+        b = int(palette[idx1][2] * (1 - fraction) + palette[idx2][2] * fraction)
         
         return (r, g, b)
     
@@ -245,24 +333,30 @@ class SpectrumSystem:
                                (x, y), (x + self.bar_width, y), 2)
     
     def draw_wave(self, surface):
-        """Draw wave-style spectrum"""
+        """Draw wave-style spectrum - directly responsive to audio"""
         # Generate wave points from spectrum
         wave_points = []
         padding = 20
+        center_y = self.spectrum_height // 2
         
-        for x in range(padding, self.width - padding):
-            # Map x position to spectrum bin
-            bin_idx = int((x - padding) * len(self.spectrum) / (self.width - 2 * padding))
+        # Map screen width to spectrum bins
+        num_points = self.width - 2 * padding
+        
+        for i in range(num_points):
+            x = padding + i
+            
+            # Map x position to spectrum bin (use full spectrum range)
+            bin_idx = int(i * len(self.spectrum) / num_points)
             bin_idx = min(bin_idx, len(self.spectrum) - 1)
             
-            # Get amplitude
+            # Get amplitude directly from spectrum
             amplitude = self.spectrum[bin_idx] * self.max_amplitude
             
-            # Create sine wave modulation
-            t = (x - padding) / (self.width - 2 * padding)
-            y = amplitude * math.sin(2 * math.pi * t * 3) + (self.spectrum_height // 2)
+            # Create upper and lower wave points (mirrored)
+            y_upper = center_y - amplitude
+            y_lower = center_y + amplitude
             
-            wave_points.append((x, int(y)))
+            wave_points.append((x, int(y_upper), int(y_lower)))
         
         # Store in history
         if len(wave_points) > 0:
@@ -270,18 +364,39 @@ class SpectrumSystem:
         
         # Draw wave history with depth
         for depth_idx, wave in enumerate(self.wave_history):
-            alpha = int(255 * (1 - self.wave_decay ** depth_idx) * 0.7)
-            color = self.secondary_color
+            alpha = int(255 * (1 - self.wave_decay ** depth_idx) * 0.8)
+            
+            # Get color with current fade state
+            color = self.get_gradient_color(0.5)
             
             # Offset for 3D depth effect
             x_shift = depth_idx * 1
-            y_shift = depth_idx * 3
             
-            # Draw wave
+            # Draw the wave as filled area
             for j in range(1, len(wave)):
-                start_pos = (wave[j - 1][0] + x_shift, wave[j - 1][1] + y_shift)
-                end_pos = (wave[j][0] + x_shift, wave[j][1] + y_shift)
-                pygame.draw.line(surface, (*color, alpha), start_pos, end_pos, 2)
+                x1, y1_upper, y1_lower = wave[j - 1]
+                x2, y2_upper, y2_lower = wave[j]
+                
+                # Apply shift
+                x1_shifted = x1 + x_shift
+                x2_shifted = x2 + x_shift
+                
+                # Draw upper wave line
+                pygame.draw.line(surface, (*color, alpha), 
+                               (x1_shifted, y1_upper), 
+                               (x2_shifted, y2_upper), 2)
+                
+                # Draw lower wave line (mirror)
+                pygame.draw.line(surface, (*color, alpha), 
+                               (x1_shifted, y1_lower), 
+                               (x2_shifted, y2_lower), 2)
+                
+                # Optional: connect them for filled effect on louder sounds
+                if depth_idx == 0 and (y1_lower - y1_upper) > 5:
+                    # Draw vertical line to create filled effect
+                    pygame.draw.line(surface, (*color, int(alpha * 0.3)), 
+                                   (x1_shifted, y1_upper), 
+                                   (x1_shifted, y1_lower), 1)
     
     def draw_circular(self, surface):
         """Draw circular spectrum analyzer"""
@@ -311,6 +426,136 @@ class SpectrumSystem:
             if bar_length > 1:
                 pygame.draw.line(surface, (*color, alpha), (x1, y1), (x2, y2), 3)
     
+    def draw_spectrogram(self, surface):
+        """Draw spectrogram-style visualization (audio fingerprinting look) - fades to transparent at top"""
+        # Add current spectrum to history
+        if len(self.spectrum) > 0:
+            self.spectrogram_history.append(self.spectrum.copy())
+        
+        if len(self.spectrogram_history) == 0:
+            return
+        
+        # Calculate dimensions
+        num_time_slices = len(self.spectrogram_history)
+        slice_width = max(2, self.width // num_time_slices)  # At least 2px wide
+        
+        # Number of frequency bins to display (reduced for performance)
+        num_freq_bins = len(self.spectrum) // self.spectrogram_freq_resolution
+        bin_height = self.spectrogram_height / num_freq_bins
+        
+        # Create temporary surface to draw on
+        temp_surface = pygame.Surface((self.width, self.spectrum_height), pygame.SRCALPHA)
+        temp_surface.fill((0, 0, 0, 0))
+        
+        # Draw spectrogram from left to right (oldest to newest)
+        for time_idx, spectrum_slice in enumerate(self.spectrogram_history):
+            x = time_idx * slice_width
+            
+            # Draw each frequency bin as a colored rectangle (skip bins for performance)
+            for display_idx in range(num_freq_bins):
+                # Get actual frequency bin (skip based on resolution)
+                freq_idx = display_idx * self.spectrogram_freq_resolution
+                if freq_idx >= len(spectrum_slice):
+                    continue
+                    
+                amplitude = spectrum_slice[freq_idx]
+                
+                # Y position (inverted - low frequencies at bottom)
+                y = self.spectrogram_height - (display_idx + 1) * bin_height
+                
+                # Map amplitude to color using colormap
+                color = self.get_spectrogram_color(amplitude)
+                
+                # Apply aggressive vertical fade to transparent at top
+                # More transparent as we go up (lower y values)
+                # Use exponential fade for softer edges
+                fade_factor = (self.spectrum_height - y) / self.spectrum_height
+                fade_factor = fade_factor ** 2.5  # Exponential fade (more aggressive)
+                alpha = int(255 * fade_factor * 0.85)  # Max 85% opacity
+                
+                # Only draw if amplitude is significant
+                if amplitude > 0.05 and alpha > 10:  # Threshold to avoid drawing noise
+                    rect = pygame.Rect(x, int(y), slice_width + 1, max(2, int(bin_height) + 1))
+                    pygame.draw.rect(temp_surface, (*color, alpha), rect)
+        
+        # Rotate the entire surface 180 degrees
+        rotated_surface = pygame.transform.rotate(temp_surface, 180)
+        
+        # Blit the rotated surface to the main surface
+        surface.blit(rotated_surface, (0, 0))
+    
+    def get_spectrogram_color(self, amplitude):
+        """Get color from spectrogram colormap based on amplitude (0.0 to 1.0)"""
+        amplitude = max(0, min(1, amplitude))
+        
+        # Map to colormap index
+        num_colors = len(self.spectrogram_colormap)
+        scaled_pos = amplitude * (num_colors - 1)
+        idx1 = int(scaled_pos)
+        idx2 = min(idx1 + 1, num_colors - 1)
+        fraction = scaled_pos - idx1
+        
+        # Interpolate between colors
+        r = int(self.spectrogram_colormap[idx1][0] * (1 - fraction) + 
+                self.spectrogram_colormap[idx2][0] * fraction)
+        g = int(self.spectrogram_colormap[idx1][1] * (1 - fraction) + 
+                self.spectrogram_colormap[idx2][1] * fraction)
+        b = int(self.spectrogram_colormap[idx1][2] * (1 - fraction) + 
+                self.spectrogram_colormap[idx2][2] * fraction)
+        
+        return (r, g, b)
+    
+    def draw_silence_progress(self, surface):
+        """Draw silence detection progress bar"""
+        # Don't show if max reached (speech triggered) or waiting for reset cycle
+        if self.silence_max <= 0:
+            return
+        
+        if self.max_reached or self.waiting_for_reset:
+            # Max reached or waiting for full reset - hide bar immediately
+            return
+        
+        if self.silence_progress <= 0 and self.time_at_zero >= self.zero_delay:
+            # Been at zero for 0.9+ seconds, don't show
+            return
+        
+        # Calculate progress percentage
+        progress_pct = min(1.0, max(0.0, self.silence_progress / self.silence_max))
+        
+        # Progress bar dimensions - positioned lower by 50px total
+        bar_height = 8
+        bar_width = self.width - 40
+        bar_x = 20
+        bar_y = (self.spectrum_height - 20) // 2 + 50  # Lowered by 50px total (was +20, now +50)
+        
+        # Draw background
+        bg_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
+        pygame.draw.rect(surface, (30, 30, 40, 180), bg_rect)
+        pygame.draw.rect(surface, (80, 80, 100, 200), bg_rect, 1)
+        
+        # Draw progress fill
+        fill_width = int(bar_width * progress_pct)
+        if fill_width > 0:
+            fill_rect = pygame.Rect(bar_x, bar_y, fill_width, bar_height)
+            
+            # Color gradient from orange to red as it approaches max
+            if progress_pct < 0.5:
+                # Orange to yellow
+                r = int(255)
+                g = int(140 + (progress_pct * 2) * 80)
+                b = 0
+            else:
+                # Yellow to red
+                r = 255
+                g = int(220 - ((progress_pct - 0.5) * 2) * 120)
+                b = 0
+            
+            pygame.draw.rect(surface, (r, g, b, 220), fill_rect)
+            
+            # Add glow effect
+            glow_color = (min(255, r + 40), min(255, g + 40), min(255, b + 40))
+            pygame.draw.rect(surface, (*glow_color, 150), fill_rect, 1)
+    
     # Animation trigger methods (for compatibility)
     def think(self):
         """Trigger thinking animation"""
@@ -329,6 +574,30 @@ class SpectrumSystem:
         # Process microphone input
         self.update_spectrum()
         
+        # Update color fade based on silence progress with delay at zero
+        if self.max_reached or self.waiting_for_reset:
+            # Max reached or waiting for reset - fade back to blue immediately
+            if self.color_fade > 0:
+                self.color_fade = max(0.0, self.color_fade - self.fade_speed)
+            
+            # Don't clear max_reached here - let silence() method handle state transitions
+                
+        elif self.silence_progress > 0:
+            # We have silence detected - fade to warmer colors immediately
+            self.time_at_zero = 0  # Reset the zero timer
+            target_fade = 1.0
+            
+            if self.color_fade < target_fade:
+                self.color_fade = min(1.0, self.color_fade + self.fade_speed)
+        else:
+            # silence_progress is 0 - track how long we've been at zero
+            self.time_at_zero += 1.0 / 60.0  # Assuming 60 FPS, adjust if needed
+            
+            # Only start fading back to blue after 0.9 seconds at zero
+            if self.time_at_zero >= self.zero_delay:
+                if self.color_fade > 0:
+                    self.color_fade = max(0.0, self.color_fade - self.fade_speed)
+        
         # Update animations
         if self.action_flash > 0:
             self.action_flash -= 0.05
@@ -337,7 +606,7 @@ class SpectrumSystem:
     
     def draw(self, surface):
         """Draw spectrum analyzer overlay"""
-        # Clear spectrum surface
+        # Clear spectrum surface (only the area we need)
         self.spectrum_surface.fill((0, 0, 0, 0))
         
         # Draw selected style
@@ -347,6 +616,11 @@ class SpectrumSystem:
             self.draw_wave(self.spectrum_surface)
         elif self.style == 'circular':
             self.draw_circular(self.spectrum_surface)
+        elif self.style == 'spectrogram':
+            self.draw_spectrogram(self.spectrum_surface)
+        
+        # Draw silence progress indicator (on top of spectrum)
+        self.draw_silence_progress(self.spectrum_surface)
         
         # Add subtle background
         if self.bg_alpha > 0:
@@ -359,7 +633,8 @@ class SpectrumSystem:
     
     def __del__(self):
         """Cleanup audio stream on destruction"""
-        self.stop_audio_stream()
+        if hasattr(self, 'stream'):
+            self.stop_audio_stream()
 
 
 # Example usage
@@ -368,12 +643,38 @@ if __name__ == "__main__":
     screen = pygame.display.set_mode((800, 600))
     clock = pygame.time.Clock()
     
-    spectrum = SpectrumSystem(800, 600, style='wave')
+    spectrum = SpectrumSystem(800, 600, style='spectrogram')  # Try: 'bars', 'wave', 'circular', 'spectrogram'
     
     running = True
+    silence_counter = 0
     print("Spectrum analyzer running - speak into your microphone!")
+    print("Press SPACE to simulate silence detection")
+    print("Press S to cycle through visualization styles")
     
     while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                elif event.key == pygame.K_SPACE:
+                    # Simulate silence detection
+                    silence_counter = 20
+                elif event.key == pygame.K_s:
+                    # Cycle through styles
+                    styles = ['bars', 'wave', 'circular', 'spectrogram']
+                    current_idx = styles.index(spectrum.style)
+                    next_idx = (current_idx + 1) % len(styles)
+                    spectrum.style = styles[next_idx]
+                    print(f"Style: {styles[next_idx]}")
+        
+        # Update silence counter (simulated)
+        if silence_counter > 0:
+            spectrum.silence(silence_counter, 20)
+            silence_counter -= 0.3
+        else:
+            spectrum.silence(0, 20)
         
         screen.fill((0, 0, 0))
         

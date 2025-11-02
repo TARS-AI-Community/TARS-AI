@@ -92,9 +92,8 @@ if __name__ == "__main__":
     battery.start()
 
     # Create global UI manager instance
-    print(show_ui)
     ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery)
-    if CONFIG["UI"]["UI_enabled"] or show_ui:
+    if show_ui and CONFIG["UI"]["UI_enabled"]:
         ui_manager.start()
     ui_manager.update_data("System", "Initializing application...", "DEBUG")
 
