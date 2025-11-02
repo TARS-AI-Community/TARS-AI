@@ -50,7 +50,7 @@ class TerminalSystem:
         try:
             self.font = pygame.font.Font("UI/mono.ttf", 20)
             self.font_bold = pygame.font.Font("UI/mono.ttf", 20)
-            self.toolbar_font = pygame.font.Font("UI/pixelmix.ttf", 12)
+            self.toolbar_font = pygame.font.Font("UI/retro.ttf", 14)
             self.label_font = pygame.font.Font("UI/mono.ttf", 12)
             self.title_font = pygame.font.Font("UI/mono.ttf", 21)
             self.code_font = pygame.font.Font("UI/mono.ttf", 17)
@@ -83,7 +83,7 @@ class TerminalSystem:
             {"label": "CLEAR", "code": "CLR-01", "rect": None, "active": False, "color": None, "position": "left"},
             {"label": "BG", "code": "BG-SW", "rect": None, "active": False, "color": None, "position": "left"},
             {"label": "WAVE", "code": "SPK-CY", "rect": None, "active": False, "color": None, "position": "left"},
-            {"label": "SHUTDOWN", "code": "PWR-DN", "rect": None, "active": False, "color": "warning", "position": "right"},
+            {"label": "PWR-DN", "code": "PWR-DN", "rect": None, "active": False, "color": "warning", "position": "right"},
         ]
         
         # Bottom toolbar buttons
@@ -242,7 +242,7 @@ class TerminalSystem:
                     self.change_background()
                 elif button["label"] == "WAVE":
                     self.change_spectrum()
-                elif button["label"] == "SHUTDOWN":
+                elif button["label"] == "PWR-DN":
                     self.shutdown_system()
                 return True
         
