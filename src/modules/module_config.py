@@ -14,9 +14,15 @@ import configparser
 from dotenv import load_dotenv
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict, List, Tuple
+from enum import Enum
 
 from modules.module_messageQue import queue_message
+
+# === TARS Configuration Management System ===
+# Import TARS CMS components
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app_cms import TarsConfigManager, ConfigAction, ActionType, ConfigSection, ConfigField
 
 # === Initialization ===
 load_dotenv()  # Load environment variables from .env file
@@ -154,6 +160,7 @@ def load_config():
             "voicemovement": config['CONTROLS']['voicemovement'],         
         },
         "STT": {
+            "language" : config['STT']['language'],
             "wake_word": config['STT']['wake_word'],
             "sensitivity": config['STT']['sensitivity'],
             "stt_processor": config['STT']['stt_processor'],
@@ -172,6 +179,7 @@ def load_config():
             "user_name": config['CHAR']['user_name'],
             "user_details": config['CHAR']['user_details'],
             "traits": persona_traits,  # Include the traits from persona.ini
+            "responses": config['CHAR']['responses'],
         },
         "LLM": {
             "llm_backend": config['LLM']['llm_backend'],
@@ -377,3 +385,354 @@ def update_character_setting(setting, value):
     except Exception as e:
         queue_message(f"Error updating setting: {e}")
         return False
+
+
+# === TARS Configuration Management System Integration ===
+
+class ConfigUpdateResult(Enum):
+    SUCCESS = "SUCCESS"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    BACKUP_FAILED = "BACKUP_FAILED"
+    WRITE_ERROR = "WRITE_ERROR"
+    TEMPLATE_MISMATCH = "TEMPLATE_MISMATCH"
+
+@dataclass
+class ConfigUpdateResponse:
+    result: ConfigUpdateResult
+    message: str
+    actions_taken: List[str] = None
+    backup_location: str = None
+    errors: List[str] = None
+    
+    def __post_init__(self):
+        if self.actions_taken is None:
+            self.actions_taken = []
+        if self.errors is None:
+            self.errors = []
+
+class TarsConfigIntegration:
+    """
+    Integration class that provides web-friendly access to TARS Configuration Management System
+    """
+    
+    def __init__(self):
+        self.cms = TarsConfigManager()
+        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+    def validate_config_data(self, config_data: Dict) -> Tuple[bool, List[str]]:
+        """
+        Validate configuration data against the template structure
+        
+        Args:
+            config_data: Dictionary of configuration sections and fields
+            
+        Returns:
+            Tuple of (is_valid, list_of_errors)
+        """
+        errors = []
+        
+        try:
+            # Load template structure
+            template_sections = self.cms.parse_config_structure(self.cms.template_file)
+            
+            # Validate each section and field
+            for section_name, section_data in config_data.items():
+                if section_name not in template_sections:
+                    errors.append(f"Unknown section: [{section_name}]")
+                    continue
+                    
+                template_section = template_sections[section_name]
+                
+                # Validate fields in this section
+                for field_name, field_value in section_data.items():
+                    if field_name not in template_section.fields:
+                        errors.append(f"Unknown field: [{section_name}] {field_name}")
+                        continue
+                        
+                    # Type validation based on template field
+                    template_field = template_section.fields[field_name]
+                    if not self._validate_field_type(field_name, field_value, template_field.value):
+                        errors.append(f"Invalid value for [{section_name}] {field_name}: '{field_value}' (type: {type(field_value).__name__})")
+                        
+        except Exception as e:
+            errors.append(f"Validation error: {str(e)}")
+            
+        return len(errors) == 0, errors
+    
+    def _validate_field_type(self, field_name: str, value: any, template_value: str) -> bool:
+        """
+        Validate field value type based on template and field name patterns
+        Handles both actual types and string representations from web UI
+        """
+        try:
+            # Convert value to string for consistent checking
+            str_value = str(value).lower().strip()
+            
+            # Boolean fields - accept bool, "true"/"false", "1"/"0"
+            if field_name in ['enabled', 'toggle_charvoice', 'voice_only', 'is_talking_override', 
+                            'is_talking', 'global_timer_paused', 'use_indicators', 'server_hosted',
+                            'restore_faces', 'UI_enabled', 'maximize_console', 'neural_net',
+                            'neural_net_always_visible', 'show_mouse', 'use_camera_module',
+                            'fullscreen', 'auto_shutdown']:
+                return (isinstance(value, bool) or 
+                       str_value in ['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'])
+            
+            # Integer fields - accept int, numeric strings
+            elif field_name in ['sensitivity', 'speechdelay', 'contextsize', 'max_tokens',
+                              'seed', 'top_k', 'steps', 'width', 'height', 'screen_width',
+                              'screen_height', 'rotation', 'background_id', 'font_size',
+                              'target_fps', 'battery_capacity_mAh']:
+                try:
+                    int(float(str_value))  # Allow "8.0" -> 8
+                    return True
+                except (ValueError, TypeError):
+                    return False
+            
+            # Float fields - accept float, numeric strings
+            elif field_name in ['temperature', 'top_p', 'vector_weight', 'denoising_strength',
+                              'cfg_scale', 'battery_initial_voltage', 'battery_cutoff_voltage']:
+                try:
+                    float(str_value)
+                    return True
+                except (ValueError, TypeError):
+                    return False
+            
+            # String fields - accept any value (most fields are strings)
+            else:
+                return True  # Most fields are strings, so accept anything
+                
+        except Exception:
+            return False
+    
+    def update_config_from_web(self, config_data: Dict, create_backup: bool = True) -> ConfigUpdateResponse:
+        """
+        Update configuration from web UI data using TARS CMS
+        
+        Args:
+            config_data: Dictionary of configuration sections and fields
+            create_backup: Whether to create a backup before updating
+            
+        Returns:
+            ConfigUpdateResponse with result and details
+        """
+        actions_taken = []
+        
+        try:
+            # Step 1: Validate the input data
+            is_valid, validation_errors = self.validate_config_data(config_data)
+            if not is_valid:
+                return ConfigUpdateResponse(
+                    result=ConfigUpdateResult.VALIDATION_ERROR,
+                    message="Configuration validation failed",
+                    errors=validation_errors
+                )
+            
+            actions_taken.append("Configuration data validated successfully")
+            
+            # Step 2: Create backup if requested
+            backup_location = None
+            if create_backup:
+                try:
+                    if self.cms.create_backup():
+                        backup_location = self.cms.backup_file
+                        actions_taken.append(f"Backup created at {backup_location}")
+                    else:
+                        return ConfigUpdateResponse(
+                            result=ConfigUpdateResult.BACKUP_FAILED,
+                            message="Failed to create backup",
+                            errors=["Backup creation failed"]
+                        )
+                except Exception as e:
+                    return ConfigUpdateResponse(
+                        result=ConfigUpdateResult.BACKUP_FAILED,
+                        message=f"Backup creation error: {str(e)}",
+                        errors=[str(e)]
+                    )
+            
+            # Step 3: Load current and template configurations
+            template_sections = self.cms.parse_config_structure(self.cms.template_file)
+            existing_sections = self.cms.parse_config_structure(self.cms.config_file)
+            
+            # Step 4: Create updated configuration structure
+            final_sections = {}
+            
+            for section_name, template_section in template_sections.items():
+                # Create final section with template structure
+                final_section = ConfigSection(
+                    name=section_name,
+                    inline_comment=template_section.inline_comment,
+                    description_comments=template_section.description_comments.copy() if template_section.description_comments else []
+                )
+                
+                # Process each field in the template section
+                for field_name, template_field in template_section.fields.items():
+                    # Determine the value to use
+                    if section_name in config_data and field_name in config_data[section_name]:
+                        # Use value from web input
+                        new_value = str(config_data[section_name][field_name])
+                        actions_taken.append(f"Updated [{section_name}] {field_name} = {new_value}")
+                    elif section_name in existing_sections and field_name in existing_sections[section_name].fields:
+                        # Preserve existing value
+                        existing_value = existing_sections[section_name].fields[field_name].value
+                        new_value = existing_value
+                        actions_taken.append(f"Preserved [{section_name}] {field_name} = {existing_value}")
+                    else:
+                        # Use template default
+                        new_value = template_field.value
+                        actions_taken.append(f"Used template default [{section_name}] {field_name} = {new_value}")
+                    
+                    # Create final field with template structure but updated value
+                    final_field = ConfigField(
+                        name=field_name,
+                        value=new_value,
+                        inline_comment=template_field.inline_comment,
+                        description_comments=template_field.description_comments.copy() if template_field.description_comments else []
+                    )
+                    
+                    final_section.fields[field_name] = final_field
+                
+                final_sections[section_name] = final_section
+            
+            # Step 5: Write the updated configuration
+            try:
+                self.cms.write_config_file(final_sections)
+                actions_taken.append("Configuration file written successfully")
+                
+                return ConfigUpdateResponse(
+                    result=ConfigUpdateResult.SUCCESS,
+                    message="Configuration updated successfully using TARS CMS",
+                    actions_taken=actions_taken,
+                    backup_location=backup_location
+                )
+                
+            except Exception as e:
+                return ConfigUpdateResponse(
+                    result=ConfigUpdateResult.WRITE_ERROR,
+                    message=f"Failed to write configuration: {str(e)}",
+                    errors=[str(e)],
+                    backup_location=backup_location
+                )
+                
+        except Exception as e:
+            return ConfigUpdateResponse(
+                result=ConfigUpdateResult.WRITE_ERROR,
+                message=f"Unexpected error during configuration update: {str(e)}",
+                errors=[str(e)],
+                backup_location=backup_location
+            )
+    
+    def get_config_analysis(self) -> Dict:
+        """
+        Get configuration analysis from TARS CMS
+        
+        Returns:
+            Dictionary with analysis results
+        """
+        try:
+            actions = self.cms.analyze_differences()
+            
+            analysis = {
+                "total_actions": len(actions),
+                "sections_to_add": len([a for a in actions if a.action == ActionType.ADD_SECTION]),
+                "fields_to_add": len([a for a in actions if a.action == ActionType.ADD_FIELD]),
+                "comments_to_add": len([a for a in actions if a.action == ActionType.ADD_COMMENT]),
+                "sections_to_remove": len([a for a in actions if a.action == ActionType.REMOVE_SECTION]),
+                "fields_to_remove": len([a for a in actions if a.action == ActionType.REMOVE_FIELD]),
+                "values_to_preserve": len([a for a in actions if a.action == ActionType.PRESERVE_VALUE]),
+                "is_synchronized": len(actions) == 0,
+                "actions": [
+                    {
+                        "action": action.action.value,
+                        "section": action.section,
+                        "field": action.field,
+                        "value": action.value,
+                        "comment": action.comment
+                    } for action in actions
+                ]
+            }
+            
+            return analysis
+            
+        except Exception as e:
+            return {
+                "error": str(e),
+                "is_synchronized": False
+            }
+    
+    def sync_with_template(self, interactive: bool = False) -> ConfigUpdateResponse:
+        """
+        Synchronize current configuration with template using TARS CMS
+        
+        Args:
+            interactive: Whether to use interactive mode for removals
+            
+        Returns:
+            ConfigUpdateResponse with result and details
+        """
+        try:
+            # Analyze differences
+            actions = self.cms.analyze_differences()
+            
+            if not actions:
+                return ConfigUpdateResponse(
+                    result=ConfigUpdateResult.SUCCESS,
+                    message="Configuration is already synchronized with template",
+                    actions_taken=["No changes needed"]
+                )
+            
+            # Handle removals based on interactive setting
+            if interactive:
+                actions = self.cms.confirm_removals(actions)
+            else:
+                # Auto-approve removals for programmatic use
+                actions = [a for a in actions if a.action not in [ActionType.REMOVE_SECTION, ActionType.REMOVE_FIELD]]
+            
+            # Apply changes
+            self.cms.apply_changes(actions)
+            
+            return ConfigUpdateResponse(
+                result=ConfigUpdateResult.SUCCESS,
+                message=f"Synchronized configuration with template ({len(actions)} actions applied)",
+                actions_taken=[f"Applied {len(actions)} configuration changes"]
+            )
+            
+        except Exception as e:
+            return ConfigUpdateResponse(
+                result=ConfigUpdateResult.WRITE_ERROR,
+                message=f"Synchronization failed: {str(e)}",
+                errors=[str(e)]
+            )
+
+# Convenience functions for easy integration
+def update_config_from_web_ui(config_data: Dict, create_backup: bool = True) -> Dict:
+    """
+    Convenience function to update configuration from web UI
+    
+    Args:
+        config_data: Dictionary of configuration sections and fields
+        create_backup: Whether to create a backup before updating
+        
+    Returns:
+        Dictionary with result information suitable for JSON response
+    """
+    integration = TarsConfigIntegration()
+    response = integration.update_config_from_web(config_data, create_backup)
+    
+    return {
+        "success": response.result == ConfigUpdateResult.SUCCESS,
+        "message": response.message,
+        "result": response.result.value,
+        "actions_taken": response.actions_taken,
+        "backup_location": response.backup_location,
+        "errors": response.errors
+    }
+
+def get_config_sync_status() -> Dict:
+    """
+    Get configuration synchronization status
+    
+    Returns:
+        Dictionary with sync status information
+    """
+    integration = TarsConfigIntegration()
+    return integration.get_config_analysis()

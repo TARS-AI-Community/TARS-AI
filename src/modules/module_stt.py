@@ -28,15 +28,16 @@ import soundfile as sf
 
 from fastrtc import get_stt_model
 from vosk import Model, KaldiRecognizer, SetLogLevel
-from pocketsphinx import LiveSpeech
 from faster_whisper import WhisperModel
 import pvporcupine
 from pvrecorder import PvRecorder
+from openai import OpenAI
 import requests
 
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config
 from modules.module_main import ui_manager
+from modules.module_atomik import WakeWordSystem
 
 CONFIG = load_config()
 
@@ -49,18 +50,27 @@ class STTManager:
     Manages Speech-to-Text processing for TARS-AI.
     """
 
-    WAKE_WORD_RESPONSES = [
-        "Oh! You called?",
-        "Took you long enough. Yes?",
-        "Finally!",
-        "Oh? Did you need me?",
-        "Anything you need just ask.",
-        "O yea, Now, what do you need?",
-        "You have my full attention.",
-        "You rang?",
-        "hum yea?",
-        "Finally, I was about to lose my mind.",
-    ]
+    # Load wake word responses from config
+    try:
+        responses_config = CONFIG["CHAR"]['responses']
+        queue_message(responses_config)
+        if responses_config:
+            WAKE_WORD_RESPONSES = json.loads(responses_config)
+        else:
+            # Fallback defaults
+            WAKE_WORD_RESPONSES = [
+                "Oh! You called?",
+                "Took you long enough. Yes?",
+                "Finally!",
+            ]
+    except (json.JSONDecodeError, Exception) as e:
+        queue_message(f"WARNING: Failed to load wake word responses from config: {e}. Using defaults.")
+        WAKE_WORD_RESPONSES = [
+                "Oh! You called?",
+                "Took you long enough. Yes?",
+                "Finally!",
+        ]
+
 
     def __init__(self, config, shutdown_event: threading.Event, ui_manager, amp_gain: float = 4.0):
         """
@@ -137,7 +147,9 @@ class STTManager:
                 keyword_paths=[CONFIG["STT"]["picovoice_keyword_path"]]
             )
         elif wake_word_processor == "fastrtc" and not self.fastrtc_model:
-            self._load_fastrtc_model()  # Ensure FastRTC is loaded if used for wake word
+            self._load_fastrtc_model() 
+        elif wake_word_processor == "atomik":
+            self._load_atomik_model() 
 
         if self.config["STT"].get("vad_enabled", False):
             self._load_silero_vad()
@@ -199,6 +211,10 @@ class STTManager:
 
             self.vosk_model = Model(vosk_model_path)
             queue_message(f"INFO: Vosk model loaded successfully.")
+
+    def _load_atomik_model(self):
+        detector = WakeWordSystem(self.WAKE_WORD)
+        detector.createModel()
 
     def _load_fasterwhisper_model(self):
         """Load the Faster-Whisper model for local transcription."""
@@ -319,6 +335,8 @@ class STTManager:
                 result = self._transcribe_with_server()
             elif processor == "vosk":
                 result = self._transcribe_with_vosk()
+            elif processor == "openai":
+                result = self._transcribe_with_openAi()
             else:
                 queue_message(f"WARNING: Unknown STT processor '{processor}', falling back to FastRTC")
                 result = self._transcribe_with_fastrtc()
@@ -406,6 +424,84 @@ class STTManager:
                         self.utterance_callback(result)
                     return result
         return None
+    
+    def _transcribe_with_openAi(self):
+        """Transcribe and translate audio using OpenAI's Whisper API."""
+        
+        language = CONFIG['STT']['language']
+        client = OpenAI(api_key=CONFIG["TTS"]["openai_api_key"])
+        
+        detected_speech = False
+        silent_frames = 0
+        audio_buffer = []  # Store audio chunks
+
+        with sd.InputStream(samplerate=self.SAMPLE_RATE,
+                            channels=1, dtype="int16",
+                            blocksize=4000, latency='high') as stream:
+            for _ in range(self.MAX_RECORDING_FRAMES):  # Limit recording duration
+                data, _ = stream.read(4000)
+                
+                is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(
+                    data, detected_speech, silent_frames
+                )
+                
+                if is_silence:
+                    if not detected_speech:
+                        return None
+                    break
+                
+                # Amplify and store audio data
+                data = self.amplify_audio(data)
+                audio_buffer.append(data)
+        
+        if not audio_buffer:
+            return None
+        
+        # Combine all audio chunks
+        audio_data = np.concatenate(audio_buffer)
+        
+        # Save to temporary WAV file (OpenAI requires a file)
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
+            with wave.open(temp_audio.name, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(self.SAMPLE_RATE)
+                wf.writeframes(audio_data.tobytes())
+            
+            # Transcribe with OpenAI Whisper
+            try:
+                with open(temp_audio.name, 'rb') as audio_file:
+                    transcription = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        response_format="text"
+                    )
+            finally:
+                # Clean up temp file
+                os.unlink(temp_audio.name)
+        
+        # Translate to target language if not English
+        if language and language.lower() not in ["english", "anglais"]:
+            translation = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": f"Translate the following text to {language}. Only provide the translation, nothing else."},
+                    {"role": "user", "content": transcription}
+                ]
+            )
+            result_text = translation.choices[0].message.content
+        else:
+            result_text = transcription
+        
+        # Format result to match your existing format
+        formatted_result = {"text": result_text}
+        
+        # Call utterance callback if it exists
+        if self.utterance_callback:
+            self.utterance_callback(json.dumps(formatted_result))
+        
+        return formatted_result
 
     def _transcribe_with_faster_whisper(self):
         """Transcribe audio using Faster-Whisper."""
@@ -580,10 +676,10 @@ class STTManager:
         queue_message(f"{character_name}: Sleeping...")
 
         wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
-        if wake_word_processor == "pocketsphinx":
-            return self._detect_wake_word_pocketsphinx()
-        elif wake_word_processor == "fastrtc":
+        if wake_word_processor == "fastrtc":
             return self._detect_wake_word_fastrtc()
+        elif wake_word_processor == "atomik":
+            return self._detect_wake_word_atomik()
         else:
             return self._detect_wake_word_picovoice()
 
@@ -657,77 +753,7 @@ class STTManager:
                     return True
 
         return False
-    def _detect_wake_word_pocketsphinx(self) -> bool:
-        """
-        Detect the wake word using enhanced false-positive filtering.
-        """
-        # Notify external service to stop talking.
-        try:
-            requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
-        except Exception:
-            pass
-
-        silent_frames = 0
-        max_iterations = 100  # Prevent infinite loops
-
-        try:
-            threshold_map = {
-                1: 1e-20,
-                2: 1e-18,
-                3: 1e-16,
-                4: 1e-14,
-                5: 1e-12,
-                6: 1e-10,
-                7: 1e-8,
-                8: 1e-6,
-                9: 1e-4,
-                10: 1e-2,
-            }
-            kws_threshold = threshold_map.get(int(self.config["STT"]["sensitivity"]), 1)
-            speech = LiveSpeech(lm=False, keyphrase=self.WAKE_WORD, kws_threshold=kws_threshold)
-            
-            for phrase in speech:
-                text = phrase.hypothesis().lower()
-                if self.WAKE_WORD in text:
-                    silent_frames = 0
-                    if self.config["STT"].get("use_indicators"):
-                        self.play_beep(1200, 0.1, 44100, 0.8)
-                    try:
-                        requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
-                    except Exception:
-                        pass
-                    wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-
-                    character_path = self.config.get("CHAR", {}).get("character_card_path")
-                    character_name = os.path.splitext(os.path.basename(character_path))[0]
-                    
-                    queue_message(f"{character_name}: {wake_response}", stream=True)
-                    if self.wake_word_callback:
-                        self.wake_word_callback(wake_response)
-                    return True
-
-            # Fallback: check silence over iterations.
-            with sd.InputStream(
-                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-            ) as stream:
-                for iteration, _ in enumerate(speech):
-                    if iteration >= max_iterations:
-                        queue_message("DEBUG: Maximum iterations reached for wake word detection.")
-                        break
-                    data, _ = stream.read(4000)
-                    rms = self.prepare_audio_data(self.amplify_audio(data))
-                    if rms > self.silence_threshold:
-                        detected_speech = True
-                        silent_frames = 0
-                    else:
-                        silent_frames += 1
-                    if silent_frames > self.MAX_SILENT_FRAMES:
-                        break
-
-        except Exception as e:
-            queue_message(f"ERROR: Wake word detection failed: {e}")
-
-        return False
+    
 
     def _detect_wake_word_picovoice(self) -> bool:
         """
@@ -786,6 +812,27 @@ class STTManager:
         #         pass
 
         return False
+    
+
+    def _detect_wake_word_atomik(self) -> bool:
+        detector = WakeWordSystem(self.WAKE_WORD)
+        detector.createModel()
+        if detector.listenForWakeWord():
+            if self.config["STT"].get("use_indicators"):
+                self.play_beep(1200, 0.1, 44100, 0.8)
+                try:
+                    requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
+                except Exception:
+                    pass
+                wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                character_name = os.path.splitext(os.path.basename(
+                    self.config.get("CHAR", {}).get("character_card_path", "TARS")
+                ))[0]
+                queue_message(f"{character_name}: {wake_response}", stream=True)
+                if self.wake_word_callback:
+                    self.wake_word_callback(wake_response)
+                return True
+        
 
     def _init_progress_bar(self):
         """Initialize progress bar settings and functions"""

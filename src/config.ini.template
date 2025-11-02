@@ -7,12 +7,14 @@ voicemovement = False
 #Enable or disable movement via voice control
 
 [STT] # Speech-to-Text configuration
-wake_word = hey tar
+language = english
+# spoken language, if not using english, use stt_processor = openai
+wake_word = hey tars
 # Wake word for activating the system
 sensitivity = 8
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection. 
 stt_processor = fastrtc
-#vosk, faster-whisper, silero, fastrtc, or external
+#vosk, faster-whisper, silero, fastrtc, openai (for other languages than english) or external
 external_url = http://192.168.2.57:5678
 # URL for the STT server (if enabled)
 whisper_model = tiny
@@ -27,8 +29,8 @@ speechdelay = 20
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
 # Relative path to the Porcupine keyword file
-wake_word_processor = pocketsphinx
-# Options: picovoice, pocketsphinx, fastrtc
+wake_word_processor = atomik
+# Options: picovoice, fastrtc, atomik
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS/TARS.json
@@ -37,6 +39,8 @@ user_name = Joe
 # Name of the user interacting with the character
 user_details = Species: Human. Gender: Male.
 # Additional user details for context
+responses = ["Oh! You called?", "Took you long enough. Yes?", "Finally!", "Oh? Did you need me?", "Anything you need just ask.", "O yea, Now, what do you need?", "You have my full attention.", "You rang?", "hum yea?", "Finally, I was about to lose my mind."]
+# what tars replies after detecting the wakeword
 
 [LLM] # Large Language Model configuration (OpenAI, Tabby, Ooba, or LOCAL)
 llm_backend = openai
@@ -87,6 +91,7 @@ ttsoption = piper
 # Onboard Options: espeak, piper, silero
 # External SelfHosted: alltalk
 # Externally Hosted: azure, elevenlabs, openai
+# for other languages than english, use elevenlabs or openai
 azure_region = eastus
 # Azure region for Azure TTS (e.g., eastus)
 ttsurl = http://192.168.2.57:7852
@@ -144,7 +149,7 @@ negative_prompt = deformed, black and white, disfigured, low contrast, extra lim
 enabled = True
 
 [UI]
-UI_enabled = True
+UI_enabled = False
 #Enable or Disable the visuals
 UI_template = ui_layout_DEFAULT.json
 #determine which UI layout you want to us
@@ -158,7 +163,7 @@ screen_width = 1024
 # Adjust based on your screen resolution
 screen_height = 600
 # Adjust based on your screen resolution
-rotation = 0
+rotation = 270
 # rotation can be 0, 90, 180, 270
 use_camera_module = False
 # enable the camera
