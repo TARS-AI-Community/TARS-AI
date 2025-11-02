@@ -293,10 +293,6 @@ def load_config():
         },
         "UI": {
             "UI_enabled": config.getboolean('UI', 'UI_enabled'),
-            "UI_template": config['UI']['UI_template'],
-            "maximize_console": config.getboolean('UI','maximize_console'),
-            "neural_net": config.getboolean('UI', 'neural_net'),
-            "neural_net_always_visible": config.getboolean('UI', 'neural_net_always_visible'),
             "screen_width": int(config['UI']['screen_width']),
             "screen_height": int(config['UI']['screen_height']),
             "rotation": int(config['UI']['rotation']),
@@ -471,8 +467,7 @@ class TarsConfigIntegration:
             # Boolean fields - accept bool, "true"/"false", "1"/"0"
             if field_name in ['enabled', 'toggle_charvoice', 'voice_only', 'is_talking_override', 
                             'is_talking', 'global_timer_paused', 'use_indicators', 'server_hosted',
-                            'restore_faces', 'UI_enabled', 'maximize_console', 'neural_net',
-                            'neural_net_always_visible', 'show_mouse', 'use_camera_module',
+                            'restore_faces', 'UI_enabled', 'show_mouse', 'use_camera_module',
                             'fullscreen', 'auto_shutdown']:
                 return (isinstance(value, bool) or 
                        str_value in ['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'])

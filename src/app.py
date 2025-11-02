@@ -148,7 +148,6 @@ if __name__ == "__main__":
         # executor.shutdown(wait=True)
 
     finally:
-        ui_manager.stop()
         stt_manager.stop()
         battery.stop()
         bt_controller_thread.join()

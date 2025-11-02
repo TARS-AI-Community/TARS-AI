@@ -151,14 +151,8 @@ enabled = True
 [UI]
 UI_enabled = False
 #Enable or Disable the visuals
-UI_template = ui_layout_DEFAULT.json
-#determine which UI layout you want to us
 maximize_console = False
 # start with the console using all the screen
-neural_net = True
-# Show the neural net animation 
-neural_net_always_visible = False
-# keep the neural net active all the time
 screen_width = 1024
 # Adjust based on your screen resolution
 screen_height = 600
