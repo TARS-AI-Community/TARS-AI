@@ -36,6 +36,7 @@ background_id = CONFIG['UI']['background_id']
 fullscreen = CONFIG['UI']['fullscreen']
 font_size = CONFIG['UI']['font_size']
 target_fps = CONFIG['UI']['target_fps']
+speechdelay = CONFIG['STT']['speechdelay']
 
 BASE_WIDTH = 800
 BASE_HEIGHT = 600
@@ -58,6 +59,7 @@ class UIManager(threading.Thread):
         self.rotate = rotation_value
         self.font_size = font_size
         self.silence_progress = 0
+        self.speechdelay = speechdelay
         
         # Background selection and cycling
         self.background_types = ['particles', 'starfield', 'tesseract', 'video']

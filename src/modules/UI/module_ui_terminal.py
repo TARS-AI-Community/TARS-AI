@@ -50,7 +50,7 @@ class TerminalSystem:
         try:
             self.font = pygame.font.Font("UI/mono.ttf", 20)
             self.font_bold = pygame.font.Font("UI/mono.ttf", 20)
-            self.toolbar_font = pygame.font.Font("UI/retro.ttf", 14)
+            self.toolbar_font = pygame.font.Font("UI/pixelmix.ttf", 14)
             self.label_font = pygame.font.Font("UI/mono.ttf", 12)
             self.title_font = pygame.font.Font("UI/mono.ttf", 21)
             self.code_font = pygame.font.Font("UI/mono.ttf", 17)

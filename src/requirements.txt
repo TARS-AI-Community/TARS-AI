@@ -62,5 +62,4 @@ simplejpeg              # Camera Requirement
 numpy==2.1              # Needed for image rotations
 
 # Battery
-adafruit-circuitpython-ina260   # INA260 sensor
 lgpio                           # Required for Raspberry pi 5 users

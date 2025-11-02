@@ -7,4 +7,3 @@ battery.start()
 while True:
     print(battery.get_battery_status())
     time.sleep(1)
-    
