@@ -241,9 +241,6 @@ neutralHeight = 300
 downHeight = 350
 
 # servo 1 (Left leg)
-# !!!IMPORTANT!!! 
-# With the V1, the Forward and Back values are normally -50 for forward and +50 for back from the neutral value with a neutral value of 350
-# With the V2, the Forward and Back values are normally -108 for forward and +108 for back from the neutral value with a neutral value of 300 for mg996r Servo Type, and +80, -80 for LDX-227 Servo
 # Forward position for the starboard drive servo
 forwardStarboard = 220
 # Neutral position for the starboard drive servo
@@ -254,9 +251,6 @@ backStarboard = 380
 perfectStaroffset = 0
 
 # servo 2 (Right Leg)
-# !!!IMPORTANT!!! 
-# With the V1, the Forward and Back values are normally +50 for forward and -50 for back from the neutral value with a neutral value of 350
-# With the V2, the Forward and Back values are normally +108 for forward and -108 for back from the neutral value with a neutral value of 300 for mg996r Servo Type, and -80, +80 for LDX-227 Servo
 # Forward position for the port drive servo
 forwardPort = 380
 # Neutral position for the port drive servo
