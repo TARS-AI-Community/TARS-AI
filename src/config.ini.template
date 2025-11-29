@@ -234,29 +234,29 @@ starHandMax = 280
 # Upper limit 
 # !!!IMPORTANT!!! 
 # Install the servo so that the position of the main leg mount are centered in the hole, then adjust for the max upHeight and downHeight
-upHeight = 220
+upHeight = 180
 # Neutral position for centering the servo
 neutralHeight = 300
 # Lower limit for the center servo (CAUTION: Setting too high may cause damage)
-downHeight = 350
+downHeight = 420
 
 # servo 1 (Left leg)
 # Forward position for the starboard drive servo
-forwardStarboard = 220
+forwardStarboard = 180
 # Neutral position for the starboard drive servo
 neutralStarboard = 300
 # Reverse position for the starboard drive servo
-backStarboard = 380
+backStarboard = 420
 # Fine-tuning offset for the starboard drive servo
 perfectStaroffset = 0
 
 # servo 2 (Right Leg)
 # Forward position for the port drive servo
-forwardPort = 380
+forwardPort = 420
 # Neutral position for the port drive servo
 neutralPort = 300
 # Reverse position for the port drive servo
-backPort = 220
+backPort = 180
 # Fine-tuning offset for the port drive servo
 perfectPortoffset = 0
 
