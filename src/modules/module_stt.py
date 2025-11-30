@@ -1071,7 +1071,7 @@ class STTManager:
         """
         t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
         sine_wave = volume * np.sin(2 * np.pi * frequency * t)
-        sd.play(sine_wave, samplerate=sample_rate)
+        sd.play(sine_wave, samplerate=sample_rate, device=1)
         sd.wait()
 
     # === Callback Setters ===
