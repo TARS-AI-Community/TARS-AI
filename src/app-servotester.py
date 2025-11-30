@@ -6,7 +6,6 @@ from adafruit_pca9685 import PCA9685
 
 # === Custom Modules ===
 from modules.module_config import load_config
-from modules.module_tts import update_tts_settings
 
 config = load_config()
 
