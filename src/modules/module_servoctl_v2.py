@@ -166,7 +166,7 @@ def step_forward():
     global MOVING
     if not MOVING:
         MOVING = True
-        move_legs(50, 50, 50, 0.4)
+        """ move_legs(50, 50, 50, 0.4)
         time.sleep(0.2)
         move_legs(22, 50, 50, 0.6)
         time.sleep(0.2)
@@ -175,7 +175,14 @@ def step_forward():
         move_legs(85, 50, 50, 0.8)
         time.sleep(0.2)
         move_legs(50, 50, 50, 1)
-        time.sleep(0.5)
+        time.sleep(0.5) """
+        move_legs(50, 50, 50, 0.8)
+        move_legs(35, 40, 40,0.9)
+        move_legs(65, 25, 25, 1)
+        time.sleep(0.2)
+        move_legs(55, 30, 30, 0.6)
+        move_legs(75, 50, 50, 0.7)
+        move_legs(50, 50, 50, 0.8)
         disable_all_servos()
         MOVING = False
 
@@ -193,33 +200,33 @@ def step_backward():
     disable_all_servos()
 
 def turn_right():
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(100, 0, 0, 0.8)
-    time.sleep(0.3)
-    move_legs(0, 70, 30, 0.6)
-    time.sleep(0.2)
-    move_legs(50, 0, 0, 0.6)
-    time.sleep(0.2)
-    move_legs(0, 50, 50, 0.3)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
+    move_legs(50, 50, 50, 0.9)
+    time.sleep(0.1)
+    move_legs(100, 0, 0, 0.9)
+    time.sleep(0.1)
+    move_legs(0, 70, 30, 0.9)
+    time.sleep(0.1)
+    move_legs(50, 0, 0, 0.9)
+    time.sleep(0.1)
+    move_legs(0, 50, 50, 0.9)
+    time.sleep(0.1)
+    move_legs(50, 50, 50, 0.9)
+    time.sleep(0.1)
     disable_all_servos()
 
 def turn_left():
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(100, 0, 0, 0.8)
-    time.sleep(0.3)
-    move_legs(0, 30, 70, 0.3)
-    time.sleep(0.2)
-    move_legs(50, 0, 0, 0.6)
-    time.sleep(0.2)
-    move_legs(0, 50, 50, 0.3)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 0.4)
-    time.sleep(0.2)
+    move_legs(50, 50, 50, 0.9)
+    time.sleep(0.1)
+    move_legs(100, 0, 0, 0.9)
+    time.sleep(0.1)
+    move_legs(0, 30, 70, 0.9)
+    time.sleep(0.1)
+    move_legs(50, 0, 0, 0.9)
+    time.sleep(0.1)
+    move_legs(0, 50, 50, 0.9)
+    time.sleep(0.1)
+    move_legs(50, 50, 50, 0.9)
+    time.sleep(0.1)
     disable_all_servos()
 
 def right_hi():
@@ -602,4 +609,5 @@ def cleanup():
 
 if __name__ == "__main__":
     initialize_servos()
+
 
