@@ -179,7 +179,6 @@ def step_forward():
         disable_all_servos()
         MOVING = False
 
-
 def step_backward():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
@@ -192,7 +191,6 @@ def step_backward():
     move_legs(50, 50, 50, 0.8)
     time.sleep(0.2)
     disable_all_servos()
-
 
 def turn_right():
     move_legs(50, 50, 50, 0.4)
@@ -209,7 +207,6 @@ def turn_right():
     time.sleep(0.2)
     disable_all_servos()
 
-
 def turn_left():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
@@ -224,7 +221,6 @@ def turn_left():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
     disable_all_servos()
-
 
 def right_hi():
     move_legs(50, 50, 50, 0.4)
@@ -251,7 +247,7 @@ def right_hi():
     time.sleep(0.2)
     move_arm(100, 50, 1, 0, 0, 0, 1)
     time.sleep(0.2)
-    move_arm(100, 1, 1, 0, 0, 0, 1)
+    move_arm(100, 1, 1, 0, 0, 0,1)
     time.sleep(0.2)
     move_arm(1, 1, 1, 0, 0, 0, 0.6)
     time.sleep(0.2)
@@ -263,51 +259,157 @@ def right_hi():
     time.sleep(0.2)
     disable_all_servos()
 
-
 def laugh():
-    for _ in range(5):
-        move_legs(50, 50, 50, 1)
-        time.sleep(0.1)
-        move_legs(1, 50, 50, 1)
-        time.sleep(0.1)
+    move_legs(50, 50, 50, 1)
+    time.sleep(0.1)
+    move_legs(1, 50, 50, 1)
+    time.sleep(0.1)
+    move_legs(50, 50, 50, 1)
+    time.sleep(0.1)
+    move_legs(1, 50, 50, 1)
+    time.sleep(0.1)
+    move_legs(50, 50, 50, 1)
+    time.sleep(0.1)
+    move_legs(1, 50, 50, 1)
+    time.sleep(0.1)
+    move_legs(50, 50, 50, 1)
+    time.sleep(0.1)
+    move_legs(1, 50, 50, 1)
+    time.sleep(0.1)
+    move_legs(50, 50, 50, 1)
+    time.sleep(0.1)
+    move_legs(1, 50, 50, 1)
+    time.sleep(0.1)
     move_legs(50, 50, 50, 1)
     time.sleep(0.2)
     disable_all_servos()
-
 
 def swing_legs():
     move_legs(50, 50, 50, 1)
     time.sleep(0.1)
     move_legs(100, 50, 50, 1)
     time.sleep(0.1)
-    for _ in range(3):
-        move_legs(0, 20, 80, 0.6)
-        time.sleep(0.1)
-        move_legs(0, 80, 20, 0.6)
-        time.sleep(0.1)
+    move_legs(0, 20, 80, 0.6)
+    time.sleep(0.1)
+    move_legs(0, 80, 20, 0.6)
+    time.sleep(0.1)
+    move_legs(0, 20, 80, 0.6)
+    time.sleep(0.1)
+    move_legs(0, 80, 20, 0.6)
+    time.sleep(0.1)
+    move_legs(0, 20, 80, 0.6)
+    time.sleep(0.1)
+    move_legs(0, 80, 20, 0.6)
+    time.sleep(0.1)
     move_legs(0, 50, 50, 0.6)
     time.sleep(0.1)
     move_legs(50, 50, 50, 0.7)
     time.sleep(0.2)
     disable_all_servos()
 
-
 def pezz_dispenser():
+    move_legs(50, 50, 50, 0.4)
+    time.sleep(0.2)
+    move_legs(80, 50, 70, 0.6)
+    move_arm(1, 1, 1, 1, 1, 1, 0.6)
+    time.sleep(0.2)
+    move_legs(50, 50, 70, 0.6)
+    time.sleep(0.2)
+    move_arm(100, 1, 1, 1, 1, 1, 0.8)
+    time.sleep(0.2)
+    move_arm(100, 100, 1, 1, 1, 1, 0.8)
+    time.sleep(0.2)
+    move_arm(100, 100, 100, 1, 1, 1, 0.8)
+    time.sleep(10)
+    move_arm(100, 100, 1, 1, 1, 1, 0.8)
+    time.sleep(0.2)
+    move_arm(100, 1, 1, 1, 1, 1, 0.8)
+    time.sleep(0.2)
+    move_legs(80, 50, 70, 0.6)
+    time.sleep(0.2)
+    move_arm(1, 1, 1, 1, 1, 1, 0.8)
+    time.sleep(0.2)
+    move_legs(50, 50, 50, 0.4)
+    time.sleep(0.2)
+    disable_all_servos()
+
+def now():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
     move_legs(80, 50, 50, 0.8)
     time.sleep(0.2)
     move_legs(80, 50, 70, 0.8)
     time.sleep(0.2)
-    move_legs(50, 50, 70, 0.8)
+    move_arm(75, 1, 1, 0, 0, 0, 1)
     time.sleep(0.2)
-    move_arm(1, 1, 1, 1, 1, 1, 0.5)
+    move_legs(50, 50, 65, 0.8)
     time.sleep(0.2)
-    move_arm(40, 1, 1, 40, 1, 1, 0.6)
+    move_arm(75, 80, 1, 0, 0, 0, 0.9)
     time.sleep(0.2)
-    move_arm(60, 70, 100, 40, 1, 1, 1)
-    time.sleep(1)
-    move_arm(60, 70, 100, 60, 70, 100, 1)
+    move_arm(60, 80, 0, 0, 0, 0, 0.9)
+    time.sleep(0.2)
+    move_arm(75, 80, 0, 0, 0, 0, 0.9)
+    time.sleep(0.2)
+    move_arm(60, 80, 0, 0, 0, 0, 0.9)
+    time.sleep(0.2)
+    move_arm(75, 80, 0, 0, 0, 0, 0.9)
+    time.sleep(0.2)
+    move_arm(60, 80, 0, 0, 0, 0, 0.9)
+    time.sleep(0.2)
+    move_arm(75, 80, 0, 0, 0, 0, 0.9)
+    time.sleep(0.2)
+    move_arm(75, 1, 1, 0, 0, 0, 1)
+    time.sleep(0.2)        
+    move_legs(50, 50, 80, 0.8)
+    time.sleep(0.2)
+    move_arm(1, 1, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_legs(80, 50, 70, 0.8)
+    time.sleep(0.2)
+    move_legs(80, 50, 50, 0.8)
+    time.sleep(0.2)
+    move_legs(50, 50, 50, 0.4)
+    time.sleep(0.2)
+    disable_all_servos()
+
+def balance():
+    # up
+    move_legs(50, 50, 50, 0.4)
+    time.sleep(0.2)
+    move_legs(30, 50, 50, 0.8)
+    # balance
+    time.sleep(0.2)
+    move_legs(30, 60, 60, 0.5)
+    time.sleep(0.2)
+    move_legs(30, 40, 40, 0.5)
+    time.sleep(0.2)
+    move_legs(30, 60, 60, 0.5)
+    time.sleep(0.2)
+    move_legs(30, 40, 40, 0.5)
+    time.sleep(0.2)
+    move_legs(30, 60, 60, 0.5)
+    time.sleep(0.2)
+    move_legs(30, 40, 40, 0.5)
+    # down
+    time.sleep(0.2)
+    move_legs(30, 50, 50, 0.8)
+    time.sleep(0.2)
+    move_legs(50, 50, 50, 0.8)
+    time.sleep(0.5)
+    disable_all_servos()
+
+def mic_drop():
+    move_legs(50, 50, 50, 0.4)
+    time.sleep(0.2)
+    move_legs(80, 50, 50, 0.8)
+    time.sleep(0.2)
+    move_legs(80, 50, 100, 0.8)
+    time.sleep(0.2)
+    move_arm(1, 1, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_arm(60, 50, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_arm(60, 70, 1, 0, 0, 0, 1)
     time.sleep(1)
     move_arm(60, 70, 100, 0, 0, 0, 1)
     time.sleep(2)
@@ -319,18 +421,20 @@ def pezz_dispenser():
     time.sleep(0.5)
     disable_all_servos()
 
-
 def monster():
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
     move_legs(80, 50, 50, 0.4)
     time.sleep(0.2)
     move_legs(80, 70, 70, 0.4)
+
     move_arm(1, 1, 1, 1, 1, 1, 0.8)
     time.sleep(0.2)
     move_arm(100, 1, 1, 100, 1, 1, 0.8)
+
     time.sleep(0.2)
     move_legs(50, 70, 70, 0.4)
+
     time.sleep(0.2)
     move_arm(100, 100, 1, 100, 100, 1, 1)
     time.sleep(0.2)
@@ -346,6 +450,7 @@ def monster():
     time.sleep(0.2)
     move_arm(100, 100, 100, 100, 100, 100, 1)
     time.sleep(0.2)
+
     move_arm(100, 100, 1, 100, 100, 1, 1)
     time.sleep(0.2)
     move_arm(100, 100, 100, 100, 100, 100, 1)
@@ -358,20 +463,24 @@ def monster():
     time.sleep(0.2)
     move_arm(100, 100, 100, 100, 100, 100, 1)
     time.sleep(0.2)
+
     move_arm(100, 100, 1, 100, 100, 1, 1)
     time.sleep(0.2)
     move_arm(100, 1, 1, 100, 1, 1, 1)
+
     move_legs(50, 70, 70, 0.4)
     time.sleep(0.2)
+
     time.sleep(0.2)
     move_arm(1, 1, 1, 1, 1, 1, 0.8)
     time.sleep(0.2)
+
     move_legs(80, 50, 50, 0.4)
     time.sleep(0.2)
+
     move_legs(50, 50, 50, 0.4)
     time.sleep(0.2)
     disable_all_servos()
-
 
 def pose():
     move_legs(50, 50, 50, 0.4)
@@ -383,7 +492,6 @@ def pose():
     move_legs(30, 40, 40, 0.4)
     move_legs(50, 50, 50, 0.4)
     disable_all_servos()
-
 
 def bow():
     move_legs(50, 50, 50, 0.4)
@@ -494,3 +602,4 @@ def cleanup():
 
 if __name__ == "__main__":
     initialize_servos()
+
