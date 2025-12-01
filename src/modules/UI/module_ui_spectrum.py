@@ -28,7 +28,11 @@ class SineWaveVisualizer:
         sinewave_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         sinewave_surface.fill((0, 0, 0, 0))
 
-        if spectrum.any():
+        # Convert to numpy array if needed and check for valid data
+        if isinstance(spectrum, list):
+            spectrum = np.array(spectrum)
+        
+        if len(spectrum) > 0 and np.any(spectrum):
             spectrum = np.clip(spectrum, 0, np.max(spectrum))
             spectrum = spectrum / np.max(spectrum)
             sinewave_points = []
@@ -54,7 +58,7 @@ class SineWaveVisualizer:
                 end_pos = (wave[j][0] + x_shift, wave[j][1] + y_shift)
                 pygame.draw.line(sinewave_surface, color, start_pos, end_pos, 2)
 
-        # ⏳ **Limit FPS to 10**
+        # ? **Limit FPS to 10**
         elapsed_time = time.time() - start_time
         sleep_time = max(0, (1.0 / target_fps) - elapsed_time)
         time.sleep(sleep_time)
@@ -123,7 +127,11 @@ class BarVisualizer:
         """Update and render the bar visualization with FPS control."""
         start_time = time.time()  # Track update start time
 
-        if spectrum.any():
+        # Convert to numpy array if needed and check for valid data
+        if isinstance(spectrum, list):
+            spectrum = np.array(spectrum)
+        
+        if len(spectrum) > 0 and np.any(spectrum):
             resampled_spectrum = np.zeros(self.num_bars)
             spectrum_bins = len(spectrum)
 
@@ -155,7 +163,7 @@ class BarVisualizer:
             reflection_rect = pygame.Rect(x, self.height, self.bar_width, reflection_height)
             pygame.draw.rect(bar_surface, (*color, 85), reflection_rect)
 
-        # ⏳ **Limit FPS to 10**
+        # ? **Limit FPS to 10**
         elapsed_time = time.time() - start_time
         sleep_time = max(0, (1.0 / target_fps) - elapsed_time)
         time.sleep(sleep_time)
