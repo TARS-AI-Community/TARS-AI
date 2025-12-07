@@ -117,6 +117,7 @@ if __name__ == "__main__":
     initialize_manager_llm(memory_manager, char_manager)
 
     # Start necessary threads
+    bt_controller_thread = None  # Initialize to None
     if CONFIG['CONTROLS']['enabled'] == 'True':
         bt_controller_thread = threading.Thread(target=start_bt_controller_thread, name="BTControllerThread", daemon=True)
         bt_controller_thread.start()
@@ -137,9 +138,8 @@ if __name__ == "__main__":
         ui_manager.update_data("System", "LOAD: TARS-AI v"+VERSION+" running.", "SYSTEM")
         # Start the STT thread
         stt_manager.start()
-
         while not shutdown_event.is_set():
-            time.sleep(0.1) # Sleep to reduce CPU usage
+            time.sleep(0.01)
 
     except KeyboardInterrupt:
         ui_manager.update_data("System", "Stopping all threads and shutting down executor....", "SYSTEM")
@@ -151,5 +151,6 @@ if __name__ == "__main__":
         ui_manager.stop()
         stt_manager.stop()
         battery.stop()
-        bt_controller_thread.join()
+        if bt_controller_thread is not None:
+            bt_controller_thread.join(timeout=5)
         queue_message(f"INFO: All threads and executor stopped gracefully.")
