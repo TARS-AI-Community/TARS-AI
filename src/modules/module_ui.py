@@ -15,6 +15,8 @@ import numpy as np
 import random
 import math
 import cv2
+import sys
+import subprocess
 import os
 import sounddevice as sd
 import json
@@ -87,14 +89,14 @@ def get_layout_dimensions(layout_config, screen_width, screen_height, rotation):
     Returns:
     - A list of Box objects with correctly calculated positions and dimensions
     """
-    # For a 270° rotation with 1024x600 screen:
+    # For a 270Â° rotation with 1024x600 screen:
     # - Physical screen is still 1024x600
     # - But the logical screen becomes 600x1024 (portrait orientation)
     
     # Select layout based on orientation
     layout_key = "landscape" if rotation in (0, 180) else "portrait"
     
-    # For 270° rotation, logical dimensions are swapped
+    # For 270Â° rotation, logical dimensions are swapped
     if rotation in (0, 180):
         logical_width, logical_height = screen_width, screen_height  # 1024x600
     else:  # rotation in (90, 270)
@@ -120,15 +122,15 @@ def get_layout_dimensions(layout_config, screen_width, screen_height, rotation):
             physical_width = int(logical_width_box)
             physical_height = int(logical_height_box)
         elif rotation == 90:
-            # When the screen is rotated 90°, Y becomes X and X becomes inverted Y
-            physical_x = int(logical_y)  # Y → X
-            physical_y = int(logical_width - logical_x - logical_width_box)  # Inverted X → Y
+            # When the screen is rotated 90Â°, Y becomes X and X becomes inverted Y
+            physical_x = int(logical_y)  # Y â†’ X
+            physical_y = int(logical_width - logical_x - logical_width_box)  # Inverted X â†’ Y
             physical_width = int(logical_height_box)
             physical_height = int(logical_width_box)
         elif rotation == 270:
-            # When the screen is rotated 270°, Y becomes inverted X and X becomes Y
-            physical_x = int(logical_height - logical_y - logical_height_box)  # Inverted Y → X
-            physical_y = int(logical_x)  # X → Y
+            # When the screen is rotated 270Â°, Y becomes inverted X and X becomes Y
+            physical_x = int(logical_height - logical_y - logical_height_box)  # Inverted Y â†’ X
+            physical_y = int(logical_x)  # X â†’ Y
             physical_width = int(logical_height_box)
             physical_height = int(logical_width_box)
         
@@ -314,6 +316,9 @@ class UIManager(threading.Thread):
         # Initialize components if their boxes exist.
         self.hal_anim = HalAnimation(self.hal_box.original_width, self.hal_box.original_height) if self.hal_box else None
         self.terminal_anim = ConsoleAnimation(self.fake_terminal_box.original_width, self.fake_terminal_box.original_height) if self.fake_terminal_box else None
+
+        self.shutdown_confirmation = False
+        self.confirmation_buttons = []
 
         if self.img_box:
             self.img_folder = "UI/img"
@@ -803,6 +808,112 @@ class UIManager(threading.Thread):
         for star in self.stars:
             star.moveStars()
             star.drawStars(surface)
+    
+    def draw_shutdown_confirmation(self, surface, font):
+        if not self.shutdown_confirmation:
+            return
+        dialog_width = int(600 * self.scale)
+        dialog_height = int(400 * self.scale)
+        dialog_surface = pygame.Surface((dialog_width, dialog_height), pygame.SRCALPHA)
+        dialog_surface.fill((20, 20, 20, 250))
+        pygame.draw.rect(dialog_surface, (76, 194, 230, 255), (0, 0, dialog_width, dialog_height), int(3 * self.scale))
+        title_font = pygame.font.Font("UI/mono.ttf", int(self.font_size * 1.5))
+        title = title_font.render("SHUTDOWN CONFIRMATION", True, (76, 194, 230))
+        title_rect = title.get_rect(center=(dialog_width // 2, int(40 * self.scale)))
+        dialog_surface.blit(title, title_rect)
+        message = font.render("What would you like to do?", True, (200, 200, 200))
+        message_rect = message.get_rect(center=(dialog_width // 2, int(100 * self.scale)))
+        dialog_surface.blit(message, message_rect)
+        button_width = int(500 * self.scale)
+        button_height = int(60 * self.scale)
+        button_spacing = int(20 * self.scale)
+        start_y = int(150 * self.scale)
+        
+        button_configs = [
+            ("SHUTDOWN APP ONLY", "shutdown_app_only"),
+            ("SHUTDOWN RASPBERRY PI", "shutdown_pi"),
+            ("CANCEL", "cancel_shutdown")
+        ]
+        for i, (label, action) in enumerate(button_configs):
+            button_x_relative = (dialog_width - button_width) // 2
+            button_y_relative = start_y + (i * (button_height + button_spacing))
+            temp_button = Button(
+                0, 0, button_width, button_height, 0, label, font, action=action
+            )
+            button_surface = temp_button.draw_button(font)
+            dialog_surface.blit(button_surface, (button_x_relative, button_y_relative))
+        
+        rotated_dialog = pygame.transform.rotate(dialog_surface, self.rotate)
+        center_x = self.width // 2
+        center_y = self.height // 2
+        rotated_width = rotated_dialog.get_width()
+        rotated_height = rotated_dialog.get_height()
+        dialog_x = center_x - rotated_width // 2
+        dialog_y = center_y - rotated_height // 2
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surface.blit(overlay, (0, 0))
+        surface.blit(rotated_dialog, (dialog_x, dialog_y))
+        self.confirmation_buttons = []
+        
+        for i, (label, action) in enumerate(button_configs):
+            relative_x = (dialog_width - button_width) // 2
+            relative_y = start_y + (i * (button_height + button_spacing))
+            
+            if self.rotate == 0:
+                real_x = dialog_x + relative_x
+                real_y = dialog_y + relative_y
+                final_width = button_width
+                final_height = button_height
+            elif self.rotate == 90:
+                real_x = dialog_x + relative_y
+                real_y = dialog_y + (dialog_width - relative_x - button_width)
+                final_width = button_height
+                final_height = button_width
+            elif self.rotate == 180:
+                real_x = dialog_x + (dialog_width - relative_x - button_width)
+                real_y = dialog_y + (dialog_height - relative_y - button_height)
+                final_width = button_width
+                final_height = button_height
+            elif self.rotate == 270:
+                real_x = dialog_x + (dialog_height - relative_y - button_height)
+                real_y = dialog_y + relative_x
+                final_width = button_height
+                final_height = button_width
+            
+            button = Button(
+                real_x, 
+                real_y, 
+                final_width, 
+                final_height, 
+                0,
+                label, 
+                font, 
+                action=action
+            )
+            self.confirmation_buttons.append(button)
+
+    def shutdown(self):
+        self.shutdown_confirmation = True
+    
+    def shutdown_app_only(self):
+        self.running = False
+        self.shutdown_event.set()
+        pygame.quit()
+        sys.exit(0)
+
+    def shutdown_pi(self):
+        self.running = False
+        self.shutdown_event.set()
+        time.sleep(0.5)
+        try:
+            subprocess.call(['sudo', 'shutdown', '-h', 'now'])
+        except Exception as e:
+            print(f"Error initiating shutdown: {e}")
+
+    def cancel_shutdown(self):
+        self.shutdown_confirmation = False
+        self.confirmation_buttons = []
 
     def run(self) -> None:
         try:
@@ -841,19 +952,34 @@ class UIManager(threading.Thread):
                                 self.bg()
                         elif event.type == pygame.MOUSEBUTTONDOWN:
                             if event.button == 1:
-                                for button in self.buttons:
-                                    action = button.is_clicked(event.pos)
-                                    self.on_click(action)
-                                if self.expanded_box == "":
-                                    panel = self.expand_panel(event.pos)
-                                    if panel in ["console", "camera"]:
-                                        self.expanded_box = panel
+                                # Check confirmation buttons first if dialog is open
+                                if self.shutdown_confirmation:
+                                    for button in self.confirmation_buttons:
+                                        action = button.is_clicked(event.pos)
+                                        if action:
+                                            self.on_click(action)
+                                            break  # Stop checking after first button click
                                 else:
-                                    self.expanded_box = ""
+                                    # Regular button handling
+                                    for button in self.buttons:
+                                        action = button.is_clicked(event.pos)
+                                        if action:
+                                            self.on_click(action)
+                                            break  # Stop checking after first button click
+                                    
+                                    # Panel expansion only if no button was clicked
+                                    if not any(button.is_clicked(event.pos) for button in self.buttons):
+                                        if self.expanded_box == "":
+                                            panel = self.expand_panel(event.pos)
+                                            if panel in ["console", "camera"]:
+                                                self.expanded_box = panel
+                                        else:
+                                            self.expanded_box = ""
                         elif event.type == pygame.MOUSEWHEEL:
                             if hasattr(self, 'total_display_lines') and hasattr(self, 'visible_line_count'):
                                 self.scroll_offset = max(0, min(self.total_display_lines - self.visible_line_count,
                                                                 self.scroll_offset - event.y))
+
                     while not self.data_queue.empty():
                         try:
                             timestamp, key, value, msg_type = self.data_queue.get_nowait()
@@ -905,6 +1031,13 @@ class UIManager(threading.Thread):
                     if self.avatar_box:
                         self.draw_avatar(original_surface, font)
 
+                    # Draw shutdown confirmation on top of everything (BEFORE OpenGL texture rendering)
+                    if self.shutdown_confirmation:
+                        self.draw_shutdown_confirmation(original_surface, font)
+
+                    # Render original_surface to OpenGL texture
+                    texture_data = pygame.image.tostring(original_surface, "RGBA", True)
+
                     # Render original_surface to OpenGL texture
                     texture_data = pygame.image.tostring(original_surface, "RGBA", True)
                     GL.glBindTexture(GL.GL_TEXTURE_2D, texture_id)
@@ -919,7 +1052,7 @@ class UIManager(threading.Thread):
                     GL.glTexCoord2f(0, 0); GL.glVertex2f(0, self.height)
                     GL.glEnd()
 
-                    # Render BrainVisualization last to ensure it’s on top
+                    # Render BrainVisualization last to ensure itâ€™s on top
                     if self.brain_box and self.brain_visible:
                         GL.glClear(GL.GL_DEPTH_BUFFER_BIT)  # Clear depth to render on top
                         screen_height = pygame.display.get_surface().get_height()
