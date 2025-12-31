@@ -15,7 +15,7 @@ wake_word_processor = atomik
 # Options: picovoice, fastrtc, atomik
 sensitivity = 8
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection. 
-stt_processor = fastrtc
+stt_processor = openai
 #vosk, faster-whisper, silero, fastrtc, openai (for other languages than english) or external
 external_url = http://192.168.2.57:5678
 # URL for the STT server (if enabled)
@@ -31,6 +31,7 @@ speechdelay = 20
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
 # Relative path to the Porcupine keyword file
+
 
 [CHAR] # Character-specific details
 character_card_path = character/TARS/TARS.json
@@ -69,8 +70,7 @@ systemprompt = Your task is to respond effectively and creatively within the giv
 # Prompt defining the LLM's behavior
 instructionprompt = You are {char}. Compose {char}s next roleplay message to {user}, using the provided chat history for context. Keep your response short and in plain text only, no emojis or Ascii. Avoid using {char}s name, as you are embodying {char}. Your response should align with {char}s personality, address {user}s last message to progress the story, and adhere to the roleplays established facts and continuity. Do not prepending your response with anything. You will respond in accordance with your settings defined below. Keep your response very short.
 # Instructions guiding the LLM's response style
-functioncalling = llm
-# LLM (passes it to the model to determine, results in second api call ) or NB is a algo used to guess (not context aware, super fast)
+
 
 [VISION] # Vision-related configuration (e.g., image recognition)
 enabled = True
@@ -87,7 +87,7 @@ emotion_model = SamLowe/roberta-base-go_emotions
 # Hugging Face model for emotion analysis
 
 [TTS] # Text-to-Speech configuration 
-ttsoption = piper
+ttsoption = elevenlabs
 # Onboard Options: espeak, piper, silero
 # External SelfHosted: alltalk
 # Externally Hosted: azure, elevenlabs, openai
@@ -106,8 +106,6 @@ model_id = eleven_multilingual_v2
 # Model ID of ElevenLabs (e.g.,eleven_multilingual_v2)
 openai_voice = onyx
 # openai voice : alloy, echo, fable, onyx, nova, shimmer
-voice_only = False
-# If True, only generate voice responses (no text)
 is_talking_override = False
 # Debug flag to override talking state
 is_talking = False
@@ -148,18 +146,16 @@ negative_prompt = deformed, black and white, disfigured, low contrast, extra lim
 [CHATUI]  # Required true for avatars
 enabled = True
 
-[UI]
+[UI] # Graphical interface 
 UI_enabled = False
 #Enable or Disable the visuals
-maximize_console = False
-# start with the console using all the screen
 screen_width = 1024
 # Adjust based on your screen resolution
 screen_height = 600
 # Adjust based on your screen resolution
 rotation = 270
 # rotation can be 0, 90, 180, 270
-use_camera_module = False
+use_camera_module = True
 # enable the camera
 show_mouse = True
 # enable the software mouse
@@ -194,80 +190,52 @@ channel_id = 811470553139249186
 [SERVO]
 # Enable or disable movement via voice control
 voicemovement = True
-#!!!IMPORTANT!!! IF YOUR TARS IS USING THE ORIGINAL FILES USE V1, IF YOU ARE USING THE NEW SETUP, USE V2.
-# THE V2 setup works with the original version but YOU CANNOT SWITCH FROM V1 to V2 WITHOUT RECONFIGURING AND RESETING YOUR HARDWARE
-MOVEMENT_VERSION = V2
-
-# V1 ARMS Variables
-portMain = 610
-portForarm = 570
-portHand = 570
-starMain = 610
-starForarm = 570
-starHand = 570
-
-# V2 ARMS Variables
-# The min and max value will control how far the arm can move, avoid having the connecting arm push against the case, the servo must not be under strain.
-# Port for the main servo.. 
-# RIGHT ARM
-portMainMin = 135
-portMainMax = 440
-portForarmMin = 200
-portForarmMax = 380
-portHandMin = 200
-portHandMax = 280
-# LEFT ARM
-starMainMin = 440
-starMainMax = 135
-starForarmMin = 380
-starForarmMax = 200
-starHandMin = 380
-starHandMax = 280
-
 # servo 0 (Main Servo - Raise and Lowers the legs)
-# Upper limit 
-# !!!IMPORTANT!!! 
-# Install the servo so that the position of the main leg mount are centered in the hole, then adjust for the max upHeight and downHeight
-upHeight = 220
-# Neutral position for centering the servo
-neutralHeight = 300
-# Lower limit for the center servo (CAUTION: Setting too high may cause damage)
-downHeight = 350
-
-# servo 1 (Left leg)
-# !!!IMPORTANT!!! 
-# With the V1, the Forward and Back values are normally -50 for forward and +50 for back from the neutral value with a neutral value of 350
-# With the V2, the Forward and Back values are normally -108 for forward and +108 for back from the neutral value with a neutral value of 300 for mg996r Servo Type, and +80, -80 for LDX-227 Servo
-# Forward position for the starboard drive servo
-forwardStarboard = 220
-# Neutral position for the starboard drive servo
-neutralStarboard = 300
-# Reverse position for the starboard drive servo
-backStarboard = 380
-# Fine-tuning offset for the starboard drive servo
-perfectStaroffset = 0
-
-# servo 2 (Right Leg)
-# !!!IMPORTANT!!! 
-# With the V1, the Forward and Back values are normally +50 for forward and -50 for back from the neutral value with a neutral value of 350
-# With the V2, the Forward and Back values are normally +108 for forward and -108 for back from the neutral value with a neutral value of 300 for mg996r Servo Type, and -80, +80 for LDX-227 Servo
-# Forward position for the port drive servo
-forwardPort = 380
-# Neutral position for the port drive servo
-neutralPort = 300
-# Reverse position for the port drive servo
-backPort = 220
-# Fine-tuning offset for the port drive servo
-perfectPortoffset = 0
+leftUpHeight = 220
+leftNeutralHeight = 350
+leftDownHeight = 460
+perfectLeftHeightOffset = 0
+# servo 1 (Main Servo - Raise and Lowers the legs)
+rightUpHeight = 460
+rightNeutralHeight = 350
+rightDownHeight = 220
+perfectRightHeightOffset = 0
+# servo 2 (Left leg)
+forwardLeftLeg = 160
+neutralLeftLeg = 300
+backLeftLeg = 460
+perfectLeftLegOffset = 0
+# servo 3 (Right Leg)
+forwardRightLeg = 460
+neutralRightLeg = 300
+backRightLeg = 160
+perfectRightLegOffset = 0
+# Arms settings
+armsPresent = False
+# Set to True only if the arms are built on the robot (This changes the movements settings because of weight distribution)
+# The min and max value will control how far the arm can move, avoid having the connecting arm push against the case, the servo must not be under strain.
+# LEFT ARM
+leftMainMin = 80
+leftMainMax = 580
+leftForarmMin = 200
+leftForarmMax = 380
+leftHandMin = 200
+leftHandMax = 280
+# RIGHT ARM
+rightMainMin = 580
+rightMainMax = 80
+rightForarmMin = 380
+rightForarmMax = 200
+rightHandMin = 380
+rightHandMax = 280
 
 
 [BATTERY]
 # This section is only required if you are using an INA260 Current + Voltage + Power Sensor
 # These values must match the battery you are using.
-# Wiring diagram https://learn.adafruit.com/assets/74100
-battery_capacity_mAh = 5600
+battery_capacity_mAh = 3200
 # Total battery capacity in milliampere-hours (mAh). Set this to the battery's rated capacity (e.g., 5600 mAh for a 5.6Ah battery).
-battery_initial_voltage = 12.6
+battery_initial_voltage = 12
 # Full charge voltage (in volts). Set this to the battery's full charge voltage (e.g., 12.6V for a fully charged 12V battery).
 battery_cutoff_voltage = 10.5
 # Minimum safe voltage before discharge should stop (in volts). Set this based on the battery's safe discharge voltage (e.g., 10.5V for a 12V battery).

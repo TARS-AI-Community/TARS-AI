@@ -1,371 +1,507 @@
 """
 module_servoctl.py
-
-Servo Control Module for TARS-AI Application.
-
-This module provides a comprehensive set of functions to control servos in TARS, enabling complex movements such as:
-- Torso height adjustment.
-- Torso rotation to forward/backward positions.
-- Controlled arm and hand movements.
-- Synchronized servo adjustments for smooth motion transitions.
+Atomikspace
+V3
 """
 
 from __future__ import division
 import time
-import Adafruit_PCA9685
-from threading import Thread
-from datetime import datetime
+import board
+import busio
+from adafruit_pca9685 import PCA9685
 
 from modules.module_messageQue import queue_message
-from module_config import load_config
+from modules.module_config import load_config
 
 config = load_config()
 
-try:
-    # Attempt to initialize the PCA9685 using I2C
-    pwm = Adafruit_PCA9685.PCA9685(busnum=1)
-    pwm.set_pwm_freq(60)  # Set frequency to 60 Hz for servos
-except FileNotFoundError as e:
-    queue_message(f"ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
-    pwm = None  # Fallback if hardware is unavailable
-except Exception as e:
-    queue_message(f"ERROR: Unexpected error during PCA9685 initialization: {e}")
-    pwm = None  # Fallback if hardware is unavailable
+global_arm_speed = 0.5
+global_easing_strength = 0.6
 
-# Servo Configuration Mapping with Integer Casting
-portMain = int(config["SERVO"]["portMain"])
-starMain = int(config["SERVO"]["starMain"])
-portForarm = int(config["SERVO"]["portForarm"])
-starForarm = int(config["SERVO"]["starForarm"])
-portHand = int(config["SERVO"]["portHand"])
-starHand = int(config["SERVO"]["starHand"])
+servo_positions = {}
 
-# Center Lift Servo (0) Values
-upHeight = int(config["SERVO"]["upHeight"])
-neutralHeight = int(config["SERVO"]["neutralHeight"])
-downHeight = int(config["SERVO"]["downHeight"])
-
-# Port Drive Servo (1) Values
-forwardPort = int(config["SERVO"]["forwardPort"])
-neutralPort = int(config["SERVO"]["neutralPort"])
-backPort = int(config["SERVO"]["backPort"])
-perfectportoffset = int(config["SERVO"]["perfectportoffset"])  # Use this to fine-tune if it's off by a few degrees
-
-# Starboard Drive Servo (2) Values
-forwardStarboard = int(config["SERVO"]["forwardStarboard"])
-neutralStarboard = int(config["SERVO"]["neutralStarboard"])
-backStarboard = int(config["SERVO"]["backStarboard"])
-perfectStaroffset = int(config["SERVO"]["perfectStaroffset"])  # Use this to fine-tune if it's off by a few degrees
+pca = None
+MAX_RETRIES = 3
 
 
-# moves the torso from a neutral position upwards, allowing the torso to pivot forwards or backwards
-def height_neutral_to_up():
-	height = neutralHeight
-	#queue_message('setting center servo (0) Neutral --> Up position')
-	while (height > upHeight):
-		height = height - 1
-		pwm.set_pwm(0, 0, height)
-		time.sleep(0.001)
-	#queue_message('center servo (0) set to: Up position\n ')
-
-# rotates the torso outwards, enough so that when TARS pivots and lands, the bottom of the torso is 
-# flush with the ground. Making the torso flush with the ground is an intentional improvement from
-# previous programs, where TARS would land and then slide a little on smooth surfaces, which while
-# allowing for a simple walking program, inhibited TARS' ability to walk on surfaces with different 
-# coefficients of friction
-def torso_neutral_to_forwards():
-	port = neutralPort
-	starboard = neutralStarboard
-	#queue_message('setting port and starboard servos (1)(2) Neutral --> Forward')
-	while (port < forwardPort):
-		port = port + 1
-		starboard = starboard - 1
-		pwm.set_pwm(1, 1, port)
-		pwm.set_pwm(2, 2, starboard)
-		time.sleep(0.0001)
-	#queue_message('port and starboard servos (1)(2) set to: Forward position\n ')
-
-def torso_neutral_to_backwards():
-	port = neutralPort
-	starboard = neutralStarboard
-	#queue_message('setting port and starboard servos (1)(2) Neutral --> Forward')
-	while (port > backPort):
-		port = port - 1
-		starboard = starboard + 1
-		pwm.set_pwm(1, 1, port)
-		pwm.set_pwm(2, 2, starboard)
-		time.sleep(0.0001)
-	#queue_message('port and starboard servos (1)(2) set to: Forward position\n ')
-
-# rapidly shifts the torso height from UP --> DOWN and then returns --> UP, which should cause TARS 
-# to pivot and land on it's torso
-def torso_bump():
-	height = upHeight
-	#queue_message('performing a torso bump\nsetting center servo (0) Up --> Down position FAST')
-	while (height < downHeight):
-		height = height + 2
-		pwm.set_pwm(0, 0, height)
-		time.sleep(0.000001)
-	#queue_message('setting center servo (0) Down --> Up position FAST')
-	while (height > upHeight):
-		height = height - 1
-		pwm.set_pwm(0, 0, height)
-		time.sleep(0.0001)
-	#queue_message('center servo (0) returned to Up position\n')
-	
-# returns the torso's vertical height and rotation to centered values from up height and forward 
-# rotation. Activates two external functions so movement in both axes can occur in parallel.
-def torso_return():
-	t1 = Thread(target = torso_return_rotation)
-	t2 = Thread(target = torso_return_vertical)
-	
-	t1.start()
-	t2.start()
-
-# returns torso's rotation to neutral from forward
-def torso_return_rotation():
-	port = forwardPort
-	starboard = forwardStarboard
-	#queue_message('setting port and starboard servos (1)(2) Forward --> Neutral position')
-	while (port > neutralPort):
-		port = port - 1
-		starboard = starboard + 1
-		pwm.set_pwm(1, 1, port)
-		pwm.set_pwm(2, 2, starboard)
-		time.sleep(0.005)
-	#queue_message('port and starboard servos (1)(2) set to: Neutral position\n ')
-
-# returns torso's vertical to neutral from up	
-def torso_return_vertical():
-	height = upHeight
-	#queue_message('setting center servo (0) Up --> Down position')
-	# moving the torso down to create clearance for the rotation of the legs
-	while (height < downHeight):
-		height = height + 1
-		pwm.set_pwm(0, 0, height)
-		time.sleep(0.00005)
-	# moving the torso up from down to neutral
-	#time.sleep(.2)
-	while (height > neutralHeight):
-		height = height - 1
-		pwm.set_pwm(0, 0, height)
-		time.sleep(0.00001)
-	#queue_message('center servo (0) set to: Neutral position\n ')
-
-def torso_return2():
-	t1 = Thread(target = torso_return_rotation2)
-	t2 = Thread(target = torso_return_vertical2)
-	
-	t1.start()
-	t2.start()
-
-# returns torso's rotation to neutral from forward
-def torso_return_rotation2():
-	port = backPort
-	starboard = backStarboard
-	#queue_message('setting port and starboard servos (1)(2) Forward --> Neutral position')
-	while (port < neutralPort):
-		port = port + 1
-		starboard = starboard - 1
-		pwm.set_pwm(1, 1, port)
-		pwm.set_pwm(2, 2, starboard)
-		time.sleep(0.01)
-	#queue_message('port and starboard servos (1)(2) set to: Neutral position\n ')
-
-# returns torso's vertical to neutral from up	
-def torso_return_vertical2():
-	height = upHeight
-	#queue_message('setting center servo (0) Up --> Down position')
-	# moving the torso down to create clearance for the rotation of the legs
-	while (height < downHeight):
-		height = height + 1
-		pwm.set_pwm(0, 0, height)
-		time.sleep(0.001)
-	# moving the torso up from down to neutral
-	time.sleep(.25)
-	while (height > neutralHeight):
-		height = height - 1
-		pwm.set_pwm(0, 0, height)
-		time.sleep(0.001)
-	#queue_message('center servo (0) set to: Neutral position\n ')
-
-
-# moves the torso from neutral position to down
-def neutral_to_down():
-    height = neutralHeight
-    #queue_message('setting center servo (0) Neutral --> Down position')
-    while (height < downHeight):
-        height = height + 1
-        pwm.set_pwm(0, 0, height)
-        time.sleep(0.001)
+def initialize_pca9685():
+    global pca
+    
+    try:
+        i2c = busio.I2C(board.SCL, board.SDA)
+        pca = PCA9685(i2c, address=0x40)
+        pca.frequency = 50
+        queue_message("LOAD: PCA9685 initialized successfully")
+        return True
         
-def down_to_up():
-    height = downHeight
-    #queue_message('setting center servo (0) Down --> Neutral position')
-    while (height > upHeight):
-        height = height - 1
-        pwm.set_pwm(0, 0, height)
-        time.sleep(0.001)
+    except OSError as e:
+        if e.errno == 121:
+            queue_message(f"ERROR: I2C Remote I/O error - Check connections and power!")
+        else:
+            queue_message(f"ERROR: I2C error {e.errno}: {e}")
+        return False
+        
+    except Exception as e:
+        queue_message(f"ERROR: Failed to initialize PCA9685: {e}")
+        return False
 
-def down_to_neutral():
-    height = downHeight
-    #queue_message('setting center servo (0) Down --> Neutral position')
-    while (height > neutralHeight):
-        height = height - 1
-        pwm.set_pwm(0, 0, height)
-        time.sleep(0.001)
 
-def neutral_to_down():
-    height = neutralHeight
-    #queue_message('setting center servo (0) Down --> Neutral position')
-    while (height < downHeight):
-        height = height + 1
-        pwm.set_pwm(0, 0, height)
-        time.sleep(0.001)
+if not initialize_pca9685():
+    queue_message("WARNING: PCA9685 initialization failed - check hardware")
+
+leftMainMin = int(config["SERVO"]["leftMainMin"])
+leftMainMax = int(config["SERVO"]["leftMainMax"])
+leftForarmMin = int(config["SERVO"]["leftForarmMin"])
+leftForarmMax = int(config["SERVO"]["leftForarmMax"])
+leftHandMin = int(config["SERVO"]["leftHandMin"])
+leftHandMax = int(config["SERVO"]["leftHandMax"])
+
+rightMainMin = int(config["SERVO"]["rightMainMin"])
+rightMainMax = int(config["SERVO"]["rightMainMax"])
+rightForarmMin = int(config["SERVO"]["rightForarmMin"])
+rightForarmMax = int(config["SERVO"]["rightForarmMax"])
+rightHandMin = int(config["SERVO"]["rightHandMin"])
+rightHandMax = int(config["SERVO"]["rightHandMax"])
+
+perfectLeftHeightOffset = int(config["SERVO"]["perfectLeftHeightOffset"])
+leftUpHeight = int(config["SERVO"]["leftUpHeight"]) + perfectLeftHeightOffset
+leftNeutralHeight = int(config["SERVO"]["leftNeutralHeight"]) + perfectLeftHeightOffset
+leftDownHeight = int(config["SERVO"]["leftDownHeight"]) + perfectLeftHeightOffset
+
+perfectRightHeightOffset = int(config["SERVO"]["perfectRightHeightOffset"])
+rightUpHeight = int(config["SERVO"]["rightUpHeight"]) - perfectRightHeightOffset
+rightNeutralHeight = int(config["SERVO"]["rightNeutralHeight"]) - perfectRightHeightOffset
+rightDownHeight = int(config["SERVO"]["rightDownHeight"]) - perfectRightHeightOffset
+
+perfectLeftLegOffset = int(config["SERVO"]["perfectLeftLegOffset"])
+forwardLeftLeg = int(config["SERVO"]["forwardLeftLeg"]) + perfectLeftLegOffset
+neutralLeftLeg = int(config["SERVO"]["neutralLeftLeg"]) + perfectLeftLegOffset
+backLeftLeg = int(config["SERVO"]["backLeftLeg"]) + perfectLeftLegOffset
+
+perfectRightLegOffset = int(config["SERVO"]["perfectRightLegOffset"])
+forwardRightLeg = int(config["SERVO"]["forwardRightLeg"]) + perfectRightLegOffset
+neutralRightLeg = int(config["SERVO"]["neutralRightLeg"]) + perfectRightLegOffset
+backRightLeg = int(config["SERVO"]["backRightLeg"]) + perfectRightLegOffset
+
+MOVING = False
+
+
+def pwm_to_duty_cycle(pwm_value):
+    return int((pwm_value / 4095.0) * 65535)
+
+
+def set_servo_pwm(channel, pwm_value):
+    if pca is None:
+        return False
+    
+    duty_cycle = pwm_to_duty_cycle(pwm_value)
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            pca.channels[channel].duty_cycle = duty_cycle
+            return True
+            
+        except OSError as e:
+            if e.errno == 121:
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(0.05)
+                    continue
+                else:
+                    queue_message(f"I2C error on channel {channel} after {MAX_RETRIES} attempts")
+            return False
+            
+        except Exception as e:
+            queue_message(f"Error setting PWM on channel {channel}: {e}")
+            return False
+    
+    return False
+
+
+def initialize_servos():
+    if pca is None:
+        queue_message("WARNING: Cannot initialize servos - PCA9685 not available")
+        return
+    
+    try:
+        for channel in range(16):
+            pca.channels[channel].duty_cycle = 0
+    except Exception as e:
+        queue_message(f"Error initializing servos: {e}")
+    
+    time.sleep(0.1)
+    reset_positions()
+    print("All servos initialized")
+
+
+def disable_all_servos():
+    if pca is None:
+        return
+    
+    try:
+        for channel in range(16):
+            pca.channels[channel].duty_cycle = 0
+    except Exception as e:
+        queue_message(f"Error disabling servos: {e}")
+    
+    time.sleep(0.05)
+
+
+def reset_positions():  
+    move_legs(50, 50, 50, 50, 0.2)
+    time.sleep(0.5)
+    move_arm(1, 1, 1, 1, 1, 1, 0.3)
+    time.sleep(0.5)
+    disable_all_servos()
+
+
+def step_forward():
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        move_legs(50, 50, 50, 50, 0.9)
+        move_legs(42, 42, 40, 40, 0.9)
+        move_legs(70, 70, 23, 23, 0.9)
+        move_legs(30, 30, 30, 30, 0.8)
+        move_legs(70, 70, 35, 35, 0.9)
+        move_legs(60, 60, 50, 50, 0.9)
+        move_legs(50, 50, 50, 50, 0.9)
+        time.sleep(0.1)
+        disable_all_servos()
+        MOVING = False
+
+
+def step_backward():
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        move_legs(50, 50, 50, 50, 0.9)
+        move_legs(30, 30, 55, 55, 0.8)
+        move_legs(68, 68, 82, 82, 0.8)
+        move_legs(30, 30, 70, 70, 0.8)
+        move_legs(50, 50, 62, 62, 0.9)
+        move_legs(65, 65, 50, 50, 0.9)
+        move_legs(50, 50, 50, 50, 0.9)
+        time.sleep(0.1)
+        disable_all_servos()
+        MOVING = False
 
 
 def turn_right():
-    port = neutralPort
-    starboard = neutralStarboard
-    while (port < forwardPort):
-        port = port + 1
-        starboard = starboard + 1
-        pwm.set_pwm(1, 1, port)
-        pwm.set_pwm(2, 2, starboard)
-        time.sleep(0.001)
-        
+    move_legs(50, 50, 50, 50, 0.9)
+    move_legs(70, 70, 0, 0, 0.9)
+    move_legs(0, 0, 60, 40, 0.9)
+    move_legs(50, 50, 0, 0, 0.9)
+    move_legs(0, 0, 50, 50, 0.7)
+    move_legs(50, 50, 50, 50, 0.9)
+    time.sleep(0.1)
+    disable_all_servos()
+
+
 def turn_left():
-    port = neutralPort
-    starboard = neutralStarboard
-    while (port > backPort):
-        port = port - 1
-        starboard = starboard - 1
-        pwm.set_pwm(1, 1, port)
-        pwm.set_pwm(2, 2, starboard)
-        time.sleep(0.001)
-        
-def neutral_from_right():
-    port = forwardPort
-    starboard = backStarboard
-    while (port > neutralPort):
-        port = port - 1
-        starboard = starboard - 1
-        pwm.set_pwm(1, 1, port)
-        pwm.set_pwm(2, 2, starboard)
-        time.sleep(0.005)
-    pwm.set_pwm(1, 1, neutralPort)
-    pwm.set_pwm(2, 2, neutralStarboard)
-        
-def neutral_from_left():
-    port = backPort
-    starboard = forwardStarboard
-    while (port < neutralPort):
-        port = port + 1
-        starboard = starboard + 1
-        pwm.set_pwm(1, 1, port)
-        pwm.set_pwm(2, 2, starboard)
-        time.sleep(0.005)
-    pwm.set_pwm(1, 1, neutralPort)
-    pwm.set_pwm(2, 2, neutralStarboard)
-# Arm shenanigans
-# port Main Arm
-def portMainPlus():
-    global portMain
-    portMain = portMain - 10
-    pwm.set_pwm(3, 3, portMain)
-    time.sleep(0.0001)
-    queue_message("increase starMain")
-    queue_message(portMain)
+    move_legs(50, 50, 50, 50, 0.9)
+    move_legs(70, 70, 0, 0, 0.9)
+    move_legs(0, 0, 40, 60, 0.9)
+    move_legs(50, 50, 0, 0, 0.9)
+    move_legs(0, 0, 50, 50, 0.7)
+    move_legs(50, 50, 50, 50, 0.9)
+    time.sleep(0.1)
+    disable_all_servos()
 
-def portMainMinus():
-    global portMain
-    portMain = portMain + 10
-    pwm.set_pwm(3, 3, portMain)
-    time.sleep(0.0001)
-    queue_message("decrease starMain")
-    queue_message(portMain) 
 
-# port Forarm
-def portForarmPlus():
-    global portForarm
-    portForarm = portForarm - 10
-    pwm.set_pwm(4, 4, portForarm)
-    time.sleep(0.0001)
-    queue_message("increase starForarm")
-    queue_message(portForarm)
+def right_hi():
+    move_legs(50, 50, 50, 50, 0.4)
+    time.sleep(0.2)
+    move_legs(80, 80, 50, 50, 0.8)
+    time.sleep(0.2)
+    move_legs(80, 80, 50, 70, 0.8)
+    time.sleep(0.2)
+    move_legs(50, 50, 50, 70, 0.8)
+    time.sleep(0.2)
+    move_arm(1, 1, 1, 0, 0, 0, 0.5)
+    time.sleep(0.2)
+    move_arm(100, 1, 1, 0, 0, 0, 0.8)
+    time.sleep(0.2)
+    move_arm(100, 100, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_arm(100, 50, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_arm(100, 50, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_arm(100, 50, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_arm(100, 1, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_arm(1, 1, 1, 0, 0, 0, 0.6)
+    time.sleep(0.2)
+    move_legs(80, 80, 50, 70, 0.8)
+    time.sleep(0.2)
+    move_legs(80, 80, 50, 50, 0.8)
+    time.sleep(0.2)
+    move_legs(50, 50, 50, 50, 0.4)
+    time.sleep(0.2)
+    disable_all_servos()
 
-def portForarmMinus():
-    global portForarm
-    portForarm = portForarm + 10
-    pwm.set_pwm(4, 4, portForarm)
-    time.sleep(0.0001)
-    queue_message("decrease starForarm")
-    queue_message(portForarm) 
 
-# port Hand
-def portHandPlus():
-    global portHand
-    portHand = portHand - 10
-    pwm.set_pwm(5, 5, portHand)
-    time.sleep(0.0001)
-    queue_message("increase starHand")
-    queue_message(portHand)
+def laugh():
+    for _ in range(5):
+        move_legs(50, 50, 50, 50, 1)
+        time.sleep(0.1)
+        move_legs(1, 1, 50, 50, 1)
+        time.sleep(0.1)
+    move_legs(50, 50, 50, 50, 1)
+    time.sleep(0.2)
+    disable_all_servos()
 
-def portHandMinus():
-    global portHand
-    portHand = portHand + 10
-    pwm.set_pwm(5, 5, portHand)
-    time.sleep(0.0001)
-    queue_message("decrease starHand")
-    queue_message(portHand)
+
+def swing_legs():
+    move_legs(50, 50, 50, 50, 1)
+    time.sleep(0.1)
+    move_legs(100, 100, 50, 50, 1)
+    time.sleep(0.1)
+    for _ in range(3):
+        move_legs(0, 0, 20, 80, 0.6)
+        time.sleep(0.1)
+        move_legs(0, 0, 80, 20, 0.6)
+        time.sleep(0.1)
+    move_legs(0, 0, 50, 50, 0.6)
+    time.sleep(0.1)
+    move_legs(50, 50, 50, 50, 0.7)
+    time.sleep(0.2)
+    disable_all_servos()
+
+
+def pezz_dispenser():
+    move_legs(50, 50, 50, 50, 0.4)
+    time.sleep(0.2)
+    move_legs(80, 80, 50, 50, 0.8)
+    time.sleep(0.2)
+    move_legs(80, 80, 50, 70, 0.8)
+    time.sleep(0.2)
+    move_legs(50, 50, 50, 70, 0.8)
+    time.sleep(0.2)
+    move_arm(1, 1, 1, 1, 1, 1, 0.5)
+    time.sleep(0.2)
+    move_arm(40, 1, 1, 40, 1, 1, 0.6)
+    time.sleep(0.2)
+    move_arm(60, 70, 100, 40, 1, 1, 1)
+    time.sleep(1)
+    move_arm(60, 70, 100, 60, 70, 100, 1)
+    time.sleep(1)
+    move_arm(60, 70, 100, 0, 0, 0, 1)
+    time.sleep(2)
+    move_arm(1, 1, 1, 0, 0, 0, 1)
+    time.sleep(0.2)
+    move_legs(80, 80, 50, 50, 0.8)
+    time.sleep(0.2)
+    move_legs(50, 50, 50, 50, 0.8)
+    time.sleep(0.5)
+    disable_all_servos()
+
+
+def monster():
+    move_legs(50, 50, 50, 50, 0.4)
+    time.sleep(0.2)
+    move_legs(80, 80, 50, 50, 0.4)
+    time.sleep(0.2)
+    move_legs(80, 80, 70, 70, 0.4)
+    move_arm(1, 1, 1, 1, 1, 1, 0.8)
+    time.sleep(0.2)
+    move_arm(100, 1, 1, 100, 1, 1, 0.8)
+    time.sleep(0.2)
+    move_legs(50, 50, 70, 70, 0.4)
+    time.sleep(0.2)
+    move_arm(100, 100, 1, 100, 100, 1, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 100, 100, 100, 100, 1)
+    time.sleep(0.2)
+    move_arm(100, 50, 100, 100, 100, 100, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 50, 100, 50, 50, 1)
+    time.sleep(0.2)
+    move_arm(100, 50, 100, 100, 100, 100, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 50, 100, 50, 50, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 100, 100, 100, 100, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 1, 100, 100, 1, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 100, 100, 100, 100, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 1, 100, 100, 1, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 100, 100, 100, 100, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 1, 100, 100, 1, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 100, 100, 100, 100, 1)
+    time.sleep(0.2)
+    move_arm(100, 100, 1, 100, 100, 1, 1)
+    time.sleep(0.2)
+    move_arm(100, 1, 1, 100, 1, 1, 1)
+    move_legs(50, 50, 70, 70, 0.4)
+    time.sleep(0.2)
+    time.sleep(0.2)
+    move_arm(1, 1, 1, 1, 1, 1, 0.8)
+    time.sleep(0.2)
+    move_legs(80, 80, 50, 50, 0.4)
+    time.sleep(0.2)
+    move_legs(50, 50, 50, 50, 0.4)
+    time.sleep(0.2)
+    disable_all_servos()
+
+
+def pose():
+    move_legs(50, 50, 50, 50, 0.4)
+    move_legs(30, 30, 40, 40, 0.4)
+    move_legs(100, 100, 30, 30, 0.4)
+    time.sleep(3)
+    move_legs(100, 100, 30, 30, 0.4)
+    move_legs(30, 30, 30, 30, 0.4)
+    move_legs(30, 30, 40, 40, 0.4)
+    move_legs(50, 50, 50, 50, 0.4)
+    disable_all_servos()
+
+
+def bow():
+    move_legs(50, 50, 50, 50, 0.4)
+    move_legs(15, 15, 50, 50, 0.7)
+    move_legs(15, 15, 70, 70, 0.7)
+    move_legs(60, 60, 70, 70, 0.7)
+    move_legs(95, 95, 65, 65, 0.7)
+    time.sleep(3)
+    move_legs(15, 15, 65, 65, 0.7)
+    move_legs(50, 50, 50, 50, 0.4)
+    disable_all_servos()
+
+
+def move_servos_synchronized(movements, speed_factor):
+    servo_data = []
     
-# starboard Main Arm
-def starMainPlus():
-    global starMain
-    starMain = starMain + 10
-    pwm.set_pwm(6, 6, starMain)
-    time.sleep(0.0001)
-    queue_message("increase starMain")
-    queue_message(starMain)
+    for channel, target_value in movements:
+        if target_value is None:
+            continue
+            
+        current_value = servo_positions.get(channel, None)
+        
+        if current_value is None:
+            set_servo_pwm(channel, target_value)
+            servo_positions[channel] = target_value
+            continue
+        
+        if current_value == target_value:
+            continue
+        
+        distance = abs(target_value - current_value)
+        step = 1 if target_value > current_value else -1
+        
+        servo_data.append({
+            'channel': channel,
+            'current': current_value,
+            'target': target_value,
+            'step': step,
+            'distance': distance,
+            'steps_taken': 0
+        })
+    
+    if not servo_data:
+        return
+    
+    max_distance = max(s['distance'] for s in servo_data)
+    base_delay = 0.02 * (1.0 - speed_factor)
+    
+    while any(s['current'] != s['target'] for s in servo_data):
+        for servo in servo_data:
+            if servo['current'] != servo['target']:
+                servo['current'] += servo['step']
+                set_servo_pwm(servo['channel'], servo['current'])
+                servo['steps_taken'] += 1
+        
+        if max_distance > 0:
+            progress = min(s['steps_taken'] for s in servo_data if s['current'] != s['target'] or s['steps_taken'] > 0) / max_distance
+        else:
+            progress = 1.0
+        
+        if global_easing_strength > 0:
+            if progress < 0.5:
+                eased = 2 * progress * progress
+            else:
+                eased = 1 - 2 * (1 - progress) * (1 - progress)
+            delay_multiplier = 1.0 + global_easing_strength * (1.0 - 4 * (eased - 0.5) ** 2)
+        else:
+            delay_multiplier = 1.0
+        
+        time.sleep(base_delay * delay_multiplier)
+    
+    for servo in servo_data:
+        servo_positions[servo['channel']] = servo['target']
+    
+    time.sleep(0.05)
 
-def starMainMinus():
-    global starMain
-    starMain = starMain - 10
-    pwm.set_pwm(6, 6, starMain)
-    time.sleep(0.0001)
-    queue_message("decrease starMain")
-    queue_message(starMain) 
 
-# port Forarm
-def starForarmPlus():
-    global starForarm
-    starForarm = starForarm + 10
-    pwm.set_pwm(7, 7, starForarm)
-    time.sleep(0.0001)
-    queue_message("increase starForarm")
-    queue_message(starForarm)
+def move_legs(left_height_percent=None, right_height_percent=None, left_leg_percent=None, right_leg_percent=None, speed_factor=1.0):
+    def percentage_to_value(percent, min_val, max_val):
+        if percent == 0:
+            return None
+        normalized = (percent - 1) / 99.0
+        value = min_val + (max_val - min_val) * normalized
+        return int(round(value))
 
-def starForarmMinus():
-    global starForarm
-    starForarm = starForarm - 10
-    pwm.set_pwm(7, 7, starForarm)
-    time.sleep(0.0001)
-    queue_message("decrease starForarm")
-    queue_message(starForarm) 
+    movements = []
+    
+    if left_height_percent is not None and left_height_percent != 0:
+        target_value = percentage_to_value(left_height_percent, leftUpHeight, leftDownHeight)
+        movements.append((0, target_value))
+    
+    if right_height_percent is not None and right_height_percent != 0:
+        target_value = percentage_to_value(right_height_percent, rightUpHeight, rightDownHeight)
+        movements.append((1, target_value))
+    
+    if left_leg_percent is not None and left_leg_percent != 0:
+        target_value = percentage_to_value(left_leg_percent, forwardLeftLeg, backLeftLeg)
+        movements.append((2, target_value))
+    
+    if right_leg_percent is not None and right_leg_percent != 0:
+        target_value = percentage_to_value(right_leg_percent, forwardRightLeg, backRightLeg)
+        movements.append((3, target_value))
 
-# port Hand
-def starHandPlus():
-    global starHand
-    starHand = starHand + 10
-    pwm.set_pwm(8, 8, starHand)
-    time.sleep(0.0001)
-    queue_message("increase starHand")
-    queue_message(starHand)
+    move_servos_synchronized(movements, speed_factor)
 
-def starHandMinus():
-    global starHand
-    starHand = starHand - 10
-    pwm.set_pwm(8, 8, starHand)
-    time.sleep(0.0001)
-    queue_message("decrease starHand")
-    queue_message(starHand) 
+
+def move_arm(left_main=None, left_forearm=None, left_hand=None,
+             right_main=None, right_forearm=None, right_hand=None, speed_factor=1.0):
+    def percentage_to_value(percent, min_val, max_val):
+        if percent == 0:
+            return None
+        if percent == 1:
+            return min_val
+        if percent == 100:
+            return max_val
+        if max_val > min_val:
+            value = min_val + ((max_val - min_val) * (percent - 1) / 99)
+        else:
+            value = min_val - ((min_val - max_val) * (percent - 1) / 99)
+        return int(round(value))
+
+    movements = [
+        (4, percentage_to_value(left_main, leftMainMin, leftMainMax) if left_main is not None and left_main != 0 else None),
+        (5, percentage_to_value(left_forearm, leftForarmMin, leftForarmMax) if left_forearm is not None and left_forearm != 0 else None),
+        (6, percentage_to_value(left_hand, leftHandMin, leftHandMax) if left_hand is not None and left_hand != 0 else None),
+        (7, percentage_to_value(right_main, rightMainMin, rightMainMax) if right_main is not None and right_main != 0 else None),
+        (8, percentage_to_value(right_forearm, rightForarmMin, rightForarmMax) if right_forearm is not None and right_forearm != 0 else None),
+        (9, percentage_to_value(right_hand, rightHandMin, rightHandMax) if right_hand is not None and right_hand != 0 else None),
+    ]
+
+    move_servos_synchronized(movements, speed_factor)
+
+
+def cleanup():
+    disable_all_servos()
+
+
+if __name__ == "__main__":
+    initialize_servos()

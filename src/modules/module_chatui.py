@@ -56,6 +56,7 @@ from modules.module_vision import get_image_caption_from_base64
 from modules.module_tts import generate_tts_audio
 from modules.module_llm import detect_emotion
 from modules.module_messageQue import queue_message
+from modules.module_servoctl import *
 
 # Suppress Flask logs
 log = logging.getLogger('werkzeug')
@@ -69,11 +70,6 @@ engineio_logger = logging.getLogger('engineio')
 engineio_logger.setLevel(logging.ERROR)
 
 CONFIG = load_config()
-
-if (CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2"):
-    from modules.module_servoctl_v2 import *
-else:
-    from modules.module_servoctl import *
 
 # Frame dimensions (as requested)
 FRAME_WIDTH = 500
@@ -693,10 +689,6 @@ def get_config():
             'options': ['cl100k_base', 'p50k_base', 'r50k_base', 'gpt2'],
             'description': 'Token encoding model'
         },
-        'LLM.functioncalling': {
-            'options': ['llm', 'nb'],
-            'description': 'Function calling method'
-        },
         'TTS.ttsoption': {
             'options': ['espeak', 'piper', 'silero', 'alltalk', 'azure', 'elevenlabs', 'openai'],
             'description': 'Text-to-speech service'
@@ -732,10 +724,6 @@ def get_config():
         'RAG.strategy': {
             'options': ['naive', 'hybrid'],
             'description': 'RAG retrieval strategy'
-        },
-        'SERVO.MOVEMENT_VERSION': {
-            'options': ['V1', 'V2'],
-            'description': 'Servo movement version'
         }
     }
     

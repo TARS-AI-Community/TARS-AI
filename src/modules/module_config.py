@@ -35,7 +35,6 @@ class TTSConfig:
     ttsoption: str
     toggle_charvoice: bool
     tts_voice: Optional[str]
-    voice_only: bool
     is_talking_override: bool
     is_talking: bool
     global_timer_paused: bool
@@ -85,7 +84,6 @@ class TTSConfig:
             ttsoption=config_dict['ttsoption'],
             toggle_charvoice=config_dict['toggle_charvoice'],
             tts_voice=config_dict['tts_voice'],
-            voice_only=config_dict['voice_only'],
             is_talking_override=config_dict['is_talking_override'],
             is_talking=config_dict['is_talking'],
             global_timer_paused=config_dict['global_timer_paused'],
@@ -193,8 +191,7 @@ def load_config():
             "top_p": float(config['LLM']['top_p']),
             "seed": int(config['LLM']['seed']),
             "systemprompt": config['LLM']['systemprompt'],
-            "instructionprompt": config['LLM']['instructionprompt'],
-            "functioncalling": config['LLM']['functioncalling'], 
+            "instructionprompt": config['LLM']['instructionprompt']
         },
         "VISION": {
             "enabled": config.getboolean('VISION', 'enabled'),
@@ -215,7 +212,6 @@ def load_config():
             "tts_voice": config['TTS']['tts_voice'],
             "voice_id": config['TTS']['voice_id'],
             "model_id": config['TTS']['model_id'],
-            "voice_only": config.getboolean('TTS', 'voice_only'),
             "is_talking_override": config.getboolean('TTS', 'is_talking_override'),
             "is_talking": config.getboolean('TTS', 'is_talking'),
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
@@ -241,39 +237,38 @@ def load_config():
             "enabled": config['DISCORD']['enabled'],
         },
         "SERVO": {
-            "MOVEMENT_VERSION": config['SERVO']['MOVEMENT_VERSION'],
-            # V1 Variables
-            "portMain": config['SERVO']['portMain'],
-            "portForarm": config['SERVO']['portForarm'],
-            "portHand": config['SERVO']['portHand'],
-            "starMain": config['SERVO']['starMain'],
-            "starForarm": config['SERVO']['starForarm'],
-            "starHand": config['SERVO']['starHand'],
-            # V2 Variables
-            "portMainMin": config['SERVO']['portMainMin'],
-            "portForarmMin": config['SERVO']['portForarmMin'],
-            "portHandMin": config['SERVO']['portHandMin'],
-            "portMainMax": config['SERVO']['portMainMax'],
-            "portForarmMax": config['SERVO']['portForarmMax'],
-            "portHandMax": config['SERVO']['portHandMax'],
-            "starMainMin": config['SERVO']['starMainMin'],
-            "starForarmMin": config['SERVO']['starForarmMin'],
-            "starHandMin": config['SERVO']['starHandMin'],
-            "starMainMax": config['SERVO']['starMainMax'],
-            "starForarmMax": config['SERVO']['starForarmMax'],
-            "starHandMax": config['SERVO']['starHandMax'],
-            # V1 & V2 Variables
-            "upHeight": config['SERVO']['upHeight'],
-            "neutralHeight": config['SERVO']['neutralHeight'],
-            "downHeight": config['SERVO']['downHeight'],
-            "forwardPort": config['SERVO']['forwardPort'],
-            "neutralPort": config['SERVO']['neutralPort'],
-            "backPort": config['SERVO']['backPort'],
-            "perfectPortoffset": config['SERVO']['perfectPortoffset'],
-            "forwardStarboard": config['SERVO']['forwardStarboard'],
-            "neutralStarboard": config['SERVO']['neutralStarboard'],
-            "backStarboard": config['SERVO']['backStarboard'],
-            "perfectStaroffset": config['SERVO']['perfectStaroffset'],
+            # Arm Servos
+            "leftMainMin": config['SERVO']['leftMainMin'],
+            "leftForarmMin": config['SERVO']['leftForarmMin'],
+            "leftHandMin": config['SERVO']['leftHandMin'],
+            "leftMainMax": config['SERVO']['leftMainMax'],
+            "leftForarmMax": config['SERVO']['leftForarmMax'],
+            "leftHandMax": config['SERVO']['leftHandMax'],
+            "rightMainMin": config['SERVO']['rightMainMin'],
+            "rightForarmMin": config['SERVO']['rightForarmMin'],
+            "rightHandMin": config['SERVO']['rightHandMin'],
+            "rightMainMax": config['SERVO']['rightMainMax'],
+            "rightForarmMax": config['SERVO']['rightForarmMax'],
+            "rightHandMax": config['SERVO']['rightHandMax'],
+            # Dual Height Servos (Pin 0 = Left, Pin 1 = Right)
+            "leftUpHeight": config['SERVO']['leftUpHeight'],
+            "leftNeutralHeight": config['SERVO']['leftNeutralHeight'],
+            "leftDownHeight": config['SERVO']['leftDownHeight'],
+            "perfectLeftHeightOffset": config['SERVO']['perfectLeftHeightOffset'],
+            "rightUpHeight": config['SERVO']['rightUpHeight'],
+            "rightNeutralHeight": config['SERVO']['rightNeutralHeight'],
+            "rightDownHeight": config['SERVO']['rightDownHeight'],
+            "perfectRightHeightOffset": config['SERVO']['perfectRightHeightOffset'],
+            # Left Leg Servo (Pin 2)
+            "forwardLeftLeg": config['SERVO']['forwardLeftLeg'],
+            "neutralLeftLeg": config['SERVO']['neutralLeftLeg'],
+            "backLeftLeg": config['SERVO']['backLeftLeg'],
+            "perfectLeftLegOffset": config['SERVO']['perfectLeftLegOffset'],
+            # Right Leg Servo (Pin 3)
+            "forwardRightLeg": config['SERVO']['forwardRightLeg'],
+            "neutralRightLeg": config['SERVO']['neutralRightLeg'],
+            "backRightLeg": config['SERVO']['backRightLeg'],
+            "perfectRightLegOffset": config['SERVO']['perfectRightLegOffset'],
         },
         "STABLE_DIFFUSION": {
             "enabled": config['STABLE_DIFFUSION']['enabled'],
@@ -465,7 +460,7 @@ class TarsConfigIntegration:
             str_value = str(value).lower().strip()
             
             # Boolean fields - accept bool, "true"/"false", "1"/"0"
-            if field_name in ['enabled', 'toggle_charvoice', 'voice_only', 'is_talking_override', 
+            if field_name in ['enabled', 'toggle_charvoice', 'is_talking_override', 
                             'is_talking', 'global_timer_paused', 'use_indicators', 'server_hosted',
                             'restore_faces', 'UI_enabled', 'show_mouse', 'use_camera_module',
                             'fullscreen', 'auto_shutdown']:

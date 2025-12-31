@@ -218,7 +218,7 @@ class TesseractSystem:
                 return
             vertices_2d.append((int(projected[0]), int(projected[1])))
         
-        # Convert color
+        # Convert color - INCREASED VISIBILITY BY 30%
         r = int(color[0] * 255)
         g = int(color[1] * 255)
         b = int(color[2] * 255)
@@ -276,8 +276,9 @@ class TesseractSystem:
                     else:
                         total_fade = base_fade
 
-                    face_alpha = total_fade * self.compute_alpha_by_distance(x, y, z) * 0.21
-                    face_alpha = max(0.03, min(0.3, face_alpha))
+                    # INCREASED VISIBILITY: 0.21 * 1.3 = 0.273, and adjusted min/max bounds
+                    face_alpha = total_fade * self.compute_alpha_by_distance(x, y, z) * 0.29
+                    face_alpha = max(0.05, min(0.49, face_alpha))
 
                     cubes_to_draw.append((z_rot, x, y, z, cube_size, base_color, face_alpha))
         

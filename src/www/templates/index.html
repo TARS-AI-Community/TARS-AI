@@ -1070,9 +1070,9 @@ function loadConfiguration() {
                 // Special handling for SERVO section - organize into groups
                 if (section === 'SERVO') {
                     console.log('SERVO fields:', fields);
-                    const generalFields = ['voicemovement', 'MOVEMENT_VERSION'];
-                    const v1Fields = ['portMain', 'portForarm', 'portHand', 'starMain', 'starForarm', 'starHand'];
-                    const v2RightFields = ['portMainMin', 'portMainMax', 'portForarmMin', 'portForarmMax', 'portHandMin', 'portHandMax'];
+                    const generalFields = ['voicemovement'];
+                    const v1Fields = ['Main', 'portForarm', 'portHand', 'starMain', 'starForarm', 'starHand'];
+                    const v2RightFields = ['MainMin', 'portMainMax', 'portForarmMin', 'portForarmMax', 'portHandMin', 'portHandMax'];
                     const v2LeftFields = ['starMainMin', 'starMainMax', 'starForarmMin', 'starForarmMax', 'starHandMin', 'starHandMax'];
                     const torsoFields = ['upHeight', 'neutralHeight', 'downHeight'];
                     const leftLegFields = ['forwardStarboard', 'neutralStarboard', 'backStarboard', 'perfectStaroffset'];

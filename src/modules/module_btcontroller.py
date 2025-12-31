@@ -1,6 +1,6 @@
 """
 module_btcontroller.py
-
+V3
 Provides functionality for managing and interpreting Bluetooth gamepad input 
 to control servos and execute specific actions in the TARS-AI system.
 
@@ -8,46 +8,42 @@ This module listens to gamepad events such as button presses, joystick movements
 and D-pad directions, mapping these events to corresponding robotic movements or 
 in-app commands. 
 """
+# ----------------------------------------------
+# atomikspace (discord)
+# olivierdion1@hotmail.com
+# ----------------------------------------------
+
 import evdev
 import time
 from datetime import datetime
 from evdev import InputDevice, categorize, ecodes, list_devices
-import Adafruit_PCA9685
+
+# Modern CircuitPython imports
+import board
+import busio
+from adafruit_pca9685 import PCA9685
 
 from modules.module_config import load_config
-from modules.module_servoctl import *
 from modules.module_messageQue import queue_message
+from modules.module_servoctl import *
 
 config = load_config()
 controller_name = config["CONTROLS"]["controller_name"]
 
 global posevar
 
-try:
-    pwm = Adafruit_PCA9685.PCA9685(busnum=1)  # Specify I2C bus 1
-    pwm.set_pwm_freq(60)  # Set frequency to 60 Hz
-except FileNotFoundError as e:
-    queue_message(f"ERROR: I2C device not found. Ensure that /dev/i2c-1 exists. Details: {e}")
-    pwm = None  # Fallback if hardware is unavailable
+""" try:
+    i2c = busio.I2C(board.SCL, board.SDA)
+    pca = PCA9685(i2c)
+    pca.frequency = 50
+    queue_message("LOAD: PCA9685 initialized successfully")
+except (FileNotFoundError, OSError, ValueError) as e:
+    queue_message(f"ERROR: I2C device not found. Ensure that I2C is enabled. Details: {e}")
+    pca = None
 except Exception as e:
     queue_message(f"ERROR: Unexpected error during PCA9685 initialization: {e}")
-    pwm = None  # Fallback if hardware is unavailable
+    pca = None """
 
-
-
-# Set initial servo positions
-if pwm:
-    try:
-        # Port
-        pwm.set_pwm(3, 3, 610)
-        pwm.set_pwm(4, 4, 570)
-        pwm.set_pwm(5, 5, 570)
-        # Starboard
-        pwm.set_pwm(6, 6, 200)
-        pwm.set_pwm(7, 7, 200)
-        pwm.set_pwm(8, 8, 240)
-    except Exception as e:
-        queue_message(f"Error setting initial servo positions: {e}")
 
 lTrg = 37
 rTrg = 50
@@ -106,39 +102,26 @@ def check_secret_code(button_name):
 #functions to move
 def stepForward():
     queue_message("MOVE: FWD")
-    height_neutral_to_up()
-    torso_neutral_to_forwards()
-    torso_bump()
-    torso_return()
-
-def stepBackward():
-    queue_message("MOVE: BWD")
-    # this move is not coded for V1
-          
+    step_forward()
 
 def turnRight():
     queue_message("MOVE: TurnRight")
-    neutral_to_down()
     turn_right()
-    down_to_neutral()
-    neutral_from_right()
 
 def turnLeft():
     queue_message("MOVE: TurnLeft")
-    neutral_to_down()
     turn_left()
-    down_to_neutral()
-    neutral_from_left()
 
 def poseaction():
-    queue_message("MOVE: Pose")
-    neutral_to_down()
-    torso_neutral_to_backwards()
-    down_to_up()
+    pose()
 
 def unposeaction():
-    queue_message("MOVE: UnPose")
-    torso_return2()  
+    #no unpose as the pose action already does it.
+    pass 
+
+def stepBackward():
+    queue_message("MOVE: BWD")
+    step_backward()
         
         
 # D-Pad Actions (pressed and released)
@@ -195,49 +178,61 @@ def action_a_button_pressed():
     #queue_message(f"CTRL: A Button? Are you trying to jump?")
     global toggle
     if toggle == True:
-        starHandPlus()
+        pass
+        #starHandPlus()
     elif toggle == False:
-        starHandMinus()
+        pass
+        #starHandMinus()
 
 def action_b_button_pressed():
     #queue_message(f"CTRL: Oh no, the B! Self-destruct initiated... just kidding!")
     global toggle
     if toggle == True:
-        portHandPlus()
+        pass
+        #portHandPlus()
     elif toggle == False:
-        portHandMinus()
+        pass
+        #portHandMinus()
 
 def action_x_button_pressed():
     #queue_message(f"CTRL: Hey, stop pushing my X Button!")
     global toggle
     if toggle == True:
-        starForarmPlus()
+        pass
+        #starForarmPlus()
     elif toggle == False:
-        starForarmMinus()
+        pass
+        #starForarmMinus()
 
 def action_y_button_pressed():
     #queue_message(f"CTRL: Y Button? I hope you know what youre doing!")
     global toggle
     if toggle == True:
-        portForarmPlus()
+        pass
+        #portForarmPlus()
     elif toggle == False:
-        portForarmMinus()
+        pass
+        #portForarmMinus()
 
 def action_r1_button_pressed():
     #queue_message(f"CTRL: R1 Button pressed! Thats the turbo button!")
     global toggle
     if toggle == True:
-        starMainPlus()
+        pass
+        #starMainPlus()
     elif toggle == False:
-        starMainMinus()
+        pass
+        #starMainMinus()
 
 def action_l1_button_pressed():
     #queue_message(f"CTRL: L1 Button activated! Shields up!")
     global toggle
     if toggle == True:
-        portMainPlus()
+        pass
+        #portMainPlus()
     elif toggle == False:
-        portMainMinus()
+        pass
+        #portMainMinus()
 
 def action_r2_button_pressed():
     #queue_message(f"CTRL: R2 Button? Are we accelerating now?")
@@ -439,21 +434,15 @@ def start_controls():
     except KeyboardInterrupt:
         queue_message("\nExiting...")
 
-    # Clean up
-    gamepad.close()
-
-    # Clean up
     gamepad.close()
 
 device = find_controller(controller_name)
 
-#Delete this is for testing
 if __name__ == "__main__":
     while True:
         try:
             start_controls()
         except Exception as e:
             queue_message(f"An error occurred: {e}")
-            # Optionally add a small delay to prevent tight infinite loops in case of failure
             import time
             time.sleep(1)

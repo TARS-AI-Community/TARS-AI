@@ -28,7 +28,6 @@ class CharacterManager:
         self.world_scenario = None
         self.char_greeting = None
         self.example_dialogue = None
-        self.voice_only = config['TTS']['voice_only']
         self.load_character_attributes()
         self.load_persona_traits()
 

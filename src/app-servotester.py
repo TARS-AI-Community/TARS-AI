@@ -3,25 +3,12 @@ import time
 import board
 import busio
 from adafruit_pca9685 import PCA9685
+from modules.module_btcontroller import *
 
 # === Custom Modules ===
 from modules.module_config import load_config
-from modules.module_tts import update_tts_settings
 
 config = load_config()
-
-if (config["SERVO"]["MOVEMENT_VERSION"] == "V2"):
-    # Import other necessary functions from the V2 module if needed
-    # but we'll handle PWM setup here
-    try:
-        from modules.module_btcontroller_v2 import *
-    except ImportError:
-        # If the module doesn't have the PWM setup anymore, we can skip it
-        pass
-else:
-    print("\nThis tool can only be used if you are using the V2 MOVEMENT Configurations.")
-    print("\n")
-    sys.exit()
 
 # Initialize I2C and PCA9685
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -67,101 +54,132 @@ def set_servo_pulse(channel, target_pulse):
         print(f"Pulse out of range ({MIN_PULSE}-{MAX_PULSE}).")
 
 def set_all_servos_preset():
-    set_servo_pulse(0, 300)  
-    set_servo_pulse(1, 300)  
-    set_servo_pulse(2, 300)
+    """Set all servos to their neutral/preset positions"""
+    # Height servos (Pins 0-1)
+    set_servo_pulse(0, 350)  # Left height servo
+    set_servo_pulse(1, 350)  # Right height servo
     
-    set_servo_pulse(3, 135)  # was 200 to 500
-    set_servo_pulse(4, 200)  
-    set_servo_pulse(5, 200)
+    # Leg servos (Pins 2-3)
+    set_servo_pulse(2, 300)  # Left leg
+    set_servo_pulse(3, 300)  # Right leg
     
-    set_servo_pulse(6, 440)  
-    set_servo_pulse(7, 380)  
-    set_servo_pulse(8, 380)
+    # Left arm servos (Pins 4-6)
+    set_servo_pulse(4, 80)   # Left main arm
+    set_servo_pulse(5, 200)  # Left forearm
+    set_servo_pulse(6, 200)  # Left hand
+    
+    # Right arm servos (Pins 7-9)
+    set_servo_pulse(7, 580)  # Right main arm
+    set_servo_pulse(8, 380)  # Right forearm
+    set_servo_pulse(9, 380)  # Right hand
     
     print("All servos set to preset pulse widths.")
 
 def set_single_servo():
     while True:
         try:
-            print("#0 -Main Legs - Raise legs up and down")
-            print("#1 -Left Leg Rotation")
-            print("#2 -Right Leg Rotation")
-            print("#3 -Right Leg Main Arm")
-            print("#4 -Right Leg Forearm")
-            print("#5 -Right Leg Hand")
-            print("#6 -Left Leg Main Arm")
-            print("#7 -Left Leg Forearm")
-            print("#8 -Left Leg Hand")
-            channel = int(input(f"Enter servo number: "))
+            print("\n=== SERVO PIN LAYOUT ===")
+            print("Height Servos:")
+            print("  #0 - Left Height Servo (raises/lowers left side)")
+            print("  #1 - Right Height Servo (raises/lowers right side)")
+            print("\nLeg Servos:")
+            print("  #2 - Left Leg (forward/back rotation)")
+            print("  #3 - Right Leg (forward/back rotation)")
+            print("\nLeft Arm Servos:")
+            print("  #4 - Left Main Arm")
+            print("  #5 - Left Forearm")
+            print("  #6 - Left Hand")
+            print("\nRight Arm Servos:")
+            print("  #7 - Right Main Arm")
+            print("  #8 - Right Forearm")
+            print("  #9 - Right Hand")
+            print("\nOther:")
+            print("  #10-15 - Additional servos (if connected)")
+            print("========================\n")
+            
+            channel = int(input(f"Enter servo number (0-15): "))
+            if channel < 0 or channel > 15:
+                print("Channel must be between 0 and 15")
+                continue
+                
             pulse = int(input(f"Enter pulse width for servo {channel} ({MIN_PULSE}-{MAX_PULSE}): "))
             set_servo_pulse(channel, pulse)
             break
         except ValueError:
+            print("Invalid input. Please try again.")
             break
 
 def control():
     try:
-        print("0 - Reset Position.")
-        print("1 - Move Forward.")
-        print("2 - Move Backward.")
-        print("3 - Turn Right.")
-        print("4 - Turn Left.")
-        print("5 - Greet")
+        print("\n=== MOVEMENT CONTROLS ===")
+        print("0 - Reset Position")
+        print("1 - Move Forward")
+        print("2 - Move Backward")
+        print("3 - Turn Right")
+        print("4 - Turn Left")
+        print("5 - Greet (Arms)")
         print("6 - Simulate Laughter")
         print("7 - Dynamic Motion")
-        print("8 - PEZZ dispenser")
-        print("9 - Now!")
+        print("8 - PEZZ Dispenser (Arms)")
+        print("9 - Now! (Arms)")
         print("10 - Balance")
-        print("11 - Mic Drop")
-        print("12 - Defensive Posture")
+        print("11 - Mic Drop (Arms)")
+        print("12 - Defensive Posture (Arms)")
         print("13 - Pose")
-        print("14 - bow")
+        print("14 - Bow")
+        print("========================\n")
 
         main_input = input("> ")
         if main_input.lower() == "0":
             reset_positions()
-        if main_input.lower() == "1":
+        elif main_input.lower() == "1":
             step_forward()
-        if main_input.lower() == "2":
+        elif main_input.lower() == "2":
             step_backward()
-        if main_input.lower() == "3":
+        elif main_input.lower() == "3":
             turn_right()
-        if main_input.lower() == "4":
+        elif main_input.lower() == "4":
             turn_left()                
-        if main_input.lower() == "5":
+        elif main_input.lower() == "5":
             right_hi()
-        if main_input.lower() == "6":
+        elif main_input.lower() == "6":
             laugh()    
-        if main_input.lower() == "7":
+        elif main_input.lower() == "7":
             swing_legs()         
-        if main_input.lower() == "8":
+        elif main_input.lower() == "8":
             pezz_dispenser()
-        if main_input.lower() == "9":
+        elif main_input.lower() == "9":
             now()         
-        if main_input.lower() == "10":
+        elif main_input.lower() == "10":
             balance()         
-        if main_input.lower() == "11":
+        elif main_input.lower() == "11":
             mic_drop()                                        
-        if main_input.lower() == "12":
+        elif main_input.lower() == "12":
             monster()          
-        if main_input.lower() == "13":
+        elif main_input.lower() == "13":
             pose()
-        if main_input.lower() == "14":
-            bow()                                   
+        elif main_input.lower() == "14":
+            bow()
+        else:
+            print("Invalid selection")
                 
     except ValueError:
         print("Invalid input. Please enter a valid number.")
 
 def motion():
-    print("V2 Servo Controller")
+    print("\n" + "="*50)
+    print("V3 Servo Controller - Dual Height + Left/Right Naming")
+    print("="*50)
+    
     while True:
-        print("\nSelect an option:")
+        print("\n=== MAIN MENU ===")
         print("1. Set all servos to preset position")
-        print("2. Manually set servo and position")
-        print("3. Manually set Channel 15 Servo position")
+        print("2. Manually set individual servo")
+        print("3. Manually set Channel 15 servo")
         print("4. Disable all servos")
-        print("5. Movements")
+        print("5. Movement sequences")
+        print("6. Exit")
+        print("==================\n")
 
         choice = input("> ")
 
@@ -173,12 +191,34 @@ def motion():
             pulse = int(input(f"Enter pulse width for servo on channel 15 ({MIN_PULSE}-{MAX_PULSE}): "))
             set_servo_pulse(15, pulse)
         elif choice == '4':
+            print("Disabling all servos...")
             # Disable all servos by setting duty cycle to 0
             for ch in range(16):
-                time.sleep(0.1)
                 pca.channels[ch].duty_cycle = 0
+                time.sleep(0.05)
+            print("All servos disabled.")
         elif choice == '5':
             control()
+        elif choice == '6':
+            print("Exiting...")
+            # Disable all servos before exit
+            for ch in range(16):
+                pca.channels[ch].duty_cycle = 0
+            break
+        else:
+            print("Invalid selection. Please try again.")
 
 if __name__ == "__main__":
-    motion()
+    try:
+        motion()
+       
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Disabling servos...")
+        for ch in range(16):
+            pca.channels[ch].duty_cycle = 0
+        print("Servos disabled. Exiting.")
+
+    
+
+
+

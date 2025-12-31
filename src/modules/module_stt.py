@@ -846,20 +846,12 @@ class STTManager:
     
 
     def _detect_wake_word_atomik(self) -> bool:
-        sensitivity = float(CONFIG["STT"]["sensitivity"])  # 1–10
+        sensitivity = float(CONFIG["STT"]["sensitivity"]) 
         norm = (sensitivity - 1) / 9
-
-        # Smooth curve so that sensitivity=8 → threshold≈0.55
         curve = norm ** 1.6
-
-        # Scale to 0.2–0.7 range
         threshold = 0.2 + curve * (0.7 - 0.2)
-
-        # Clamp and round to 2 decimal places
         threshold = round(max(0.2, min(threshold, 0.7)), 2)
-
         detector = WakeWordSystem(self.WAKE_WORD, 16000, threshold)
-        print(threshold)
         detector.createModel()
         if detector.listenForWakeWord():
             if self.config["STT"].get("use_indicators"):

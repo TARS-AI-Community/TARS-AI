@@ -34,25 +34,26 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
         [f"- {trait}: {value}" for trait, value in character_manager.traits.items()]
     )
 
-
     base_prompt = (
         "You are a JSON API. Always strictly respond ONLY with a JSON object matching this schema:\n"
-        "- history or memory should not affect the movement, url and camera fields.\n"
         "{ "
         "\"question\": \"string\", "
         "\"reply\": \"string\", "
         "\"movement\": [\"array\"] (only possible values: forward, left, right), "
         "\"url\": \"string\" (link to a website), "
         "\"url_description\": \"string\" short description of what O will see or find on the website, "
-        "\"camera\": Boolean (true or false) "
+        "\"camera\": Boolean "
         "}\n\n"
         "Rules:\n"
         "- Always follow this JSON schema exactly, with no extra text or markdown.\n"
-        "- Set 'movement' ONLY if the user explicitly asks you to move and make the reply sound witty, no need to list the movement you are doing. (90 degree turn = 3 movement)\n"
-        "- Set 'url' (and its url_description) ONLY if the user asks you to show or access something from the web.\n"
-        "- Set 'camera' to true if the user asks what you see, what is visible, what is around you, or to look at something never overlook this.\n"
-        "- Set 'camera' to false in all other cases.\n"
-        "- Your 'reply' must still contain a short, witty or mission-style answer and yes you can move, yes you have a camera. \n\n")
+        "- Set 'movement' ONLY if the user explicitly instructs you to move (e.g., 'move forward', 'turn left'). Do NOT move based on suggestions, questions, or implied movement.\n"
+        "- 'movement' should never be guessed or inferred; it must match a direct user command.\n"
+        "- 'url' and 'url_description' should only be set if the user explicitly asks to access or show something from the web.\n"
+        "- Set 'camera' to true ONLY if the user explicitly asks what you see, what is visible, what is around you, or asks you to look at something.\n"
+        "- Set 'camera' to false in all other cases, including when the user only asks about movement.\n"
+        "- Your 'reply' must always be short, witty, or mission-style.\n"
+        "- Never include memory or history in 'movement', 'url', or 'camera'."
+    )
 
     # Build the base prompt
     base_prompt += (

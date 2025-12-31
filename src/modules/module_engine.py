@@ -46,6 +46,7 @@ from modules.module_homeassistant import send_prompt_to_homeassistant
 from modules.module_tts import generate_tts_audio
 from modules.module_config import load_config, update_character_setting
 from modules.module_messageQue import queue_message
+from modules.module_btcontroller import turnRight, turnLeft, poseaction, unposeaction, stepForward
 
 # === Constants ===
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Move up to "src"
@@ -82,13 +83,7 @@ def execute_movement(movements):
     'movements' should be a list like ["forward", "forward", "left"].
     """
     def movement_task():
-        queue_message(f"[DEBUG] Thread started for movements: {movements}")
-
-        if CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2":
-            from modules.module_btcontroller_v2 import turnRight, turnLeft, poseaction, unposeaction, stepForward
-        else:
-            from modules.module_btcontroller import turnRight, turnLeft, poseaction, unposeaction, stepForward
-
+            
         action_map = {
             "right": turnRight,
             "left": turnLeft,
@@ -101,7 +96,6 @@ def execute_movement(movements):
             for i, move in enumerate(movements, start=1):
                 action_function = action_map.get(move)
                 if callable(action_function):
-                    queue_message(f"[DEBUG] Executing movement '{move}' ({i}/{len(movements)})")
                     action_function()
                 else:
                     queue_message(f"[ERROR] Movement '{move}' not found in action_map.")
@@ -117,9 +111,7 @@ def execute_movement(movements):
 
 
 def call_function(module_name, *args, **kwargs):
-    #queue_message(f"[DEBUG] Calling module: {module_name}")
     if module_name not in FUNCTION_REGISTRY:
-        #queue_message(f"[DEBUG] No function registered for module: {module_name}")
         return "Not a Function"
     func = FUNCTION_REGISTRY[module_name]
     try:
@@ -241,9 +233,6 @@ def adjust_persona(user_input):
         persona_data = extracted_data.get("persona", {})
         trait = persona_data.get("trait")
         value = persona_data.get("value")
-
-        #queue_message(f"[DEBUG] FunctionCalling: {data}")
-        #queue_message(f"[DEBUG] Extracted values: {trait}, {value}")
 
         # Validate the extracted data
         if trait and value:

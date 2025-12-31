@@ -30,6 +30,7 @@ from modules.module_vision import initialize_blip
 from modules.module_llm import initialize_manager_llm
 from modules.module_ui import UIManager
 from modules.module_battery import BatteryModule
+from modules.module_btcontroller import *
 import modules.module_chatui
 
 import logging  # This will hide INFO and DEBUG messages
@@ -43,7 +44,7 @@ sys.path.insert(0, BASE_DIR)
 sys.path.append(os.getcwd())
 
 CONFIG = load_config()
-VERSION = "4.0"
+VERSION = "V3"
 
 show_ui = True
 for arg in sys.argv[1:]: 
@@ -52,10 +53,6 @@ for arg in sys.argv[1:]:
         if key == "show_ui":
             show_ui = value.lower() in ["1", "true", "yes", "on"]
 
-if (CONFIG["SERVO"]["MOVEMENT_VERSION"] == "V2"):
-    from modules.module_btcontroller_v2 import *
-else:
-    from modules.module_btcontroller import *
 
 # === Helper Functions ===
 def init_app():
