@@ -45,6 +45,14 @@ CONFIG = load_config()
 SetLogLevel(-1)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+# Global STT manager instance
+_stt_manager_instance = None
+
+def get_stt_manager():
+    """Get the global STT manager instance."""
+    global _stt_manager_instance
+    return _stt_manager_instance
+
 class STTManager:
     """
     Manages Speech-to-Text processing for TARS-AI.
@@ -81,10 +89,17 @@ class STTManager:
             shutdown_event (threading.Event): Event to signal when to stop.
             amp_gain (float): Amplification gain for audio data.
         """
+        global _stt_manager_instance
+        _stt_manager_instance = self  # Set global instance
+        
         self.ui_manager = ui_manager
         self.config = config
         self.shutdown_event = shutdown_event
         self.running = False
+        
+        # Pause/resume functionality for video playback
+        self.paused = False
+        self.pause_lock = threading.Lock()
 
         # Audio settings - Set sample rate based on VAD configuration
         if self.config["STT"].get("vad_enabled", False):
@@ -167,6 +182,23 @@ class STTManager:
         self.running = False
         self.shutdown_event.set()
         self.thread.join()
+    
+    def pause(self):
+        """Pause STT processing (e.g., during video playback)."""
+        with self.pause_lock:
+            self.paused = True
+        queue_message("STT Manager paused")
+    
+    def resume(self):
+        """Resume STT processing."""
+        with self.pause_lock:
+            self.paused = False
+        queue_message("STT Manager resumed")
+    
+    def is_paused(self):
+        """Check if STT is currently paused."""
+        with self.pause_lock:
+            return self.paused
 
     # === Model Loading Methods ===
 
@@ -322,6 +354,10 @@ class STTManager:
     def _transcribe_utterance(self):
         """Transcribe the user's utterance using the selected STT processor."""
         try:
+            # Skip if paused
+            if self.is_paused():
+                return None
+            
             processor = self.config["STT"].get("stt_processor", "fastrtc")  # Default to fastrtc
             #queue_message(f"DEBUG: Selected STT processor: {processor}")
 
@@ -694,13 +730,20 @@ class STTManager:
         """Main loop that detects the wake word and transcribes utterances."""
         queue_message("INFO: Starting STT processing loop...")
         while self.running and not self.shutdown_event.is_set():
+            # Skip processing if paused (e.g., during video playback)
+            if self.is_paused():
+                time.sleep(0.1)  # Sleep while paused to avoid busy waiting
+                continue
+            
             if self._detect_wake_word():
-                self._transcribe_utterance()
+                # Check again if paused before transcribing
+                if not self.is_paused():
+                    self._transcribe_utterance()
         queue_message("INFO: STT Manager stopped.")
 
     def _detect_wake_word(self) -> bool:
         if self.config["STT"]["use_indicators"]:
-            self.play_beep(400, 0.1, 44100, 0.6)
+            self.play_wav("../stt/beep_off.wav")
 
         character_path = self.config.get("CHAR", {}).get("character_card_path")
         character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
@@ -769,7 +812,7 @@ class STTManager:
 
                 if self.WAKE_WORD in transcript:
                     if self.config["STT"].get("use_indicators"):
-                        self.play_beep(1200, 0.1, 44100, 0.8)
+                        self.play_wav("../stt/beep_on.wav")
                     try:
                         requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
                     except Exception:
@@ -815,7 +858,7 @@ class STTManager:
                 if keyword_index >= 0:
                     try:
                         if self.config["STT"].get("use_indicators"):
-                            self.play_beep(1200, 0.1, 44100, 0.8)
+                            self.play_wav("../stt/beep_on.wav")
                         requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
                     except Exception:
                         pass
@@ -851,11 +894,12 @@ class STTManager:
         curve = norm ** 1.6
         threshold = 0.2 + curve * (0.7 - 0.2)
         threshold = round(max(0.2, min(threshold, 0.7)), 2)
+        #print("Atomik sensitivity:", threshold)
         detector = WakeWordSystem(self.WAKE_WORD, 16000, threshold)
         detector.createModel()
         if detector.listenForWakeWord():
             if self.config["STT"].get("use_indicators"):
-                self.play_beep(1200, 0.1, 44100, 0.8)
+                self.play_wav("../stt/beep_on.wav")
             try:
                 requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
             except Exception:
@@ -1101,14 +1145,17 @@ class STTManager:
             queue_message(f"ERROR: {e}")
             return self.DEFAULT_SAMPLE_RATE
 
-    def play_beep(self, frequency: int, duration: float, sample_rate: int, volume: float):
-        """
-        Play a beep sound to indicate state changes.
-        """
-        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        sine_wave = volume * np.sin(2 * np.pi * frequency * t)
-        sd.play(sine_wave, samplerate=sample_rate)
-        sd.wait()
+
+    def play_wav(self, filename):
+        try:
+            data, sample_rate = sf.read(filename)
+            data = data * 0.5
+            sd.play(data, samplerate=sample_rate)
+            sd.wait()
+        except Exception as e:
+            print(f"Error playing sound file: {e}")
+
+
 
     # === Callback Setters ===
 

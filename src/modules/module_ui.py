@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFilter
 import socket
 import random
 import math
+import cv2
 
 from module_config import load_config
 from UI.module_ui_particles import ParticleSystem
@@ -22,7 +23,8 @@ from UI.module_ui_starfield import StarfieldSystem
 from UI.module_ui_tesseract import TesseractSystem
 from UI.module_ui_terminal import TerminalSystem
 from UI.module_ui_spectrum import SpectrumSystem
-from UI.module_ui_video import VideoSystem 
+from UI.module_ui_video import VideoSystem
+from UI.module_ui_camera import CameraModule  # Add camera import
 
 
 # --- Configuration and Constants ---
@@ -49,6 +51,7 @@ class UIManager(threading.Thread):
         self.shutdown_event = shutdown_event
         self.battery_module = battery_module
         self.running = False
+        self.paused = False  # For pausing during video playback
         self.new_data_added = False
         self.target_fps = target_fps
         self.show_mouse = show_mouse
@@ -87,13 +90,63 @@ class UIManager(threading.Thread):
         
         # Terminal overlay system (always active)
         self.terminal_system = None
+        
+        # Camera system
+        self.camera_module = None
+        self.show_camera = False
+        
+        # Face detection - single cascade, simple and fast
+        self.face_detector = None
+        try:
+            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            self.face_detector = cv2.CascadeClassifier(cascade_path)
+            if self.face_detector.empty():
+                self.face_detector = None
+            else:
+                print("Face detector loaded")
+        except Exception as e:
+            print(f"Face detection initialization failed: {e}")
+            self.face_detector = None
+        
+        # Initialize camera if enabled
+        if self.use_camera_module:
+            try:
+                self.camera_module = CameraModule(
+                    self.logical_width,
+                    self.logical_height,
+                    use_camera_module=True
+                )
+                print("Camera module initialized")
+            except Exception as e:
+                print(f"Failed to initialize camera: {e}")
+                self.camera_module = None
     
     def cycle_background(self):
         """Cycle to the next background"""
         self.current_background_index = (self.current_background_index + 1) % len(self.background_types)
         self.next_background = self.background_types[self.current_background_index]
         self.background_change_requested = True
-        print(f"Background change requested: {self.next_background}")
+    
+    def toggle_camera(self):
+        """Toggle camera view on/off"""
+        self.show_camera = not self.show_camera
+        
+        if self.show_camera:
+            if self.terminal_system:
+                self.terminal_system.set_camera_active(True)
+        else:
+            if self.terminal_system:
+                self.terminal_system.set_camera_active(False)
+    
+    def pause(self):
+        """Pause UI updates (e.g., during video playback)"""
+        self.paused = True
+        print("UIManager paused")
+    
+    def resume(self):
+        """Resume UI updates"""
+        self.paused = False
+        print("UIManager resumed")
     
     def initiate_shutdown(self):
         """Called before system shutdown"""
@@ -239,7 +292,6 @@ class UIManager(threading.Thread):
                 video_folder="video"
             )
 
-
     def cycle_spectrum_style(self):
         """Cycle through spectrum visualization styles"""
         if self.spectrum_system:
@@ -247,11 +299,82 @@ class UIManager(threading.Thread):
             current_idx = styles.index(self.spectrum_system.style)
             next_idx = (current_idx + 1) % len(styles)
             self.spectrum_system.style = styles[next_idx]
-            print(f"Spectrum style changed to: {styles[next_idx]}")
+
+    def _draw_camera(self, surface):
+        """Draw camera feed on the surface with face detection"""
+        if not self.camera_module:
+            return
+        
+        frame = self.camera_module.get_frame()
+        if frame is None:
+            # Show "Initializing camera..." message
+            font = pygame.font.Font("UI/mono.ttf", 24)
+            text = font.render("Initializing camera...", True, (0, 255, 255))
+            text_rect = text.get_rect(center=(self.logical_width // 2, self.logical_height // 2))
             
-            # Optionally show message in terminal
-            if self.terminal_system:
-                self.terminal_system.add_message("SYS", f"Spectrum style: {styles[next_idx].upper()}", "INFO")
+            # Draw semi-transparent background
+            overlay = pygame.Surface((self.logical_width, self.logical_height))
+            overlay.set_alpha(200)
+            overlay.fill((0, 0, 0))
+            surface.blit(overlay, (0, 0))
+            
+            surface.blit(text, text_rect)
+            return
+        
+        # Add semi-transparent overlay
+        overlay = pygame.Surface((self.logical_width, self.logical_height))
+        overlay.set_alpha(200)
+        overlay.fill((0, 0, 0))
+        surface.blit(overlay, (0, 0))
+        
+        # Calculate centered position (80% of screen)
+        camera_w = int(self.logical_width * 0.8)
+        camera_h = int(self.logical_height * 0.8)
+        camera_x = (self.logical_width - camera_w) // 2
+        camera_y = (self.logical_height - camera_h) // 2
+        
+        # Detect faces
+        detected_frame = frame
+        if self.face_detector is not None:
+            # Convert pygame surface to numpy array for OpenCV
+            frame_array = pygame.surfarray.array3d(frame)
+            frame_array = np.transpose(frame_array, (1, 0, 2))
+            frame_array = np.ascontiguousarray(frame_array)
+            
+            # Convert RGB to BGR for OpenCV
+            frame_bgr = cv2.cvtColor(frame_array, cv2.COLOR_RGB2BGR)
+            
+            # Face detection
+            gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+            faces = self.face_detector.detectMultiScale(
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=5,
+                minSize=(30, 30)
+            )
+            
+            for (x, y, w_box, h_box) in faces:
+                # Yellow box in BGR is (0, 255, 255)
+                cv2.rectangle(frame_bgr, (x, y), (x+w_box, y+h_box), (0, 255, 255), 2)
+                label = "FACE"
+                label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                cv2.rectangle(frame_bgr, (x, y-20), (x+label_size[0]+6, y), (0, 255, 255), -1)
+                cv2.putText(frame_bgr, label, (x+3, y-6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+            
+            # Convert BGR back to RGB
+            frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            
+            # Convert back to pygame surface
+            frame_rgb = np.transpose(frame_rgb, (1, 0, 2))
+            detected_frame = pygame.surfarray.make_surface(frame_rgb)
+        
+        scaled_frame = pygame.transform.scale(detected_frame, (camera_w, camera_h))
+        
+        # Draw border
+        border_rect = pygame.Rect(camera_x - 2, camera_y - 2, camera_w + 4, camera_h + 4)
+        pygame.draw.rect(surface, (0, 255, 255), border_rect, 2)
+        
+        surface.blit(scaled_frame, (camera_x, camera_y))
 
     def run(self) -> None:
         try:
@@ -292,9 +415,11 @@ class UIManager(threading.Thread):
                     self.logical_width,
                     self.logical_height,
                     bg_alpha=13,
+                    battery_module=self.battery_module,  # Add battery module
                     on_background_change=self.cycle_background,
                     on_shutdown=self.initiate_shutdown,
-                    on_spectrum_change=self.cycle_spectrum_style  # ADD THIS
+                    on_spectrum_change=self.cycle_spectrum_style,
+                    on_camera_toggle=self.toggle_camera  # Add camera callback
                 )
     
                 
@@ -307,14 +432,18 @@ class UIManager(threading.Thread):
             font = pygame.font.Font("UI/mono.ttf", self.font_size)
             self.running = True
             
-            print("UI Manager initialized - Spectrum analyzer active")
+            print("UI Manager initialized - Spectrum analyzer and camera active")
             
             # Main game loop
             while self.running and not self.shutdown_event.is_set():
+                # Skip updates when paused (e.g., during video playback)
+                if self.paused:
+                    clock.tick(10)  # Low FPS sleep while paused
+                    pygame.event.pump()  # Keep window responsive
+                    continue
+                
                 # Check if background change was requested
                 if self.background_change_requested and self.next_background:
-                    print(f"Switching background to: {self.next_background}")
-                    
                     # Initialize new background
                     self.background_type = self.next_background
                     self._init_background(self.next_background)
@@ -331,6 +460,8 @@ class UIManager(threading.Thread):
                             self.running = False
                         elif event.key == pygame.K_s:  # Press 'S' to cycle spectrum styles
                             self.cycle_spectrum_style()
+                        elif event.key == pygame.K_c:  # Press 'C' to toggle camera
+                            self.toggle_camera()
                     elif event.type == pygame.MOUSEBUTTONDOWN:
                         if self.terminal_system:
                             logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
@@ -344,16 +475,21 @@ class UIManager(threading.Thread):
 
                 # Update and draw based on active background
                 if self.background_type == 'particles' and self.particle_system is not None:
-                    # 1. Draw background
-                    self.particle_system.update()
+                    # 1. Draw background (skip update if camera is showing)
+                    if not self.show_camera:
+                        self.particle_system.update()
                     self.particle_system.draw(original_surface)
                     
-                    # 2. Draw spectrum analyzer on top of background
-                    if self.spectrum_system:
+                    # 2. Draw spectrum analyzer on top of background (skip if camera is showing)
+                    if self.spectrum_system and not self.show_camera:
                         self.spectrum_system.update()
                         self.spectrum_system.draw(original_surface)
                     
-                    # 3. Draw terminal overlay on top of spectrum
+                    # 3. Draw camera feed if enabled
+                    if self.show_camera and self.camera_module:
+                        self._draw_camera(original_surface)
+                    
+                    # 4. Draw terminal overlay on top
                     if self.terminal_system:
                         self.terminal_system.update()
                         self.terminal_system.draw(original_surface)
@@ -367,16 +503,21 @@ class UIManager(threading.Thread):
                         screen.blit(original_surface, (0, 0))
                 
                 elif self.background_type == 'starfield' and self.starfield_system is not None:
-                    # 1. Draw background
-                    self.starfield_system.update()
+                    # 1. Draw background (skip update if camera is showing)
+                    if not self.show_camera:
+                        self.starfield_system.update()
                     self.starfield_system.draw(original_surface)
                     
-                    # 2. Draw spectrum analyzer on top of background
-                    if self.spectrum_system:
+                    # 2. Draw spectrum analyzer on top of background (skip if camera is showing)
+                    if self.spectrum_system and not self.show_camera:
                         self.spectrum_system.update()
                         self.spectrum_system.draw(original_surface)
                     
-                    # 3. Draw terminal overlay on top of spectrum
+                    # 3. Draw camera feed if enabled
+                    if self.show_camera and self.camera_module:
+                        self._draw_camera(original_surface)
+                    
+                    # 4. Draw terminal overlay on top
                     if self.terminal_system:
                         self.terminal_system.update()
                         self.terminal_system.draw(original_surface)
@@ -390,16 +531,21 @@ class UIManager(threading.Thread):
                         screen.blit(original_surface, (0, 0))
                 
                 elif self.background_type == 'tesseract' and self.tesseract_system is not None:
-                    # 1. Draw background
-                    self.tesseract_system.update()
+                    # 1. Draw background (skip update if camera is showing)
+                    if not self.show_camera:
+                        self.tesseract_system.update()
                     self.tesseract_system.draw(original_surface)
                     
-                    # 2. Draw spectrum analyzer on top of background
-                    if self.spectrum_system:
+                    # 2. Draw spectrum analyzer on top of background (skip if camera is showing)
+                    if self.spectrum_system and not self.show_camera:
                         self.spectrum_system.update()
                         self.spectrum_system.draw(original_surface)
                     
-                    # 3. Draw terminal overlay on top of spectrum
+                    # 3. Draw camera feed if enabled
+                    if self.show_camera and self.camera_module:
+                        self._draw_camera(original_surface)
+                    
+                    # 4. Draw terminal overlay on top
                     if self.terminal_system:
                         self.terminal_system.update()
                         self.terminal_system.draw(original_surface)
@@ -413,16 +559,21 @@ class UIManager(threading.Thread):
                         screen.blit(original_surface, (0, 0))
 
                 elif self.background_type == 'video' and self.video_system is not None:
-                    # 1. Draw video background
-                    self.video_system.update()
+                    # 1. Draw video background (skip update if camera is showing)
+                    if not self.show_camera:
+                        self.video_system.update()
                     self.video_system.draw(original_surface)
                     
-                    # 2. Draw spectrum analyzer on top of video
-                    if self.spectrum_system:
+                    # 2. Draw spectrum analyzer on top of video (skip if camera is showing)
+                    if self.spectrum_system and not self.show_camera:
                         self.spectrum_system.update()
                         self.spectrum_system.draw(original_surface)
                     
-                    # 3. Draw terminal overlay on top of spectrum
+                    # 3. Draw camera feed if enabled
+                    if self.show_camera and self.camera_module:
+                        self._draw_camera(original_surface)
+                    
+                    # 4. Draw terminal overlay on top
                     if self.terminal_system:
                         self.terminal_system.update()
                         self.terminal_system.draw(original_surface)
@@ -451,4 +602,9 @@ class UIManager(threading.Thread):
             # Cleanup spectrum analyzer
             if self.spectrum_system:
                 self.spectrum_system.stop_audio_stream()
+            
+            # Cleanup camera
+            if self.camera_module:
+                self.camera_module.stop()
+                
             pygame.quit()

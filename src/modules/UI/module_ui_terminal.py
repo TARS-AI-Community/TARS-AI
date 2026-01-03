@@ -4,17 +4,21 @@ from typing import List, Tuple, Callable, Optional
 
 class TerminalSystem:
     def __init__(self, width: int, height: int, bg_color=(0, 0, 0), bg_alpha=13, 
+                 battery_module=None,
                  on_background_change: Optional[Callable] = None,
                  on_shutdown: Optional[Callable] = None,
-                 on_spectrum_change: Optional[Callable] = None):
+                 on_spectrum_change: Optional[Callable] = None,
+                 on_camera_toggle: Optional[Callable] = None):
         self.width = width
         self.height = height
         self.bg_color = bg_color
         self.bg_alpha = bg_alpha
 
+        self.battery_module = battery_module
         self.on_background_change = on_background_change
         self.on_shutdown = on_shutdown
         self.on_spectrum_change = on_spectrum_change
+        self.on_camera_toggle = on_camera_toggle
 
         self.primary_color = (0, 255, 255)  
         self.secondary_color = (0, 180, 200)  
@@ -87,6 +91,8 @@ class TerminalSystem:
 
         self.shutdown_confirm = False
         self.shutdown_time = 0
+        
+        self.camera_active = False  # Track if camera view is active
 
         self.overlay_surface = pygame.Surface((width, height), pygame.SRCALPHA)
 
@@ -171,14 +177,92 @@ class TerminalSystem:
     def change_background(self):
         if self.on_background_change:
             self.on_background_change()
-            self.add_message("SYS", "Background module switched", "INFO")
 
     def change_spectrum(self):
         if self.on_spectrum_change:
             self.on_spectrum_change()
 
     def toggle_camera(self):
-        self.add_message("CAM", "Camera toggle - not yet implemented", "INFO")
+        if self.on_camera_toggle:
+            self.on_camera_toggle()
+        else:
+            self.add_message("CAM", "Camera toggle - callback not set", "WARNING")
+    
+    def set_camera_active(self, active: bool):
+        """Set camera active state - used to hide terminal messages and disable buttons"""
+        self.camera_active = active
+    
+    def _draw_battery_indicator(self, surface, x, y, width, height):
+        """Draw battery indicator with percentage"""
+        if not self.battery_module:
+            return
+        
+        try:
+            battery_status = self.battery_module.get_battery_status()
+            percentage = battery_status['normalized_percentage']
+            is_charging = battery_status['is_charging']
+            
+            # Battery colors based on percentage
+            if percentage > 60:
+                fill_color = (0, 200, 80)  # Green
+            elif percentage > 20:
+                fill_color = (255, 160, 0)  # Orange
+            else:
+                fill_color = (255, 40, 40)  # Red
+            
+            # Dark blue background for empty portion
+            bg_fill_color = (10, 20, 35)
+            
+            # Battery body - same height as buttons
+            body_width = width - 8
+            body_height = height - 8
+            body_x = x + 4
+            body_y = y + 4
+            
+            # Draw battery outline
+            pygame.draw.rect(surface, self.border_color, 
+                           (body_x, body_y, body_width, body_height), 2)
+            
+            # Draw battery tip
+            tip_width = 4
+            tip_height = int(body_height * 0.5)
+            tip_x = body_x + body_width
+            tip_y = body_y + (body_height - tip_height) // 2
+            pygame.draw.rect(surface, self.border_color, 
+                           (tip_x, tip_y, tip_width, tip_height))
+            
+            # FIRST: Fill entire interior with dark blue background
+            pygame.draw.rect(surface, bg_fill_color,
+                           (body_x + 2, body_y + 2, body_width - 4, body_height - 4))
+            
+            # SECOND: Draw colored fill on top based on percentage
+            fill_width = int((body_width - 4) * (percentage / 100))
+            if fill_width > 0:
+                pygame.draw.rect(surface, fill_color,
+                               (body_x + 2, body_y + 2, fill_width, body_height - 4))
+            
+            # Draw percentage text - cyan color with thick black outline
+            text = f"{percentage}"  # No % sign (using normalized_percentage)
+            try:
+                battery_font = pygame.font.SysFont("arial", 18, bold=True)
+            except:
+                battery_font = self.font_bold
+            
+            # Draw thick black outline first (2px)
+            for offset_x in [-2, -1, 0, 1, 2]:
+                for offset_y in [-2, -1, 0, 1, 2]:
+                    if offset_x != 0 or offset_y != 0:  # Skip center
+                        outline_surface = battery_font.render(text, True, (0, 0, 0))
+                        outline_rect = outline_surface.get_rect(center=(body_x + body_width // 2 + offset_x, body_y + body_height // 2 + offset_y))
+                        surface.blit(outline_surface, outline_rect)
+            
+            # Draw cyan text on top
+            text_surface = battery_font.render(text, True, (0, 255, 255))
+            text_rect = text_surface.get_rect(center=(body_x + body_width // 2, body_y + body_height // 2))
+            surface.blit(text_surface, text_rect)
+        
+        except Exception as e:
+            pass  # Silently fail if battery module not available
 
     def shutdown_system(self):
         if not self.shutdown_confirm:
@@ -203,6 +287,10 @@ class TerminalSystem:
     def handle_click(self, pos):
         for button in self.top_buttons:
             if button["rect"] and button["rect"].collidepoint(pos):
+                # Disable CLEAR, BG and WAVE buttons when camera is active
+                if self.camera_active and button["label"] in ["CLEAR", "BG", "WAVE"]:
+                    continue
+                
                 if button["label"] == "CLEAR":
                     self.clear_messages()
                 elif button["label"] == "BG":
@@ -278,8 +366,12 @@ class TerminalSystem:
 
         return lines if lines else ['']
 
-    def _draw_tech_button(self, surface, rect, label, code, active=False, color_type=None):
-        if color_type == "warning":
+    def _draw_tech_button(self, surface, rect, label, code, active=False, color_type=None, disabled=False):
+        if disabled:
+            # Disabled button appearance
+            bg_color = (20, 20, 20, 150)
+            border_color = (60, 60, 60, 180)
+        elif color_type == "warning":
             if self.shutdown_confirm:
                 bg_color = (100, 30, 10, 220)
                 border_color = (255, 80, 0, 255)
@@ -309,10 +401,21 @@ class TerminalSystem:
         pygame.draw.line(surface, bracket_color, rect.topright, (rect.right - bracket_size, rect.top), 2)
         pygame.draw.line(surface, bracket_color, (rect.right - 1, rect.top), (rect.right - 1, rect.top + bracket_size), 2)
 
-        text_color = self.primary_color if active or color_type == "warning" else self.text_color
+        if disabled:
+            text_color = (80, 80, 80)
+        else:
+            text_color = self.primary_color if active or color_type == "warning" else self.text_color
         text_surface = self.toolbar_font.render(label, True, text_color)
         text_rect = text_surface.get_rect(center=rect.center)
         surface.blit(text_surface, text_rect)
+        
+        # Draw active indicator dot
+        if active and not disabled:
+            dot_radius = 4
+            dot_x = rect.right - 12
+            dot_y = rect.top + 12
+            pygame.draw.circle(surface, self.primary_color, (dot_x, dot_y), dot_radius)
+            pygame.draw.circle(surface, (255, 255, 255), (dot_x, dot_y), dot_radius - 1)
 
     def draw(self, surface: pygame.Surface):
         import math
@@ -332,10 +435,23 @@ class TerminalSystem:
 
         for button in self.top_buttons:
             if button["rect"]:
+                # Disable CLEAR, BG and WAVE buttons visually when camera is active
+                is_disabled = self.camera_active and button["label"] in ["CLEAR", "BG", "WAVE"]
                 self._draw_tech_button(self.overlay_surface, button["rect"], 
                                        button["label"], button["code"],
                                        button.get("active", False),
-                                       button.get("color"))
+                                       button.get("color"),
+                                       disabled=is_disabled)
+        
+        # Draw battery indicator between last left button and PWR-DN
+        if self.battery_module:
+            # Calculate position: between WAVE button and PWR-DN button
+            battery_width = 60
+            battery_height = self.toolbar_height - 10
+            battery_x = self.width - battery_width - 120  # Left of PWR-DN
+            battery_y = 5
+            self._draw_battery_indicator(self.overlay_surface, battery_x, battery_y, 
+                                        battery_width, battery_height)
 
         terminal_rect = pygame.Rect(0, self.toolbar_height, self.width, self.terminal_height)
         terminal_bg = pygame.Surface((self.width, self.terminal_height), pygame.SRCALPHA)
@@ -364,77 +480,79 @@ class TerminalSystem:
         pygame.draw.line(self.overlay_surface, (*self.accent_color, 80), 
                         (10, line_y + 1), (self.width - 10, line_y + 1), 1)
 
-        y_offset = line_y + 12
-        start_y = y_offset
+        # Only draw messages if camera is not active
+        if not self.camera_active:
+            y_offset = line_y + 12
+            start_y = y_offset
 
-        all_lines = []
-        reversed_cache = list(reversed(self.wrapped_cache))
+            all_lines = []
+            reversed_cache = list(reversed(self.wrapped_cache))
 
-        for key, value, msg_type, wrapped_lines in reversed_cache:
-            for line_idx, line_text in enumerate(wrapped_lines):
-                all_lines.append((key, value, msg_type, line_text, line_idx))
+            for key, value, msg_type, wrapped_lines in reversed_cache:
+                for line_idx, line_text in enumerate(wrapped_lines):
+                    all_lines.append((key, value, msg_type, line_text, line_idx))
 
-        total_lines = len(all_lines)
-        visible_lines = all_lines[:self.max_visible_lines] if total_lines > self.max_visible_lines else all_lines
+            total_lines = len(all_lines)
+            visible_lines = all_lines[:self.max_visible_lines] if total_lines > self.max_visible_lines else all_lines
 
-        terminal_draw_height = self.toolbar_height + self.terminal_height - start_y - self.padding
+            terminal_draw_height = self.toolbar_height + self.terminal_height - start_y - self.padding
 
-        line_count = 0
-        for key, value, msg_type, line_text, line_idx in visible_lines:
-            if y_offset + self.line_height > self.toolbar_height + self.terminal_height - self.padding:
-                break
+            line_count = 0
+            for key, value, msg_type, line_text, line_idx in visible_lines:
+                if y_offset + self.line_height > self.toolbar_height + self.terminal_height - self.padding:
+                    break
 
-            progress = (y_offset - start_y) / terminal_draw_height
-            progress = max(0.0, min(1.0, progress))
-            fade_alpha = 1.0 - (progress * 0.9)
+                progress = (y_offset - start_y) / terminal_draw_height
+                progress = max(0.0, min(1.0, progress))
+                fade_alpha = 1.0 - (progress * 0.9)
 
-            if line_idx == 0 and ':' in line_text:
-                parts = line_text.split(':', 1)
-                if len(parts) == 2:
-                    user_part, msg_part = parts
+                if line_idx == 0 and ':' in line_text:
+                    parts = line_text.split(':', 1)
+                    if len(parts) == 2:
+                        user_part, msg_part = parts
 
-                    if user_part.upper() == "TARS":
-                        msg_color = (100, 200, 255)
-                        code_color_base = (100, 200, 255)
-                    elif user_part.upper() == "USER":
-                        msg_color = (255, 255, 255)
-                        code_color_base = (255, 255, 255)
-                    else:
-                        msg_color = (150, 150, 150)
-                        code_color_base = (150, 150, 150)
+                        if user_part.upper() == "TARS":
+                            msg_color = (100, 200, 255)
+                            code_color_base = (100, 200, 255)
+                        elif user_part.upper() == "USER":
+                            msg_color = (255, 255, 255)
+                            code_color_base = (255, 255, 255)
+                        else:
+                            msg_color = (150, 150, 150)
+                            code_color_base = (150, 150, 150)
 
-                    code_text = f"[{user_part}]"
-                    temp_surface = pygame.Surface((self.width, self.line_height), pygame.SRCALPHA)
-                    code_surface = self.font_bold.render(code_text, True, code_color_base)
-                    code_surface.set_alpha(int(255 * fade_alpha))
+                        code_text = f"[{user_part}]"
+                        temp_surface = pygame.Surface((self.width, self.line_height), pygame.SRCALPHA)
+                        code_surface = self.font_bold.render(code_text, True, code_color_base)
+                        code_surface.set_alpha(int(255 * fade_alpha))
 
-                    x_pos = self.padding + 5
-                    temp_surface.blit(code_surface, (0, 0))
-                    self.overlay_surface.blit(temp_surface, (x_pos, y_offset))
+                        x_pos = self.padding + 5
+                        temp_surface.blit(code_surface, (0, 0))
+                        self.overlay_surface.blit(temp_surface, (x_pos, y_offset))
 
-                    msg_surface = self.font.render(msg_part, True, msg_color)
-                    msg_surface.set_alpha(int(255 * fade_alpha))
+                        msg_surface = self.font.render(msg_part, True, msg_color)
+                        msg_surface.set_alpha(int(255 * fade_alpha))
 
-                    temp_surface2 = pygame.Surface((self.width, self.line_height), pygame.SRCALPHA)
-                    temp_surface2.blit(msg_surface, (0, 0))
-                    self.overlay_surface.blit(temp_surface2, (x_pos + code_surface.get_width() + 5, y_offset))
-            else:
-                if key.upper() == "TARS":
-                    cont_color = (100, 200, 255)
-                elif key.upper() == "USER":
-                    cont_color = (255, 255, 255)
+                        temp_surface2 = pygame.Surface((self.width, self.line_height), pygame.SRCALPHA)
+                        temp_surface2.blit(msg_surface, (0, 0))
+                        self.overlay_surface.blit(temp_surface2, (x_pos + code_surface.get_width() + 5, y_offset))
                 else:
-                    cont_color = (150, 150, 150)
+                    if key.upper() == "TARS":
+                        cont_color = (100, 200, 255)
+                    elif key.upper() == "USER":
+                        cont_color = (255, 255, 255)
+                    else:
+                        cont_color = (150, 150, 150)
 
-                text_surface = self.font.render(line_text, True, cont_color)
-                text_surface.set_alpha(int(255 * fade_alpha))
+                    text_surface = self.font.render(line_text, True, cont_color)
+                    text_surface.set_alpha(int(255 * fade_alpha))
 
-                temp_surface = pygame.Surface((self.width, self.line_height), pygame.SRCALPHA)
-                temp_surface.blit(text_surface, (0, 0))
-                self.overlay_surface.blit(temp_surface, (self.padding + 25, y_offset))
+                    temp_surface = pygame.Surface((self.width, self.line_height), pygame.SRCALPHA)
+                    temp_surface.blit(text_surface, (0, 0))
+                    self.overlay_surface.blit(temp_surface, (self.padding + 25, y_offset))
 
-            y_offset += self.line_height
-            line_count += 1
+                y_offset += self.line_height
+                line_count += 1
 
         if self.action_flash > 0:
             scan_alpha = int(self.action_flash * 60)
@@ -493,9 +611,11 @@ class TerminalSystem:
 
         for button in self.bottom_buttons:
             if button["rect"]:
+                # Mark CAM button as active when camera is on
+                is_active = button["label"] == "CAM" and self.camera_active
                 self._draw_tech_button(self.overlay_surface, button["rect"], 
                                        button["label"], button["code"],
-                                       button.get("active", False),
+                                       is_active,
                                        button.get("color"))
 
         surface.blit(self.overlay_surface, (0, 0))

@@ -178,6 +178,7 @@ def load_config():
             "user_details": config['CHAR']['user_details'],
             "traits": persona_traits,  # Include the traits from persona.ini
             "responses": config['CHAR']['responses'],
+            "thinking_responses": config['CHAR']['thinking_responses'],
         },
         "LLM": {
             "llm_backend": config['LLM']['llm_backend'],
@@ -252,21 +253,17 @@ def load_config():
             "rightHandMax": config['SERVO']['rightHandMax'],
             # Dual Height Servos (Pin 0 = Left, Pin 1 = Right)
             "leftUpHeight": config['SERVO']['leftUpHeight'],
-            "leftNeutralHeight": config['SERVO']['leftNeutralHeight'],
             "leftDownHeight": config['SERVO']['leftDownHeight'],
             "perfectLeftHeightOffset": config['SERVO']['perfectLeftHeightOffset'],
             "rightUpHeight": config['SERVO']['rightUpHeight'],
-            "rightNeutralHeight": config['SERVO']['rightNeutralHeight'],
             "rightDownHeight": config['SERVO']['rightDownHeight'],
             "perfectRightHeightOffset": config['SERVO']['perfectRightHeightOffset'],
             # Left Leg Servo (Pin 2)
             "forwardLeftLeg": config['SERVO']['forwardLeftLeg'],
-            "neutralLeftLeg": config['SERVO']['neutralLeftLeg'],
             "backLeftLeg": config['SERVO']['backLeftLeg'],
             "perfectLeftLegOffset": config['SERVO']['perfectLeftLegOffset'],
             # Right Leg Servo (Pin 3)
             "forwardRightLeg": config['SERVO']['forwardRightLeg'],
-            "neutralRightLeg": config['SERVO']['neutralRightLeg'],
             "backRightLeg": config['SERVO']['backRightLeg'],
             "perfectRightLegOffset": config['SERVO']['perfectRightLegOffset'],
         },

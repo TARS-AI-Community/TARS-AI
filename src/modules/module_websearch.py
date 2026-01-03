@@ -1,260 +1,193 @@
-
 """
 module_websearch.py
 
-Web Search Module for TARS-AI Application.
-
-This module provides functionality for performing web searches using Selenium WebDriver. 
-It supports multiple search engines and allows for extracting specific content, links, 
-and structured data from search results.
+Web Search Module for TARS-AI using free APIs.
 """
 
-# === Standard Libraries ===
-import os
-import sys
-from contextlib import contextmanager
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import atexit
-from datetime import datetime
-
+import requests
+import xml.etree.ElementTree as ET
 from modules.module_messageQue import queue_message
-
-# === Helper Functions ===
-# Silence logs to suppress unnecessary outputs
-@contextmanager
-def silence_log():
-    """
-    Context manager to suppress unnecessary console logs during driver initialization.
-    """
-    old_stdout, old_stderr = sys.stdout, sys.stderr
-    try:
-        with open(os.devnull, "w") as devnull:
-            sys.stdout, sys.stderr = devnull, devnull
-            yield
-    finally:
-        sys.stdout, sys.stderr = old_stdout, old_stderr
-
-
-def initialize_driver():
-    """
-    Initialize the Selenium WebDriver using Chromium.
-
-    Returns:
-    - WebDriver: Configured Selenium WebDriver instance.
-    """
-    options = ChromeOptions()
-    options.add_argument("--headless")  # Run in headless mode
-    options.add_argument("--no-sandbox")  # Bypass OS security model
-    options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
-    options.add_argument("--disable-infobars")
-    options.add_argument("--lang=en-GB")
-
-    service = ChromeService(executable_path="/usr/bin/chromedriver")  # Path to the chromedriver
-    return webdriver.Chrome(service=service, options=options)
-
-def quit_driver():
-    """
-    Quit the WebDriver instance when the script ends.
-    """
-    if driver:
-        driver.quit()
-
-def save_debug():
-    """
-    Save the current page source for debugging purposes.
-    """
-    with open("engine/debug.html", "w", encoding='utf-8') as f:
-        f.write(driver.page_source)
-
-def wait_for_element(element_id: str, delay: int = 10):
-    """Wait for an element with a specific ID to be present."""
-    try:
-        WebDriverWait(driver, delay).until(EC.presence_of_element_located((By.ID, element_id)))
-    except Exception:
-        queue_message(f"ERROR: Element with ID '{element_id}' not found.")
-        
-def extract_text(selector):
-    """
-    Extract text content from elements matching the specified CSS selector.
-
-    Parameters:
-    - selector (str): The CSS selector for the elements.
-
-    Returns:
-    - str: Concatenated text content of matched elements.
-    """
-    return '\n'.join(el.text for el in driver.find_elements(By.CSS_SELECTOR, selector) if el and el.text).strip()
-
-def extract_links(selector):
-    """
-    Extract hyperlinks from elements matching the specified CSS selector.
-
-    Parameters:
-    - selector (str): The CSS selector for the elements.
-
-    Returns:
-    - list: List of extracted hyperlinks.
-    """
-    return [el.get_attribute('href') for el in driver.find_elements(By.CSS_SELECTOR, selector) if el and el.text]
-
-# === Search Functions ===
-def search_query(url, query, content_selector, link_selector=None):
-    """
-    Perform a web search and extract content and links.
-
-    Parameters:
-    - url (str): Base search URL.
-    - query (str): Search query.
-    - content_selector (str): CSS selector for text content.
-    - link_selector (str, optional): CSS selector for links.
-
-    Returns:
-    - tuple: Extracted text content and links (if applicable).
-    """
-    driver.get(url + query)
-    wait_for_element('res')  # Wait for page to load
-
-    content = extract_text(content_selector)
-    links = extract_links(link_selector) if link_selector else []
-    return content, links
 
 def search_google(query):
     """
-    Perform a Google search for information.
-
+    Search using DuckDuckGo instant answer API (free, no auth).
+    
     Parameters:
     - query (str): The search query.
-
+    
     Returns:
-    - tuple: Extracted content and links.
+    - str: Extracted search results.
     """
-    queue_message(f"INFO: Searching Google for: {query}")
-    driver.get("https://google.com/search?hl=en&q=" + query)
-    wait_for_element('res')
-    save_debug()
+    
+    # Check if it's a weather query
+    if 'weather' in query.lower():
+        return get_weather(query)
+    
+    # Check if it's a news query
+    if any(word in query.lower() for word in ['news', 'latest', 'happening', 'today']):
+        return get_news(query)
+    
+    try:
+        queue_message(f"Searching DuckDuckGo: {query}")
+        
+        url = f"https://api.duckduckgo.com/?q={query}&format=json"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        results = []
+        
+        # Abstract (summary from Wikipedia, etc.)
+        if data.get('AbstractText'):
+            results.append(data['AbstractText'])
+        
+        # Instant answer
+        if data.get('Answer'):
+            results.append(data['Answer'])
+        
+        # Definition
+        if data.get('Definition'):
+            results.append(data['Definition'])
+        
+        # Related topics
+        if data.get('RelatedTopics') and not results:
+            for topic in data['RelatedTopics'][:3]:
+                if isinstance(topic, dict) and topic.get('Text'):
+                    results.append(topic['Text'])
+        
+        if results:
+            combined = " ".join(results[:2])
+            queue_message(f"Found: {combined[:150]}...")
+            return combined
+        else:
+            return f"No instant answer found for '{query}'. Try being more specific."
+            
+    except Exception as e:
+        queue_message(f"Search error: {e}")
+        return f"Search failed: {str(e)}"
 
-    text = ""
-    # Featured snippets
-    text += extract_text('.wDYxhc')
-    queue_message(f"INFO: Featured snippets: {text}")
-    # Knowledge panels
-    text += extract_text('.hgKElc')
-    queue_message(f"INFO: Knowledge panels: {text}")
-    # Page snippets
-    text += extract_text('.r025kc.lVm3ye')
-    queue_message(f"INFO: Page snippets: {text}")
-    # Additional selectors for compatibility
-    text += extract_text('.yDYNvb.lyLwlc')
+def get_news(query):
+    """
+    Get news using Google News RSS feed.
+    
+    Parameters:
+    - query (str): Query containing topic.
+    
+    Returns:
+    - str: News headlines.
+    """
+    try:
+        # Clean query - remove news-related words
+        topic = query.lower()
+        for word in ['news', 'latest', 'today', 'happening', 'what', 'the', 'in', 'about']:
+            topic = topic.replace(word, '')
+        topic = topic.strip()
+        
+        if not topic:
+            topic = 'world'
+        
+        queue_message(f"Getting news for: {topic}")
+        
+        # Google News RSS feed
+        url = f"https://news.google.com/rss/search?q={topic}&hl=en-US&gl=US&ceid=US:en"
+        
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        # Parse RSS XML
+        root = ET.fromstring(response.content)
+        
+        headlines = []
+        for item in root.findall('.//item')[:5]:
+            title = item.find('title')
+            if title is not None and title.text:
+                # Remove source name (everything after last " - ")
+                clean_title = title.text.rsplit(' - ', 1)[0]
+                # Limit length
+                if len(clean_title) > 120:
+                    clean_title = clean_title[:117] + "..."
+                headlines.append(clean_title)
+        
+        if headlines:
+            # Format as numbered list
+            news_text = "Latest headlines:\n" + "\n".join([f"{i+1}. {h}" for i, h in enumerate(headlines[:3])])
+            queue_message(f"Found {len(headlines)} headlines")
+            return news_text
+        else:
+            return f"No recent news found about {topic}."
+        
+    except Exception as e:
+        queue_message(f"News error: {e}")
+        return f"Couldn't get news: {str(e)}"
 
-    return text
+def get_weather(query):
+    """
+    Get weather using wttr.in free weather service.
+    
+    Parameters:
+    - query (str): Query containing location.
+    
+    Returns:
+    - str: Weather information.
+    """
+    try:
+        # Extract location from query
+        location = query.lower().replace('weather', '').replace('in', '').replace('at', '').strip()
+        if not location:
+            location = 'Quebec City'  # Default
+        
+        queue_message(f"Getting weather for: {location}")
+        
+        # Get JSON format for detailed info
+        url = f"https://wttr.in/{location}?format=j1"
+        
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Extract current conditions
+        current = data['current_condition'][0]
+        
+        # Get today's forecast
+        today = data['weather'][0]
+        
+        weather_text = (
+            f"{location.title()}: {current['weatherDesc'][0]['value']}, "
+            f"{current['temp_C']}°C (feels like {current['FeelsLikeC']}°C). "
+            f"Humidity {current['humidity']}%, "
+            f"Wind {current['windspeedKmph']}km/h {current['winddir16Point']}. "
+            f"High: {today['maxtempC']}°C, Low: {today['mintempC']}°C."
+        )
+        
+        queue_message(f"Weather: {weather_text}")
+        return weather_text
+        
+    except Exception as e:
+        queue_message(f"Weather error: {e}")
+        return f"Couldn't get weather data: {str(e)}"
 
 def search_google_news(query):
     """
-    Perform a search on Google News and extract news snippets.
-
+    Search news (alias for get_news).
+    
     Parameters:
     - query (str): The search query.
-
+    
     Returns:
-    - tuple: Extracted content and links.
+    - str: News results.
     """
-    queue_message(f"INFO: Fetching Google News for: {query}")
-    return search_query(
-        "https://google.com/search?hl=en&gl=us&tbm=nws&q=",
-        query,
-        ".dURPMd"
-    )
+    return get_news(query)
 
 def search_duckduckgo(query):
     """
-    Perform a search on DuckDuckGo and extract results.
-
+    Direct DuckDuckGo search (alias for search_google).
+    
     Parameters:
     - query (str): The search query.
-
+    
     Returns:
-    - tuple: Extracted content and links.
+    - str: Search results.
     """
-    queue_message(f"INFO: Searching DuckDuckGo for: {query}")
-    return search_query(
-        "https://duckduckgo.com/?kp=-2&kl=wt-wt&q=",
-        query,
-        '[data-result="snippet"]'
-    )
-
-def search_mojeek(query):
-    """
-    Perform a search on Mojeek and extract results.
-
-    Parameters:
-    - query (str): The search query.
-
-    Returns:
-    - tuple: Extracted content and links.
-    """
-    queue_message(f"INFO: Searching Mojeek for: {query}")
-    base_url = "https://www.mojeek.com/search?q="
-    full_url = base_url + query
-
-    # Load the page
-    driver.get(full_url)
-    wait_for_element("results")  # Wait for results container to load
-
-    # Extract search result snippets
-    content = extract_text(".result-title, .result-desc")  # Titles and descriptions
-    links = extract_links(".result-title > a")  # Result links
-
-    return content
-
-def search_mojeek_summary(query):
-    """
-    Perform a search on Mojeek and extract the summary text. Includes debugging information.
-
-    Parameters:
-    - query (str): The search query.
-
-    Returns:
-    - str: The extracted summary text, or an error message if not found.
-    """
-    queue_message(f"INFO: Searching Mojeek for: {query}")
-    base_url = "https://www.mojeek.com/search?q="
-    full_url = base_url + query
-
-    try:
-        # Load the Mojeek search results page
-        driver.get(full_url)
-
-        # Save page source for debugging
-        save_debug()
-
-        # Print all elements with 'id=kalid' for verification
-        elements = driver.find_elements(By.ID, "kalid")
-        if not elements:
-            queue_message("DEBUG: No elements with ID 'kalid' found.")
-        else:
-            for el in elements:
-                queue_message("DEBUG: Found element with ID 'kalid':", el.get_attribute("outerHTML"))
-
-        # Wait for the summary box to load
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div#kalid.infobox-right.llm-ib"))
-        )
-
-        # Extract the summary content
-        summary = extract_text("div#kalid.infobox-right.llm-ib div.content")
-        queue_message("INFO: Summary extracted successfully.")
-        return summary
-
-    except Exception as e:
-        queue_message(f"ERROR: Unable to extract summary. {e}")
-        return "Summary not found. Check debug.html for details."
-
-
-# === Initialize and Cleanup ===
-driver = initialize_driver()
-atexit.register(quit_driver)
+    return search_google(query)

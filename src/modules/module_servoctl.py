@@ -15,6 +15,12 @@ from modules.module_config import load_config
 
 config = load_config()
 
+# === Hardcoded Neutral Position Constants ===
+NEUTRAL_LEFT_HEIGHT = 350
+NEUTRAL_RIGHT_HEIGHT = 350
+NEUTRAL_LEFT_LEG = 300
+NEUTRAL_RIGHT_LEG = 300
+
 global_arm_speed = 0.5
 global_easing_strength = 0.6
 
@@ -65,22 +71,22 @@ rightHandMax = int(config["SERVO"]["rightHandMax"])
 
 perfectLeftHeightOffset = int(config["SERVO"]["perfectLeftHeightOffset"])
 leftUpHeight = int(config["SERVO"]["leftUpHeight"]) + perfectLeftHeightOffset
-leftNeutralHeight = int(config["SERVO"]["leftNeutralHeight"]) + perfectLeftHeightOffset
+leftNeutralHeight = NEUTRAL_LEFT_HEIGHT + perfectLeftHeightOffset
 leftDownHeight = int(config["SERVO"]["leftDownHeight"]) + perfectLeftHeightOffset
 
 perfectRightHeightOffset = int(config["SERVO"]["perfectRightHeightOffset"])
 rightUpHeight = int(config["SERVO"]["rightUpHeight"]) - perfectRightHeightOffset
-rightNeutralHeight = int(config["SERVO"]["rightNeutralHeight"]) - perfectRightHeightOffset
+rightNeutralHeight = NEUTRAL_RIGHT_HEIGHT - perfectRightHeightOffset
 rightDownHeight = int(config["SERVO"]["rightDownHeight"]) - perfectRightHeightOffset
 
 perfectLeftLegOffset = int(config["SERVO"]["perfectLeftLegOffset"])
 forwardLeftLeg = int(config["SERVO"]["forwardLeftLeg"]) + perfectLeftLegOffset
-neutralLeftLeg = int(config["SERVO"]["neutralLeftLeg"]) + perfectLeftLegOffset
+neutralLeftLeg = NEUTRAL_LEFT_LEG + perfectLeftLegOffset
 backLeftLeg = int(config["SERVO"]["backLeftLeg"]) + perfectLeftLegOffset
 
 perfectRightLegOffset = int(config["SERVO"]["perfectRightLegOffset"])
 forwardRightLeg = int(config["SERVO"]["forwardRightLeg"]) + perfectRightLegOffset
-neutralRightLeg = int(config["SERVO"]["neutralRightLeg"]) + perfectRightLegOffset
+neutralRightLeg = NEUTRAL_RIGHT_LEG + perfectRightLegOffset
 backRightLeg = int(config["SERVO"]["backRightLeg"]) + perfectRightLegOffset
 
 MOVING = False
@@ -169,6 +175,25 @@ def step_forward():
         disable_all_servos()
         MOVING = False
 
+def walk_forward():
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        move_legs(50, 50, 50, 50, 0.8)
+        sequence = [
+            (50, 70, 50, 50),
+            (50, 70, 35, 50),
+            (70, 50, 50, 50),
+            (70, 50, 50, 35),
+        ]
+        for _ in range(2):
+            for a, b, c, d in sequence:
+                move_legs(a, b, c, d, 0.5)
+        move_legs(70, 70, 50, 50, 0.6)
+        move_legs(50, 50, 50, 50, 0.8) 
+        time.sleep(0.1)
+        disable_all_servos()
+        MOVING = False
 
 def step_backward():
     global MOVING
@@ -185,13 +210,42 @@ def step_backward():
         disable_all_servos()
         MOVING = False
 
+def walk_backward():
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        move_legs(50, 50, 50, 50, 0.8)
+        sequence = [
+        (50, 65, 50, 50),
+        (50, 65, 50, 35),
+        (65, 50, 50, 50),
+        (65, 50, 35, 50),
+        ]
+        for _ in range(2):
+            for a, b, c, d in sequence:
+                move_legs(a, b, c, d, 0.5)
+        move_legs(50, 50, 50, 50, 0.6)
+        time.sleep(0.1)
+        disable_all_servos()
+        MOVING = False
+
 
 def turn_right():
     move_legs(50, 50, 50, 50, 0.9)
-    move_legs(70, 70, 0, 0, 0.9)
-    move_legs(0, 0, 60, 40, 0.9)
-    move_legs(50, 50, 0, 0, 0.9)
-    move_legs(0, 0, 50, 50, 0.7)
+    move_legs(70, 70, 50, 50, 0.9)
+    move_legs(70, 70, 65, 35, 0.9)
+    move_legs(45, 45, 65, 35, 0.9)
+    move_legs(52, 52, 50, 50, 0.8)
+    move_legs(50, 50, 50, 50, 0.8)
+    time.sleep(0.1)
+    disable_all_servos()
+
+def turn_right_slow():
+    move_legs(50, 50, 50, 50, 0.9)
+    move_legs(70, 40, 50, 50, 0.7)
+    move_legs(70, 40, 50, 40, 0.7)
+    move_legs(50, 70, 50, 40, 0.7)
+    move_legs(50, 70, 50, 50, 0.7)
     move_legs(50, 50, 50, 50, 0.9)
     time.sleep(0.1)
     disable_all_servos()
@@ -199,14 +253,23 @@ def turn_right():
 
 def turn_left():
     move_legs(50, 50, 50, 50, 0.9)
-    move_legs(70, 70, 0, 0, 0.9)
-    move_legs(0, 0, 40, 60, 0.9)
-    move_legs(50, 50, 0, 0, 0.9)
-    move_legs(0, 0, 50, 50, 0.7)
-    move_legs(50, 50, 50, 50, 0.9)
+    move_legs(70, 70, 50, 50, 0.9)
+    move_legs(70, 70, 35, 65, 0.9)
+    move_legs(45, 45, 35, 65, 0.9)
+    move_legs(52, 52, 50, 50, 0.8)
+    move_legs(50, 50, 50, 50, 0.8)
     time.sleep(0.1)
     disable_all_servos()
 
+def turn_left_slow():
+    move_legs(50, 50, 50, 50, 0.9)
+    move_legs(40, 70, 50, 50, 0.7)
+    move_legs(40, 70, 40, 50, 0.7)
+    move_legs(70, 50, 40, 50, 0.7)
+    move_legs(70, 50, 50, 50, 0.7)
+    move_legs(50, 50, 50, 50, 0.9)
+    time.sleep(0.1)
+    disable_all_servos()
 
 def right_hi():
     move_legs(50, 50, 50, 50, 0.4)
@@ -376,6 +439,68 @@ def bow():
     time.sleep(3)
     move_legs(15, 15, 65, 65, 0.7)
     move_legs(50, 50, 50, 50, 0.4)
+    disable_all_servos()
+
+def tilt_right():
+    move_legs(50, 50, 50, 50, 0.9)
+    move_legs(20, 80, 50, 50, 0.9)
+    time.sleep(3)
+    move_legs(50, 50, 50, 50, 0.9)
+    disable_all_servos()
+
+
+def tilt_left():
+    move_legs(50, 50, 50, 50, 0.9)
+    move_legs(80, 20, 50, 50, 0.9)
+    time.sleep(3)
+    move_legs(50, 50, 50, 50, 0.9)
+    disable_all_servos()
+
+def side_side():
+    move_legs(50, 50, 50, 50, 0.8)
+    move_legs(10, 90, 50, 50, 0.9)
+    move_legs(90, 10, 50, 50, 0.9)
+    move_legs(10, 90, 50, 50, 0.9)
+    move_legs(90, 10, 50, 50, 0.9)
+    move_legs(10, 90, 50, 50, 0.9)
+    move_legs(90, 10, 50, 50, 0.9)
+    move_legs(50, 50, 50, 50, 0.9)
+    disable_all_servos()
+
+def wave_right():
+    move_legs(50, 50, 50, 50, 0.8)
+    move_legs(50, 90, 50, 50, 0.9)
+    move_legs(20, 90, 50, 100, 0.9)
+    move_legs(20, 90, 50, 70, 0.9)
+    move_legs(20, 90, 50, 100, 0.9)
+    move_legs(20, 90, 50, 70, 0.9)
+    move_legs(50, 90, 50, 100, 0.9)
+    move_legs(50, 90, 50, 70, 0.9)
+    move_legs(50, 90, 50, 100, 0.9)
+    move_legs(50, 90, 50, 70, 0.9)
+    move_legs(20, 90, 50, 100, 0.9)
+    move_legs(20, 90, 50, 70, 0.9)
+    move_legs(20, 90, 50, 100, 0.9)
+    move_legs(20, 90, 50, 70, 0.9)
+    move_legs(50, 50, 50, 50, 0.8)
+    disable_all_servos()
+
+def wave_left():
+    move_legs(50, 50, 50, 50, 0.8)
+    move_legs(90, 50, 50, 50, 0.9)
+    move_legs(90, 20, 100, 50, 0.9)
+    move_legs(90, 20, 70, 50, 0.9)
+    move_legs(90, 20, 100, 50, 0.9)
+    move_legs(90, 20, 70, 50, 0.9)
+    move_legs(90, 50, 100, 50, 0.9)
+    move_legs(90, 50, 70, 50, 0.9)
+    move_legs(90, 50, 100, 50, 0.9)
+    move_legs(90, 50, 70, 50, 0.9)
+    move_legs(90, 20, 100, 50, 0.9)
+    move_legs(90, 20, 70, 50, 0.9)
+    move_legs(90, 20, 100, 50, 0.9)
+    move_legs(90, 20, 70, 50, 0.9)
+    move_legs(50, 50, 50, 50, 0.8)
     disable_all_servos()
 
 

@@ -9,31 +9,35 @@ from datetime import datetime
 from pathlib import Path
 import openai
 
-# === Custom Modules ===
 from modules.module_config import load_config
 from modules.module_messageQue import queue_message
-from UI.module_ui_camera import CameraModule  # Import once, no reinitialization in function calls
+from UI.module_ui_camera import CameraModule
 
-# === Constants and Globals ===
 CONFIG = load_config()
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MODEL_NAME = "Salesforce/blip-image-captioning-base"
 
-# Cache directory for model
 CACHE_DIR = Path(__file__).resolve().parent.parent / "vision"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-# Globals for processor, model, and camera instance
 PROCESSOR = None
 MODEL = None
-CAMERA = None  # Prevents reinitialization
+CAMERA = None
+
+try:
+    openai.api_key = CONFIG['TTS']['openai_api_key']
+except (KeyError, TypeError):
+    try:
+        openai.api_key = CONFIG['VISION']['openai_api_key']
+    except (KeyError, TypeError):
+        queue_message("WARNING: No OpenAI API key found for vision")
 
 def initialize_camera():
     """Initialize camera once and store the reference globally."""
     if not CONFIG['VISION']['enabled']:
         global CAMERA
-        if CAMERA is None:  # Ensure it's only created once
+        if CAMERA is None:
             CAMERA = CameraModule(1920, 1080)
             queue_message(f"INFO: Camera initialized.")
 
@@ -58,7 +62,6 @@ def capture_image() -> str:
         camera = CameraModule(1920, 1080)
         image_path = camera.capture_single_image()
         print(f"Image saved: {image_path}")
-        #camera.stop()
         return image_path
 
     except Exception as e:
@@ -95,8 +98,10 @@ def describe_camera_view_openai(user_prompt) -> str:
         image_path = capture_image()
         if not Path(image_path).exists():
             return "Error: captured image not found."
+        
         with open(image_path, "rb") as image_file:
             base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+        
         response = openai.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -111,11 +116,12 @@ def describe_camera_view_openai(user_prompt) -> str:
             max_tokens=150
         )
         description = response.choices[0].message.content
+        queue_message(f"Vision: {description}")
         return description
 
     except Exception as e:
-        queue_message("TARS is unable to see right now.")
-        return f"Error: {e}"
+        queue_message(f"ERROR: Vision failed - {e}")
+        return f"I tried to look but encountered an error."
 
 
 def send_image_to_server(image_path: str) -> str:
@@ -179,11 +185,9 @@ def save_captured_image(image_path: str) -> str:
         output_dir = Path(__file__).resolve().parent.parent / "vision/images"
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Define the file name with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         new_path = output_dir / f"captured_image_{timestamp}.jpg"
 
-        # Save the image to the new file path
         img = Image.open(image_path)
         img.save(new_path, format="JPEG", optimize=True, quality=85)
 

@@ -44,7 +44,7 @@ sys.path.insert(0, BASE_DIR)
 sys.path.append(os.getcwd())
 
 CONFIG = load_config()
-VERSION = "V3"
+VERSION = "5.0"
 
 show_ui = True
 for arg in sys.argv[1:]: 

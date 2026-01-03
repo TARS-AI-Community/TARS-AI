@@ -150,23 +150,57 @@ async def generate_tts_audio(text, ttsoption, is_wakeword=False, azure_api_key=N
 
 async def play_audio_chunks(text, config, is_wakeword=False):
     """
-    Plays audio chunks sequentially from the generate_tts_audio function.
-    Calls stop_talking when done.
-    """  
-
-    async for audio_chunk in generate_tts_audio(text, config, is_wakeword):
+    Plays audio chunks with concurrent synthesis and playback.
+    Uses asyncio queue to buffer chunks while playing.
+    """
+    audio_queue = asyncio.Queue(maxsize=3)  # Buffer up to 3 chunks ahead
+    synthesis_done = asyncio.Event()
+    
+    async def synthesize_chunks():
+        """Producer: synthesize chunks and put in queue"""
+        try:
+            async for audio_chunk in generate_tts_audio(text, config, is_wakeword):
+                await audio_queue.put(audio_chunk)
+        except Exception as e:
+            queue_message(f"ERROR: Synthesis failed: {e}")
+        finally:
+            synthesis_done.set()
+    
+    async def play_chunks():
+        """Consumer: play chunks from queue"""
         try:
             requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
-            # Read the audio chunk into a format playable by sounddevice
-            data, samplerate = sf.read(audio_chunk, dtype='float32')
-            sd.play(data, samplerate)
-            await asyncio.sleep(len(data) / samplerate)  # Wait for playback to finish
-            
-        except Exception as e:
-            queue_message(f"ERROR: Failed to play audio chunk: {e}")
-
-    # ✅ Call stop_talking when all audio chunks are played
-    try:
-        requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
-    except requests.exceptions.RequestException as e:
-        queue_message(f"ERROR: Failed to send stop_talking request: {e}")
+        except:
+            pass
+        
+        while True:
+            try:
+                # Get next chunk (with timeout to check if done)
+                try:
+                    audio_chunk = await asyncio.wait_for(audio_queue.get(), timeout=0.1)
+                except asyncio.TimeoutError:
+                    if synthesis_done.is_set() and audio_queue.empty():
+                        break
+                    continue
+                
+                # Play the chunk
+                data, samplerate = sf.read(audio_chunk, dtype='float32')
+                sd.play(data, samplerate)
+                sd.wait()  # Wait for this chunk to finish
+                
+            except Exception as e:
+                queue_message(f"ERROR: Failed to play chunk: {e}")
+                if synthesis_done.is_set() and audio_queue.empty():
+                    break
+        
+        # Stop talking when done
+        try:
+            requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
+        except:
+            pass
+    
+    # Run synthesis and playback concurrently
+    await asyncio.gather(
+        synthesize_chunks(),
+        play_chunks()
+    )
