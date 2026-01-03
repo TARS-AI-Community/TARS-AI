@@ -46,29 +46,19 @@ def get_completion(user_prompt, istext=True):
     if memory_manager is None or character_manager is None:
         raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
 
-    # Play thinking response while processing
     try:
         thinking_responses_raw = CONFIG["CHAR"].get('thinking_responses', '[]')
-        
-        # Safely parse JSON
         try:
             thinking_responses = json.loads(thinking_responses_raw)
         except (json.JSONDecodeError, TypeError):
-            # If parsing fails or it's not a string, default to empty list
             thinking_responses = []
-        
-        # Validate it's actually a list
         if not isinstance(thinking_responses, list):
             thinking_responses = []
         
         if thinking_responses and len(thinking_responses) > 0:
             thinking_text = random.choice(thinking_responses)
-            
-            # Make sure it's not empty
             if thinking_text and isinstance(thinking_text, str) and thinking_text.strip():
-                queue_message(f"Playing thinking response: {thinking_text}")
-                
-                # Play thinking response in background thread
+                queue_message(f"{thinking_text}")
                 def play_thinking():
                     try:
                         from modules.module_tts import play_audio_chunks
@@ -78,11 +68,9 @@ def get_completion(user_prompt, istext=True):
                 
                 thinking_thread = threading.Thread(target=play_thinking, daemon=True)
                 thinking_thread.start()
-                # Give it a moment to start playing
                 import time
                 time.sleep(0.1)
     except Exception as e:
-        # Silently fail if thinking responses aren't configured
         pass
 
     prompt = build_prompt(user_prompt, character_manager, memory_manager, CONFIG, debug=False)
