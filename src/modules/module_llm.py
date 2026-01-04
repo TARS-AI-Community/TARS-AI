@@ -3,9 +3,6 @@ module_llm.py
 
 LLM module for the TARS-AI application.
 
-Provides:
-- Integration with LLM backends (OpenAI, DeepInfra, Ooba, Tabby).
-- Functions for text generation, emotion detection, and memory management.
 """
 
 import requests
@@ -33,16 +30,7 @@ if CONFIG['EMOTION']['enabled']:
     classifier = pipeline("text-classification", model="SamLowe/roberta-base-go_emotions", top_k=None)
 
 def get_completion(user_prompt, istext=True):
-    """
-    Generate a completion using the configured LLM backend.
 
-    Parameters:
-    - user_prompt (str): The user's input prompt.
-    - istext (bool): Whether the prompt is a standard text query.
-
-    Returns:
-    - str: The generated completion.
-    """
     if memory_manager is None or character_manager is None:
         raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
 
@@ -54,7 +42,7 @@ def get_completion(user_prompt, istext=True):
             thinking_responses = []
         if not isinstance(thinking_responses, list):
             thinking_responses = []
-        
+
         if thinking_responses and len(thinking_responses) > 0:
             thinking_text = random.choice(thinking_responses)
             if thinking_text and isinstance(thinking_text, str) and thinking_text.strip():
@@ -65,7 +53,7 @@ def get_completion(user_prompt, istext=True):
                         asyncio.run(play_audio_chunks(thinking_text, CONFIG['TTS']['ttsoption'], is_wakeword=True))
                     except Exception as e:
                         queue_message(f"ERROR: Failed to play thinking response: {e}")
-                
+
                 thinking_thread = threading.Thread(target=play_thinking, daemon=True)
                 thinking_thread.start()
                 import time
@@ -85,25 +73,16 @@ def get_completion(user_prompt, istext=True):
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
         bot_reply = _extract_text(response.json(), istext)
-        
+
         finalReply = llm_process(user_prompt, bot_reply)
         return finalReply
-    
+
     except requests.RequestException as e:
         queue_message(f"ERROR: LLM request failed: {e}")
         return None
 
 def _prepare_request_data(llm_backend, prompt):
-    """
-    Prepare the request URL and data for the LLM backend.
 
-    Parameters:
-    - llm_backend (str): The LLM backend name.
-    - prompt (str): The formatted prompt.
-
-    Returns:
-    - tuple: URL and data payload for the request.
-    """
     if llm_backend == "openai":
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
         data = {
@@ -146,16 +125,6 @@ def _prepare_request_data(llm_backend, prompt):
     return url, data
 
 def _extract_text(response_json, istext):
-    """
-    Extract the generated text from the LLM response.
-
-    Parameters:
-    - response_json (dict): The JSON response from the LLM backend.
-    - istext (bool): Whether the response should be treated as text.
-
-    Returns:
-    - str: Extracted text content.
-    """
     try:
         llm_backend = CONFIG['LLM']['llm_backend']
         if 'choices' in response_json:
@@ -170,28 +139,10 @@ def _extract_text(response_json, istext):
         return f"Text extraction failed: {str(error)}"
 
 def process_completion(prompt):
-    """
-    Generate a response for the given prompt using the LLM backend.
-
-    Parameters:
-    - prompt (str): The input prompt.
-
-    Returns:
-    - str: The generated response.
-    """
     future = executor.submit(get_completion, prompt, istext=True)
     return future.result()
 
 def detect_emotion(text):
-    """
-    Detect the emotion of the given text.
-
-    Parameters:
-    - text (str): The text to analyze.
-
-    Returns:
-    - str: The detected emotion.
-    """
     model_outputs = classifier(text)
     emotindetected = max(model_outputs[0], key=lambda x: x['score'])['label']
     requests.post("http://127.0.0.1:5012/emotion", data=emotindetected, timeout=10)
@@ -199,45 +150,29 @@ def detect_emotion(text):
 
 def llm_process(user_input, bot_response):
     global memory_manager
-    """
-    Process user input and bot response, integrating with memory.
-
-    Parameters:
-    - user_input (str): The user's input.
-    - bot_response (str): The bot's response (JSON string).
-
-    Returns:
-    - str: The processed bot reply.
-    """
-
     if isinstance(bot_response, str):
         try:
-            # Clean the response
+
             bot_response = bot_response.strip()
-            
-            # Remove markdown code blocks
+
             bot_response = re.sub(r'^```json\s*', '', bot_response)
             bot_response = re.sub(r'^```\s*', '', bot_response)
             bot_response = re.sub(r'\s*```$', '', bot_response)
-            
-            # Remove trailing backticks and other common artifacts
+
             bot_response = re.sub(r'`+$', '', bot_response)
             bot_response = bot_response.strip()
-            
-            # Replace Python-style booleans
+
             bot_response = bot_response.replace("True", "true").replace("False", "false")
-            
-            # Try to find JSON object if there's extra text
+
             json_match = re.search(r'\{.*\}', bot_response, re.DOTALL)
             if json_match:
                 bot_response = json_match.group(0)
-            
-            # Remove extra closing braces at the end
+
             while bot_response.endswith('}}') and bot_response.count('{') < bot_response.count('}'):
                 bot_response = bot_response[:-1]
-            
+
             bot_response = json.loads(bot_response)
-            
+
         except json.JSONDecodeError as e:
             queue_message(f"ERROR: JSON parsing failed: {e}")
             queue_message(f"Raw response: {bot_response}")
@@ -284,14 +219,6 @@ def llm_process(user_input, bot_response):
     return bot_response["reply"]
 
 def execute_function_call(func_call, bot_response, user_input):
-    """
-    Execute a function call from the LLM response.
-
-    Parameters:
-    - func_call (dict): The function call object containing 'function' and 'parameters'
-    - bot_response (dict): The full bot response for potential modification
-    - user_input (str): The original user input
-    """
     function_name = func_call.get("function", "")
     parameters = func_call.get("parameters", {})
 
@@ -300,7 +227,7 @@ def execute_function_call(func_call, bot_response, user_input):
             movements = parameters.get("movements", [])
             if movements:
                 execute_movement(movements)
-        
+
         elif function_name == "capture_camera_view":
             query = parameters.get("query", bot_response.get("question", ""))
             description = describe_camera_view_openai(query)
@@ -308,7 +235,7 @@ def execute_function_call(func_call, bot_response, user_input):
                 bot_response["reply"] = description
             else:
                 bot_response["reply"] = "I tried to look but couldn't process the image."
-        
+
         elif function_name == "web_search":
             from modules.module_websearch import search_google
             query = parameters.get("query", "")
@@ -319,16 +246,16 @@ def execute_function_call(func_call, bot_response, user_input):
                     bot_response["reply"] = f"Based on my search: {search_results[:500]}"
                 else:
                     bot_response["reply"] = "I couldn't find relevant information for that query."
-        
+
         elif function_name == "adjust_volume":
             from modules.module_volume import get_volume_control
             vc = get_volume_control()
-            
+
             action = parameters.get("action", "set")
             value = parameters.get("value", 0)
-            
+
             current = vc.get_volume()
-            
+
             if action == "set":
                 if vc.set_volume(value):
                     bot_response["reply"] = f"Volume set to {value}%."
@@ -346,7 +273,7 @@ def execute_function_call(func_call, bot_response, user_input):
                     bot_response["reply"] = f"Volume decreased by {value}%. Now at {new_vol}%."
                 else:
                     bot_response["reply"] = "Failed to decrease volume."
-        
+
         elif function_name == "get_volume":
             from modules.module_volume import get_volume_control
             vc = get_volume_control()
@@ -355,7 +282,7 @@ def execute_function_call(func_call, bot_response, user_input):
                 bot_response["reply"] = f"Current volume is {current}%."
             else:
                 bot_response["reply"] = "Unable to check volume level."
-        
+
         elif function_name == "adjust_persona":
             from modules.module_config import update_character_setting
             trait = parameters.get("trait", "")
@@ -366,42 +293,64 @@ def execute_function_call(func_call, bot_response, user_input):
                 queue_message(f"Persona adjusted: {trait} = {value}")
             else:
                 bot_response["reply"] = "Could not parse persona adjustment."
-        
+
         elif function_name == "open_url":
             url = parameters.get("url", "")
             description = parameters.get("description", "")
             if url:
-                print(f"Opening URL: {url} - {description}")
-        
-        elif function_name == "play_youtube":
-            from modules.module_youtube import search_and_play
-            query = parameters.get("query", "")
-            
-            if query:
-                # Define callbacks to pause/resume UI and STT
-                def pause_ui_and_stt():
+                from modules.module_browser import get_browser_player
+
+                def close_ui_and_pause_stt():
                     try:
-                        # Pause STT
                         from modules.module_stt import get_stt_manager
                         stt = get_stt_manager()
                         if stt:
                             stt.pause()
-                            queue_message("STT paused during video playback")
+                            queue_message("STT paused during browser session")
                     except Exception as e:
                         queue_message(f"Could not pause STT: {e}")
-                    
+
                     try:
-                        # Pause UI updates if available
                         from modules.module_main import ui_manager
-                        if ui_manager and hasattr(ui_manager, 'pause'):
-                            ui_manager.pause()
-                            queue_message("UI paused during video playback")
+                        if ui_manager and ui_manager.running:
+                            queue_message("Closing UI for browser...")
+                            ui_manager.running = False
+                            ui_manager.join(timeout=5)
+                            queue_message("UI closed")
                     except Exception as e:
-                        queue_message(f"Could not pause UI: {e}")
-                
-                def resume_ui_and_stt():
+                        queue_message(f"Could not close UI: {e}")
+
+                def reopen_ui_and_resume_stt():
                     try:
-                        # Resume STT
+                        from modules.module_main import ui_manager, shutdown_event, battery_module, stt_manager
+                        import modules.module_main as main_module
+                        from modules.module_ui import UIManager
+
+                        if ui_manager and not ui_manager.running:
+                            queue_message("Reopening UI...")
+
+                            if shutdown_event is None or battery_module is None:
+                                queue_message("ERROR: Missing shutdown_event or battery_module - cannot reopen UI")
+                                return
+
+                            new_ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery_module)
+                            new_ui_manager.start()
+                            main_module.ui_manager = new_ui_manager
+
+                            if stt_manager:
+                                stt_manager.ui_manager = new_ui_manager
+
+                            from modules.module_main import memory_manager
+                            if memory_manager:
+                                memory_manager.ui_manager = new_ui_manager
+
+                            queue_message("UI reopened")
+                    except Exception as e:
+                        queue_message(f"Could not reopen UI: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                    try:
                         from modules.module_stt import get_stt_manager
                         stt = get_stt_manager()
                         if stt:
@@ -409,17 +358,90 @@ def execute_function_call(func_call, bot_response, user_input):
                             queue_message("STT resumed")
                     except Exception as e:
                         queue_message(f"Could not resume STT: {e}")
-                    
+
+                player = get_browser_player()
+                player.set_callbacks(on_start=close_ui_and_pause_stt, on_end=reopen_ui_and_resume_stt)
+
+                queue_message(f"Opening URL: {url}")
+                success = player.play_video(url)  
+
+                if success:
+                    bot_response["reply"] = f"Opening {description if description else url}"
+                else:
+                    bot_response["reply"] = "Failed to open the website"
+
+        elif function_name == "play_youtube":
+            from modules.module_browser import search_and_play
+            query = parameters.get("query", "")
+
+            if query:
+
+                def close_ui_and_pause_stt():
                     try:
-                        # Resume UI updates if available
-                        from modules.module_main import ui_manager
-                        if ui_manager and hasattr(ui_manager, 'resume'):
-                            ui_manager.resume()
-                            queue_message("UI resumed")
+
+                        from modules.module_stt import get_stt_manager
+                        stt = get_stt_manager()
+                        if stt:
+                            stt.pause()
+                            queue_message("STT paused during video playback")
                     except Exception as e:
-                        queue_message(f"Could not resume UI: {e}")
-                
-                result = search_and_play(query, on_start=pause_ui_and_stt, on_end=resume_ui_and_stt)
+                        queue_message(f"Could not pause STT: {e}")
+
+                    try:
+
+                        from modules.module_main import ui_manager
+                        if ui_manager and ui_manager.running:
+                            queue_message("Closing UI for browser playback...")
+                            ui_manager.running = False
+                            ui_manager.join(timeout=5)  
+
+                            queue_message("UI closed")
+                    except Exception as e:
+                        queue_message(f"Could not close UI: {e}")
+
+                def reopen_ui_and_resume_stt():
+                    try:
+
+                        from modules.module_main import ui_manager, shutdown_event, battery_module, stt_manager
+                        import modules.module_main as main_module
+                        from modules.module_ui import UIManager
+
+                        if ui_manager and not ui_manager.running:
+                            queue_message("Reopening UI...")
+
+                            if shutdown_event is None or battery_module is None:
+                                queue_message("ERROR: Missing shutdown_event or battery_module - cannot reopen UI")
+                                return
+
+                            new_ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery_module)
+                            new_ui_manager.start()
+
+                            main_module.ui_manager = new_ui_manager
+
+                            if stt_manager:
+                                stt_manager.ui_manager = new_ui_manager
+
+                            from modules.module_main import memory_manager
+                            if memory_manager:
+                                memory_manager.ui_manager = new_ui_manager
+
+                            queue_message("UI reopened")
+                    except Exception as e:
+                        queue_message(f"Could not reopen UI: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                    try:
+
+                        from modules.module_stt import get_stt_manager
+                        stt = get_stt_manager()
+                        if stt:
+                            stt.resume()
+                            queue_message("STT resumed")
+                    except Exception as e:
+                        queue_message(f"Could not resume STT: {e}")
+
+                result = search_and_play(query, on_start=close_ui_and_pause_stt, on_end=reopen_ui_and_resume_stt)
                 if result['success']:
                     video_info = result.get('video', {})
                     bot_response["reply"] = f"{result['message']} by {video_info.get('channel', 'Unknown')}."
@@ -427,24 +449,14 @@ def execute_function_call(func_call, bot_response, user_input):
                     bot_response["reply"] = result['message']
             else:
                 bot_response["reply"] = "Please specify what video you'd like to watch."
-        
+
         else:
             queue_message(f"Unknown function: {function_name}")
-    
+
     except Exception as e:
         queue_message(f"Function execution failed for {function_name}: {e}")
 
 def raw_complete_llm(user_prompt, istext=True):
-    """
-    Generate a completion using the configured LLM backend.
-
-    Parameters:
-    - user_prompt (str): The user's input prompt.
-    - istext (bool): Whether the prompt is a standard text query.
-
-    Returns:
-    - str: The generated completion.
-    """
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
@@ -457,19 +469,12 @@ def raw_complete_llm(user_prompt, istext=True):
         response.raise_for_status()
         bot_reply = _extract_text(response.json(), istext)
         return bot_reply
-    
+
     except requests.RequestException as e:
         queue_message(f"ERROR: LLM request failed: {e}")
         return None
 
 def initialize_manager_llm(mem_manager, char_manager):
-    """
-    Pass in the shared instances for MemoryManager, CharacterManager, and STTManager.
-    
-    Parameters:
-    - mem_manager: The MemoryManager instance from app.py.
-    - char_manager: The CharacterManager instance from app.py.
-    """
     global memory_manager, character_manager
     memory_manager = mem_manager
     character_manager = char_manager

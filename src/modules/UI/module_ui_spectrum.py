@@ -36,6 +36,8 @@ class SpectrumSystem:
         self.wave_decay = 0.85  
         self.max_amplitude = 100  
 
+        self.sinewave_history = deque(maxlen=8)  
+
         self.spectrogram_history = deque(maxlen=100)  
         self.spectrogram_height = int(self.spectrum_height * 0.9)  
         self.spectrogram_freq_resolution = 4  
@@ -302,6 +304,92 @@ class SpectrumSystem:
                                    (x1_shifted, y1_upper), 
                                    (x1_shifted, y1_lower), 1)
 
+    def draw_sinewave(self, surface):
+        """Draw oscilloscope-style waveform with grid and phosphor glow"""
+        padding = 40
+
+        osc_height = int(self.spectrum_height * 0.6)  
+
+        osc_top = (self.spectrum_height - osc_height) // 2  
+
+        center_y = osc_top + osc_height // 2
+
+        grid_base_color = (30, 80, 80)
+
+        num_h_divisions = 8
+        for i in range(num_h_divisions + 1):
+            y = osc_top + int(i * osc_height / num_h_divisions)
+
+            distance_from_center = abs(i - num_h_divisions / 2) / (num_h_divisions / 2)
+
+            alpha = int(60 * (1 - distance_from_center ** 2))
+
+            if alpha > 5:
+                pygame.draw.line(surface, (*grid_base_color, alpha), 
+                               (padding, y), (self.width - padding, y), 1)
+
+        num_v_divisions = 20
+        grid_spacing = (self.width - 2 * padding) // num_v_divisions
+        for i in range(num_v_divisions + 1):
+            x = padding + i * grid_spacing
+
+            num_segments = 20
+            for seg in range(num_segments):
+                y1 = osc_top + int(seg * osc_height / num_segments)
+                y2 = osc_top + int((seg + 1) * osc_height / num_segments)
+
+                seg_center = (y1 + y2) / 2
+                distance_from_center = abs(seg_center - center_y) / (osc_height / 2)
+
+                alpha = int(60 * (1 - distance_from_center ** 2))
+
+                if alpha > 5:
+                    pygame.draw.line(surface, (*grid_base_color, alpha), 
+                                   (x, y1), (x, y2), 1)
+
+        with self.audio_lock:
+            audio_data = self.audio_buffer.copy()
+
+        num_points = self.width - 2 * padding
+        step = max(1, len(audio_data) // num_points)
+
+        wave_points = []
+        for i in range(num_points):
+            x = padding + i
+
+            sample_idx = min(i * step, len(audio_data) - 1)
+            amplitude = audio_data[sample_idx]
+
+            y = center_y + int(amplitude * osc_height * 0.45)
+
+            y = max(osc_top, min(osc_top + osc_height, y))
+
+            wave_points.append((x, y))
+
+        if len(wave_points) > 1:
+            self.sinewave_history.appendleft(wave_points.copy())
+
+        oscilloscope_color = (0, 255, 200)
+
+        for depth_idx, old_wave in enumerate(self.sinewave_history):
+
+            alpha = int(255 * (1 - depth_idx / len(self.sinewave_history)) * 0.4)
+
+            if len(old_wave) > 1 and alpha > 10:
+                pygame.draw.lines(surface, (*oscilloscope_color, alpha), False, old_wave, 1)
+
+        if len(wave_points) > 1:
+
+            pygame.draw.lines(surface, (*oscilloscope_color, 60), False, wave_points, 3)
+
+            pygame.draw.lines(surface, (*oscilloscope_color, 150), False, wave_points, 2)
+
+            pygame.draw.lines(surface, oscilloscope_color, False, wave_points, 1)
+
+        pygame.draw.line(surface, (*oscilloscope_color, 50), 
+                        (padding, center_y), 
+                        (self.width - padding, center_y), 1)
+
     def draw_circular(self, surface):
         center_x = self.width // 2
         center_y = self.spectrum_height // 2
@@ -474,6 +562,8 @@ class SpectrumSystem:
             self.draw_bars(self.spectrum_surface)
         elif self.style == 'wave':
             self.draw_wave(self.spectrum_surface)
+        elif self.style == 'sinewave':
+            self.draw_sinewave(self.spectrum_surface)
         elif self.style == 'circular':
             self.draw_circular(self.spectrum_surface)
         elif self.style == 'spectrogram':

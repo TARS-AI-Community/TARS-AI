@@ -30,6 +30,8 @@ ui_manager = None
 character_manager = None
 memory_manager = None
 stt_manager = None
+shutdown_event = None
+battery_module = None
 
 CONFIG = load_config()
 
@@ -111,19 +113,22 @@ def utterance_callback(message):
             #queue_message(f"TARS: Going Idle...")
             return
         
+        # Strip any special characters/control characters from user text
+        user_text = message_dict['text'].strip()
+        
         #Print or stream the response
-        #queue_message(f"USER: {message_dict['text']}")
-        ui_manager.update_data("USER", message_dict['text'], "USER")
-        queue_message(f"USER: {message_dict['text']}", stream=False) 
+        #queue_message(f"USER: {user_text}")
+        ui_manager.update_data("USER", user_text, "USER")
+        queue_message(f"USER: {user_text}", stream=False) 
 
         # Check for shutdown command
-        if "shutdown pc" in message_dict['text'].lower():
+        if "shutdown pc" in user_text.lower():
             queue_message(f"SHUTDOWN: Shutting down the PC...")
             os.system('shutdown /s /t 0')
             return  # Exit function after issuing shutdown command
         
         # Process the message using process_completion
-        reply = process_completion(message_dict['text'])  # Process the message
+        reply = process_completion(user_text)  # Process the message
 
         # Extract the <think> block if present
         try:
@@ -163,17 +168,22 @@ def post_utterance_callback():
     stt_manager._transcribe_utterance()
 
 # === Initialization ===
-def initialize_managers(mem_manager, char_manager, stt_mgr, ui_mgr):
+def initialize_managers(mem_manager, char_manager, stt_mgr, ui_mgr, shutdown_evt=None, battery_mod=None):
     """
-    Pass in the shared instances for MemoryManager, CharacterManager, and STTManager.
+    Pass in the shared instances for MemoryManager, CharacterManager, STTManager, and other components.
     
     Parameters:
     - mem_manager: The MemoryManager instance from app.py.
     - char_manager: The CharacterManager instance from app.py.
     - stt_mgr: The STTManager instance from app.py.
+    - ui_mgr: The UIManager instance from app.py.
+    - shutdown_evt: The shutdown event from app.py.
+    - battery_mod: The BatteryModule instance from app.py.
     """
-    global memory_manager, character_manager, stt_manager, ui_manager
+    global memory_manager, character_manager, stt_manager, ui_manager, shutdown_event, battery_module
     memory_manager = mem_manager
     character_manager = char_manager
     stt_manager = stt_mgr
     ui_manager = ui_mgr
+    shutdown_event = shutdown_evt
+    battery_module = battery_mod

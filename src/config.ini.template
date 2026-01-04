@@ -13,7 +13,7 @@ wake_word = hey tars
 # Wake word for activating the system
 wake_word_processor = atomik
 # Options: picovoice, fastrtc, atomik
-sensitivity = 5
+sensitivity = 7
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for Atomik wake word detection. 
 stt_processor = openai
 #vosk, faster-whisper, silero, fastrtc, openai (for other languages than english) or external
@@ -41,7 +41,7 @@ user_name = Joe
 user_details = Species: Human. Gender: Male.
 # Additional user details for context
 responses = ["Hi", "Yes?", "hey!", "What's up?", "Can I help you?", "What do you need?", "I'm here.", "You rang?", "Yea?", "Hey There.", "You again?"]
-thinking_responses = ["Hummm...", "Let me think...", "One moment...", "Just a sec..."]
+thinking_responses = ["Hummm...", "ahhh", "ermmm...", "Mmmmmm...", "Let's see..."]
 # what tars replies after detecting the wakeword (you can change these and add or remove new ones)
 
 [LLM] # Large Language Model configuration (OpenAI, Tabby, Ooba, or LOCAL)
@@ -73,7 +73,6 @@ instructionprompt = You are {char}. Compose {char}s next message to {user}, usin
 # Instructions guiding the LLM's response style
 
 
-
 [VISION] # Vision-related configuration (e.g., image recognition)
 enabled = True
 # Set to false to prevent loading of blip
@@ -89,7 +88,7 @@ emotion_model = SamLowe/roberta-base-go_emotions
 # Hugging Face model for emotion analysis
 
 [TTS] # Text-to-Speech configuration 
-ttsoption = elevenlabs
+ttsoption = piper
 # Onboard Options: espeak, piper, silero
 # External SelfHosted: alltalk
 # Externally Hosted: azure, elevenlabs, openai
@@ -102,7 +101,7 @@ toggle_charvoice = True
 # Use character-specific voice settings
 tts_voice = en-US-Steffan:DragonHDLatestNeural
 # Name of the cloned voice to use (e.g., TARS2 or en-US-Steffan:DragonHDLatestNeural for azure)
-voice_id = JBFqnCBsd6RMkjVDRZzb
+voice_id = RiS3eO72menIyDeCvrnc
 # Voice ID of ElevenLabs (e.g.,JBFqnCBsd6RMkjVDRZzb)
 model_id = eleven_multilingual_v2
 # Model ID of ElevenLabs (e.g.,eleven_multilingual_v2)
@@ -149,7 +148,7 @@ negative_prompt = deformed, black and white, disfigured, low contrast, extra lim
 enabled = True
 
 [UI] # Graphical interface 
-UI_enabled = False
+UI_enabled = True
 #Enable or Disable the visuals
 screen_width = 1024
 # Adjust based on your screen resolution
@@ -191,9 +190,8 @@ channel_id = 811470553139249186
 
 [SERVO]
 # Enable or disable movement via voice control
+# Use the app-servotester to adjust the offsets after you have built the robot. You should not have to modify any value here.
 voicemovement = True
-# Arms settings
-armsPresent = False
 # servo 0 (Main Servo - Raise and Lowers the legs)
 leftUpHeight = 220
 leftDownHeight = 460
@@ -215,27 +213,33 @@ perfectRightLegOffset = 0
 # LEFT ARM
 leftMainMin = 80
 leftMainMax = 580
+leftMainOffset = 0
 leftForarmMin = 200
 leftForarmMax = 380
+leftForearmOffset = 0
 leftHandMin = 200
 leftHandMax = 280
+leftHandOffset = 0
 # RIGHT ARM
 rightMainMin = 580
 rightMainMax = 80
+rightMainOffset = 0
 rightForarmMin = 380
 rightForarmMax = 200
+rightForearmOffset = 0
 rightHandMin = 380
 rightHandMax = 280
+rightHandOffset = 0
 
 
 [BATTERY]
 # This section is only required if you are using an INA260 Current + Voltage + Power Sensor
 # These values must match the battery you are using.
-battery_capacity_mAh = 3200
+battery_capacity_mAh = 3000
 # Total battery capacity in milliampere-hours (mAh). Set this to the battery's rated capacity (e.g., 5600 mAh for a 5.6Ah battery).
 battery_initial_voltage = 12
 # Full charge voltage (in volts). Set this to the battery's full charge voltage (e.g., 12.6V for a fully charged 12V battery).
-battery_cutoff_voltage = 10.5
+battery_cutoff_voltage = 10
 # Minimum safe voltage before discharge should stop (in volts). Set this based on the battery's safe discharge voltage (e.g., 10.5V for a 12V battery).
-auto_shutdown = False
-# not implemented yet
+auto_shutdown = True
+# Protects the Raspberry pi and battery, when it reaches 0% the raspberry pi will shutdown by itself.

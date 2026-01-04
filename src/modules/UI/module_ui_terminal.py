@@ -75,8 +75,12 @@ class TerminalSystem:
         self.cache_dirty = True
 
         self.dragging = False
-        self.drag_start_y = 0
-        self.drag_start_scroll = 0
+        
+        # Touch-friendly scrolling with pixel-based accumulation
+        self.last_drag_y = 0
+        self.drag_positions = []
+        self.max_drag_buffer = 3
+        self.accumulated_scroll = 0.0  # Track fractional scrolling for smooth movement
 
         self.log_dir = Path.home() / ".local" / "share" / "tars_ai"
         self.log_file = self.log_dir / "terminal_log.json"
@@ -242,30 +246,59 @@ class TerminalSystem:
         
         if terminal_y_start <= pos[1] <= terminal_y_end:
             self.dragging = True
-            self.drag_start_y = pos[1]
-            self.drag_start_scroll = self.scroll_offset
+            self.last_drag_y = pos[1]
+            self.drag_positions = [pos[1]]
+            self.accumulated_scroll = 0.0  # Reset accumulator
 
     def handle_mouse_up(self, pos: Tuple[int, int]):
         self.dragging = False
+        self.drag_positions = []
+        self.accumulated_scroll = 0.0  # Clear accumulator
 
     def handle_mouse_motion(self, pos: Tuple[int, int]):
         if self.dragging:
-            delta_y = self.drag_start_y - pos[1]
-            lines_to_scroll = int(delta_y / self.line_height)
+            current_y = pos[1]
             
-            self.scroll_offset = self.drag_start_scroll + lines_to_scroll
+            # Add current position to buffer for smoothing
+            self.drag_positions.append(current_y)
+            if len(self.drag_positions) > self.max_drag_buffer:
+                self.drag_positions.pop(0)
             
-            self._update_wrapped_cache()
-            total_lines = sum(len(wrapped_lines) for _, _, _, wrapped_lines in self.wrapped_cache)
-            scroll_padding = int(self.max_visible_lines * 0.75)
-            max_scroll = max(0, total_lines - self.max_visible_lines) + scroll_padding
+            # Use smoothed position (average of recent positions)
+            smoothed_y = sum(self.drag_positions) / len(self.drag_positions)
             
-            self.scroll_offset = max(-scroll_padding, min(self.scroll_offset, max_scroll))
+            # Calculate pixel movement from last smoothed position
+            pixel_delta = self.last_drag_y - smoothed_y
             
-            if self.scroll_offset > 0:
-                self.auto_scroll = False
-            elif self.scroll_offset == 0:
-                self.auto_scroll = True
+            # Update last position
+            self.last_drag_y = smoothed_y
+            
+            # Accumulate pixel movements (fractional scrolling)
+            self.accumulated_scroll += pixel_delta / self.line_height
+            
+            # Convert accumulated pixels to line scrolling
+            lines_to_scroll = int(self.accumulated_scroll)
+            
+            if lines_to_scroll != 0:
+                # Apply the scroll
+                self.scroll_offset += lines_to_scroll
+                
+                # Subtract the scrolled amount from accumulator (keep remainder)
+                self.accumulated_scroll -= lines_to_scroll
+                
+                # Clamp scroll offset to valid range
+                self._update_wrapped_cache()
+                total_lines = sum(len(wrapped_lines) for _, _, _, wrapped_lines in self.wrapped_cache)
+                scroll_padding = int(self.max_visible_lines * 0.75)
+                max_scroll = max(0, total_lines - self.max_visible_lines) + scroll_padding
+                
+                self.scroll_offset = max(-scroll_padding, min(self.scroll_offset, max_scroll))
+                
+                # Update auto-scroll state
+                if self.scroll_offset > 0:
+                    self.auto_scroll = False
+                elif self.scroll_offset == 0:
+                    self.auto_scroll = True
 
     def _wrap_text(self, text: str, max_width: int) -> List[str]:
         words = text.split(' ')

@@ -2,6 +2,10 @@
 module_prompt.py
 
 Utility module for building prompts for LLM backends.
+# ----------------------------------------------
+# atomikspace (discord)
+# olivierdion1@hotmail.com
+# ----------------------------------------------
 """
 
 from datetime import datetime
@@ -9,19 +13,6 @@ import os
 from modules.module_messageQue import queue_message
 
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
-    """
-    Build a dynamically optimized prompt for the LLM backend.
-
-    Parameters:
-    - user_prompt (str): The user's input prompt.
-    - character_manager: The CharacterManager instance.
-    - memory_manager: The MemoryManager instance.
-    - config (dict): Configuration dictionary.
-    - debug (bool): If True, print debug information.
-
-    Returns:
-    - str: The formatted prompt for the LLM backend.
-    """
     now = datetime.now()
     dtg = f"Current Date: {now.strftime('%m/%d/%Y')}\nCurrent Time: {now.strftime('%H:%M:%S')}\n"
     user_name = config['CHAR']['user_name']
@@ -103,14 +94,20 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
         "   - Parameters: {\"trait\": \"trait_name\", \"value\": number (0-100)}\n"
         "   - Example: {\"function\": \"adjust_persona\", \"parameters\": {\"trait\": \"humor\", \"value\": 75}}\n\n"
         "7. open_url\n"
-        "   - Use when user asks to access or show something from the web\n"
-        "   - Parameters: {\"url\": \"string\", \"description\": \"string\"}\n\n"
+        "   - Use when user asks to open/visit/show a specific website or URL:\n"
+        "     * \"open google\", \"go to reddit\", \"show me github\"\n"
+        "     * \"open youtube.com\", \"visit wikipedia\"\n"
+        "     * \"can you show me the news website\"\n"
+        "   - Parameters: {\"url\": \"full URL with https://\", \"description\": \"optional description\"}\n"
+        "   - Always include https:// prefix for URLs\n"
+        "   - Opens in browser (UI will close during browsing)\n"
+        "   - Example: {\"function\": \"open_url\", \"parameters\": {\"url\": \"https://reddit.com\", \"description\": \"Reddit\"}}\n\n"
         "8. play_youtube\n"
-        "   - Use when user wants to watch/play/show a YouTube video:\n"
+        "   - Use when user wants to watch/play/show a video (searches YouTube):\n"
         "     * \"show me a cat video\", \"play funny dog videos\"\n"
         "     * \"watch a tutorial on...\", \"find a video about...\"\n"
         "   - Parameters: {\"query\": \"search query\"}\n"
-        "   - Video displays in pygame window (like camera feed)\n"
+        "   - Opens video in browser (UI will close during playback)\n"
         "   - Example: {\"function\": \"play_youtube\", \"parameters\": {\"query\": \"funny cats\"}}\n\n"
         "Rules:\n"
         "- Always follow this JSON schema exactly, with no extra text or markdown\n"
@@ -154,8 +151,10 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
         "Response: {\"question\": \"Walk forward and turn left\", \"reply\": \"Moving now.\", \"function_calls\": [{\"function\": \"execute_movement\", \"parameters\": {\"movements\": [\"forward\", \"left\"]}}]}\n\n"
         "User: 'Set your humor to 75%'\n"
         "Response: {\"question\": \"Set your humor to 75%\", \"reply\": \"Humor setting adjusted to 75%. I'll try to keep things interesting.\", \"function_calls\": [{\"function\": \"adjust_persona\", \"parameters\": {\"trait\": \"humor\", \"value\": 75}}]}\n\n"
+        "User: 'Open Reddit for me'\n"
+        "Response: {\"question\": \"Open Reddit for me\", \"reply\": \"Opening Reddit in browser...\", \"function_calls\": [{\"function\": \"open_url\", \"parameters\": {\"url\": \"https://reddit.com\", \"description\": \"Reddit\"}}]}\n\n"
         "User: 'Show me a cat video'\n"
-        "Response: {\"question\": \"Show me a cat video\", \"reply\": \"Searching for cat videos...\", \"function_calls\": [{\"function\": \"play_youtube\", \"parameters\": {\"query\": \"funny cats\"}}]}\n\n"
+        "Response: {\"question\": \"Show me a cat video\", \"reply\": \"Opening browser to play cat videos...\", \"function_calls\": [{\"function\": \"play_youtube\", \"parameters\": {\"query\": \"funny cats\"}}]}\n\n"
     )
 
     base_prompt += (
@@ -184,15 +183,6 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
     return clean_text(final_prompt)
 
 def clean_text(text):
-    """
-    Clean and format text for inclusion in the prompt.
-
-    Parameters:
-    - text (str): The text to clean.
-
-    Returns:
-    - str: Cleaned text.
-    """
     return (
         text.replace("\\\\", "\\")
             .replace("\\n", "\n")
@@ -203,19 +193,6 @@ def clean_text(text):
     )
 
 def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config, character_manager):
-    """
-    Append short-term memory and example dialog to the prompt based on token availability.
-
-    Parameters:
-    - base_prompt (str): The base portion of the prompt.
-    - user_prompt (str): The user's input prompt.
-    - memory_manager: The MemoryManager instance.
-    - config (dict): Configuration dictionary.
-    - character_manager: The CharacterManager instance.
-
-    Returns:
-    - str: The full prompt with memory and examples included.
-    """
     past_memory = clean_text(memory_manager.get_longterm_memory(user_prompt))
     short_term_memory = ""
     example_dialog = ""
@@ -251,17 +228,6 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     )
 
 def inject_dynamic_values(template, user_name, char_name):
-    """
-    Replace placeholders in a template with dynamic values.
-
-    Parameters:
-    - template (str): Template string containing placeholders.
-    - user_name (str): User's name.
-    - char_name (str): Character's name.
-
-    Returns:
-    - str: Template with placeholders replaced.
-    """
     return (
         template
         .replace("{user}", user_name)

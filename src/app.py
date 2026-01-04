@@ -109,7 +109,7 @@ if __name__ == "__main__":
         start_discord_in_thread()
 
     # Pass managers to main module
-    initialize_managers(memory_manager, char_manager, stt_manager, ui_manager)
+    initialize_managers(memory_manager, char_manager, stt_manager, ui_manager, shutdown_event, battery)
     initialize_manager_llm(memory_manager, char_manager)
 
     # Start necessary threads

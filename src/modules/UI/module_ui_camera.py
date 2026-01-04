@@ -86,6 +86,7 @@ class CameraModule:
             return
         try:
             self.running = True
+            self.first_frame_captured = False
             self.picam2.start()
             self.thread = threading.Thread(target=self.capture_frames, daemon=True)
             self.thread.start()
@@ -97,10 +98,12 @@ class CameraModule:
     def restart_camera(self):
         print("Restarting camera...")
         self.stop()
-        time.sleep(2)
+        time.sleep(1)
         try:
-            self.__init__(640, 480, self.use_camera_module, self.apply_corrections)
-            self.start_camera()
+            if self.picam2 is not None:
+                self.first_frame_captured = False
+                self.start_camera()
+                print("Camera restarted successfully")
         except Exception as e:
             print(f"Camera restart failed: {e}")
             self.running = False
