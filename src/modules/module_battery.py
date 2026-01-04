@@ -9,14 +9,16 @@ CONFIG = load_config()
 
 class BatteryModule:
     def __init__(self, 
-                 battery_capacity_mAh=CONFIG['BATTERY']['battery_capacity_mAh'], #5600
-                 battery_initial_voltage=CONFIG['BATTERY']['battery_initial_voltage'], #12.6
-                 battery_cutoff_voltage=CONFIG['BATTERY']['battery_cutoff_voltage'], #10.5
+                 battery_capacity_mAh=CONFIG['BATTERY']['battery_capacity_mAh'], #3000
+                 battery_initial_voltage=CONFIG['BATTERY']['battery_initial_voltage'], #12
+                 battery_cutoff_voltage=CONFIG['BATTERY']['battery_cutoff_voltage'], #10
+                 auto_shutdown=CONFIG['BATTERY']['auto_shutdown'],
                  smoothing_window=10):
         """Initialize the Battery Module with battery parameters."""
         self.battery_capacity_mAh = battery_capacity_mAh
         self.battery_initial_voltage = battery_initial_voltage
         self.battery_cutoff_voltage = battery_cutoff_voltage
+        self.auto_shutdown = auto_shutdown
         self.smoothing_window = smoothing_window
         self.current = 0.0  # in mA
         self.voltage = 0.0  # in V
@@ -27,6 +29,10 @@ class BatteryModule:
         self.is_running = False
         self.thread = None
         self.last_printed_percentage = None
+        
+        # Auto-shutdown tracking
+        self.zero_percent_start_time = None
+        self.shutdown_delay_seconds = 60  # 1 minute
         
         # Initialize sensor
         try:
@@ -71,11 +77,45 @@ class BatteryModule:
                     print(f"Battery percentage: {self.battery_percentage}%")
                     self.last_printed_percentage = self.battery_percentage
                 
+                # Auto-shutdown logic (only if sensor is present)
+                if self.auto_shutdown and self.sensor_initialized:
+                    if self.normalized_percentage <= 0:
+                        # Battery is at 0%
+                        if self.zero_percent_start_time is None:
+                            # First time hitting 0%, start the timer
+                            self.zero_percent_start_time = time.time()
+                            print("WARNING: Battery at 0%. System will shutdown in 60 seconds if battery remains critical.")
+                        else:
+                            # Check if we've been at 0% for the required duration
+                            elapsed = time.time() - self.zero_percent_start_time
+                            if elapsed >= self.shutdown_delay_seconds:
+                                print("CRITICAL: Battery at 0% for 60 seconds. Initiating system shutdown...")
+                                self._initiate_shutdown()
+                                break  # Exit the loop
+                    else:
+                        # Battery is above 0%, reset the timer
+                        if self.zero_percent_start_time is not None:
+                            print(f"Battery recovered to {self.normalized_percentage}%. Shutdown cancelled.")
+                            self.zero_percent_start_time = None
+                
                 time.sleep(3)
 
             except Exception as e:
                 print(f"Battery monitoring error: {e}")
                 time.sleep(5)
+    
+    def _initiate_shutdown(self):
+        """Initiate system shutdown."""
+        import subprocess
+        import os
+        try:
+            print("Executing: sudo shutdown now")
+            subprocess.Popen(['sudo', 'shutdown', 'now'])
+        except Exception as e:
+            print(f"Failed to shutdown system: {e}")
+        # Give the shutdown command a moment to execute
+        time.sleep(2)
+        os._exit(0)
     
     def start(self):
         """Start the battery monitoring thread."""
@@ -136,7 +176,8 @@ class BatteryModule:
             'percentage': self.battery_percentage,  # %
             'normalized_percentage': self.normalized_percentage,  # Smoothed integer %
             'capacity': self.battery_capacity_mAh,  # mAh
-            'is_charging': self.is_charging()  # Boolean indicating charge status
+            'is_charging': self.is_charging(),  # Boolean indicating charge status
+            'sensor_initialized': self.sensor_initialized  # Boolean indicating if INA260 is present
         }
     
     def get_battery_percentage(self):

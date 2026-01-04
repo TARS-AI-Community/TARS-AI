@@ -1,5 +1,8 @@
 import pygame
 import time
+import os
+import json
+from pathlib import Path
 from typing import List, Tuple, Callable, Optional
 
 class TerminalSystem:
@@ -8,7 +11,8 @@ class TerminalSystem:
                  on_background_change: Optional[Callable] = None,
                  on_shutdown: Optional[Callable] = None,
                  on_spectrum_change: Optional[Callable] = None,
-                 on_camera_toggle: Optional[Callable] = None):
+                 on_camera_toggle: Optional[Callable] = None,
+                 on_exit: Optional[Callable] = None):
         self.width = width
         self.height = height
         self.bg_color = bg_color
@@ -19,6 +23,7 @@ class TerminalSystem:
         self.on_shutdown = on_shutdown
         self.on_spectrum_change = on_spectrum_change
         self.on_camera_toggle = on_camera_toggle
+        self.on_exit = on_exit
 
         self.primary_color = (0, 255, 255)  
         self.secondary_color = (0, 180, 200)  
@@ -32,7 +37,7 @@ class TerminalSystem:
         self.warning_color = (255, 100, 0)  
         self.status_active = (0, 255, 100)  
         self.status_warning = (255, 180, 0)  
-        self.status_error = (255, 50, 50)  
+        self.status_error = (255, 50, 50)
 
         self.toolbar_height = int(height * 0.06)
         self.bottom_toolbar_height = int(height * 0.06)
@@ -69,6 +74,17 @@ class TerminalSystem:
         self.wrapped_cache = []
         self.cache_dirty = True
 
+        self.dragging = False
+        self.drag_start_y = 0
+        self.drag_start_scroll = 0
+
+        self.log_dir = Path.home() / ".local" / "share" / "tars_ai"
+        self.log_file = self.log_dir / "terminal_log.json"
+        self.max_log_messages = 100
+
+        self._ensure_log_dir()
+        self._load_messages()
+
         self.top_buttons = [
             {"label": "CLEAR", "code": "CLR-01", "rect": None, "active": False, "color": None, "position": "left"},
             {"label": "BG", "code": "BG-SW", "rect": None, "active": False, "color": None, "position": "left"},
@@ -89,12 +105,47 @@ class TerminalSystem:
         self.scan_line = 0
         self.status_blink = 0
 
-        self.shutdown_confirm = False
-        self.shutdown_time = 0
+        self.show_power_menu = False
+        self.power_menu_buttons = []
         
-        self.camera_active = False  # Track if camera view is active
+        self.camera_active = False
 
         self.overlay_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+
+    def _ensure_log_dir(self):
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+
+    def _load_messages(self):
+        if self.log_file.exists():
+            try:
+                with open(self.log_file, 'r') as f:
+                    data = json.load(f)
+                    for msg in data:
+                        self.messages.append((msg['key'], msg['value'], msg['type'], msg['timestamp']))
+                    self.cache_dirty = True
+            except Exception as e:
+                print(f"Failed to load messages: {e}")
+
+    def _save_messages(self):
+        try:
+            messages_to_save = [
+                (key, value, msg_type, timestamp)
+                for key, value, msg_type, timestamp in self.messages[-self.max_log_messages:]
+                if key.upper() not in ["SYSTEM", "SYS"]
+            ]
+            data = [
+                {
+                    'key': key,
+                    'value': value,
+                    'type': msg_type,
+                    'timestamp': timestamp
+                }
+                for key, value, msg_type, timestamp in messages_to_save
+            ]
+            with open(self.log_file, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"Failed to save messages: {e}")
 
     def _init_buttons(self):
         button_width = 90
@@ -151,47 +202,234 @@ class TerminalSystem:
             self.messages = self.messages[-self.max_messages:]
             self.cache_dirty = True
 
-        if self.auto_scroll:
-            self.scroll_offset = 0
+        self.scroll_offset = 0
+        self.auto_scroll = True
+
+        self._save_messages()
 
     def clear_messages(self):
         self.messages.clear()
         self.wrapped_cache.clear()
         self.scroll_offset = 0
         self.cache_dirty = True
+        self._save_messages()  # Saves empty list, clearing the history log
 
     def scroll_up(self, lines=3):
         self._update_wrapped_cache()
         total_lines = sum(len(wrapped_lines) for _, _, _, wrapped_lines in self.wrapped_cache)
-        max_scroll = max(0, total_lines - self.max_visible_lines)
+        scroll_padding = int(self.max_visible_lines * 0.75)
+        max_scroll = max(0, total_lines - self.max_visible_lines) + scroll_padding
 
         self.scroll_offset = min(self.scroll_offset + lines, max_scroll)
         if self.scroll_offset > 0:
             self.auto_scroll = False
 
     def scroll_down(self, lines=3):
-        self.scroll_offset = max(0, self.scroll_offset - lines)
+        scroll_padding = int(self.max_visible_lines * 0.75)
+        self.scroll_offset = max(-scroll_padding, self.scroll_offset - lines)
         if self.scroll_offset == 0:
             self.auto_scroll = True
 
-    def change_background(self):
-        if self.on_background_change:
-            self.on_background_change()
+    def handle_scroll_wheel(self, wheel_y: int):
+        if wheel_y > 0:
+            self.scroll_down(3)
+        elif wheel_y < 0:
+            self.scroll_up(3)
 
-    def change_spectrum(self):
-        if self.on_spectrum_change:
-            self.on_spectrum_change()
+    def handle_mouse_down(self, pos: Tuple[int, int]):
+        terminal_y_start = self.toolbar_height
+        terminal_y_end = self.toolbar_height + self.terminal_height
+        
+        if terminal_y_start <= pos[1] <= terminal_y_end:
+            self.dragging = True
+            self.drag_start_y = pos[1]
+            self.drag_start_scroll = self.scroll_offset
 
-    def toggle_camera(self):
-        if self.on_camera_toggle:
-            self.on_camera_toggle()
-        else:
-            self.add_message("CAM", "Camera toggle - callback not set", "WARNING")
-    
+    def handle_mouse_up(self, pos: Tuple[int, int]):
+        self.dragging = False
+
+    def handle_mouse_motion(self, pos: Tuple[int, int]):
+        if self.dragging:
+            delta_y = self.drag_start_y - pos[1]
+            lines_to_scroll = int(delta_y / self.line_height)
+            
+            self.scroll_offset = self.drag_start_scroll + lines_to_scroll
+            
+            self._update_wrapped_cache()
+            total_lines = sum(len(wrapped_lines) for _, _, _, wrapped_lines in self.wrapped_cache)
+            scroll_padding = int(self.max_visible_lines * 0.75)
+            max_scroll = max(0, total_lines - self.max_visible_lines) + scroll_padding
+            
+            self.scroll_offset = max(-scroll_padding, min(self.scroll_offset, max_scroll))
+            
+            if self.scroll_offset > 0:
+                self.auto_scroll = False
+            elif self.scroll_offset == 0:
+                self.auto_scroll = True
+
+    def _wrap_text(self, text: str, max_width: int) -> List[str]:
+        words = text.split(' ')
+        lines = []
+        current_line = []
+
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            if self.font.size(test_line)[0] <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        return lines if lines else ['']
+
     def set_camera_active(self, active: bool):
-        """Set camera active state - used to hide terminal messages and disable buttons"""
         self.camera_active = active
-    
+
+    def _init_power_menu(self):
+        """Initialize power menu button positions"""
+        modal_center_x = self.width // 2
+        modal_center_y = self.height // 2
+        button_width = 160
+        button_height = 50
+        button_spacing = 20
+        
+        self.power_menu_buttons = [
+            {
+                "label": "EXIT PROGRAM",
+                "action": "exit",
+                "rect": pygame.Rect(
+                    modal_center_x - button_width - button_spacing // 2,
+                    modal_center_y + 20,
+                    button_width,
+                    button_height
+                )
+            },
+            {
+                "label": "SHUTDOWN",
+                "action": "shutdown",
+                "rect": pygame.Rect(
+                    modal_center_x + button_spacing // 2,
+                    modal_center_y + 20,
+                    button_width,
+                    button_height
+                )
+            }
+        ]
+
+    def handle_click(self, pos: Tuple[int, int]):
+        # Check if power menu is shown
+        if self.show_power_menu:
+            for button in self.power_menu_buttons:
+                if button["rect"].collidepoint(pos):
+                    if button["action"] == "exit":
+                        if self.on_exit:
+                            self.on_exit()
+                    elif button["action"] == "shutdown":
+                        if self.on_shutdown:
+                            self.on_shutdown()
+                    self.show_power_menu = False
+                    return
+            # Click outside modal closes it
+            modal_rect = pygame.Rect(self.width // 2 - 200, self.height // 2 - 100, 400, 200)
+            if not modal_rect.collidepoint(pos):
+                self.show_power_menu = False
+            return
+        
+        for button in self.top_buttons:
+            if button["rect"] and button["rect"].collidepoint(pos):
+                if button["label"] == "CLEAR":
+                    self.clear_messages()
+                elif button["label"] == "BG":
+                    if self.on_background_change:
+                        self.on_background_change()
+                elif button["label"] == "WAVE":
+                    if self.on_spectrum_change:
+                        self.on_spectrum_change()
+                elif button["label"] == "PWR-DN":
+                    self.show_power_menu = True
+                    self._init_power_menu()
+
+        for button in self.bottom_buttons:
+            if button["rect"] and button["rect"].collidepoint(pos):
+                if button["label"] == "CAM":
+                    if self.on_camera_toggle:
+                        self.on_camera_toggle()
+
+    def think(self):
+        self.thinking = True
+        self.thinking_time = time.time()
+
+    def stop_thinking(self):
+        self.thinking = False
+
+    def add_memory(self):
+        self.memory_pulse = 1.0
+        self.action_flash = 1.0
+
+    def update(self):
+        current_time = time.time()
+
+        if self.thinking:
+            elapsed = current_time - self.thinking_time
+            if elapsed > 5.0:
+                self.thinking = False
+
+        if self.memory_pulse > 0:
+            self.memory_pulse -= 0.02
+            if self.memory_pulse < 0:
+                self.memory_pulse = 0
+
+        if self.action_flash > 0:
+            self.action_flash -= 0.05
+            if self.action_flash < 0:
+                self.action_flash = 0
+            self.scan_line = (self.scan_line + 4) % self.terminal_height
+
+        self.status_blink = (self.status_blink + 0.1) % (2 * 3.14159)
+
+    def _draw_tech_button(self, surface, rect, label, code, active=False, color_type=None, disabled=False):
+        if disabled:
+            # Disabled button appearance
+            bg_color = (20, 20, 20, 150)
+            border_color = (60, 60, 60, 180)
+        elif color_type == "warning":
+            bg_color = (50, 30, 20, 200)
+            border_color = (180, 100, 40, 220)
+        elif active:
+            bg_color = (20, 60, 80, 220)
+            border_color = (*self.primary_color, 255)
+        else:
+            bg_color = (*self.bg_panel, 200)
+            border_color = (*self.border_color, 200)
+
+        pygame.draw.rect(surface, bg_color, rect)
+
+        pygame.draw.rect(surface, border_color, rect, 2)
+
+        inner_rect = rect.inflate(-4, -4)
+        pygame.draw.rect(surface, (*self.accent_color, 150), inner_rect, 1)
+
+        bracket_size = 6
+        bracket_color = border_color
+
+        pygame.draw.line(surface, bracket_color, rect.topleft, (rect.left + bracket_size, rect.top), 2)
+        pygame.draw.line(surface, bracket_color, rect.topleft, (rect.left, rect.top + bracket_size), 2)
+
+        pygame.draw.line(surface, bracket_color, rect.topright, (rect.right - bracket_size, rect.top), 2)
+        pygame.draw.line(surface, bracket_color, (rect.right - 1, rect.top), (rect.right - 1, rect.top + bracket_size), 2)
+
+        if disabled:
+            text_color = (80, 80, 80)
+        else:
+            text_color = self.primary_color if active or color_type == "warning" else self.text_color
+        text_surface = self.toolbar_font.render(label, True, text_color)
+        text_rect = text_surface.get_rect(center=rect.center)
+        surface.blit(text_surface, text_rect)
+
     def _draw_battery_indicator(self, surface, x, y, width, height):
         """Draw battery indicator with percentage"""
         if not self.battery_module:
@@ -199,6 +437,11 @@ class TerminalSystem:
         
         try:
             battery_status = self.battery_module.get_battery_status()
+            
+            # Don't draw if sensor is not initialized
+            if not battery_status.get('sensor_initialized', False):
+                return
+            
             percentage = battery_status['normalized_percentage']
             is_charging = battery_status['is_charging']
             
@@ -264,163 +507,78 @@ class TerminalSystem:
         except Exception as e:
             pass  # Silently fail if battery module not available
 
-    def shutdown_system(self):
-        if not self.shutdown_confirm:
-            self.shutdown_confirm = True
-            self.shutdown_time = time.time()
-            self.add_message("PWR", "CONFIRM SHUTDOWN - Click again", "WARNING")
-        else:
-            if time.time() - self.shutdown_time < 5.0:
-                self.add_message("PWR", "Initiating system halt sequence...", "WARNING")
-                if self.on_shutdown:
-                    self.on_shutdown()
-                try:
-                    import subprocess
-                    subprocess.run(["sudo", "halt"], check=False)
-                except Exception as e:
-                    self.add_message("ERR", f"Shutdown failed: {e}", "ERROR")
-            else:
-                self.shutdown_confirm = True
-                self.shutdown_time = time.time()
-                self.add_message("PWR", "CONFIRM SHUTDOWN", "WARNING")
-
-    def handle_click(self, pos):
-        for button in self.top_buttons:
-            if button["rect"] and button["rect"].collidepoint(pos):
-                # Disable CLEAR, BG and WAVE buttons when camera is active
-                if self.camera_active and button["label"] in ["CLEAR", "BG", "WAVE"]:
-                    continue
-                
-                if button["label"] == "CLEAR":
-                    self.clear_messages()
-                elif button["label"] == "BG":
-                    self.change_background()
-                elif button["label"] == "WAVE":
-                    self.change_spectrum()
-                elif button["label"] == "PWR-DN":
-                    self.shutdown_system()
-                return True
-
-        for button in self.bottom_buttons:
-            if button["rect"] and button["rect"].collidepoint(pos):
-                if button["label"] == "CAM":
-                    self.toggle_camera()
-                return True
-
-        return False
-
-    def handle_scroll_wheel(self, y):
-        if y > 0:
-            self.scroll_up(3)
-        elif y < 0:
-            self.scroll_down(3)
-
-    def think(self):
-        self.thinking = True
-        self.thinking_time = time.time()
-
-    def action(self):
-        self.action_flash = 1.0
-
-    def add_memory(self):
-        self.memory_pulse = 1.0
-
-    def update(self):
-        current_time = time.time()
-
-        if self.thinking and current_time - self.thinking_time > 2.0:
-            self.thinking = False
-
-        if self.action_flash > 0:
-            self.action_flash -= 0.05
-            if self.action_flash < 0:
-                self.action_flash = 0
-
-        if self.memory_pulse > 0:
-            self.memory_pulse -= 0.02
-            if self.memory_pulse < 0:
-                self.memory_pulse = 0
-
-        if self.shutdown_confirm and current_time - self.shutdown_time > 5.0:
-            self.shutdown_confirm = False
-
-        self.scan_line = (self.scan_line + 2) % self.terminal_height
-        self.status_blink = (self.status_blink + 0.1) % (3.14159 * 2)
-
-    def _wrap_text(self, text: str, max_width: int) -> List[str]:
-        words = text.split(' ')
-        lines = []
-        current_line = []
-
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            if self.font.size(test_line)[0] <= max_width:
-                current_line.append(word)
-            else:
-                if current_line:
-                    lines.append(' '.join(current_line))
-                current_line = [word]
-
-        if current_line:
-            lines.append(' '.join(current_line))
-
-        return lines if lines else ['']
-
-    def _draw_tech_button(self, surface, rect, label, code, active=False, color_type=None, disabled=False):
-        if disabled:
-            # Disabled button appearance
-            bg_color = (20, 20, 20, 150)
-            border_color = (60, 60, 60, 180)
-        elif color_type == "warning":
-            if self.shutdown_confirm:
-                bg_color = (100, 30, 10, 220)
-                border_color = (255, 80, 0, 255)
-            else:
-                bg_color = (50, 30, 20, 200)
-                border_color = (180, 100, 40, 220)
-        elif active:
-            bg_color = (20, 60, 80, 220)
-            border_color = (*self.primary_color, 255)
-        else:
-            bg_color = (*self.bg_panel, 200)
-            border_color = (*self.border_color, 200)
-
-        pygame.draw.rect(surface, bg_color, rect)
-
-        pygame.draw.rect(surface, border_color, rect, 2)
-
-        inner_rect = rect.inflate(-4, -4)
-        pygame.draw.rect(surface, (*self.accent_color, 150), inner_rect, 1)
-
-        bracket_size = 6
-        bracket_color = border_color
-
-        pygame.draw.line(surface, bracket_color, rect.topleft, (rect.left + bracket_size, rect.top), 2)
-        pygame.draw.line(surface, bracket_color, rect.topleft, (rect.left, rect.top + bracket_size), 2)
-
-        pygame.draw.line(surface, bracket_color, rect.topright, (rect.right - bracket_size, rect.top), 2)
-        pygame.draw.line(surface, bracket_color, (rect.right - 1, rect.top), (rect.right - 1, rect.top + bracket_size), 2)
-
-        if disabled:
-            text_color = (80, 80, 80)
-        else:
-            text_color = self.primary_color if active or color_type == "warning" else self.text_color
-        text_surface = self.toolbar_font.render(label, True, text_color)
-        text_rect = text_surface.get_rect(center=rect.center)
-        surface.blit(text_surface, text_rect)
+    def _draw_power_menu(self, surface):
+        """Draw the power menu modal"""
+        # Semi-transparent overlay
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surface.blit(overlay, (0, 0))
         
-        # Draw active indicator dot
-        if active and not disabled:
-            dot_radius = 4
-            dot_x = rect.right - 12
-            dot_y = rect.top + 12
-            pygame.draw.circle(surface, self.primary_color, (dot_x, dot_y), dot_radius)
-            pygame.draw.circle(surface, (255, 255, 255), (dot_x, dot_y), dot_radius - 1)
+        # Modal box
+        modal_width = 400
+        modal_height = 200
+        modal_x = self.width // 2 - modal_width // 2
+        modal_y = self.height // 2 - modal_height // 2
+        modal_rect = pygame.Rect(modal_x, modal_y, modal_width, modal_height)
+        
+        # Modal background
+        pygame.draw.rect(surface, (*self.bg_panel, 250), modal_rect)
+        pygame.draw.rect(surface, self.border_color, modal_rect, 3)
+        
+        # Inner glow
+        inner_rect = modal_rect.inflate(-6, -6)
+        pygame.draw.rect(surface, (*self.accent_color, 100), inner_rect, 1)
+        
+        # Title
+        title = "POWER OPTIONS"
+        title_surface = self.title_font.render(title, True, self.primary_color)
+        title_rect = title_surface.get_rect(center=(modal_x + modal_width // 2, modal_y + 35))
+        surface.blit(title_surface, title_rect)
+        
+        # Divider line
+        line_y = modal_y + 60
+        pygame.draw.line(surface, self.border_color, 
+                        (modal_x + 20, line_y), (modal_x + modal_width - 20, line_y), 2)
+        
+        # Draw buttons
+        for button in self.power_menu_buttons:
+            rect = button["rect"]
+            label = button["label"]
+            action = button["action"]
+            
+            # Button colors
+            if action == "shutdown":
+                bg_color = (80, 20, 20, 220)
+                border_color = (255, 80, 80, 255)
+                text_color = (255, 120, 120)
+            else:
+                bg_color = (20, 60, 80, 220)
+                border_color = self.primary_color
+                text_color = self.primary_color
+            
+            # Draw button
+            pygame.draw.rect(surface, bg_color, rect)
+            pygame.draw.rect(surface, border_color, rect, 2)
+            
+            # Button corners
+            corner_size = 8
+            pygame.draw.line(surface, border_color, rect.topleft, 
+                           (rect.left + corner_size, rect.top), 3)
+            pygame.draw.line(surface, border_color, rect.topleft, 
+                           (rect.left, rect.top + corner_size), 3)
+            pygame.draw.line(surface, border_color, 
+                           (rect.right - 1, rect.top), (rect.right - corner_size - 1, rect.top), 3)
+            pygame.draw.line(surface, border_color, 
+                           (rect.right - 1, rect.top), (rect.right - 1, rect.top + corner_size), 3)
+            
+            # Button text
+            text_surface = self.toolbar_font.render(label, True, text_color)
+            text_rect = text_surface.get_rect(center=rect.center)
+            surface.blit(text_surface, text_rect)
 
-    def draw(self, surface: pygame.Surface):
-        import math
-
+    def draw(self, surface):
         self._update_wrapped_cache()
+
         self.overlay_surface.fill((0, 0, 0, 0))
 
         toolbar_rect = pygame.Rect(0, 0, self.width, self.toolbar_height)
@@ -429,26 +587,22 @@ class TerminalSystem:
         self.overlay_surface.blit(toolbar_bg, (0, 0))
 
         pygame.draw.line(self.overlay_surface, (*self.border_color, 200), 
-                        (0, self.toolbar_height - 1), (self.width, self.toolbar_height - 1), 2)
+                        (0, self.toolbar_height - 2), (self.width, self.toolbar_height - 2), 2)
         pygame.draw.line(self.overlay_surface, (*self.accent_color, 100), 
-                        (0, self.toolbar_height - 2), (self.width, self.toolbar_height - 2), 1)
+                        (0, self.toolbar_height - 1), (self.width, self.toolbar_height - 1), 1)
 
         for button in self.top_buttons:
             if button["rect"]:
-                # Disable CLEAR, BG and WAVE buttons visually when camera is active
-                is_disabled = self.camera_active and button["label"] in ["CLEAR", "BG", "WAVE"]
+                is_active = button["label"] == "PWR-DN" and self.show_power_menu
                 self._draw_tech_button(self.overlay_surface, button["rect"], 
                                        button["label"], button["code"],
-                                       button.get("active", False),
-                                       button.get("color"),
-                                       disabled=is_disabled)
-        
-        # Draw battery indicator between last left button and PWR-DN
+                                       is_active,
+                                       button.get("color"))
+
         if self.battery_module:
-            # Calculate position: between WAVE button and PWR-DN button
             battery_width = 60
             battery_height = self.toolbar_height - 10
-            battery_x = self.width - battery_width - 120  # Left of PWR-DN
+            battery_x = self.width - battery_width - 120
             battery_y = 5
             self._draw_battery_indicator(self.overlay_surface, battery_x, battery_y, 
                                         battery_width, battery_height)
@@ -480,7 +634,6 @@ class TerminalSystem:
         pygame.draw.line(self.overlay_surface, (*self.accent_color, 80), 
                         (10, line_y + 1), (self.width - 10, line_y + 1), 1)
 
-        # Only draw messages if camera is not active
         if not self.camera_active:
             y_offset = line_y + 12
             start_y = y_offset
@@ -493,7 +646,18 @@ class TerminalSystem:
                     all_lines.append((key, value, msg_type, line_text, line_idx))
 
             total_lines = len(all_lines)
-            visible_lines = all_lines[:self.max_visible_lines] if total_lines > self.max_visible_lines else all_lines
+            
+            # Handle negative scroll offset for bottom padding
+            if self.scroll_offset < 0:
+                # Add empty space at top when scrolled past the bottom
+                y_offset += abs(self.scroll_offset) * self.line_height
+                start_index = 0
+                end_index = min(self.max_visible_lines, total_lines)
+            else:
+                start_index = self.scroll_offset
+                end_index = min(start_index + self.max_visible_lines, total_lines)
+            
+            visible_lines = all_lines[start_index:end_index]
 
             terminal_draw_height = self.toolbar_height + self.terminal_height - start_y - self.padding
 
@@ -611,7 +775,6 @@ class TerminalSystem:
 
         for button in self.bottom_buttons:
             if button["rect"]:
-                # Mark CAM button as active when camera is on
                 is_active = button["label"] == "CAM" and self.camera_active
                 self._draw_tech_button(self.overlay_surface, button["rect"], 
                                        button["label"], button["code"],
@@ -619,3 +782,7 @@ class TerminalSystem:
                                        button.get("color"))
 
         surface.blit(self.overlay_surface, (0, 0))
+        
+        # Draw power menu on top of everything if active
+        if self.show_power_menu:
+            self._draw_power_menu(surface)

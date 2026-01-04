@@ -148,11 +148,26 @@ class UIManager(threading.Thread):
         self.paused = False
         print("UIManager resumed")
     
+    def exit_program(self):
+        """Exit the program without shutting down system"""
+        print("Program exit initiated by user")
+        self.running = False
+        self.shutdown_event.set()
+        import os
+        os._exit(0)  # Force exit entire process
+    
     def initiate_shutdown(self):
         """Called before system shutdown"""
         print("System shutdown initiated by user")
         self.running = False
         self.shutdown_event.set()
+        import subprocess
+        import os
+        try:
+            subprocess.Popen(['sudo', 'shutdown', 'now'])  # Shutdown the system
+        except Exception as e:
+            print(f"Failed to shutdown system: {e}")
+        os._exit(0)  # Force exit entire process
 
     def silence(self, progress):
         self.silence_progress = progress
@@ -419,7 +434,8 @@ class UIManager(threading.Thread):
                     on_background_change=self.cycle_background,
                     on_shutdown=self.initiate_shutdown,
                     on_spectrum_change=self.cycle_spectrum_style,
-                    on_camera_toggle=self.toggle_camera  # Add camera callback
+                    on_camera_toggle=self.toggle_camera,  # Add camera callback
+                    on_exit=self.exit_program  # Add exit callback
                 )
     
                 
@@ -465,7 +481,16 @@ class UIManager(threading.Thread):
                     elif event.type == pygame.MOUSEBUTTONDOWN:
                         if self.terminal_system:
                             logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
+                            self.terminal_system.handle_mouse_down(logical_pos)
                             self.terminal_system.handle_click(logical_pos)
+                    elif event.type == pygame.MOUSEBUTTONUP:
+                        if self.terminal_system:
+                            logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
+                            self.terminal_system.handle_mouse_up(logical_pos)
+                    elif event.type == pygame.MOUSEMOTION:
+                        if self.terminal_system:
+                            logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
+                            self.terminal_system.handle_mouse_motion(logical_pos)
                     elif event.type == pygame.MOUSEWHEEL:
                         if self.terminal_system:
                             self.terminal_system.handle_scroll_wheel(event.y)

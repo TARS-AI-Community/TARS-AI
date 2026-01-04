@@ -69,6 +69,31 @@ rightForarmMax = int(config["SERVO"]["rightForarmMax"])
 rightHandMin = int(config["SERVO"]["rightHandMin"])
 rightHandMax = int(config["SERVO"]["rightHandMax"])
 
+# Apply arm offsets (same pattern as leg servos)
+leftMainOffset = int(config["SERVO"]["leftMainOffset"])
+leftMainMin = leftMainMin + leftMainOffset
+leftMainMax = leftMainMax + leftMainOffset
+
+leftForearmOffset = int(config["SERVO"]["leftForearmOffset"])
+leftForarmMin = leftForarmMin + leftForearmOffset
+leftForarmMax = leftForarmMax + leftForearmOffset
+
+leftHandOffset = int(config["SERVO"]["leftHandOffset"])
+leftHandMin = leftHandMin + leftHandOffset
+leftHandMax = leftHandMax + leftHandOffset
+
+rightMainOffset = int(config["SERVO"]["rightMainOffset"])
+rightMainMin = rightMainMin + rightMainOffset
+rightMainMax = rightMainMax + rightMainOffset
+
+rightForearmOffset = int(config["SERVO"]["rightForearmOffset"])
+rightForarmMin = rightForarmMin + rightForearmOffset
+rightForarmMax = rightForarmMax + rightForearmOffset
+
+rightHandOffset = int(config["SERVO"]["rightHandOffset"])
+rightHandMin = rightHandMin + rightHandOffset
+rightHandMax = rightHandMax + rightHandOffset
+
 perfectLeftHeightOffset = int(config["SERVO"]["perfectLeftHeightOffset"])
 leftUpHeight = int(config["SERVO"]["leftUpHeight"]) + perfectLeftHeightOffset
 leftNeutralHeight = NEUTRAL_LEFT_HEIGHT + perfectLeftHeightOffset

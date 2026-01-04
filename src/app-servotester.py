@@ -118,7 +118,13 @@ offset_values = {
     'perfectLeftHeightOffset': int(servo_config.get('perfectLeftHeightOffset', 0)),
     'perfectRightHeightOffset': int(servo_config.get('perfectRightHeightOffset', 0)),
     'perfectLeftLegOffset': int(servo_config.get('perfectLeftLegOffset', 0)),
-    'perfectRightLegOffset': int(servo_config.get('perfectRightLegOffset', 0))
+    'perfectRightLegOffset': int(servo_config.get('perfectRightLegOffset', 0)),
+    'leftMainOffset': int(servo_config.get('leftMainOffset', 0)),
+    'leftForearmOffset': int(servo_config.get('leftForearmOffset', 0)),
+    'leftHandOffset': int(servo_config.get('leftHandOffset', 0)),
+    'rightMainOffset': int(servo_config.get('rightMainOffset', 0)),
+    'rightForearmOffset': int(servo_config.get('rightForearmOffset', 0)),
+    'rightHandOffset': int(servo_config.get('rightHandOffset', 0))
 }
 
 def pulse_to_duty_cycle(pulse):
@@ -626,27 +632,31 @@ class ServoControllerGUI:
         self.status_time = 0
         
         # Create tabs (using reference coordinates 800x480)
-        tab_width = 250
+        tab_width = 185
         tab_height = 38
         tab_y = 10
         spacing = 5
-        start_x = 25
+        start_x = 20
         
         self.tabs = [
             Tab(start_x, tab_y, tab_width, tab_height, "Preset Controls"),
-            Tab(start_x + tab_width + spacing, tab_y, tab_width, tab_height, "Offset Adjustment"),
-            Tab(start_x + (tab_width + spacing) * 2, tab_y, tab_width, tab_height, "Movements")
+            Tab(start_x + tab_width + spacing, tab_y, tab_width, tab_height, "Leg Offsets"),
+            Tab(start_x + (tab_width + spacing) * 2, tab_y, tab_width, tab_height, "Arm Offsets"),
+            Tab(start_x + (tab_width + spacing) * 3, tab_y, tab_width, tab_height, "Movements")
         ]
         self.tabs[0].active = True
         
         # Tab 1 - Preset Controls
         self.create_tab1_elements()
         
-        # Tab 2 - Offset Adjustment (placeholder)
+        # Tab 2 - Leg Offset Adjustment
         self.create_tab2_elements()
         
-        # Tab 3 - Movements (placeholder)
+        # Tab 3 - Arm Offset Adjustment (NEW)
         self.create_tab3_elements()
+        
+        # Tab 4 - Movements
+        self.create_tab4_elements()
         
     def create_tab1_elements(self):
         """Create buttons and elements for Tab 1 - Preset Controls"""
@@ -677,9 +687,9 @@ class ServoControllerGUI:
         self.tab1_mode = "main"  # "main" or "manual_servo"
         
     def create_tab2_elements(self):
-        """Create elements for Tab 2 - Offset Adjustment"""
+        """Create elements for Tab 2 - Leg Offset Adjustment"""
         # Offset data - maps offset name to (display name, servo channel)
-        self.offset_info = {
+        self.leg_offset_info = {
             'perfectLeftHeightOffset': ('LEFT HEIGHT', 0),
             'perfectRightHeightOffset': ('RIGHT HEIGHT', 1),
             'perfectLeftLegOffset': ('LEFT LEG', 2),
@@ -687,13 +697,13 @@ class ServoControllerGUI:
         }
         
         # Current selected offset for custom input
-        self.selected_offset = 'perfectLeftHeightOffset'
+        self.selected_leg_offset = 'perfectLeftHeightOffset'
         
         # Custom value input - moved below the label
-        self.offset_custom_input = InputBox(80, 325, 70, 30, "", "0")
+        self.leg_offset_custom_input = InputBox(80, 325, 70, 30, "", "0")
         
         # Y positions for each offset row
-        self.offset_rows = {
+        self.leg_offset_rows = {
             'perfectLeftHeightOffset': 90,
             'perfectRightHeightOffset': 140,
             'perfectLeftLegOffset': 190,
@@ -705,9 +715,9 @@ class ServoControllerGUI:
         btn_height = 30
         
         # Create buttons for each offset (will be drawn dynamically)
-        self.offset_buttons = {}
-        for offset_name, y_pos in self.offset_rows.items():
-            self.offset_buttons[offset_name] = {
+        self.leg_offset_buttons = {}
+        for offset_name, y_pos in self.leg_offset_rows.items():
+            self.leg_offset_buttons[offset_name] = {
                 'minus5': Button(460, y_pos, btn_width, btn_height, "-5", ACCENT_BLUE, ACCENT_BLUE_DARK),
                 'minus1': Button(510, y_pos, btn_width, btn_height, "-1", ACCENT_BLUE, ACCENT_BLUE_DARK),
                 'plus1': Button(560, y_pos, btn_width, btn_height, "+1", ACCENT_BLUE, ACCENT_BLUE_DARK),
@@ -715,11 +725,57 @@ class ServoControllerGUI:
             }
         
         # Apply and Test buttons - on line below label
-        self.apply_custom_btn = Button(160, 325, 60, 30, "SET", ACCENT_BLUE, ACCENT_BLUE_DARK)
-        self.test_offsets_btn = Button(230, 325, 150, 30, "TEST OFFSETS", ACCENT_GREEN, ACCENT_GREEN_DARK)
+        self.apply_leg_custom_btn = Button(160, 325, 60, 30, "SET", ACCENT_BLUE, ACCENT_BLUE_DARK)
+        self.test_leg_offsets_btn = Button(230, 325, 150, 30, "TEST OFFSETS", ACCENT_GREEN, ACCENT_GREEN_DARK)
         
     def create_tab3_elements(self):
-        """Create elements for Tab 3 - Movements"""
+        """Create elements for Tab 3 - Arm Offset Adjustment (NEW)"""
+        # Offset data - maps offset name to (display name, servo channel)
+        self.arm_offset_info = {
+            'leftMainOffset': ('LEFT MAIN ARM', 4),
+            'leftForearmOffset': ('LEFT FOREARM', 5),
+            'leftHandOffset': ('LEFT HAND', 6),
+            'rightMainOffset': ('RIGHT MAIN ARM', 7),
+            'rightForearmOffset': ('RIGHT FOREARM', 8),
+            'rightHandOffset': ('RIGHT HAND', 9)
+        }
+        
+        # Current selected offset for custom input
+        self.selected_arm_offset = 'leftMainOffset'
+        
+        # Custom value input
+        self.arm_offset_custom_input = InputBox(80, 355, 70, 30, "", "0")
+        
+        # Y positions for each offset row (6 rows, more compact)
+        self.arm_offset_rows = {
+            'leftMainOffset': 85,
+            'leftForearmOffset': 120,
+            'leftHandOffset': 155,
+            'rightMainOffset': 190,
+            'rightForearmOffset': 225,
+            'rightHandOffset': 260
+        }
+        
+        # Buttons for increment/decrement
+        btn_width = 45
+        btn_height = 28
+        
+        # Create buttons for each offset
+        self.arm_offset_buttons = {}
+        for offset_name, y_pos in self.arm_offset_rows.items():
+            self.arm_offset_buttons[offset_name] = {
+                'minus5': Button(460, y_pos, btn_width, btn_height, "-5", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                'minus1': Button(510, y_pos, btn_width, btn_height, "-1", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                'plus1': Button(560, y_pos, btn_width, btn_height, "+1", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                'plus5': Button(610, y_pos, btn_width, btn_height, "+5", ACCENT_BLUE, ACCENT_BLUE_DARK)
+            }
+        
+        # Apply and Test buttons
+        self.apply_arm_custom_btn = Button(160, 355, 60, 30, "SET", ACCENT_BLUE, ACCENT_BLUE_DARK)
+        self.test_arm_offsets_btn = Button(230, 355, 150, 30, "TEST OFFSETS", ACCENT_GREEN, ACCENT_GREEN_DARK)
+        
+    def create_tab4_elements(self):
+        """Create elements for Tab 4 - Movements"""
         # Movement mode (fast/slow)
         self.movement_mode = "slow"  # "slow" or "fast"
         
@@ -827,20 +883,20 @@ class ServoControllerGUI:
             self.submit_servo_button.draw(self.screen, self.fonts)
     
     def draw_tab2(self):
-        """Draw Tab 2 - Offset Adjustment"""
+        """Draw Tab 2 - Leg Offset Adjustment"""
         # Title
-        title = self.fonts['tab'].render("SERVO OFFSET CALIBRATION", True, TEXT_PRIMARY)
+        title = self.fonts['tab'].render("LEG SERVO OFFSET CALIBRATION", True, TEXT_PRIMARY)
         title_rect = title.get_rect(center=(WINDOW_WIDTH // 2, scale_y(67)))
         self.screen.blit(title, title_rect)
         
         # Draw each offset row
-        for offset_name, y_pos in self.offset_rows.items():
-            display_name, channel = self.offset_info[offset_name]
+        for offset_name, y_pos in self.leg_offset_rows.items():
+            display_name, channel = self.leg_offset_info[offset_name]
             current_value = offset_values.get(offset_name, 0)
             
             # Selection indicator (clickable box)
             select_box = pygame.Rect(scale_x(60), scale_y(y_pos + 2), scale_x(20), scale_y(26))
-            is_selected = (offset_name == self.selected_offset)
+            is_selected = (offset_name == self.selected_leg_offset)
             
             pygame.draw.rect(self.screen, PANEL_BG, select_box)
             pygame.draw.rect(self.screen, ACCENT_BLUE if is_selected else BORDER_COLOR, select_box, 2)
@@ -870,7 +926,7 @@ class ServoControllerGUI:
             self.screen.blit(target_text, (scale_x(360), scale_y(y_pos + 7)))
             
             # Draw increment/decrement buttons
-            for btn in self.offset_buttons[offset_name].values():
+            for btn in self.leg_offset_buttons[offset_name].values():
                 btn.draw(self.screen, self.fonts)
         
         # Divider line
@@ -883,21 +939,104 @@ class ServoControllerGUI:
         self.screen.blit(custom_label, (scale_x(60), scale_y(300)))
         
         # Show which offset is selected - right after the label
-        selected_display = self.offset_info[self.selected_offset][0]
+        selected_display = self.leg_offset_info[self.selected_leg_offset][0]
         selected_text = self.fonts['label'].render(f"[{selected_display}]:", True, ACCENT_BLUE)
         self.screen.blit(selected_text, (scale_x(300), scale_y(300)))
         
         # Input and buttons on the line below
-        self.offset_custom_input.draw(self.screen, self.fonts)
-        self.apply_custom_btn.draw(self.screen, self.fonts)
-        self.test_offsets_btn.draw(self.screen, self.fonts)
+        self.leg_offset_custom_input.draw(self.screen, self.fonts)
+        self.apply_leg_custom_btn.draw(self.screen, self.fonts)
+        self.test_leg_offsets_btn.draw(self.screen, self.fonts)
         
         # Info footer
         info_text = self.fonts['small'].render("CHANGES AUTO-SAVE TO CONFIG.INI | USE TEST BUTTON TO VERIFY", True, (0, 200, 255))
-        info_rect = info_text.get_rect(center=(WINDOW_WIDTH // 2, scale_y(370)))
+        info_rect = info_text.get_rect(center=(WINDOW_WIDTH // 2, scale_y(400)))
         self.screen.blit(info_text, info_rect)
     
     def draw_tab3(self):
+        """Draw Tab 3 - Arm Offset Adjustment (NEW)"""
+        # Title
+        title = self.fonts['tab'].render("ARM SERVO OFFSET CALIBRATION", True, TEXT_PRIMARY)
+        title_rect = title.get_rect(center=(WINDOW_WIDTH // 2, scale_y(67)))
+        self.screen.blit(title, title_rect)
+        
+        # Arm servo base values from config
+        arm_base_values = {
+            'leftMainOffset': (int(servo_config.get('leftMainMin', 80)), int(servo_config.get('leftMainMax', 580))),
+            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 200)), int(servo_config.get('leftForarmMax', 380))),
+            'leftHandOffset': (int(servo_config.get('leftHandMin', 200)), int(servo_config.get('leftHandMax', 280))),
+            'rightMainOffset': (int(servo_config.get('rightMainMin', 580)), int(servo_config.get('rightMainMax', 80))),
+            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 380)), int(servo_config.get('rightForarmMax', 200))),
+            'rightHandOffset': (int(servo_config.get('rightHandMin', 380)), int(servo_config.get('rightHandMax', 280)))
+        }
+        
+        # Draw each offset row
+        for offset_name, y_pos in self.arm_offset_rows.items():
+            display_name, channel = self.arm_offset_info[offset_name]
+            current_value = offset_values.get(offset_name, 0)
+            
+            # Selection indicator (clickable box)
+            select_box = pygame.Rect(scale_x(60), scale_y(y_pos + 2), scale_x(20), scale_y(24))
+            is_selected = (offset_name == self.selected_arm_offset)
+            
+            pygame.draw.rect(self.screen, PANEL_BG, select_box)
+            pygame.draw.rect(self.screen, ACCENT_BLUE if is_selected else BORDER_COLOR, select_box, 2)
+            
+            if is_selected:
+                # Draw filled box
+                inner_box = select_box.inflate(-scale_x(8), -scale_y(8))
+                pygame.draw.rect(self.screen, ACCENT_BLUE, inner_box)
+            
+            # Offset label
+            label_text = self.fonts['label'].render(f"{display_name} (CH{channel}):", True, TEXT_PRIMARY)
+            self.screen.blit(label_text, (scale_x(90), scale_y(y_pos + 3)))
+            
+            # Current value display with box
+            value_rect = pygame.Rect(scale_x(300), scale_y(y_pos), scale_x(70), scale_y(28))
+            pygame.draw.rect(self.screen, PANEL_BG, value_rect)
+            pygame.draw.rect(self.screen, ACCENT_BLUE if current_value != 0 else BORDER_COLOR, value_rect, 2)
+            
+            value_text = self.fonts['label'].render(f"{current_value:+d}", True, ACCENT_AMBER if current_value != 0 else TEXT_SECONDARY)
+            value_text_rect = value_text.get_rect(center=value_rect.center)
+            self.screen.blit(value_text, value_text_rect)
+            
+            # Target value indicator - show actual min-max after offset
+            base_min, base_max = arm_base_values.get(offset_name, (0, 0))
+            target_min = base_min + current_value
+            target_max = base_max + current_value
+            target_text = self.fonts['small'].render(f"→ {target_min}-{target_max}", True, TEXT_SECONDARY)
+            self.screen.blit(target_text, (scale_x(380), scale_y(y_pos + 5)))
+            
+            # Draw increment/decrement buttons
+            for btn in self.arm_offset_buttons[offset_name].values():
+                btn.draw(self.screen, self.fonts)
+        
+        # Divider line
+        pygame.draw.line(self.screen, BORDER_COLOR, 
+                        (scale_x(60), scale_y(295)), 
+                        (scale_x(740), scale_y(295)), 2)
+        
+        # Custom value section
+        custom_label = self.fonts['label'].render("SET CUSTOM VALUE FOR", True, TEXT_SECONDARY)
+        self.screen.blit(custom_label, (scale_x(60), scale_y(310)))
+        
+        # Show which offset is selected
+        selected_display = self.arm_offset_info[self.selected_arm_offset][0]
+        selected_text = self.fonts['label'].render(f"[{selected_display}]:", True, ACCENT_BLUE)
+        self.screen.blit(selected_text, (scale_x(300), scale_y(310)))
+        
+        # Input and buttons
+        self.arm_offset_custom_input.draw(self.screen, self.fonts)
+        self.apply_arm_custom_btn.draw(self.screen, self.fonts)
+        self.test_arm_offsets_btn.draw(self.screen, self.fonts)
+        
+        # Info footer
+        info_text = self.fonts['small'].render("CHANGES AUTO-SAVE TO CONFIG.INI | USE TEST BUTTON TO VERIFY", True, (0, 200, 255))
+        info_rect = info_text.get_rect(center=(WINDOW_WIDTH // 2, scale_y(410)))
+        self.screen.blit(info_text, info_rect)
+    
+    def draw_tab4(self):
+        """Draw Tab 4 - Movements"""
         if self.movement_mode == "slow":
             self.mode_slow_btn.color = ACCENT_BLUE
             self.mode_fast_btn.color = MID_DARK
@@ -960,18 +1099,18 @@ class ServoControllerGUI:
                     self.set_status("WARNING Please enter valid numbers")
     
     def handle_tab2_events(self, event):
-        """Handle events for Tab 2 - Offset Adjustment"""
+        """Handle events for Tab 2 - Leg Offset Adjustment"""
         # Handle selection box clicks
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_pos = event.pos
-            for offset_name, y_pos in self.offset_rows.items():
+            for offset_name, y_pos in self.leg_offset_rows.items():
                 select_box = pygame.Rect(scale_x(60), scale_y(y_pos + 2), scale_x(20), scale_y(26))
                 if select_box.collidepoint(mouse_pos):
-                    self.selected_offset = offset_name
+                    self.selected_leg_offset = offset_name
                     return
         
         # Handle increment/decrement buttons for each offset
-        for offset_name, buttons in self.offset_buttons.items():
+        for offset_name, buttons in self.leg_offset_buttons.items():
             for btn_type, btn in buttons.items():
                 if btn.handle_event(event):
                     current_value = offset_values.get(offset_name, 0)
@@ -986,12 +1125,33 @@ class ServoControllerGUI:
                     elif btn_type == 'plus5':
                         new_value = current_value + 5
                     
+                    # Get base values for validation
+                    channel = self.leg_offset_info[offset_name][1]
+                    if channel in [0, 1]:  # Height servos
+                        base_up = int(servo_config.get('leftUpHeight' if channel == 0 else 'rightUpHeight', 350))
+                        base_down = int(servo_config.get('leftDownHeight' if channel == 0 else 'rightDownHeight', 350))
+                        # For height servos, check both up and down positions
+                        target_up = base_up + new_value
+                        target_down = base_down + new_value
+                        if target_up < 10 or target_up > 600 or target_down < 10 or target_down > 600:
+                            self.set_status(f"⚠ Value would exceed safe range (10-600)")
+                            return
+                    else:  # Leg servos
+                        base_forward = int(servo_config.get('forwardLeftLeg' if channel == 2 else 'forwardRightLeg', 300))
+                        base_back = int(servo_config.get('backLeftLeg' if channel == 2 else 'backRightLeg', 300))
+                        # Check both forward and back positions
+                        target_forward = base_forward + new_value
+                        target_back = base_back + new_value
+                        if target_forward < 10 or target_forward > 600 or target_back < 10 or target_back > 600:
+                            self.set_status(f"⚠ Value would exceed safe range (10-600)")
+                            return
+                    
                     # Update offset value
                     offset_values[offset_name] = new_value
                     
                     # Save to config
                     if save_offset_to_config(offset_name, new_value):
-                        display_name = self.offset_info[offset_name][0]
+                        display_name = self.leg_offset_info[offset_name][0]
                         self.set_status(f"✓ {display_name}: {new_value:+d} saved")
                     else:
                         self.set_status(f"⚠ Failed to save offset")
@@ -999,29 +1159,48 @@ class ServoControllerGUI:
                     return
         
         # Handle custom value input
-        self.offset_custom_input.handle_event(event)
+        self.leg_offset_custom_input.handle_event(event)
         
         # Handle apply custom button
-        if self.apply_custom_btn.handle_event(event):
+        if self.apply_leg_custom_btn.handle_event(event):
             try:
-                custom_value = int(self.offset_custom_input.text)
+                custom_value = int(self.leg_offset_custom_input.text)
+                
+                # Get base values for validation
+                channel = self.leg_offset_info[self.selected_leg_offset][1]
+                if channel in [0, 1]:  # Height servos
+                    base_up = int(servo_config.get('leftUpHeight' if channel == 0 else 'rightUpHeight', 350))
+                    base_down = int(servo_config.get('leftDownHeight' if channel == 0 else 'rightDownHeight', 350))
+                    target_up = base_up + custom_value
+                    target_down = base_down + custom_value
+                    if target_up < 10 or target_up > 600 or target_down < 10 or target_down > 600:
+                        self.set_status(f"⚠ Value would exceed safe range (10-600)")
+                        return
+                else:  # Leg servos
+                    base_forward = int(servo_config.get('forwardLeftLeg' if channel == 2 else 'forwardRightLeg', 300))
+                    base_back = int(servo_config.get('backLeftLeg' if channel == 2 else 'backRightLeg', 300))
+                    target_forward = base_forward + custom_value
+                    target_back = base_back + custom_value
+                    if target_forward < 10 or target_forward > 600 or target_back < 10 or target_back > 600:
+                        self.set_status(f"⚠ Value would exceed safe range (10-600)")
+                        return
                 
                 # Apply to selected offset
-                offset_values[self.selected_offset] = custom_value
+                offset_values[self.selected_leg_offset] = custom_value
                 
                 # Save to config
-                if save_offset_to_config(self.selected_offset, custom_value):
-                    display_name = self.offset_info[self.selected_offset][0]
+                if save_offset_to_config(self.selected_leg_offset, custom_value):
+                    display_name = self.leg_offset_info[self.selected_leg_offset][0]
                     self.set_status(f"✓ {display_name}: {custom_value:+d} saved")
                     # Clear input
-                    self.offset_custom_input.text = "0"
+                    self.leg_offset_custom_input.text = "0"
                 else:
                     self.set_status(f"⚠ Failed to save offset")
             except ValueError:
                 self.set_status("⚠ Invalid value - enter a number")
         
         # Handle test button
-        if self.test_offsets_btn.handle_event(event):
+        if self.test_leg_offsets_btn.handle_event(event):
             self.set_status("⏳ Testing offsets...")
             if reload_and_test():
                 self.set_status("✓ Offsets tested - servos at reset position")
@@ -1029,7 +1208,104 @@ class ServoControllerGUI:
                 self.set_status("⚠ Test failed - check console")
     
     def handle_tab3_events(self, event):
-        """Handle events for Tab 3 - Movements"""
+        """Handle events for Tab 3 - Arm Offset Adjustment (NEW)"""
+        # Handle selection box clicks
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            mouse_pos = event.pos
+            for offset_name, y_pos in self.arm_offset_rows.items():
+                select_box = pygame.Rect(scale_x(60), scale_y(y_pos + 2), scale_x(20), scale_y(24))
+                if select_box.collidepoint(mouse_pos):
+                    self.selected_arm_offset = offset_name
+                    return
+        
+        # Arm servo base values for validation
+        arm_base_values = {
+            'leftMainOffset': (int(servo_config.get('leftMainMin', 80)), int(servo_config.get('leftMainMax', 580))),
+            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 200)), int(servo_config.get('leftForarmMax', 380))),
+            'leftHandOffset': (int(servo_config.get('leftHandMin', 200)), int(servo_config.get('leftHandMax', 280))),
+            'rightMainOffset': (int(servo_config.get('rightMainMin', 580)), int(servo_config.get('rightMainMax', 80))),
+            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 380)), int(servo_config.get('rightForarmMax', 200))),
+            'rightHandOffset': (int(servo_config.get('rightHandMin', 380)), int(servo_config.get('rightHandMax', 280)))
+        }
+        
+        # Handle increment/decrement buttons
+        for offset_name, buttons in self.arm_offset_buttons.items():
+            for btn_type, btn in buttons.items():
+                if btn.handle_event(event):
+                    current_value = offset_values.get(offset_name, 0)
+                    
+                    # Determine adjustment amount
+                    if btn_type == 'minus5':
+                        new_value = current_value - 5
+                    elif btn_type == 'minus1':
+                        new_value = current_value - 1
+                    elif btn_type == 'plus1':
+                        new_value = current_value + 1
+                    elif btn_type == 'plus5':
+                        new_value = current_value + 5
+                    
+                    # Validate against safe range
+                    base_min, base_max = arm_base_values.get(offset_name, (0, 0))
+                    target_min = base_min + new_value
+                    target_max = base_max + new_value
+                    
+                    if target_min < 10 or target_min > 600 or target_max < 10 or target_max > 600:
+                        self.set_status(f"⚠ Value would exceed safe range (10-600)")
+                        return
+                    
+                    # Update offset value
+                    offset_values[offset_name] = new_value
+                    
+                    # Save to config
+                    if save_offset_to_config(offset_name, new_value):
+                        display_name = self.arm_offset_info[offset_name][0]
+                        self.set_status(f"✓ {display_name}: {new_value:+d} saved")
+                    else:
+                        self.set_status(f"⚠ Failed to save offset")
+                    
+                    return
+        
+        # Handle custom value input
+        self.arm_offset_custom_input.handle_event(event)
+        
+        # Handle apply custom button
+        if self.apply_arm_custom_btn.handle_event(event):
+            try:
+                custom_value = int(self.arm_offset_custom_input.text)
+                
+                # Validate against safe range
+                base_min, base_max = arm_base_values.get(self.selected_arm_offset, (0, 0))
+                target_min = base_min + custom_value
+                target_max = base_max + custom_value
+                
+                if target_min < 10 or target_min > 600 or target_max < 10 or target_max > 600:
+                    self.set_status(f"⚠ Value would exceed safe range (10-600)")
+                    return
+                
+                # Apply to selected offset
+                offset_values[self.selected_arm_offset] = custom_value
+                
+                # Save to config
+                if save_offset_to_config(self.selected_arm_offset, custom_value):
+                    display_name = self.arm_offset_info[self.selected_arm_offset][0]
+                    self.set_status(f"✓ {display_name}: {custom_value:+d} saved")
+                    # Clear input
+                    self.arm_offset_custom_input.text = "0"
+                else:
+                    self.set_status(f"⚠ Failed to save offset")
+            except ValueError:
+                self.set_status("⚠ Invalid value - enter a number")
+        
+        # Handle test button
+        if self.test_arm_offsets_btn.handle_event(event):
+            self.set_status("⏳ Testing offsets...")
+            if reload_and_test():
+                self.set_status("✓ Offsets tested - servos at reset position")
+            else:
+                self.set_status("⚠ Test failed - check console")
+    
+    def handle_tab4_events(self, event):
+        """Handle events for Tab 4 - Movements"""
         if self.mode_slow_btn.handle_event(event):
             self.movement_mode = "slow"
             self.set_status("Mode: SLOW")
@@ -1131,6 +1407,8 @@ class ServoControllerGUI:
                     self.handle_tab2_events(event)
                 elif self.current_tab == 2:
                     self.handle_tab3_events(event)
+                elif self.current_tab == 3:
+                    self.handle_tab4_events(event)
             
             # Drawing
             self.screen.fill(DARK_BG)
@@ -1195,6 +1473,8 @@ class ServoControllerGUI:
                 self.draw_tab2()
             elif self.current_tab == 2:
                 self.draw_tab3()
+            elif self.current_tab == 3:
+                self.draw_tab4()
             
             # Draw status bar
             self.draw_status_bar()
@@ -1215,16 +1495,22 @@ def adjust_offsets():
         print("SERVO OFFSET ADJUSTMENT")
         print("="*60)
         print("\nCurrent Offset Values:")
-        print(f"  1. Left Height Offset:  {offset_values['perfectLeftHeightOffset']:+4d}")
-        print(f"  2. Right Height Offset: {offset_values['perfectRightHeightOffset']:+4d}")
-        print(f"  3. Left Leg Offset:     {offset_values['perfectLeftLegOffset']:+4d}")
-        print(f"  4. Right Leg Offset:    {offset_values['perfectRightLegOffset']:+4d}")
-        print("\n  5. Return to main menu")
+        print(f"  1. Left Height Offset:    {offset_values['perfectLeftHeightOffset']:+4d}")
+        print(f"  2. Right Height Offset:   {offset_values['perfectRightHeightOffset']:+4d}")
+        print(f"  3. Left Leg Offset:       {offset_values['perfectLeftLegOffset']:+4d}")
+        print(f"  4. Right Leg Offset:      {offset_values['perfectRightLegOffset']:+4d}")
+        print(f"  5. Left Main Arm Offset:  {offset_values['leftMainOffset']:+4d}")
+        print(f"  6. Left Forearm Offset:   {offset_values['leftForearmOffset']:+4d}")
+        print(f"  7. Left Hand Offset:      {offset_values['leftHandOffset']:+4d}")
+        print(f"  8. Right Main Arm Offset: {offset_values['rightMainOffset']:+4d}")
+        print(f"  9. Right Forearm Offset:  {offset_values['rightForearmOffset']:+4d}")
+        print(f" 10. Right Hand Offset:     {offset_values['rightHandOffset']:+4d}")
+        print("\n 11. Return to main menu")
         print("="*60)
         
-        choice = input("\nSelect offset to adjust (1-5): ").strip()
+        choice = input("\nSelect offset to adjust (1-11): ").strip()
         
-        if choice == '5':
+        if choice == '11':
             print("\nFinalizing...")
             try:
                 global config
@@ -1236,12 +1522,18 @@ def adjust_offsets():
                 print(f"WARNING Reload error: {e}")
             break
             
-        elif choice in ['1', '2', '3', '4']:
+        elif choice in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']:
             offset_map = {
                 '1': ('perfectLeftHeightOffset', 'Left Height', 0),
                 '2': ('perfectRightHeightOffset', 'Right Height', 1),
                 '3': ('perfectLeftLegOffset', 'Left Leg', 2),
-                '4': ('perfectRightLegOffset', 'Right Leg', 3)
+                '4': ('perfectRightLegOffset', 'Right Leg', 3),
+                '5': ('leftMainOffset', 'Left Main Arm', 4),
+                '6': ('leftForearmOffset', 'Left Forearm', 5),
+                '7': ('leftHandOffset', 'Left Hand', 6),
+                '8': ('rightMainOffset', 'Right Main Arm', 7),
+                '9': ('rightForearmOffset', 'Right Forearm', 8),
+                '10': ('rightHandOffset', 'Right Hand', 9)
             }
             
             offset_name, servo_name, channel = offset_map[choice]
@@ -1298,7 +1590,7 @@ def adjust_offsets():
                     except ValueError:
                         print("Invalid command. Use +, -, ++, --, q, or a number.")
         else:
-            print("Invalid selection. Please choose 1-5.")
+            print("Invalid selection. Please choose 1-11.")
 
 def set_single_servo():
     while True:
