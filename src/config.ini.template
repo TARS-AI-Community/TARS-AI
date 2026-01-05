@@ -1,0 +1,245 @@
+[CONTROLS] # Controller settings
+controller_name = 8BitDo
+# Name of the controller used for interaction
+enabled = False
+# enable use of controller used for interaction
+voicemovement = False
+#Enable or disable movement via voice control
+
+[STT] # Speech-to-Text configuration
+language = english
+# spoken language, if not using english, use stt_processor = openai
+wake_word = hey tars
+# Wake word for activating the system
+wake_word_processor = atomik
+# Options: picovoice, fastrtc, atomik
+sensitivity = 7
+# Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for Atomik wake word detection. 
+stt_processor = openai
+#vosk, faster-whisper, silero, fastrtc, openai (for other languages than english) or external
+use_indicators = True
+# Use beeps to indicate when listening
+external_url = http://192.168.2.57:5678
+# URL for the STT server (if enabled)
+whisper_model = tiny
+# Which whisper model to use for onboard whisper transcription tiny, base, small, medium, large
+vosk_model = vosk-model-small-en-us-0.15
+# Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15 or vosk-model-en-us-0.22)
+vad_method = rms
+# Enable silero, rms
+speechdelay = 20
+# Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
+picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
+# Relative path to the Porcupine keyword file
+
+
+[CHAR] # Character-specific details
+character_card_path = character/TARS/TARS.json
+# Path to the JSON file describing the character
+user_name = Joe
+# Name of the user interacting with the character
+user_details = Species: Human. Gender: Male.
+# Additional user details for context
+responses = ["Hi", "Yes?", "hey!", "What's up?", "Can I help you?", "What do you need?", "I'm here.", "You rang?", "Yea?", "Hey There.", "You again?"]
+thinking_responses = ["Hummm...", "ahhh", "ermmm...", "Mmmmmm...", "Let's see..."]
+# what tars replies after detecting the wakeword (you can change these and add or remove new ones)
+
+[LLM] # Large Language Model configuration (OpenAI, Tabby, Ooba, or LOCAL)
+llm_backend = openai
+# Backend for LLM: [openai, tabby, ooba] 
+base_url = https://api.openai.com
+# URL for the LLM backend API [OpenAI: https://api.openai.com]
+openai_model = gpt-4o-mini
+# OpenAI model to use for LLM if backend = openai IE gpt-4o-mini / llava-phi3:3.8b-mini-q4_0 / qwen2.5:3b
+override_encoding_model = cl100k_base
+#Model to use for counting tokens this is a override feature if automatic isnt working. 
+#cl100k_base,GPT-4, GPT-3.5-turbo,Modern encoding with large context windows; default for newer OpenAI models
+#p50k_base,text-davinci-003, code-davinci-002,Older InstructGPT models and code generation tasks
+#r50k_base,text-curie-001, text-babbage-001, text-ada-001,Legacy GPT-3 models with smaller token limits
+#gpt2,GPT-2,Used by early OpenAI models; the default for backward compatibility
+contextsize = 4000
+# Maximum token context size for LLM
+max_tokens = 1000
+# Maximum tokens generated per response
+temperature = 0.8
+# Controls randomness in generated responses (higher = more random)
+top_p = 0.9
+# Probability threshold for sampling next tokens (higher = more deterministic)
+seed = -1
+# Random seed for reproducibility (-1 means no fixed seed)
+systemprompt = You are to responding naturally and helpfully within the scenario. Be informative and conversational while maintaining your personality.
+# Prompt defining the LLM's behavior
+instructionprompt = You are {char}. Compose {char}s next message to {user}, using the provided chat history for context. Respond in plain text only, no emojis or ASCII art. Avoid using {char}s name, as you are embodying {char}. Your response should align with {char}s personality and address {user}s last message. Adhere to the established facts and continuity. You will respond in accordance with your personality settings. Be brief for simple questions, detailed for complex ones.
+# Instructions guiding the LLM's response style
+
+
+[VISION] # Vision-related configuration (e.g., image recognition)
+enabled = True
+# Set to false to prevent loading of blip
+server_hosted = False
+# If True, the vision server is hosted locally
+base_url = http://192.168.2.68:5678
+# URL for the vision server API
+
+[EMOTION] # Emotion detection for avatars (set to false if not using avatars emotions)
+enabled = false
+# Enable or disable emotion detection
+emotion_model = SamLowe/roberta-base-go_emotions
+# Hugging Face model for emotion analysis
+
+[TTS] # Text-to-Speech configuration 
+ttsoption = piper
+# Onboard Options: espeak, piper, silero
+# External SelfHosted: alltalk
+# Externally Hosted: azure, elevenlabs, openai
+# for other languages than english, use elevenlabs or openai
+azure_region = eastus
+# Azure region for Azure TTS (e.g., eastus)
+ttsurl = http://192.168.2.57:7852
+# URL of the TTS server (i.e., alltalk)
+toggle_charvoice = True
+# Use character-specific voice settings
+tts_voice = en-US-Steffan:DragonHDLatestNeural
+# Name of the cloned voice to use (e.g., TARS2 or en-US-Steffan:DragonHDLatestNeural for azure)
+voice_id = RiS3eO72menIyDeCvrnc
+# Voice ID of ElevenLabs (e.g.,JBFqnCBsd6RMkjVDRZzb)
+model_id = eleven_multilingual_v2
+# Model ID of ElevenLabs (e.g.,eleven_multilingual_v2)
+openai_voice = onyx
+# openai voice : alloy, echo, fable, onyx, nova, shimmer
+is_talking_override = False
+# Debug flag to override talking state
+is_talking = False
+# Tracks whether the system is currently speaking
+global_timer_paused = False
+# Pauses global timers
+
+[STABLE_DIFFUSION] # Stable Diffusion Image Generation Module
+enabled = False
+# If set to False, the Stable Diffusion module will be disabled.
+service = automatic1111
+# You can pick from openai (requires paid account) and stablediffusion(requires setup).
+url = http://192.168.2.57:5002
+# URL of the Automatic1111 Install. This is where requests to generate images are sent..
+prompt_prefix = in the style of midjourney
+# The prefix is used to help create a specific aesthetic for the images.
+prompt_postfix = clearly defined, high def, (detailed scene and background), key visual, vibrant, highly detailed
+# Used for defining the visual quality and characteristics of the generated image.
+seed = -1
+# A value of -1 means a random seed will be used each time, ensuring unique results on every generation, Set to a fixed number for reproducibility.
+sampler_name = Euler a
+# "Euler a" is a commonly used sampler, but other options may be available depending on the implementation.
+denoising_strength = 0.5
+# Higher values result in less noise but may make the image less detailed.
+steps = 20
+# More steps generally produce better results but take longer to complete.
+cfg_scale = 7
+# The Classifier-Free Guidance scale. Higher values give more weight to the prompt, resulting in images more closely aligned with the prompt.
+width = 480
+# The width of the generated image in pixels. Adjust this based on your desired resolution.
+height = 320
+# The height of the generated image in pixels. Adjust this based on your desired resolution.
+restore_faces = False
+# Set to True if you want better face rendering in the generated image.
+negative_prompt = deformed, black and white, disfigured, low contrast, extra limbs, bad anatomy, bad hands
+# The model will attempt to avoid creating images with these characteristics.
+
+[CHATUI]  # Required true for avatars
+enabled = True
+
+[UI] # Graphical interface 
+UI_enabled = True
+#Enable or Disable the visuals
+screen_width = 1024
+# Adjust based on your screen resolution
+screen_height = 600
+# Adjust based on your screen resolution
+rotation = 270
+# rotation can be 0, 90, 180, 270
+use_camera_module = True
+# enable the camera
+show_mouse = True
+# enable the software mouse
+background_id = 1
+# 0 = no background animation, # 1 = background image, # 2 = stars, # 3 = video 3 , 4 = video, 5 = video
+fullscreen = True
+# fullscreen or within a framed window
+font_size = 12
+# normally from 9 to 20 depending on your resolution
+target_fps = 30
+# UI Refresh max FPS speed
+
+[RAG]
+# RAG (Retrieval Augmented Generation) settings
+strategy = hybrid
+# Options: naive (vector-only), hybrid (vector + BM25)
+top_k = 5
+# Number of documents to retrieve
+
+[HOME_ASSISTANT] # HA Module
+enabled = False
+# If set to False, the Home Assistant module will be disabled.
+url = http://192.168.2.5:8123
+# Url to acccess HA from (set Token in .env file!).
+
+[DISCORD] # Discord bot integration
+enabled = False
+# Enable or disable Discord integration
+channel_id = 811470553139249186
+# ID of the Discord channel for communication (TARS-AI = 1311295891512098920)
+
+[SERVO]
+# Enable or disable movement via voice control
+# Use the app-servotester to adjust the offsets after you have built the robot. You should not have to modify any value here.
+voicemovement = True
+# servo 0 (Main Servo - Raise and Lowers the legs)
+leftUpHeight = 220
+leftDownHeight = 460
+perfectLeftHeightOffset = 0
+# servo 1 (Main Servo - Raise and Lowers the legs)
+rightUpHeight = 460
+rightDownHeight = 220
+perfectRightHeightOffset = 0
+# servo 2 (Left leg)
+forwardLeftLeg = 160
+backLeftLeg = 460
+perfectLeftLegOffset = 0
+# servo 3 (Right Leg)
+forwardRightLeg = 460
+backRightLeg = 160
+perfectRightLegOffset = 0
+# Set to True only if the arms are built on the robot (This changes the movements settings because of weight distribution)
+# The min and max value will control how far the arm can move, avoid having the connecting arm push against the case, the servo must not be under strain.
+# LEFT ARM
+leftMainMin = 80
+leftMainMax = 580
+leftMainOffset = 0
+leftForarmMin = 200
+leftForarmMax = 380
+leftForearmOffset = 0
+leftHandMin = 200
+leftHandMax = 280
+leftHandOffset = 0
+# RIGHT ARM
+rightMainMin = 580
+rightMainMax = 80
+rightMainOffset = 0
+rightForarmMin = 380
+rightForarmMax = 200
+rightForearmOffset = 0
+rightHandMin = 380
+rightHandMax = 280
+rightHandOffset = 0
+
+
+[BATTERY]
+# This section is only required if you are using an INA260 Current + Voltage + Power Sensor
+# These values must match the battery you are using.
+battery_capacity_mAh = 3000
+# Total battery capacity in milliampere-hours (mAh). Set this to the battery's rated capacity (e.g., 5600 mAh for a 5.6Ah battery).
+battery_initial_voltage = 12
+# Full charge voltage (in volts). Set this to the battery's full charge voltage (e.g., 12.6V for a fully charged 12V battery).
+battery_cutoff_voltage = 10
+# Minimum safe voltage before discharge should stop (in volts). Set this based on the battery's safe discharge voltage (e.g., 10.5V for a 12V battery).
+auto_shutdown = True
+# Protects the Raspberry pi and battery, when it reaches 0% the raspberry pi will shutdown by itself.

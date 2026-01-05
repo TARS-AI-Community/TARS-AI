@@ -1,0 +1,131 @@
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-weight: 100;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  background-image: linear-gradient(to right, #212529, #212529);
+}
+
+.card-body {
+  overflow: visible;
+}
+
+.chat-messages {
+  overflow: visible;
+  margin-bottom: 0;
+}
+
+.input-group {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+button {
+  border: 2px solid black;
+  background: transparent;
+  font-family: 'Roboto', sans-serif;
+  color: white;
+  width: 100px;
+  border-radius: 5px;
+  opacity: .5;
+  margin: auto;
+  transition: .3s;
+}
+
+button:hover {
+  background-color: rgba(365, 365, 365, 0.5);
+  cursor: pointer;
+  color: #104F55;
+  opacity: .8;
+  transition: .3s;
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
+}
+
+button:focus {
+  outline: none;
+}
+
+
+@media (max-width: 576px) {
+  .col {
+    height: calc(100vh - 50px);
+    overflow: visible;
+  }
+
+  .input-group {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    padding: 5px;
+    background-color: #fff;
+  }
+
+  .input-group input {
+    border-radius: 0;
+    width: calc(100% - 100px);
+  }
+
+  .input-group button {
+    width: 100px;
+  }
+}
+
+.card-body {
+  height: calc(100vh - 50px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-bottom: 0;
+}
+
+.name {
+  color: #ffffffcc;
+  font-size: 16px;
+  font-family: "Libre Baskerville", serif;
+  line-height: 25px;
+  text-align: left;
+  padding-top: 20px;
+}
+
+p {
+  color: #070707;
+  font-size: 14px;
+  text-align: left;
+
+  padding-top: 20px;
+  font-family: 'Raleway',sans-serif; 
+  font-weight: 500; 
+  line-height: 22px; 
+}
+
+/* ScrollBar */
+::-webkit-scrollbar {
+  width: 10px;
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+

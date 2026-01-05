@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI</title>
+  <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: black;
+    }
+    #container {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+    }
+    #imageWrapper {
+      width: 512px;
+      height: 512px;
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      overflow: hidden;
+    }
+    #backgroundImage {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      cursor: move;
+      border: 2px dashed black;
+      position: absolute;
+      top: 0;
+      left: 0;
+      user-drag: none;
+      user-select: none;
+    }
+    #dimOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.5); /* Adjust the alpha value for the desired dimness */
+      pointer-events: none; /* Allow interactions with elements behind the overlay */
+      z-index: 999; /* Ensure the overlay is on top of other elements */
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="imageWrapper">
+      <img id="backgroundImage" src="" alt="Background Image">
+    </div>
+  </div>
+  <div id="dimOverlay"></div>
+  <script>
+    // Declare a global variable to store the base URL
+    let talkingheadBaseUrl = '';
+
+    // Fetch the talking head base URL from the backend
+    fetch('/get_talkinghead_url')
+        .then(response => response.json())
+        .then(data => {
+            // Store the base URL in the global variable
+            talkingheadBaseUrl = data.talkinghead_base_url;
+
+            // Update the image source or do other initial actions
+            const fullUrl = talkingheadBaseUrl + "/stream";
+            document.getElementById('backgroundImage').src = fullUrl;
+        })
+        .catch(error => console.error('Error fetching talking head URL:', error));
+  </script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const params = new URLSearchParams(window.location.search);
+      const rotateParam = params.get('rotate');
+      const dimParam = params.get('dim');
+      const backgroundImage = document.getElementById('backgroundImage');
+      const imageWrapper = document.getElementById('imageWrapper');
+      const dimOverlay = document.getElementById('dimOverlay');
+
+  switch(rotateParam) {
+      case '90':
+    // Ensure the wrapper takes up the appropriate amount of space
+    imageWrapper.style.width = '100vh'; // Full height of the viewport as width
+    imageWrapper.style.height = '100vw'; // Full width of the viewport as height
+    imageWrapper.style.top = '50%';
+    imageWrapper.style.left = '50%';
+    // Adjust for correct centering and rotation
+    // Note: The scaling might need adjustment based on the viewport size
+    imageWrapper.style.transform = 'translate(-50%, -50%) rotate(90deg) scale(1)';
+    // Set transform-origin to ensure rotation behaves as expected
+    imageWrapper.style.transformOrigin = 'center center';
+    break;
+
+    case '180':
+      // Position at the top of the screen and rotate 180 degrees
+      imageWrapper.style.top = '0';
+      imageWrapper.style.left = '50%';
+      imageWrapper.style.transform = 'translateX(-50%) rotate(180deg)';
+      break;
+    default:
+      // Default behavior for other values or no rotate param
+      imageWrapper.style.top = 'auto';
+      imageWrapper.style.bottom = '0';
+      backgroundImage.style.objectPosition = 'bottom';
+  }
+
+
+  if (dimParam) {
+        // Set the opacity of the dim overlay based on the dim parameter
+        dimOverlay.style.background = `rgba(0, 0, 0, ${parseFloat(dimParam)})`;
+      }
+
+      function refreshImage() {
+        backgroundImage.src = talkingheadBaseUrl + "/stream?" + new Date().getTime();
+      }
+
+      setInterval(refreshImage, 2000);
+
+      document.body.addEventListener('click', () => {
+        const elem = document.documentElement;
+        if (!document.fullscreenElement && elem.requestFullscreen) {
+          elem.requestFullscreen({ navigationUI: 'hide' });
+        }
+      });
+    });
+
+    window.addEventListener('online', () => location.reload());
+    window.addEventListener('offline', () => console.log('The network connection has been lost.'));
+    window.onlineStatus = navigator.onLine;
+  </script>
+</body>
+</html>
