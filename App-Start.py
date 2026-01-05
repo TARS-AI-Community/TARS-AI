@@ -1,12 +1,268 @@
 import os
+os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+
 import subprocess
 import time
 import pygame
 import sys
 import configparser
+import random
+
+class TerminalScroll:
+    def __init__(self, width, height, font, font_bold):
+        self.width = width
+        self.height = height
+        self.font = font
+        self.font_bold = font_bold
+        self.lines = []
+        self.line_height = 13
+        self.max_lines = (height // self.line_height) - 2
+        
+        self.messages = [
+            "def calculate_trajectory():",
+            "    wormhole_coords = [x:48.2, y:23.7, z:91.4]",
+            "    if time_dilation > 1.0:",
+            "        adjust_for_relativity()",
+            "    return optimal_path",
+            "",
+            "class EnduranceSystem:",
+            "    def __init__(self, fuel_capacity=1000, crew_count=4):",
+            "        self.fuel = 87.3",
+            "        self.oxygen = 94.1",
+            "        self.status = 'NOMINAL'",
+            "        self.gravitational_stress_level = calculate_stress(self.position)",
+            "",
+            "# GARGANTUA PROXIMITY WARNING - CRITICAL SYSTEM ALERT",
+            "singularity_distance = 4127.8  # km",
+            "event_horizon_threshold = 4000.0",
+            "gravitational_pull_force = calculate_schwarzschild_radius(black_hole_mass)",
+            "",
+            "if singularity_distance < event_horizon_threshold:",
+            "    print('CRITICAL: TOO CLOSE')",
+            "    engage_emergency_thrust()",
+            "    transmit_distress_signal(frequency=121.5, power='MAX')",
+            "",
+            "# Time dilation calculation - Einstein field equations",
+            "years_per_hour = 7.0",
+            "elapsed_time = calculate_elapsed()",
+            "relativistic_factor = sqrt(1 - (velocity_squared / speed_of_light_squared))",
+            "",
+            "# Cooper Station alignment",
+            "alignment_percent = 97.4",
+            "docking_rotation = 68  # RPM",
+            "centrifugal_force = mass * angular_velocity_squared * radius",
+            "",
+            "quantum_data = receive_transmission()",
+            "if quantum_data.valid:",
+            "    decode_message(quantum_data)",
+            "    verify_morse_sequence(data_stream, pattern='S.T.A.Y')",
+            "",
+            "# TARS parameters",
+            "humor_setting = 0.75",
+            "honesty_param = 0.90",
+            "discretion_mode = True",
+            "adaptive_learning_rate = 0.001",
+            "",
+            "def analyze_gravity_anomaly():",
+            "    data = collect_sensor_data()",
+            "    pattern = find_pattern(data)",
+            "    if pattern == 'MORSE':",
+            "        message = decode_morse(pattern)",
+            "        return message",
+            "    else:",
+            "        log_anomaly(timestamp=current_time(), severity='WARNING')",
+            "",
+            "# Miller's planet approach - WARNING: massive tidal forces detected",
+            "tidal_wave_height = 1200  # meters",
+            "surface_time_loss = 23  # years",
+            "atmospheric_pressure = 1.3  # atm",
+            "water_coverage_percent = 100",
+            "",
+            "for module in habitat_systems:",
+            "    module.status_check()",
+            "    if not module.is_operational():",
+            "        initiate_repair_sequence()",
+            "        log_maintenance(module.id, timestamp=now(), priority='HIGH')",
+            "",
+            "def dock_with_endurance(rotation_speed, alignment_tolerance=0.5):",
+            "    while abs(rotation_speed - target_rotation) > alignment_tolerance:",
+            "        adjust_thrust_vectors()",
+            "        recalculate_approach_angle()",
+            "    return docking_status",
+            "",
+            "# Tesseract dimension analysis",
+            "spacetime_coordinates = [t, x, y, z, w]",
+            "if dimensions > 3:",
+            "    enable_quantum_visualization()",
+            "",
+            "ranger_fuel_remaining = 12.7  # percent",
+            "life_support_duration = 847  # hours",
+            "communication_delay = 91  # minutes",
+            "",
+            "# Plan A: Solve gravity equation",
+            "# Plan B: Population bomb with frozen embryos",
+            "if plan_a_viable == False:",
+            "    activate_plan_b(embryo_count=5000, destination='edmunds_planet')",
+        ]
+        
+        self.current_message_index = 0
+        self.current_char_index = 0
+        self.typing_speed = 0
+        self.char_counter = 0
+        self.pause_counter = 0
+        self.pause_duration = 0
+        self.blink_counter = 0
+        self.blinking_keywords = ['CRITICAL', 'WARNING', 'event_horizon', 'singularity_distance', 'plan_a_viable', 'ALERT']
+        
+        random.shuffle(self.messages)
+        
+        start_y = height - (self.max_lines * self.line_height)
+        for i in range(self.max_lines):
+            self.lines.append({
+                'text': '',
+                'full_text': '',
+                'completed': True,
+                'alpha': 60
+            })
+    
+    def update(self):
+        if self.pause_counter > 0:
+            self.pause_counter -= 1
+            return
+        
+        self.char_counter += 1
+        if self.char_counter < self.typing_speed:
+            return
+        
+        self.char_counter = 0
+        self.blink_counter += 1
+        
+        if self.current_char_index == 0:
+            middle_line = len(self.lines) // 2
+            
+            for i in range(len(self.lines) - 1):
+                self.lines[i] = self.lines[i + 1].copy()
+                if self.lines[i]['completed']:
+                    if i >= middle_line:
+                        self.lines[i]['alpha'] = 200
+                    else:
+                        distance_from_middle = middle_line - i
+                        fade_amount = int(150 * (distance_from_middle / middle_line))
+                        self.lines[i]['alpha'] = max(50, 200 - fade_amount)
+            
+            self.lines[-1] = {
+                'text': '',
+                'full_text': self.messages[self.current_message_index],
+                'completed': False,
+                'alpha': 200
+            }
+        
+        current_line = self.lines[-1]
+        if not current_line['completed']:
+            chars_to_type = min(3, len(current_line['full_text']) - self.current_char_index)
+            for _ in range(chars_to_type):
+                if self.current_char_index < len(current_line['full_text']):
+                    current_line['text'] += current_line['full_text'][self.current_char_index]
+                    self.current_char_index += 1
+            
+            if self.current_char_index >= len(current_line['full_text']):
+                current_line['completed'] = True
+                self.current_char_index = 0
+                self.current_message_index = (self.current_message_index + 1) % len(self.messages)
+                
+                if random.random() < 0.15:
+                    self.pause_duration = random.randint(10, 25)
+                else:
+                    self.pause_duration = random.randint(0, 1)
+                self.pause_counter = self.pause_duration
+    
+    def draw(self, surface, color):
+        blink_state = (self.blink_counter // 20) % 2 == 0
+        
+        for i, line in enumerate(self.lines):
+            y_pos = i * self.line_height + 10
+            
+            if line['text']:
+                text = line['text']
+                x_pos = 25
+                base_alpha = line['alpha']
+                
+                keywords = ['def', 'class', 'if', 'for', 'return', 'import', 'while', 'True', 'False']
+                numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+                
+                j = 0
+                while j < len(text):
+                    char = text[j]
+                    word = ''
+                    word_alpha = base_alpha
+                    brightness_boost = 0
+                    use_bold = False
+                    
+                    if char == '#':
+                        comment_end = text.find('\n', j)
+                        if comment_end == -1:
+                            comment_end = len(text)
+                        word = text[j:comment_end]
+                        brightness_boost = 30
+                        j = comment_end
+                    elif char == '"' or char == "'":
+                        quote_char = char
+                        quote_end = text.find(quote_char, j + 1)
+                        if quote_end == -1:
+                            quote_end = len(text)
+                        else:
+                            quote_end += 1
+                        word = text[j:quote_end]
+                        brightness_boost = 40
+                        j = quote_end
+                    elif char.isalnum() or char == '_':
+                        word_start = j
+                        while j < len(text) and (text[j].isalnum() or text[j] == '_' or text[j] == '.'):
+                            j += 1
+                        word = text[word_start:j]
+                        
+                        if word in keywords:
+                            brightness_boost = 60
+                        elif word in self.blinking_keywords:
+                            use_bold = True
+                            if blink_state:
+                                brightness_boost = 80
+                            else:
+                                brightness_boost = 20
+                        elif any(c in numbers for c in word) and word[0] in numbers:
+                            brightness_boost = 50
+                    else:
+                        word = char
+                        j += 1
+                    
+                    if word:
+                        word_alpha = min(255, base_alpha + brightness_boost)
+                        
+                        blend_factor = brightness_boost / 100.0
+                        word_color = (
+                            int(color[0] + (255 - color[0]) * blend_factor),
+                            int(color[1] + (255 - color[1]) * blend_factor),
+                            int(color[2])
+                        )
+                        
+                        chosen_font = self.font_bold if use_bold else self.font
+                        word_surface = chosen_font.render(word, True, word_color)
+                        word_surface.set_alpha(word_alpha)
+                        surface.blit(word_surface, (x_pos, y_pos))
+                        x_pos += word_surface.get_width()
+                
+                if not line['completed'] and i == len(self.lines) - 1:
+                    cursor_alpha = 220 if (self.blink_counter // 15) % 2 == 0 else 100
+                    cursor_surface = self.font.render('_', True, color)
+                    cursor_surface.set_alpha(cursor_alpha)
+                    surface.blit(cursor_surface, (x_pos, y_pos))
+
+def check_required_file():
+    file_path = os.path.expanduser("~/.local/share/tars_ai/hey_tars_templates.pkl")
+    return os.path.exists(file_path)
 
 def load_config():
-    """Load configuration from config.ini"""
     config = configparser.ConfigParser()
     config_path = os.path.join('src', 'config.ini')
 
@@ -44,375 +300,20 @@ def load_config():
     return rotation, ui_enabled, font_size, screen_width, screen_height
 
 def stop_tars_ai():
-
     subprocess.Popen("killall xterm", shell=True)
     subprocess.Popen("pkill -f 'python app.py'", shell=True)
 
 def run_tars_ai_fullscreen():
-    """Run TARS AI in fullscreen mode"""
-
-    os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
-    os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
-
-    rotation, ui_enabled, font_size, _, _ = load_config()
-
-    if ui_enabled:
-        print("[CONFIG] UI is enabled, launching app directly...")
-        command = "cd src && source .venv/bin/activate && python app.py"
-        subprocess.run(command, shell=True, executable="/bin/bash")
-        return
-
-    pygame.init()
-
-    display_info = pygame.display.Info()
-    screen_width = display_info.current_w
-    screen_height = display_info.current_h
-
-    screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN)
-    pygame.display.set_caption("TARS AI - FULLSCREEN MODE")
-
-    if rotation in [90, 270]:
-        draw_width, draw_height = screen_height, screen_width
-    else:
-        draw_width, draw_height = screen_width, screen_height
-
-    draw_surface = pygame.Surface((draw_width, draw_height))
-
-    BLACK = (0, 0, 0)
-    DARK_GRAY = (15, 15, 15)
-    CYAN = (0, 200, 255)
-    WHITE = (255, 255, 255)
-    GREEN = (0, 255, 0)
-    RED = (255, 50, 50)
-    ORANGE = (255, 150, 0)
-
-    header_size = int(font_size * 1.5)
-    try:
-        terminal_font = pygame.font.SysFont('dejavusansmono', font_size, bold=True)
-        header_font = pygame.font.SysFont('dejavusansmono', header_size, bold=True)
-    except:
-        try:
-            terminal_font = pygame.font.SysFont('freemono', font_size, bold=True)
-            header_font = pygame.font.SysFont('freemono', header_size, bold=True)
-        except:
-            terminal_font = pygame.font.Font(None, font_size)
-            header_font = pygame.font.Font(None, header_size)
-
-    terminal_lines = []
-    line_height = int(font_size * 1.5)  
-
-    header_height = int(header_size * 3.5)  
-
-    available_height = draw_height - header_height - 40  
-    max_lines = max(1, available_height // line_height)
-    scroll_offset = 0
-
-    is_listening = False
-    listening_animation_frame = 0
-
-    command = "cd src && source .venv/bin/activate && python app.py"
-    process = subprocess.Popen(
-        command,
-        shell=True,
-        executable="/bin/bash",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1
-    )
-
-    clock = pygame.time.Clock()
-    running = True
-    process_terminated_logged = False
-    exit_button_pressed = False  
-
-    exit_button_width = int(font_size * 8)
-    exit_button_height = int(font_size * 3)
-    exit_button = pygame.Rect(draw_width - exit_button_width - 10, 10, exit_button_width, exit_button_height)
-
-    while running:
-
-        mouse_pos = pygame.mouse.get_pos()
-
-        transformed_mouse = mouse_pos
-
-        exit_hover = exit_button.collidepoint(transformed_mouse)
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-                elif event.key == pygame.K_UP:
-                    scroll_offset = max(0, scroll_offset - 1)
-                elif event.key == pygame.K_DOWN:
-                    scroll_offset = min(len(terminal_lines) - max_lines, scroll_offset + 1)
-                elif event.key == pygame.K_PAGEUP:
-                    scroll_offset = max(0, scroll_offset - 10)
-                elif event.key == pygame.K_PAGEDOWN:
-                    scroll_offset = min(len(terminal_lines) - max_lines, scroll_offset + 10)
-
-            if event.type == pygame.MOUSEBUTTONDOWN:
-
-                click_pos = event.pos
-                transformed_click = click_pos
-
-                if exit_button.collidepoint(transformed_click):
-                    exit_button_pressed = True
-
-            if event.type == pygame.MOUSEBUTTONUP:
-                click_pos = event.pos
-                transformed_click = click_pos
-
-                if exit_button_pressed and exit_button.collidepoint(transformed_click):
-
-                    if process.poll() is None:
-                        process.terminate()
-                        try:
-                            process.wait(timeout=2)
-                        except:
-                            process.kill()
-                    running = False
-
-                exit_button_pressed = False
-
-        if process.poll() is None:  
-            try:
-                line = process.stdout.readline()
-                if line:
-                    line = line.rstrip()
-
-                    print(line)
-
-                    # Check for SETUP: Record line and close program
-                    if line.startswith("SETUP: Record"):
-                        terminal_lines.append("=" * 60)
-                        terminal_lines.append("WARNING: Wake word template not found!")
-                        terminal_lines.append("")
-                        terminal_lines.append("Use the Terminal Mode first to create the wake word template")
-                        terminal_lines.append("")
-                        terminal_lines.append("=" * 60)
-                        terminal_lines.append("")
-                        terminal_lines.append("Closing in 20 seconds...")
-                        
-                        # Force display update
-                        draw_surface.fill(BLACK)
-                        y_pos = header_height + 20
-                        for i, display_line in enumerate(terminal_lines[-(max_lines):]):
-                            line_surface = terminal_font.render(display_line, True, CYAN)
-                            draw_surface.blit(line_surface, (20, y_pos))
-                            y_pos += line_height
-                        
-                        if rotation == 90:
-                            rotated_surface = pygame.transform.rotate(draw_surface, 90)
-                        elif rotation == 180:
-                            rotated_surface = pygame.transform.rotate(draw_surface, 180)
-                        elif rotation == 270:
-                            rotated_surface = pygame.transform.rotate(draw_surface, 270)
-                        else:
-                            rotated_surface = draw_surface
-                        
-                        screen.blit(rotated_surface, (0, 0))
-                        pygame.display.flip()
-                        
-                        time.sleep(20)
-                        if process.poll() is None:
-                            process.terminate()
-                            try:
-                                process.wait(timeout=2)
-                            except:
-                                process.kill()
-                        running = False
-                        break
-
-                    if line.startswith('[SILENCE:'):
-                        is_listening = True
-                    elif line.startswith('USER:') or line.startswith('TARS:'):
-                        is_listening = False
-                        terminal_lines.append(line)
-
-                        scroll_offset = max(0, len(terminal_lines) - max_lines)
-
-            except:
-                pass
-        else:
-
-            if not process_terminated_logged:
-                terminal_lines.append("")
-                terminal_lines.append("[PROCESS TERMINATED - Press ESC to exit]")
-                process_terminated_logged = True
-
-        draw_surface.fill(BLACK)
-
-        for x in range(0, draw_width, 50):
-            pygame.draw.line(draw_surface, DARK_GRAY, (x, 0), (x, draw_height), 1)
-        for y in range(0, draw_height, 50):
-            pygame.draw.line(draw_surface, DARK_GRAY, (0, y), (draw_width, y), 1)
-
-        header_rect = pygame.Rect(0, 0, draw_width, header_height)
-        pygame.draw.rect(draw_surface, DARK_GRAY, header_rect)
-        pygame.draw.line(draw_surface, CYAN, (0, header_height), (draw_width, header_height), 3)
-
-        header_text = header_font.render("T.A.R.S TERMINAL OUTPUT", True, CYAN)
-        draw_surface.blit(header_text, (20, 20))
-
-        status_text = terminal_font.render("↑↓: Scroll | PgUp/PgDn: Fast Scroll", True, WHITE)
-        draw_surface.blit(status_text, (20, 20 + header_size + 10))
-
-        exit_button_color = WHITE if exit_button_pressed else (RED if exit_hover else (40, 40, 40))
-        pygame.draw.rect(draw_surface, exit_button_color, exit_button)
-
-        draw_corner_brackets(draw_surface, exit_button, RED if (exit_hover or exit_button_pressed) else CYAN, 15, 3)
-
-        exit_text = terminal_font.render("[ EXIT ]", True, RED if exit_button_pressed else (WHITE if exit_hover else CYAN))
-        exit_text_rect = exit_text.get_rect(center=exit_button.center)
-        draw_surface.blit(exit_text, exit_text_rect)
-
-        terminal_y = header_height
-        terminal_width = draw_width
-        terminal_height = draw_height - terminal_y
-        terminal_rect = pygame.Rect(0, terminal_y, terminal_width, terminal_height)
-        pygame.draw.rect(draw_surface, BLACK, terminal_rect)
-
-        start_line = max(0, scroll_offset)
-        end_line = min(len(terminal_lines), start_line + max_lines)
-
-        y_pos = terminal_y + 20
-
-        max_chars = (terminal_width - 40) // max(1, int(font_size * 0.6))
-
-        lines_drawn = 0
-
-        for i in range(start_line, end_line):
-            if lines_drawn >= max_lines:
-                break
-
-            line = terminal_lines[i]
-
-            if "[ERROR]" in line or "Error" in line or "error" in line:
-                color = RED
-            elif "[WARNING]" in line or "Warning" in line:
-                color = ORANGE
-            elif "[CONFIG]" in line or "[SYSTEM]" in line:
-                color = CYAN
-            elif "TERMINATED" in line:
-                color = RED
-            else:
-                color = GREEN
-
-            if len(line) <= max_chars:
-
-                line_surface = terminal_font.render(line, True, color)
-                draw_surface.blit(line_surface, (20, y_pos))
-                y_pos += line_height
-                lines_drawn += 1
-            else:
-
-                words = line.split(' ')
-                current_line = ""
-
-                for word in words:
-                    test_line = current_line + (' ' if current_line else '') + word
-
-                    if len(test_line) <= max_chars:
-                        current_line = test_line
-                    else:
-
-                        if current_line:
-                            line_surface = terminal_font.render(current_line, True, color)
-                            draw_surface.blit(line_surface, (20, y_pos))
-                            y_pos += line_height
-                            lines_drawn += 1
-
-                            if lines_drawn >= max_lines or y_pos + line_height > terminal_rect.bottom - 20:
-                                break
-
-                        if len(word) > max_chars:
-                            current_line = word[:max_chars - 3] + "..."
-                        else:
-                            current_line = word
-
-                if current_line and lines_drawn < max_lines:
-                    line_surface = terminal_font.render(current_line, True, color)
-                    draw_surface.blit(line_surface, (20, y_pos))
-                    y_pos += line_height
-                    lines_drawn += 1
-
-            if y_pos + line_height > terminal_rect.bottom - 20:
-                break
-
-        if len(terminal_lines) > max_lines:
-            scroll_area_height = terminal_height - 40
-            scroll_bar_height = max(30, int(scroll_area_height * max_lines / len(terminal_lines)))
-            scroll_bar_y = terminal_y + 20 + int((scroll_offset / max(1, len(terminal_lines) - max_lines)) * (scroll_area_height - scroll_bar_height))
-
-            scroll_bar = pygame.Rect(draw_width - 15, scroll_bar_y, 10, scroll_bar_height)
-            pygame.draw.rect(draw_surface, CYAN, scroll_bar, border_radius=5)
-
-        listening_animation_frame = (listening_animation_frame + 1) % 60
-
-        if is_listening:
-
-            indicator_x = draw_width - 150
-            indicator_y = draw_height - 60
-
-            indicator_rect = pygame.Rect(indicator_x, indicator_y, 140, 50)
-            pygame.draw.rect(draw_surface, DARK_GRAY, indicator_rect)
-            pygame.draw.rect(draw_surface, CYAN, indicator_rect, 2)
-
-            listen_text = terminal_font.render("LISTENING", True, CYAN)
-            draw_surface.blit(listen_text, (indicator_x + 10, indicator_y + 5))
-
-            num_bars = 5
-            bar_spacing = 15
-            bar_start_x = indicator_x + 20
-            bar_y = indicator_y + 30
-
-            for i in range(num_bars):
-
-                wave_offset = (listening_animation_frame + i * 10) % 60
-                bar_height = int(8 + 8 * abs(((wave_offset / 60.0) * 2) - 1))
-
-                bar_x = bar_start_x + i * bar_spacing
-                bar_rect = pygame.Rect(bar_x, bar_y - bar_height // 2, 8, bar_height)
-                pygame.draw.rect(draw_surface, GREEN, bar_rect)
-
-        if rotation == 90:
-            rotated_surface = pygame.transform.rotate(draw_surface, 90)  
-        elif rotation == 180:
-            rotated_surface = pygame.transform.rotate(draw_surface, 180)
-        elif rotation == 270:
-            rotated_surface = pygame.transform.rotate(draw_surface, 270)
-        else:
-            rotated_surface = draw_surface
-
-        screen.fill(BLACK)
-        screen.blit(rotated_surface, (0, 0))
-        pygame.display.flip()
-        clock.tick(30)
-
-    if process.poll() is None:
-        process.terminate()
-        process.wait(timeout=5)
-    pygame.quit()
+    command = "cd src && source .venv/bin/activate && python app.py show_ui=true"
+    subprocess.run(command, shell=True, executable="/bin/bash")
 
 def run_tars_ai_normal():
-
-    os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
-    os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
-
     command = (
-        "cd src && "
-        "source .venv/bin/activate && "
-        "python app.py show_ui=false"
+        "cd src && source .venv/bin/activate && python app.py show_ui=false"
     )
-
     subprocess.run(command, shell=True, executable="/bin/bash")
 
 def draw_corner_brackets(surface, rect, color, size=20, thickness=2):
-    """Draw corner brackets like in Interstellar UI"""
     x, y, w, h = rect.x, rect.y, rect.width, rect.height
 
     pygame.draw.line(surface, color, (x, y), (x + size, y), thickness)
@@ -428,14 +329,17 @@ def draw_corner_brackets(surface, rect, color, size=20, thickness=2):
     pygame.draw.line(surface, color, (x + w, y + h), (x + w, y + h - size), thickness)
 
 def draw_grid_background(surface, width, height, grid_size=50, color=(20, 20, 20)):
-    """Draw a subtle grid background"""
+    grid_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+    grid_color = (100, 100, 100, 30)
+    
     for x in range(0, width, grid_size):
-        pygame.draw.line(surface, color, (x, 0), (x, height), 1)
+        pygame.draw.line(grid_surface, grid_color, (x, 0), (x, height), 1)
     for y in range(0, height, grid_size):
-        pygame.draw.line(surface, color, (0, y), (width, y), 1)
+        pygame.draw.line(grid_surface, grid_color, (0, y), (width, y), 1)
+    
+    surface.blit(grid_surface, (0, 0))
 
 def draw_technical_frame(surface, rect, color, thickness=2):
-    """Draw technical-looking frame elements"""
     x, y, w, h = rect.x, rect.y, rect.width, rect.height
 
     pygame.draw.rect(surface, color, rect, thickness)
@@ -455,7 +359,6 @@ def draw_technical_frame(surface, rect, color, thickness=2):
     pygame.draw.line(surface, color, (x + w + 5, y + h + 5), (x + w - corner_size, y + h + 5), thickness)
 
 def create_touch_menu():
-
     rotation, ui_enabled, font_size, config_width, config_height = load_config()
 
     pygame.init()
@@ -479,7 +382,6 @@ def create_touch_menu():
     ui_height = base_height
 
     if rotation in [90, 270]:
-
         draw_surface = pygame.Surface((ui_height, ui_width))
         window_width, window_height = ui_width, ui_height  
     else:
@@ -510,6 +412,8 @@ def create_touch_menu():
         small_font = pygame.font.SysFont('dejavusansmono', 18, bold=True)
         tiny_font = pygame.font.SysFont('dejavusansmono', 14, bold=True)
         countdown_font = pygame.font.SysFont('dejavusansmono', 36, bold=True)
+        terminal_font = pygame.font.SysFont('dejavusansmono', 9, bold=False)
+        terminal_font_bold = pygame.font.SysFont('dejavusansmono', 9, bold=True)
     except:
         try:
             title_font = pygame.font.SysFont('freemono', 80, bold=True)
@@ -518,6 +422,8 @@ def create_touch_menu():
             small_font = pygame.font.SysFont('freemono', 18, bold=True)
             tiny_font = pygame.font.SysFont('freemono', 14, bold=True)
             countdown_font = pygame.font.SysFont('freemono', 36, bold=True)
+            terminal_font = pygame.font.SysFont('freemono', 9, bold=False)
+            terminal_font_bold = pygame.font.SysFont('freemono', 9, bold=True)
         except:
             title_font = pygame.font.Font(None, 80)
             section_font = pygame.font.Font(None, 24)
@@ -525,6 +431,10 @@ def create_touch_menu():
             small_font = pygame.font.Font(None, 18)
             tiny_font = pygame.font.Font(None, 14)
             countdown_font = pygame.font.Font(None, 36)
+            terminal_font = pygame.font.Font(None, 9)
+            terminal_font_bold = pygame.font.Font(None, 9)
+
+    terminal_scroll = TerminalScroll(surf_width, surf_height, terminal_font, terminal_font_bold)
 
     button_width = int(surf_width * 0.7)
     button_height = int(surf_height * 0.15)
@@ -538,16 +448,15 @@ def create_touch_menu():
     esc_button = pygame.Rect(40, surf_height - esc_button_height - 40, 
                              esc_button_width, esc_button_height)
 
-    countdown_seconds = 10
+    countdown_seconds = 30
     start_time = time.time()
 
     clock = pygame.time.Clock()
     running = True
 
-    button_pressed = None  
+    button_pressed = None
 
     while running:
-
         elapsed_time = time.time() - start_time
         remaining_time = countdown_seconds - elapsed_time
 
@@ -555,22 +464,23 @@ def create_touch_menu():
             pygame.quit()
             stop_tars_ai()
             time.sleep(0.1)
-            run_tars_ai_fullscreen()
-            return  
+            if ui_enabled:
+                print("[AUTO.LAUNCH] UI enabled — starting fullscreen mode.")
+                run_tars_ai_fullscreen()
+            else:
+                print("[AUTO.LAUNCH] UI disabled — starting terminal mode.")
+                run_tars_ai_normal()
+            return
 
         mouse_pos = pygame.mouse.get_pos()
 
         if rotation == 270:
-
             transformed_mouse = (mouse_pos[1], surf_height - mouse_pos[0])
         elif rotation == 90:
-
             transformed_mouse = (surf_width - mouse_pos[1], mouse_pos[0])
         elif rotation == 180:
-
             transformed_mouse = (surf_width - mouse_pos[0], surf_height - mouse_pos[1])
         else:
-
             transformed_mouse = mouse_pos
 
         fullscreen_hover = fullscreen_button.collidepoint(transformed_mouse)
@@ -590,7 +500,6 @@ def create_touch_menu():
                     sys.exit()
 
             if event.type == pygame.MOUSEBUTTONDOWN:
-
                 click_pos = event.pos
 
                 if rotation == 270:
@@ -642,7 +551,10 @@ def create_touch_menu():
 
         draw_surface.fill(BLACK)
 
-        draw_grid_background(draw_surface, surf_width, surf_height, 50, DARK_GRAY)
+        terminal_scroll.update()
+        terminal_scroll.draw(draw_surface, DARK_CYAN)
+
+        draw_grid_background(draw_surface, surf_width, surf_height, 50)
 
         main_frame = pygame.Rect(20, 20, surf_width - 40, surf_height - 40)
         pygame.draw.rect(draw_surface, CYAN, main_frame, 2)
@@ -739,4 +651,8 @@ def create_touch_menu():
         clock.tick(60)
 
 if __name__ == "__main__":
-    create_touch_menu()
+    if not check_required_file():
+        print("[FILE.CHECK] hey_tars_templates.pkl not found — launching terminal mode.")
+        run_tars_ai_normal()
+    else:
+        create_touch_menu()
