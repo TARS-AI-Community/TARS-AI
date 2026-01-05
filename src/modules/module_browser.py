@@ -1,9 +1,8 @@
 """
-module_browser.py
-
-Web video search and playback for TARS-AI.
-Uses yt-dlp for search and browser for playback.
-Closes UI and pauses STT during playback.
+Open Browser - V3
+==========================
+# atomikspace (discord)
+# olivierdion1@hotmail.com
 """
 
 import subprocess
@@ -60,15 +59,6 @@ class BrowserPlayer:
             return None
 
     def play_video(self, url):
-        """
-        Play YouTube video in maximized browser window.
-
-        Parameters:
-        - url (str): YouTube video URL
-
-        Returns:
-        - bool: Success status
-        """
         try:
             self.stop_video()
 
@@ -164,7 +154,6 @@ class BrowserPlayer:
             return False
 
     def stop_video(self):
-        """Stop currently playing video"""
         if self.current_process:
             try:
                 self.current_process.terminate()
@@ -187,13 +176,11 @@ class BrowserPlayer:
                 self.temp_profile_dir = None
 
     def is_playing_video(self):
-        """Check if a video is currently playing"""
         return self.is_playing
 
 _browser_player = None
 
 def get_browser_player():
-    """Get or create browser player instance"""
     global _browser_player
     if _browser_player is None:
         _browser_player = BrowserPlayer()

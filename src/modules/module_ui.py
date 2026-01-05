@@ -127,7 +127,6 @@ class UIManager(threading.Thread):
                 self.camera_module = None
 
     def _load_ui_settings(self):
-        """Load saved UI settings (background and spectrum style)"""
         try:
             import json
             if self.settings_file.exists():
@@ -146,7 +145,6 @@ class UIManager(threading.Thread):
             print(f"Could not load UI settings: {e}")
 
     def _save_ui_settings(self):
-        """Save current UI settings (background and spectrum style)"""
         try:
             import json
             self.settings_dir.mkdir(parents=True, exist_ok=True)
@@ -163,14 +161,11 @@ class UIManager(threading.Thread):
             print(f"Could not save UI settings: {e}")
 
     def cycle_background(self):
-        """Cycle to the next background"""
         self.current_background_index = (self.current_background_index + 1) % len(self.background_types)
         self.next_background = self.background_types[self.current_background_index]
-
         self.background_change_requested = True
 
     def toggle_camera(self):
-        """Toggle camera view on/off"""
         self.show_camera = not self.show_camera
 
         if self.show_camera:
@@ -181,17 +176,14 @@ class UIManager(threading.Thread):
                 self.terminal_system.set_camera_active(False)
 
     def pause(self):
-        """Pause UI updates (e.g., during video playback)"""
         self.paused = True
         print("UIManager paused")
 
     def resume(self):
-        """Resume UI updates"""
         self.paused = False
         print("UIManager resumed")
 
     def exit_program(self):
-        """Exit the program without shutting down system"""
         print("Program exit initiated by user")
         self.running = False
         self.shutdown_event.set()
@@ -199,7 +191,6 @@ class UIManager(threading.Thread):
         os._exit(0)  
 
     def initiate_shutdown(self):
-        """Called before system shutdown"""
         print("System shutdown initiated by user")
         self.running = False
         self.shutdown_event.set()
@@ -218,7 +209,6 @@ class UIManager(threading.Thread):
             self.spectrum_system.silence(progress, self.speechdelay)
 
     def save_memory(self):
-        """Trigger add_memory animation on active background and terminal"""
         if self.terminal_system is not None:
             self.terminal_system.add_memory()
 
@@ -233,7 +223,6 @@ class UIManager(threading.Thread):
             self.tesseract_system.add_memory()
 
     def think(self):
-        """Trigger think animation on active background and terminal"""
         if self.terminal_system is not None:
             self.terminal_system.think()
 
@@ -248,15 +237,11 @@ class UIManager(threading.Thread):
             self.tesseract_system.think()
 
     def update_data(self, key: str, value: str, msg_type: str = 'INFO') -> None:
-        """Add message to terminal and trigger action animation on background"""
         self.new_data_added = True
-
         if self.terminal_system is not None:
             self.terminal_system.add_message(key, value, msg_type)
-
         if self.spectrum_system is not None:
             self.spectrum_system.action()
-
         if self.background_type == 'particles' and self.particle_system is not None:
             self.particle_system.action()
         elif self.background_type == 'starfield' and self.starfield_system is not None:
@@ -265,7 +250,6 @@ class UIManager(threading.Thread):
             self.tesseract_system.action()
 
     def _transform_mouse_pos(self, screen_pos, display_width, display_height):
-        """Transform screen mouse position to logical surface coordinates based on rotation"""
         x, y = screen_pos
 
         if self.rotate == 0:
@@ -305,8 +289,6 @@ class UIManager(threading.Thread):
         return (int(logical_x), int(logical_y))
 
     def _init_background(self, bg_type):
-        """Initialize a specific background system - creates new one BEFORE destroying old one"""
-
         new_particle = None
         new_starfield = None
         new_tesseract = None
@@ -346,7 +328,6 @@ class UIManager(threading.Thread):
         self.video_system = new_video
 
     def cycle_spectrum_style(self):
-        """Cycle through spectrum visualization styles"""
         if self.spectrum_system:
             styles = ['bars', 'wave', 'sinewave', 'circular', 'spectrogram']
             current_idx = styles.index(self.spectrum_system.style)
@@ -357,7 +338,6 @@ class UIManager(threading.Thread):
             self._save_ui_settings()  
 
     def _draw_camera(self, surface):
-        """Draw camera feed on the surface with face detection"""
         if not self.camera_module:
             return
 
@@ -449,9 +429,7 @@ class UIManager(threading.Thread):
                     self.logical_width,
                     self.logical_height,
                     style=self.spectrum_style,  
-
                     bg_alpha=0  
-
                 )
 
                 self.terminal_system = TerminalSystem(
@@ -459,12 +437,10 @@ class UIManager(threading.Thread):
                     self.logical_height,
                     bg_alpha=13,
                     battery_module=self.battery_module,  
-
                     on_background_change=self.cycle_background,
                     on_shutdown=self.initiate_shutdown,
                     on_spectrum_change=self.cycle_spectrum_style,
                     on_camera_toggle=self.toggle_camera,  
-
                     on_exit=self.exit_program  
 
                 )
