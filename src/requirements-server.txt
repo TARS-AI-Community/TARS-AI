@@ -1,4 +1,0 @@
-faster_whisper
-torch
-transformers
-flask_cors
