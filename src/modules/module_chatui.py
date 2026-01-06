@@ -503,7 +503,9 @@ def get_next_audio_chunk():
 def robot_move():
     """
     Handles robot movement commands.
-    Expects JSON with a 'direction' field containing one of: 'forward', 'backward', 'left', 'right'
+    Expects JSON with a 'direction' field containing one of: 
+    'forward', 'backward', 'left', 'right' (fast mode)
+    'forward_slow', 'backward_slow', 'left_slow', 'right_slow' (slow mode)
     """
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
@@ -511,23 +513,32 @@ def robot_move():
     data = request.get_json()
     direction = data.get('direction')
     
-    if direction not in ['forward', 'backward', 'left', 'right']:
-        return jsonify({"error": "Invalid direction. Must be one of: forward, backward, left, right"}), 400
+    valid_directions = ['forward', 'backward', 'left', 'right', 
+                       'forward_slow', 'backward_slow', 'left_slow', 'right_slow']
+    
+    if direction not in valid_directions:
+        return jsonify({"error": f"Invalid direction. Must be one of: {', '.join(valid_directions)}"}), 400
     
     # Execute the robot movement command
-    # This is where you would add code to control your actual robot
-    # For example, you might send commands to a GPIO interface, a robot API, etc.
-    
     try:
+        # Fast movements
         if direction == 'forward':
             step_forward()
         elif direction == 'backward':
-            # Code to move robot backward 
-            pass 
+            step_backward()
         elif direction == 'left':
             turn_left()
         elif direction == 'right':
             turn_right()
+        # Slow movements
+        elif direction == 'forward_slow':
+            walk_forward()
+        elif direction == 'backward_slow':
+            walk_backward()
+        elif direction == 'left_slow':
+            turn_left_slow()
+        elif direction == 'right_slow':
+            turn_right_slow()
             
         return jsonify({"success": True, "message": f"Robot moved {direction}"}), 200
         
