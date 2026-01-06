@@ -543,28 +543,86 @@
 
     .custom-tab {
     font-weight: bold;
-    color: #adb5bd; /* light gray for inactive */
-    background-color: #343a40; /* darker background for tabs */
+    color: #ffffff;
+    background-color: #1a1d20;
     border: none;
     border-radius: 0;
-    margin-right: 5px;
-    padding: 10px 15px;
-    transition: all 0.3s ease;
+    margin: 0;
+    padding: 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+  }
+  .custom-tab i {
+    font-size: 22px;
+    color: #ffffff !important;
+  }
+  .custom-tab:hover {
+    background-color: #212529;
+  }
+  .custom-tab:hover i {
+    color: #ffffff !important;
   }
   .custom-tab.active {
-    color: white;
-    background-color: #495057; /* slightly lighter bg for active tab */
-    border-bottom: 3px solid #0d6efd; /* Bootstrap blue */
+    background-color: #1e2124;
+    box-shadow: inset 0 -3px 0 0 #0d6efd;
+  }
+  .custom-tab.active i {
+    color: #ffffff !important;
+  }
+  #fullscreen-toggle {
+    border-left: 1px solid #343a40;
+  }
+  #fullscreen-toggle i {
+    font-size: 22px;
+    color: #ffffff !important;
   }
   .nav-tabs {
-    border-bottom: none;
+    border-bottom: 1px solid #343a40;
+    min-height: 36px;
+    padding: 0;
+    margin: 0;
   }
   
   /* Config Container Styles */
   .tab-content {
-    height: calc(100vh - 40px);
+    height: calc(100vh - 36px);
+    height: calc(100dvh - 36px);
     overflow: hidden;
     background-color: #0d1117;
+    position: relative;
+  }
+  
+  .tab-pane {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    background-color: #0d1117;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 1;
+  }
+  
+  .tab-pane.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    z-index: 10;
+  }
+  
+  .tab-pane.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    z-index: 10;
   }
   
   #config {
@@ -798,20 +856,25 @@
   <audio id="audioPlayer" controls hidden></audio>
 
 <!-- TABS HEADER -->
-<ul class="nav nav-tabs" id="myTab" role="tablist" style="background-color: #212529; border-bottom: none;">
+<ul class="nav nav-tabs" id="myTab" role="tablist" style="background-color: #212529; border-bottom: none; padding: 0; margin: 0;">
     <li class="nav-item" role="presentation">
-      <button style="width:fit-content;" class="nav-link active d-flex align-items-center gap-2 custom-tab" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button" role="tab">
-        <i class="bi bi-chat-dots-fill"></i> Chat UI
+      <button class="nav-link active custom-tab" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button" role="tab" aria-label="Chat UI">
+        <i class="bi bi-chat-dots-fill"></i>
       </button>
     </li>
     <li class="nav-item" role="presentation">
-      <button style="width:fit-content;" class="nav-link d-flex align-items-center gap-2 custom-tab" id="motion-tab" data-bs-toggle="tab" data-bs-target="#motion" type="button" role="tab">
-        <i class="bi bi-joystick"></i> Motion Control
+      <button class="nav-link custom-tab" id="motion-tab" data-bs-toggle="tab" data-bs-target="#motion" type="button" role="tab" aria-label="Motion Control">
+        <i class="bi bi-joystick"></i>
       </button>
     </li>
     <li class="nav-item" role="presentation">
-      <button style="width:fit-content;" class="nav-link d-flex align-items-center gap-2 custom-tab" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab">
-        <i class="bi bi-gear-fill"></i> Configuration
+      <button class="nav-link custom-tab" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab" aria-label="Configuration">
+        <i class="bi bi-gear-fill"></i>
+      </button>
+    </li>
+    <li class="nav-item ms-auto" role="presentation">
+      <button class="nav-link custom-tab" id="fullscreen-toggle" type="button" aria-label="Toggle Fullscreen" onclick="toggleFullscreen()">
+        <i class="bi bi-fullscreen" id="fullscreen-icon"></i>
       </button>
     </li>
   </ul>
@@ -869,7 +932,7 @@
     </div>
 
     <!-- MOTION CONTROL TAB -->
-    <div class="tab-pane fade p-0" id="motion" role="tabpanel" style="height: calc(100vh - 40px); overflow: hidden;">
+    <div class="tab-pane fade p-0" id="motion" role="tabpanel">
       <div class="motion-control-container">
         <!-- Left Side: Game Controller -->
         <div class="controller-section">
@@ -887,15 +950,15 @@
                 <!-- Speed Toggle integrated into controller -->
                 <div class="speed-toggle-integrated">
                   <label class="speed-label">
-                    <input type="radio" name="speed" value="fast" checked>
-                    <span class="speed-option speed-fast">
-                      <span>FAST</span>
+                    <input type="radio" name="speed" value="slow" checked>
+                    <span class="speed-option speed-slow">
+                      <span>SLOW</span>
                     </span>
                   </label>
                   <label class="speed-label">
-                    <input type="radio" name="speed" value="slow">
-                    <span class="speed-option speed-slow">
-                      <span>SLOW</span>
+                    <input type="radio" name="speed" value="fast">
+                    <span class="speed-option speed-fast">
+                      <span>FAST</span>
                     </span>
                   </label>
                 </div>
@@ -932,7 +995,7 @@
     </div>
 
     <!-- CONFIG TAB -->
-    <div class="tab-pane fade p-0" id="config" role="tabpanel" style="position: relative;">
+    <div class="tab-pane fade p-0" id="config" role="tabpanel">
       <div class="config-container">
         <div class="config-header">
           <div class="d-flex justify-content-between align-items-center w-100">
@@ -1650,209 +1713,209 @@ function loadConfiguration() {
                     });
                     formHtml += '</div></div>';
                     
-                    // V1 ARMS Variables
-                    formHtml += `
-                        <div class="servo-group mb-3">
-                            <h6 class="servo-group-title"><i class="bi bi-joystick me-2"></i>V1 ARMS Variables (Legacy)</h6>
-                            <div class="row g-3">
-                    `;
-                    v1Fields.forEach(key => {
-                        if (fields[key] !== undefined) {
-                            const fieldId = `config_${section}_${key}`;
-                            const fieldInfo = data.field_options[`${section}.${key}`];
-                            const description = fieldInfo?.description || '';
-                            const value = fields[key];
-                            
-                            formHtml += `<div class="col-md-4">
-                                <div class="field-wrapper">
-                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
-                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-                                        <span>${key}</span>
-                                    </label>
-                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-                            
-                            if (description) {
-                                formHtml += `
-                                    <div class="config-hint mt-1">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        <small>${description}</small>
-                                    </div>
-                                `;
-                            }
-                            formHtml += '</div></div>';
-                        }
-                    });
-                    formHtml += '</div></div>';
-                    
-                    // V2 RIGHT ARM Variables
-                    formHtml += `
-                        <div class="servo-group mb-3">
-                            <h6 class="servo-group-title"><i class="bi bi-arrow-right-circle me-2"></i>V2 RIGHT ARM Variables</h6>
-                            <div class="row g-3">
-                    `;
-                    v2RightFields.forEach(key => {
-                        if (fields[key] !== undefined) {
-                            const fieldId = `config_${section}_${key}`;
-                            const fieldInfo = data.field_options[`${section}.${key}`];
-                            const description = fieldInfo?.description || '';
-                            const value = fields[key];
-                            
-                            formHtml += `<div class="col-md-4">
-                                <div class="field-wrapper">
-                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
-                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-                                        <span>${key}</span>
-                                    </label>
-                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-                            
-                            if (description) {
-                                formHtml += `
-                                    <div class="config-hint mt-1">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        <small>${description}</small>
-                                    </div>
-                                `;
-                            }
-                            formHtml += '</div></div>';
-                        }
-                    });
-                    formHtml += '</div></div>';
-                    
-                    // V2 LEFT ARM Variables
-                    formHtml += `
-                        <div class="servo-group mb-3">
-                            <h6 class="servo-group-title"><i class="bi bi-arrow-left-circle me-2"></i>V2 LEFT ARM Variables</h6>
-                            <div class="row g-3">
-                    `;
-                    v2LeftFields.forEach(key => {
-                        if (fields[key] !== undefined) {
-                            const fieldId = `config_${section}_${key}`;
-                            const fieldInfo = data.field_options[`${section}.${key}`];
-                            const description = fieldInfo?.description || '';
-                            const value = fields[key];
-                            
-                            formHtml += `<div class="col-md-4">
-                                <div class="field-wrapper">
-                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
-                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-                                        <span>${key}</span>
-                                    </label>
-                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-                            
-                            if (description) {
-                                formHtml += `
-                                    <div class="config-hint mt-1">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        <small>${description}</small>
-                                    </div>
-                                `;
-                            }
-                            formHtml += '</div></div>';
-                        }
-                    });
-                    formHtml += '</div></div>';
-                    
-                    // Torso Height Variables
-                    formHtml += `
-                        <div class="servo-group mb-3">
-                            <h6 class="servo-group-title"><i class="bi bi-arrow-up-down me-2"></i>Torso Height Variables</h6>
-                            <div class="row g-3">
-                    `;
-                    torsoFields.forEach(key => {
-                        if (fields[key] !== undefined) {
-                            const fieldId = `config_${section}_${key}`;
-                            const fieldInfo = data.field_options[`${section}.${key}`];
-                            const description = fieldInfo?.description || '';
-                            const value = fields[key];
-                            
-                            formHtml += `<div class="col-md-4">
-                                <div class="field-wrapper">
-                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
-                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-                                        <span>${key}</span>
-                                    </label>
-                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-                            
-                            if (description) {
-                                formHtml += `
-                                    <div class="config-hint mt-1">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        <small>${description}</small>
-                                    </div>
-                                `;
-                            }
-                            formHtml += '</div></div>';
-                        }
-                    });
-                    formHtml += '</div></div>';
-                    
-                    // Left Leg Variables
-                    formHtml += `
-                        <div class="servo-group mb-3">
-                            <h6 class="servo-group-title"><i class="bi bi-arrow-left me-2"></i>Left Leg Variables</h6>
-                            <div class="row g-3">
-                    `;
-                    leftLegFields.forEach(key => {
-                        if (fields[key] !== undefined) {
-                            const fieldId = `config_${section}_${key}`;
-                            const fieldInfo = data.field_options[`${section}.${key}`];
-                            const description = fieldInfo?.description || '';
-                            const value = fields[key];
-                            
-                            formHtml += `<div class="col-md-4 col-lg-3">
-                                <div class="field-wrapper">
-                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
-                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-                                        <span>${key}</span>
-                                    </label>
-                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-                            
-                            if (description) {
-                                formHtml += `
-                                    <div class="config-hint mt-1">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        <small>${description}</small>
-                                    </div>
-                                `;
-                            }
-                            formHtml += '</div></div>';
-                        }
-                    });
-                    formHtml += '</div></div>';
-                    
-                    // Right Leg Variables
-                    formHtml += `
-                        <div class="servo-group mb-3">
-                            <h6 class="servo-group-title"><i class="bi bi-arrow-right me-2"></i>Right Leg Variables</h6>
-                            <div class="row g-3">
-                    `;
-                    rightLegFields.forEach(key => {
-                        if (fields[key] !== undefined) {
-                            const fieldId = `config_${section}_${key}`;
-                            const fieldInfo = data.field_options[`${section}.${key}`];
-                            const description = fieldInfo?.description || '';
-                            const value = fields[key];
-                            
-                            formHtml += `<div class="col-md-4 col-lg-3">
-                                <div class="field-wrapper">
-                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
-                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-                                        <span>${key}</span>
-                                    </label>
-                                    <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-                            
-                            if (description) {
-                                formHtml += `
-                                    <div class="config-hint mt-1">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        <small>${description}</small>
-                                    </div>
-                                `;
-                            }
-                            formHtml += '</div></div>';
-                        }
-                    });
-                    formHtml += '</div></div>';
+//                     // V1 ARMS Variables
+//                     formHtml += `
+//                         <div class="servo-group mb-3">
+//                             <h6 class="servo-group-title"><i class="bi bi-joystick me-2"></i>V1 ARMS Variables (Legacy)</h6>
+//                             <div class="row g-3">
+//                     `;
+//                     v1Fields.forEach(key => {
+//                         if (fields[key] !== undefined) {
+//                             const fieldId = `config_${section}_${key}`;
+//                             const fieldInfo = data.field_options[`${section}.${key}`];
+//                             const description = fieldInfo?.description || '';
+//                             const value = fields[key];
+//                             
+//                             formHtml += `<div class="col-md-4">
+//                                 <div class="field-wrapper">
+//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
+//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+//                                         <span>${key}</span>
+//                                     </label>
+//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+//                             
+//                             if (description) {
+//                                 formHtml += `
+//                                     <div class="config-hint mt-1">
+//                                         <i class="bi bi-info-circle me-1"></i>
+//                                         <small>${description}</small>
+//                                     </div>
+//                                 `;
+//                             }
+//                             formHtml += '</div></div>';
+//                         }
+//                     });
+//                     formHtml += '</div></div>';
+//                     
+//                     // V2 RIGHT ARM Variables
+//                     formHtml += `
+//                         <div class="servo-group mb-3">
+//                             <h6 class="servo-group-title"><i class="bi bi-arrow-right-circle me-2"></i>V2 RIGHT ARM Variables</h6>
+//                             <div class="row g-3">
+//                     `;
+//                     v2RightFields.forEach(key => {
+//                         if (fields[key] !== undefined) {
+//                             const fieldId = `config_${section}_${key}`;
+//                             const fieldInfo = data.field_options[`${section}.${key}`];
+//                             const description = fieldInfo?.description || '';
+//                             const value = fields[key];
+//                             
+//                             formHtml += `<div class="col-md-4">
+//                                 <div class="field-wrapper">
+//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
+//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+//                                         <span>${key}</span>
+//                                     </label>
+//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+//                             
+//                             if (description) {
+//                                 formHtml += `
+//                                     <div class="config-hint mt-1">
+//                                         <i class="bi bi-info-circle me-1"></i>
+//                                         <small>${description}</small>
+//                                     </div>
+//                                 `;
+//                             }
+//                             formHtml += '</div></div>';
+//                         }
+//                     });
+//                     formHtml += '</div></div>';
+//                     
+//                     // V2 LEFT ARM Variables
+//                     formHtml += `
+//                         <div class="servo-group mb-3">
+//                             <h6 class="servo-group-title"><i class="bi bi-arrow-left-circle me-2"></i>V2 LEFT ARM Variables</h6>
+//                             <div class="row g-3">
+//                     `;
+//                     v2LeftFields.forEach(key => {
+//                         if (fields[key] !== undefined) {
+//                             const fieldId = `config_${section}_${key}`;
+//                             const fieldInfo = data.field_options[`${section}.${key}`];
+//                             const description = fieldInfo?.description || '';
+//                             const value = fields[key];
+//                             
+//                             formHtml += `<div class="col-md-4">
+//                                 <div class="field-wrapper">
+//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
+//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+//                                         <span>${key}</span>
+//                                     </label>
+//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+//                             
+//                             if (description) {
+//                                 formHtml += `
+//                                     <div class="config-hint mt-1">
+//                                         <i class="bi bi-info-circle me-1"></i>
+//                                         <small>${description}</small>
+//                                     </div>
+//                                 `;
+//                             }
+//                             formHtml += '</div></div>';
+//                         }
+//                     });
+//                     formHtml += '</div></div>';
+//                     
+//                     // Torso Height Variables
+//                     formHtml += `
+//                         <div class="servo-group mb-3">
+//                             <h6 class="servo-group-title"><i class="bi bi-arrow-up-down me-2"></i>Torso Height Variables</h6>
+//                             <div class="row g-3">
+//                     `;
+//                     torsoFields.forEach(key => {
+//                         if (fields[key] !== undefined) {
+//                             const fieldId = `config_${section}_${key}`;
+//                             const fieldInfo = data.field_options[`${section}.${key}`];
+//                             const description = fieldInfo?.description || '';
+//                             const value = fields[key];
+//                             
+//                             formHtml += `<div class="col-md-4">
+//                                 <div class="field-wrapper">
+//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
+//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+//                                         <span>${key}</span>
+//                                     </label>
+//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+//                             
+//                             if (description) {
+//                                 formHtml += `
+//                                     <div class="config-hint mt-1">
+//                                         <i class="bi bi-info-circle me-1"></i>
+//                                         <small>${description}</small>
+//                                     </div>
+//                                 `;
+//                             }
+//                             formHtml += '</div></div>';
+//                         }
+//                     });
+//                     formHtml += '</div></div>';
+//                     
+//                     // Left Leg Variables
+//                     formHtml += `
+//                         <div class="servo-group mb-3">
+//                             <h6 class="servo-group-title"><i class="bi bi-arrow-left me-2"></i>Left Leg Variables</h6>
+//                             <div class="row g-3">
+//                     `;
+//                     leftLegFields.forEach(key => {
+//                         if (fields[key] !== undefined) {
+//                             const fieldId = `config_${section}_${key}`;
+//                             const fieldInfo = data.field_options[`${section}.${key}`];
+//                             const description = fieldInfo?.description || '';
+//                             const value = fields[key];
+//                             
+//                             formHtml += `<div class="col-md-4 col-lg-3">
+//                                 <div class="field-wrapper">
+//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
+//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+//                                         <span>${key}</span>
+//                                     </label>
+//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+//                             
+//                             if (description) {
+//                                 formHtml += `
+//                                     <div class="config-hint mt-1">
+//                                         <i class="bi bi-info-circle me-1"></i>
+//                                         <small>${description}</small>
+//                                     </div>
+//                                 `;
+//                             }
+//                             formHtml += '</div></div>';
+//                         }
+//                     });
+//                     formHtml += '</div></div>';
+//                     
+//                     // Right Leg Variables
+//                     formHtml += `
+//                         <div class="servo-group mb-3">
+//                             <h6 class="servo-group-title"><i class="bi bi-arrow-right me-2"></i>Right Leg Variables</h6>
+//                             <div class="row g-3">
+//                     `;
+//                     rightLegFields.forEach(key => {
+//                         if (fields[key] !== undefined) {
+//                             const fieldId = `config_${section}_${key}`;
+//                             const fieldInfo = data.field_options[`${section}.${key}`];
+//                             const description = fieldInfo?.description || '';
+//                             const value = fields[key];
+//                             
+//                             formHtml += `<div class="col-md-4 col-lg-3">
+//                                 <div class="field-wrapper">
+//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
+//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
+//                                         <span>${key}</span>
+//                                     </label>
+//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+//                             
+//                             if (description) {
+//                                 formHtml += `
+//                                     <div class="config-hint mt-1">
+//                                         <i class="bi bi-info-circle me-1"></i>
+//                                         <small>${description}</small>
+//                                     </div>
+//                                 `;
+//                             }
+//                             formHtml += '</div></div>';
+//                         }
+//                     });
+//                     formHtml += '</div></div>';
                 } else {
                     // Regular sections - use standard layout
                     formHtml += '<div class="row g-3">';
@@ -2024,6 +2087,38 @@ if (saveBtn) {
         saveConfiguration();
     });
 }
+});
+
+// Fullscreen toggle function - outside DOMContentLoaded so it's globally accessible
+function toggleFullscreen() {
+    const icon = document.getElementById('fullscreen-icon');
+    
+    if (!document.fullscreenElement) {
+        // Enter fullscreen
+        document.documentElement.requestFullscreen().then(() => {
+            icon.classList.remove('bi-fullscreen');
+            icon.classList.add('bi-fullscreen-exit');
+        }).catch(err => {
+            console.log('Error attempting to enable fullscreen:', err);
+        });
+    } else {
+        // Exit fullscreen
+        if (document.exitFullscreen) {
+            document.exitFullscreen().then(() => {
+                icon.classList.remove('bi-fullscreen-exit');
+                icon.classList.add('bi-fullscreen');
+            });
+        }
+    }
+}
+
+// Handle fullscreen change events (for when user exits with ESC key)
+document.addEventListener('fullscreenchange', function() {
+    const icon = document.getElementById('fullscreen-icon');
+    if (!document.fullscreenElement) {
+        icon.classList.remove('bi-fullscreen-exit');
+        icon.classList.add('bi-fullscreen');
+    }
 });
 </script>
   
