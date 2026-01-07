@@ -116,6 +116,37 @@ backRightLeg = int(config["SERVO"]["backRightLeg"]) + perfectRightLegOffset
 
 MOVING = False
 
+# Callbacks for pause/resume functionality
+_on_movement_start = None
+_on_movement_end = None
+
+
+def set_movement_callbacks(on_start=None, on_end=None):
+    """Set callbacks to be called when servo movements start and end."""
+    global _on_movement_start, _on_movement_end
+    _on_movement_start = on_start
+    _on_movement_end = on_end
+    queue_message("Servo movement callbacks configured")
+
+
+def _notify_movement_start():
+    """Call the movement start callback if it's set."""
+    if _on_movement_start:
+        try:
+            _on_movement_start()
+        except Exception as e:
+            queue_message(f"ERROR: Failed to pause UI/STT: {e}")
+
+
+def _notify_movement_end():
+    """Call the movement end callback if it's set."""
+    if _on_movement_end:
+        try:
+            _on_movement_end()
+        except Exception as e:
+            queue_message(f"ERROR: Failed to resume UI/STT: {e}")
+
+
 
 def pwm_to_duty_cycle(pwm_value):
     return int((pwm_value / 4095.0) * 65535)
@@ -189,344 +220,488 @@ def step_forward():
     global MOVING
     if not MOVING:
         MOVING = True
-        move_legs(50, 50, 50, 50, 0.9)
-        move_legs(42, 42, 40, 40, 0.9)
-        move_legs(70, 70, 23, 23, 0.9)
-        move_legs(30, 30, 30, 30, 0.8)
-        move_legs(70, 70, 35, 35, 0.9)
-        move_legs(60, 60, 50, 50, 0.9)
-        move_legs(50, 50, 50, 50, 0.9)
-        time.sleep(0.1)
-        disable_all_servos()
-        MOVING = False
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.9)
+            move_legs(42, 42, 40, 40, 0.9)
+            move_legs(70, 70, 23, 23, 0.9)
+            move_legs(30, 30, 30, 30, 0.8)
+            move_legs(70, 70, 35, 35, 0.9)
+            move_legs(60, 60, 50, 50, 0.9)
+            move_legs(50, 50, 50, 50, 0.9)
+            time.sleep(0.1)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 def walk_forward():
     global MOVING
     if not MOVING:
         MOVING = True
-        move_legs(50, 50, 50, 50, 0.8)
-        sequence = [
-            (50, 70, 50, 50),
-            (50, 70, 35, 50),
-            (70, 50, 50, 50),
-            (70, 50, 50, 35),
-        ]
-        for _ in range(2):
-            for a, b, c, d in sequence:
-                move_legs(a, b, c, d, 0.5)
-        move_legs(70, 70, 50, 50, 0.6)
-        move_legs(50, 50, 50, 50, 0.8) 
-        time.sleep(0.1)
-        disable_all_servos()
-        MOVING = False
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            sequence = [
+                (50, 70, 50, 50),
+                (50, 70, 35, 50),
+                (70, 50, 50, 50),
+                (70, 50, 50, 35),
+            ]
+            for _ in range(2):
+                for a, b, c, d in sequence:
+                    move_legs(a, b, c, d, 0.5)
+            move_legs(70, 70, 50, 50, 0.6)
+            move_legs(50, 50, 50, 50, 0.8) 
+            time.sleep(0.1)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 def step_backward():
     global MOVING
     if not MOVING:
         MOVING = True
-        move_legs(50, 50, 50, 50, 0.9)
-        move_legs(30, 30, 55, 55, 0.8)
-        move_legs(68, 68, 82, 82, 0.8)
-        move_legs(30, 30, 70, 70, 0.8)
-        move_legs(50, 50, 62, 62, 0.9)
-        move_legs(65, 65, 50, 50, 0.9)
-        move_legs(50, 50, 50, 50, 0.9)
-        time.sleep(0.1)
-        disable_all_servos()
-        MOVING = False
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.9)
+            move_legs(30, 30, 55, 55, 0.8)
+            move_legs(68, 68, 82, 82, 0.8)
+            move_legs(30, 30, 70, 70, 0.8)
+            move_legs(50, 50, 62, 62, 0.9)
+            move_legs(65, 65, 50, 50, 0.9)
+            move_legs(50, 50, 50, 50, 0.9)
+            time.sleep(0.1)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 def walk_backward():
     global MOVING
     if not MOVING:
         MOVING = True
-        move_legs(50, 50, 50, 50, 0.8)
-        sequence = [
-        (50, 65, 50, 50),
-        (50, 65, 50, 35),
-        (65, 50, 50, 50),
-        (65, 50, 35, 50),
-        ]
-        for _ in range(2):
-            for a, b, c, d in sequence:
-                move_legs(a, b, c, d, 0.5)
-        move_legs(50, 50, 50, 50, 0.6)
-        time.sleep(0.1)
-        disable_all_servos()
-        MOVING = False
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            sequence = [
+            (50, 65, 50, 50),
+            (50, 65, 50, 35),
+            (65, 50, 50, 50),
+            (65, 50, 35, 50),
+            ]
+            for _ in range(2):
+                for a, b, c, d in sequence:
+                    move_legs(a, b, c, d, 0.5)
+            move_legs(50, 50, 50, 50, 0.6)
+            time.sleep(0.1)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 
 def turn_right():
-    move_legs(50, 50, 50, 50, 0.9)
-    move_legs(70, 70, 50, 50, 0.9)
-    move_legs(70, 70, 65, 35, 0.9)
-    move_legs(45, 45, 65, 35, 0.9)
-    move_legs(52, 52, 50, 50, 0.8)
-    move_legs(50, 50, 50, 50, 0.8)
-    time.sleep(0.1)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.9)
+            move_legs(70, 70, 50, 50, 0.9)
+            move_legs(70, 70, 65, 35, 0.9)
+            move_legs(45, 45, 65, 35, 0.9)
+            move_legs(52, 52, 50, 50, 0.8)
+            move_legs(50, 50, 50, 50, 0.8)
+            time.sleep(0.1)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 def turn_right_slow():
-    move_legs(50, 50, 50, 50, 0.9)
-    move_legs(70, 40, 50, 50, 0.7)
-    move_legs(70, 40, 50, 40, 0.7)
-    move_legs(50, 70, 50, 40, 0.7)
-    move_legs(50, 70, 50, 50, 0.7)
-    move_legs(50, 50, 50, 50, 0.9)
-    time.sleep(0.1)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.9)
+            move_legs(70, 40, 50, 50, 0.7)
+            move_legs(70, 40, 50, 40, 0.7)
+            move_legs(50, 70, 50, 40, 0.7)
+            move_legs(50, 70, 50, 50, 0.7)
+            move_legs(50, 50, 50, 50, 0.9)
+            time.sleep(0.1)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 
 def turn_left():
-    move_legs(50, 50, 50, 50, 0.9)
-    move_legs(70, 70, 50, 50, 0.9)
-    move_legs(70, 70, 35, 65, 0.9)
-    move_legs(45, 45, 35, 65, 0.9)
-    move_legs(52, 52, 50, 50, 0.8)
-    move_legs(50, 50, 50, 50, 0.8)
-    time.sleep(0.1)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.9)
+            move_legs(70, 70, 50, 50, 0.9)
+            move_legs(70, 70, 35, 65, 0.9)
+            move_legs(45, 45, 35, 65, 0.9)
+            move_legs(52, 52, 50, 50, 0.8)
+            move_legs(50, 50, 50, 50, 0.8)
+            time.sleep(0.1)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 def turn_left_slow():
-    move_legs(50, 50, 50, 50, 0.9)
-    move_legs(40, 70, 50, 50, 0.7)
-    move_legs(40, 70, 40, 50, 0.7)
-    move_legs(70, 50, 40, 50, 0.7)
-    move_legs(70, 50, 50, 50, 0.7)
-    move_legs(50, 50, 50, 50, 0.9)
-    time.sleep(0.1)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.9)
+            move_legs(40, 70, 50, 50, 0.7)
+            move_legs(40, 70, 40, 50, 0.7)
+            move_legs(70, 50, 40, 50, 0.7)
+            move_legs(70, 50, 50, 50, 0.7)
+            move_legs(50, 50, 50, 50, 0.9)
+            time.sleep(0.1)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 def right_hi():
-    move_legs(50, 50, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(80, 80, 50, 50, 0.8)
-    time.sleep(0.2)
-    move_legs(80, 80, 50, 70, 0.8)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 70, 0.8)
-    time.sleep(0.2)
-    move_arm(1, 1, 1, 0, 0, 0, 0.5)
-    time.sleep(0.2)
-    move_arm(100, 1, 1, 0, 0, 0, 0.8)
-    time.sleep(0.2)
-    move_arm(100, 100, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_arm(100, 50, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_arm(100, 50, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_arm(100, 50, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_arm(100, 1, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_arm(1, 1, 1, 0, 0, 0, 0.6)
-    time.sleep(0.2)
-    move_legs(80, 80, 50, 70, 0.8)
-    time.sleep(0.2)
-    move_legs(80, 80, 50, 50, 0.8)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 50, 0.4)
-    time.sleep(0.2)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.4)
+            time.sleep(0.2)
+            move_legs(80, 80, 50, 50, 0.8)
+            time.sleep(0.2)
+            move_legs(80, 80, 50, 70, 0.8)
+            time.sleep(0.2)
+            move_legs(50, 50, 50, 70, 0.8)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, 0, 0, 0, 0.5)
+            time.sleep(0.2)
+            move_arm(100, 1, 1, 0, 0, 0, 0.8)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, 0, 0, 0, 1)
+            time.sleep(0.2)
+            move_arm(100, 50, 1, 0, 0, 0, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, 0, 0, 0, 1)
+            time.sleep(0.2)
+            move_arm(100, 50, 1, 0, 0, 0, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, 0, 0, 0, 1)
+            time.sleep(0.2)
+            move_arm(100, 50, 1, 0, 0, 0, 1)
+            time.sleep(0.2)
+            move_arm(100, 1, 1, 0, 0, 0, 1)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, 0, 0, 0, 0.6)
+            time.sleep(0.2)
+            move_legs(80, 80, 50, 70, 0.8)
+            time.sleep(0.2)
+            move_legs(80, 80, 50, 50, 0.8)
+            time.sleep(0.2)
+            move_legs(50, 50, 50, 50, 0.4)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 
 def laugh():
-    for _ in range(5):
-        move_legs(50, 50, 50, 50, 1)
-        time.sleep(0.1)
-        move_legs(1, 1, 50, 50, 1)
-        time.sleep(0.1)
-    move_legs(50, 50, 50, 50, 1)
-    time.sleep(0.2)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            for _ in range(5):
+                move_legs(50, 50, 50, 50, 1)
+                time.sleep(0.1)
+                move_legs(1, 1, 50, 50, 1)
+                time.sleep(0.1)
+            move_legs(50, 50, 50, 50, 1)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 
 def swing_legs():
-    move_legs(50, 50, 50, 50, 1)
-    time.sleep(0.1)
-    move_legs(100, 100, 50, 50, 1)
-    time.sleep(0.1)
-    for _ in range(3):
-        move_legs(0, 0, 20, 80, 0.6)
-        time.sleep(0.1)
-        move_legs(0, 0, 80, 20, 0.6)
-        time.sleep(0.1)
-    move_legs(0, 0, 50, 50, 0.6)
-    time.sleep(0.1)
-    move_legs(50, 50, 50, 50, 0.7)
-    time.sleep(0.2)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 1)
+            time.sleep(0.1)
+            move_legs(100, 100, 50, 50, 1)
+            time.sleep(0.1)
+            for _ in range(3):
+                move_legs(0, 0, 20, 80, 0.6)
+                time.sleep(0.1)
+                move_legs(0, 0, 80, 20, 0.6)
+                time.sleep(0.1)
+            move_legs(0, 0, 50, 50, 0.6)
+            time.sleep(0.1)
+            move_legs(50, 50, 50, 50, 0.7)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 
 def pezz_dispenser():
-    move_legs(50, 50, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(80, 80, 50, 50, 0.8)
-    time.sleep(0.2)
-    move_legs(80, 80, 50, 70, 0.8)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 70, 0.8)
-    time.sleep(0.2)
-    move_arm(1, 1, 1, 1, 1, 1, 0.5)
-    time.sleep(0.2)
-    move_arm(40, 1, 1, 40, 1, 1, 0.6)
-    time.sleep(0.2)
-    move_arm(60, 70, 100, 40, 1, 1, 1)
-    time.sleep(1)
-    move_arm(60, 70, 100, 60, 70, 100, 1)
-    time.sleep(1)
-    move_arm(60, 70, 100, 0, 0, 0, 1)
-    time.sleep(2)
-    move_arm(1, 1, 1, 0, 0, 0, 1)
-    time.sleep(0.2)
-    move_legs(80, 80, 50, 50, 0.8)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 50, 0.8)
-    time.sleep(0.5)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.4)
+            time.sleep(0.2)
+            move_legs(80, 80, 50, 50, 0.8)
+            time.sleep(0.2)
+            move_legs(80, 80, 50, 70, 0.8)
+            time.sleep(0.2)
+            move_legs(50, 50, 50, 70, 0.8)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, 1, 1, 1, 0.5)
+            time.sleep(0.2)
+            move_arm(40, 1, 1, 40, 1, 1, 0.6)
+            time.sleep(0.2)
+            move_arm(60, 70, 100, 40, 1, 1, 1)
+            time.sleep(1)
+            move_arm(60, 70, 100, 60, 70, 100, 1)
+            time.sleep(1)
+            move_arm(60, 70, 100, 0, 0, 0, 1)
+            time.sleep(2)
+            move_arm(1, 1, 1, 0, 0, 0, 1)
+            time.sleep(0.2)
+            move_legs(80, 80, 50, 50, 0.8)
+            time.sleep(0.2)
+            move_legs(50, 50, 50, 50, 0.8)
+            time.sleep(0.5)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 
 def monster():
-    move_legs(50, 50, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(80, 80, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(80, 80, 70, 70, 0.4)
-    move_arm(1, 1, 1, 1, 1, 1, 0.8)
-    time.sleep(0.2)
-    move_arm(100, 1, 1, 100, 1, 1, 0.8)
-    time.sleep(0.2)
-    move_legs(50, 50, 70, 70, 0.4)
-    time.sleep(0.2)
-    move_arm(100, 100, 1, 100, 100, 1, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 100, 100, 100, 100, 1)
-    time.sleep(0.2)
-    move_arm(100, 50, 100, 100, 100, 100, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 50, 100, 50, 50, 1)
-    time.sleep(0.2)
-    move_arm(100, 50, 100, 100, 100, 100, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 50, 100, 50, 50, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 100, 100, 100, 100, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 1, 100, 100, 1, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 100, 100, 100, 100, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 1, 100, 100, 1, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 100, 100, 100, 100, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 1, 100, 100, 1, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 100, 100, 100, 100, 1)
-    time.sleep(0.2)
-    move_arm(100, 100, 1, 100, 100, 1, 1)
-    time.sleep(0.2)
-    move_arm(100, 1, 1, 100, 1, 1, 1)
-    move_legs(50, 50, 70, 70, 0.4)
-    time.sleep(0.2)
-    time.sleep(0.2)
-    move_arm(1, 1, 1, 1, 1, 1, 0.8)
-    time.sleep(0.2)
-    move_legs(80, 80, 50, 50, 0.4)
-    time.sleep(0.2)
-    move_legs(50, 50, 50, 50, 0.4)
-    time.sleep(0.2)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.4)
+            time.sleep(0.2)
+            move_legs(80, 80, 50, 50, 0.4)
+            time.sleep(0.2)
+            move_legs(80, 80, 70, 70, 0.4)
+            move_arm(1, 1, 1, 1, 1, 1, 0.8)
+            time.sleep(0.2)
+            move_arm(100, 1, 1, 100, 1, 1, 0.8)
+            time.sleep(0.2)
+            move_legs(50, 50, 70, 70, 0.4)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, 100, 100, 1, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 100, 100, 100, 100, 1)
+            time.sleep(0.2)
+            move_arm(100, 50, 100, 100, 100, 100, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 50, 100, 50, 50, 1)
+            time.sleep(0.2)
+            move_arm(100, 50, 100, 100, 100, 100, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 50, 100, 50, 50, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 100, 100, 100, 100, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, 100, 100, 1, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 100, 100, 100, 100, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, 100, 100, 1, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 100, 100, 100, 100, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, 100, 100, 1, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 100, 100, 100, 100, 1)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, 100, 100, 1, 1)
+            time.sleep(0.2)
+            move_arm(100, 1, 1, 100, 1, 1, 1)
+            move_legs(50, 50, 70, 70, 0.4)
+            time.sleep(0.2)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, 1, 1, 1, 0.8)
+            time.sleep(0.2)
+            move_legs(80, 80, 50, 50, 0.4)
+            time.sleep(0.2)
+            move_legs(50, 50, 50, 50, 0.4)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 
 def pose():
-    move_legs(50, 50, 50, 50, 0.4)
-    move_legs(30, 30, 40, 40, 0.4)
-    move_legs(100, 100, 30, 30, 0.4)
-    time.sleep(3)
-    move_legs(100, 100, 30, 30, 0.4)
-    move_legs(30, 30, 30, 30, 0.4)
-    move_legs(30, 30, 40, 40, 0.4)
-    move_legs(50, 50, 50, 50, 0.4)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.4)
+            move_legs(30, 30, 40, 40, 0.4)
+            move_legs(100, 100, 30, 30, 0.4)
+            time.sleep(3)
+            move_legs(100, 100, 30, 30, 0.4)
+            move_legs(30, 30, 30, 30, 0.4)
+            move_legs(30, 30, 40, 40, 0.4)
+            move_legs(50, 50, 50, 50, 0.4)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 
 def bow():
-    move_legs(50, 50, 50, 50, 0.4)
-    move_legs(15, 15, 50, 50, 0.7)
-    move_legs(15, 15, 70, 70, 0.7)
-    move_legs(60, 60, 70, 70, 0.7)
-    move_legs(95, 95, 65, 65, 0.7)
-    time.sleep(3)
-    move_legs(15, 15, 65, 65, 0.7)
-    move_legs(50, 50, 50, 50, 0.4)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.4)
+            move_legs(15, 15, 50, 50, 0.7)
+            move_legs(15, 15, 70, 70, 0.7)
+            move_legs(60, 60, 70, 70, 0.7)
+            move_legs(95, 95, 65, 65, 0.7)
+            time.sleep(3)
+            move_legs(15, 15, 65, 65, 0.7)
+            move_legs(50, 50, 50, 50, 0.4)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 def tilt_right():
-    move_legs(50, 50, 50, 50, 0.9)
-    move_legs(20, 80, 50, 50, 0.9)
-    time.sleep(3)
-    move_legs(50, 50, 50, 50, 0.9)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.9)
+            move_legs(20, 80, 50, 50, 0.9)
+            time.sleep(3)
+            move_legs(50, 50, 50, 50, 0.9)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 
 def tilt_left():
-    move_legs(50, 50, 50, 50, 0.9)
-    move_legs(80, 20, 50, 50, 0.9)
-    time.sleep(3)
-    move_legs(50, 50, 50, 50, 0.9)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.9)
+            move_legs(80, 20, 50, 50, 0.9)
+            time.sleep(3)
+            move_legs(50, 50, 50, 50, 0.9)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 def side_side():
-    move_legs(50, 50, 50, 50, 0.8)
-    move_legs(10, 90, 50, 50, 0.9)
-    move_legs(90, 10, 50, 50, 0.9)
-    move_legs(10, 90, 50, 50, 0.9)
-    move_legs(90, 10, 50, 50, 0.9)
-    move_legs(10, 90, 50, 50, 0.9)
-    move_legs(90, 10, 50, 50, 0.9)
-    move_legs(50, 50, 50, 50, 0.9)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(10, 90, 50, 50, 0.9)
+            move_legs(90, 10, 50, 50, 0.9)
+            move_legs(10, 90, 50, 50, 0.9)
+            move_legs(90, 10, 50, 50, 0.9)
+            move_legs(10, 90, 50, 50, 0.9)
+            move_legs(90, 10, 50, 50, 0.9)
+            move_legs(50, 50, 50, 50, 0.9)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 def wave_right():
-    move_legs(50, 50, 50, 50, 0.8)
-    move_legs(50, 90, 50, 50, 0.9)
-    move_legs(20, 90, 50, 100, 0.9)
-    move_legs(20, 90, 50, 70, 0.9)
-    move_legs(20, 90, 50, 100, 0.9)
-    move_legs(20, 90, 50, 70, 0.9)
-    move_legs(50, 90, 50, 100, 0.9)
-    move_legs(50, 90, 50, 70, 0.9)
-    move_legs(50, 90, 50, 100, 0.9)
-    move_legs(50, 90, 50, 70, 0.9)
-    move_legs(20, 90, 50, 100, 0.9)
-    move_legs(20, 90, 50, 70, 0.9)
-    move_legs(20, 90, 50, 100, 0.9)
-    move_legs(20, 90, 50, 70, 0.9)
-    move_legs(50, 50, 50, 50, 0.8)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(50, 90, 50, 50, 0.9)
+            move_legs(20, 90, 50, 100, 0.9)
+            move_legs(20, 90, 50, 70, 0.9)
+            move_legs(20, 90, 50, 100, 0.9)
+            move_legs(20, 90, 50, 70, 0.9)
+            move_legs(50, 90, 50, 100, 0.9)
+            move_legs(50, 90, 50, 70, 0.9)
+            move_legs(50, 90, 50, 100, 0.9)
+            move_legs(50, 90, 50, 70, 0.9)
+            move_legs(20, 90, 50, 100, 0.9)
+            move_legs(20, 90, 50, 70, 0.9)
+            move_legs(20, 90, 50, 100, 0.9)
+            move_legs(20, 90, 50, 70, 0.9)
+            move_legs(50, 50, 50, 50, 0.8)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 def wave_left():
-    move_legs(50, 50, 50, 50, 0.8)
-    move_legs(90, 50, 50, 50, 0.9)
-    move_legs(90, 20, 100, 50, 0.9)
-    move_legs(90, 20, 70, 50, 0.9)
-    move_legs(90, 20, 100, 50, 0.9)
-    move_legs(90, 20, 70, 50, 0.9)
-    move_legs(90, 50, 100, 50, 0.9)
-    move_legs(90, 50, 70, 50, 0.9)
-    move_legs(90, 50, 100, 50, 0.9)
-    move_legs(90, 50, 70, 50, 0.9)
-    move_legs(90, 20, 100, 50, 0.9)
-    move_legs(90, 20, 70, 50, 0.9)
-    move_legs(90, 20, 100, 50, 0.9)
-    move_legs(90, 20, 70, 50, 0.9)
-    move_legs(50, 50, 50, 50, 0.8)
-    disable_all_servos()
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(90, 50, 50, 50, 0.9)
+            move_legs(90, 20, 100, 50, 0.9)
+            move_legs(90, 20, 70, 50, 0.9)
+            move_legs(90, 20, 100, 50, 0.9)
+            move_legs(90, 20, 70, 50, 0.9)
+            move_legs(90, 50, 100, 50, 0.9)
+            move_legs(90, 50, 70, 50, 0.9)
+            move_legs(90, 50, 100, 50, 0.9)
+            move_legs(90, 50, 70, 50, 0.9)
+            move_legs(90, 20, 100, 50, 0.9)
+            move_legs(90, 20, 70, 50, 0.9)
+            move_legs(90, 20, 100, 50, 0.9)
+            move_legs(90, 20, 70, 50, 0.9)
+            move_legs(50, 50, 50, 50, 0.8)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
 
 
 def move_servos_synchronized(movements, speed_factor):

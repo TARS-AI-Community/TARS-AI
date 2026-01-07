@@ -32,6 +32,24 @@ from modules.module_ui import UIManager
 from modules.module_battery import BatteryModule
 from modules.module_btcontroller import *
 import modules.module_chatui
+from modules import module_servoctl
+
+def pause_ui_and_stt():
+    if ui_manager:
+        ui_manager.pause()
+    if stt_manager:
+        stt_manager.pause()
+
+def resume_ui_and_stt():
+    if ui_manager:
+        ui_manager.resume()
+    if stt_manager:
+        stt_manager.resume()
+
+module_servoctl.set_movement_callbacks(
+    on_start=pause_ui_and_stt,
+    on_end=resume_ui_and_stt
+)
 
 import logging  # This will hide INFO and DEBUG messages
 logging.basicConfig(level=logging.WARNING)  # This will hide INFO and DEBUG messages
