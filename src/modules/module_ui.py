@@ -454,8 +454,6 @@ class UIManager(threading.Thread):
             font = pygame.font.Font("UI/mono.ttf", self.font_size)
             self.running = True
 
-            print("UI Manager initialized - Spectrum analyzer and camera active")
-
             while self.running and not self.shutdown_event.is_set():
 
                 if self.paused:
