@@ -15,7 +15,7 @@ wake_word_processor = atomik
 # Options: picovoice, fastrtc, atomik
 sensitivity = 7
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for Atomik wake word detection. 
-stt_processor = openai
+stt_processor = fastrtc
 #vosk, faster-whisper, silero, fastrtc, openai (for other languages than english) or external
 use_indicators = True
 # Use beeps to indicate when listening
