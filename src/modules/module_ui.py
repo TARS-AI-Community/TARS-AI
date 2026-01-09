@@ -305,7 +305,7 @@ class UIManager(threading.Thread):
             new_starfield = StarfieldSystem(
                 self.logical_width,
                 self.logical_height,
-                num_stars=300,
+                num_stars=600,
                 bg_color=(0, 0, 0)
             )
         elif bg_type == 'tesseract':
