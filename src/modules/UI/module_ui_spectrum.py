@@ -13,7 +13,7 @@ import sounddevice as sd
 import threading
 
 class SpectrumSystem:
-    def __init__(self, width, height, style='wave', bg_alpha=0, sample_rate=44100, chunk_size=1024):
+    def __init__(self, width, height, style='wave', bg_alpha=0, sample_rate=16000, chunk_size=1024):
         self.stream = None
         self.audio_running = False
 
