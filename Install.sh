@@ -275,6 +275,39 @@ install_chromedriver() {
     fi
 }
 
+install_pulseaudio() {
+    tars_say "Initiating PulseAudio installation sequence..." "info"
+    
+    echo "+===============================================================+"
+    echo "| PULSEAUDIO INSTALLATION PROTOCOL"
+    echo "+===============================================================+"
+    
+    # Install PulseAudio
+    if ! sudo apt-get install -y pulseaudio 2>&1 | tee /tmp/pulseaudio-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
+        tars_say "PulseAudio installation encountered issues. Check /tmp/pulseaudio-install.log" "warning"
+    else
+        echo "|  [OK] PulseAudio installed successfully"
+    fi
+    
+    # Start PulseAudio
+    echo "+===============================================================+"
+    echo "| Starting PulseAudio service..."
+    echo "+===============================================================+"
+    
+    if pulseaudio --check 2>/dev/null; then
+        echo "|  PulseAudio is already running"
+    else
+        if pulseaudio --start 2>&1 | tee -a /tmp/pulseaudio-install.log; then
+            echo "|  [OK] PulseAudio started successfully"
+        else
+            echo "|  [!] PulseAudio start had issues - it may start automatically later"
+        fi
+    fi
+    
+    echo "+===============================================================+"
+    echo ""
+}
+
 verify_installations() {
     tars_say "Verifying system dependencies..." "info"
     
@@ -284,7 +317,7 @@ verify_installations() {
     
     local MISSING_DEPS=()
     
-    for cmd in python3 pip chromium chromedriver sox portaudio19-dev espeak-ng; do
+    for cmd in python3 pip chromium chromedriver sox pulseaudio portaudio19-dev espeak-ng; do
         if command -v $cmd &>/dev/null || dpkg -l | grep -q $cmd; then
             echo "|  [OK] $cmd"
         else
@@ -370,6 +403,7 @@ main() {
         sleep 2
     fi
     
+    install_pulseaudio
     detect_os_version
     install_chromium
     verify_installations
