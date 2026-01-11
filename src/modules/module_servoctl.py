@@ -148,15 +148,21 @@ def _notify_movement_end():
 
 
 
-def pwm_to_duty_cycle(pwm_value):
-    return int((pwm_value / 4095.0) * 65535)
+def pulse_to_duty_cycle(pulse_value):
+    """Convert pulse width value (0-600 range) to 16-bit duty cycle.
+    This matches the coordinate system used in config.ini and app-servotester.py
+    """
+    MAX_PULSE = 600
+    pulse_us = 500 + (pulse_value / MAX_PULSE) * 2000
+    duty_cycle = int((pulse_us / 20000.0) * 65535)
+    return duty_cycle
 
 
 def set_servo_pwm(channel, pwm_value):
     if pca is None:
         return False
     
-    duty_cycle = pwm_to_duty_cycle(pwm_value)
+    duty_cycle = pulse_to_duty_cycle(pwm_value)
 
     for attempt in range(MAX_RETRIES):
         try:

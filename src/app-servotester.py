@@ -138,12 +138,12 @@ def set_all_servos_preset():
     set_servo_pulse(1, 350)
     set_servo_pulse(2, 300)
     set_servo_pulse(3, 300)
-    set_servo_pulse(4, 80)
-    set_servo_pulse(5, 200)
-    set_servo_pulse(6, 200)
-    set_servo_pulse(7, 580)
-    set_servo_pulse(8, 380)
-    set_servo_pulse(9, 380)
+    set_servo_pulse(4, 550)  # Left main arm
+    set_servo_pulse(5, 380)  # Left forearm
+    set_servo_pulse(6, 280)  # Left hand (updated to 280)
+    set_servo_pulse(7, 50)   # Right main arm
+    set_servo_pulse(8, 200)  # Right forearm
+    set_servo_pulse(9, 200)  # Right hand
     print("OK Preset applied - Servos under power")
     return "OK Preset applied - Servos under power"
 
@@ -1205,12 +1205,12 @@ class ServoControllerGUI:
         
         # Arm servo base values for validation
         arm_base_values = {
-            'leftMainOffset': (int(servo_config.get('leftMainMin', 80)), int(servo_config.get('leftMainMax', 580))),
-            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 200)), int(servo_config.get('leftForarmMax', 380))),
-            'leftHandOffset': (int(servo_config.get('leftHandMin', 200)), int(servo_config.get('leftHandMax', 280))),
-            'rightMainOffset': (int(servo_config.get('rightMainMin', 580)), int(servo_config.get('rightMainMax', 80))),
-            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 380)), int(servo_config.get('rightForarmMax', 200))),
-            'rightHandOffset': (int(servo_config.get('rightHandMin', 380)), int(servo_config.get('rightHandMax', 280)))
+            'leftMainOffset': (int(servo_config.get('leftMainMin', 550)), int(servo_config.get('leftMainMax', 50))),
+            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 380)), int(servo_config.get('leftForarmMax', 280))),
+            'leftHandOffset': (int(servo_config.get('leftHandMin', 280)), int(servo_config.get('leftHandMax', 200))),
+            'rightMainOffset': (int(servo_config.get('rightMainMin', 50)), int(servo_config.get('rightMainMax', 550))),
+            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 200)), int(servo_config.get('rightForarmMax', 380))),
+            'rightHandOffset': (int(servo_config.get('rightHandMin', 200)), int(servo_config.get('rightHandMax', 280)))
         }
         
         # Handle increment/decrement buttons
@@ -1527,8 +1527,23 @@ def adjust_offsets():
             print(f"\n--- Adjusting {servo_name} Offset ---")
             print(f"Current value: {current_value:+d}")
             
+            # Use actual default positions for each servo type
             if channel in [0, 1]:
-                base_pulse = 350
+                base_pulse = 350  # Height servos
+            elif channel in [2, 3]:
+                base_pulse = 300  # Leg servos
+            elif channel == 4:
+                base_pulse = int(servo_config.get('leftMainMin', 550))  # Left main arm
+            elif channel == 5:
+                base_pulse = int(servo_config.get('leftForarmMin', 380))  # Left forearm
+            elif channel == 6:
+                base_pulse = int(servo_config.get('leftHandMin', 280))  # Left hand
+            elif channel == 7:
+                base_pulse = int(servo_config.get('rightMainMin', 50))  # Right main arm
+            elif channel == 8:
+                base_pulse = int(servo_config.get('rightForarmMin', 200))  # Right forearm
+            elif channel == 9:
+                base_pulse = int(servo_config.get('rightHandMin', 200))  # Right hand
             else:
                 base_pulse = 300
             
