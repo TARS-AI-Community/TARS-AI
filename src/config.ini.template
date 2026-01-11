@@ -211,26 +211,25 @@ perfectRightLegOffset = 0
 # Set to True only if the arms are built on the robot (This changes the movements settings because of weight distribution)
 # The min and max value will control how far the arm can move, avoid having the connecting arm push against the case, the servo must not be under strain.
 # LEFT ARM
-leftMainMin = 80
-leftMainMax = 580
+leftMainMin = 550
+leftMainMax = 50
 leftMainOffset = 0
-leftForarmMin = 200
-leftForarmMax = 380
+leftForarmMin = 380
+leftForarmMax = 100
 leftForearmOffset = 0
-leftHandMin = 200
-leftHandMax = 280
+leftHandMin = 280
+leftHandMax = 200
 leftHandOffset = 0
 # RIGHT ARM
-rightMainMin = 580
-rightMainMax = 80
+rightMainMin = 50
+rightMainMax = 550
 rightMainOffset = 0
-rightForarmMin = 380
-rightForarmMax = 200
+rightForarmMin = 100
+rightForarmMax = 380
 rightForearmOffset = 0
-rightHandMin = 380
+rightHandMin = 200
 rightHandMax = 280
 rightHandOffset = 0
-
 
 [BATTERY]
 # This section is only required if you are using an INA260 Current + Voltage + Power Sensor
