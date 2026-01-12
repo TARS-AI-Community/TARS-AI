@@ -140,9 +140,9 @@ def set_all_servos_preset():
     set_servo_pulse(3, 300)
     set_servo_pulse(4, 550)  # Left main arm
     set_servo_pulse(5, 380)  # Left forearm
-    set_servo_pulse(6, 280)  # Left hand (updated to 280)
+    set_servo_pulse(6, 280)  # Left hand
     set_servo_pulse(7, 50)   # Right main arm
-    set_servo_pulse(8, 200)  # Right forearm
+    set_servo_pulse(8, 100)  # Right forearm (updated to 100)
     set_servo_pulse(9, 200)  # Right hand
     print("OK Preset applied - Servos under power")
     return "OK Preset applied - Servos under power"
@@ -1206,10 +1206,10 @@ class ServoControllerGUI:
         # Arm servo base values for validation
         arm_base_values = {
             'leftMainOffset': (int(servo_config.get('leftMainMin', 550)), int(servo_config.get('leftMainMax', 50))),
-            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 380)), int(servo_config.get('leftForarmMax', 280))),
+            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 380)), int(servo_config.get('leftForarmMax', 100))),
             'leftHandOffset': (int(servo_config.get('leftHandMin', 280)), int(servo_config.get('leftHandMax', 200))),
             'rightMainOffset': (int(servo_config.get('rightMainMin', 50)), int(servo_config.get('rightMainMax', 550))),
-            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 200)), int(servo_config.get('rightForarmMax', 380))),
+            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 100)), int(servo_config.get('rightForarmMax', 380))),
             'rightHandOffset': (int(servo_config.get('rightHandMin', 200)), int(servo_config.get('rightHandMax', 280)))
         }
         
@@ -1541,7 +1541,7 @@ def adjust_offsets():
             elif channel == 7:
                 base_pulse = int(servo_config.get('rightMainMin', 50))  # Right main arm
             elif channel == 8:
-                base_pulse = int(servo_config.get('rightForarmMin', 200))  # Right forearm
+                base_pulse = int(servo_config.get('rightForarmMin', 100))  # Right forearm
             elif channel == 9:
                 base_pulse = int(servo_config.get('rightHandMin', 200))  # Right hand
             else:
@@ -1720,6 +1720,7 @@ if __name__ == "__main__":
     print("\nSelect Mode:")
     print("1. GUI Mode (graphical interface)")
     print("2. Terminal Mode (text-based)")
+    print("3. Test Custom Movements (Need to be added in the code)")
     print("="*50)
     
     mode_choice = input("\nEnter your choice (1 or 2): ").strip()
@@ -1730,6 +1731,12 @@ if __name__ == "__main__":
             gui.run()
         elif mode_choice == '2':
             terminal_mode()
+        elif mode_choice == '3':
+            #insert your own movements
+            # values are in percentage, 0 = no power to the servo, last parameter is the speed (0.1 to 1)
+            #move_legs(50, 50, 50, 50, 0.8) -- neutral legs
+            #move_arm(1, 1, 1, 1, 1, 1, 0.8) -- neutral arms
+            pass
         else:
             print("Invalid selection. Defaulting to GUI mode...")
             gui = ServoControllerGUI()
@@ -1737,3 +1744,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         disable_all_servos()
         print("\nOK Servos disabled. Exiting.")
+

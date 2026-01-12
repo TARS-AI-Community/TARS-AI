@@ -116,13 +116,11 @@ backRightLeg = int(config["SERVO"]["backRightLeg"]) + perfectRightLegOffset
 
 MOVING = False
 
-# Callbacks for pause/resume functionality
 _on_movement_start = None
 _on_movement_end = None
 
 
 def set_movement_callbacks(on_start=None, on_end=None):
-    """Set callbacks to be called when servo movements start and end."""
     global _on_movement_start, _on_movement_end
     _on_movement_start = on_start
     _on_movement_end = on_end
@@ -130,7 +128,6 @@ def set_movement_callbacks(on_start=None, on_end=None):
 
 
 def _notify_movement_start():
-    """Call the movement start callback if it's set."""
     if _on_movement_start:
         try:
             _on_movement_start()
@@ -139,7 +136,6 @@ def _notify_movement_start():
 
 
 def _notify_movement_end():
-    """Call the movement end callback if it's set."""
     if _on_movement_end:
         try:
             _on_movement_end()
@@ -149,9 +145,6 @@ def _notify_movement_end():
 
 
 def pulse_to_duty_cycle(pulse_value):
-    """Convert pulse width value (0-600 range) to 16-bit duty cycle.
-    This matches the coordinate system used in config.ini and app-servotester.py
-    """
     MAX_PULSE = 600
     pulse_us = 500 + (pulse_value / MAX_PULSE) * 2000
     duty_cycle = int((pulse_us / 20000.0) * 65535)
