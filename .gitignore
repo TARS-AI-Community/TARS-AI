@@ -166,7 +166,7 @@ character/persona.ini
 
 # Speech-to-text (STT) Folder (ignored except for specific file)
 stt/
-!stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
+!stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 
 # Ignore everything inside "character" by default
 character/

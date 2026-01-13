@@ -29,7 +29,7 @@ vad_method = rms
 # Enable silero, rms
 speechdelay = 20
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
-picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v3_0_0.ppn
+picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 # Relative path to the Porcupine keyword file
 
 
@@ -214,8 +214,8 @@ perfectRightLegOffset = 0
 leftMainMin = 550
 leftMainMax = 50
 leftMainOffset = 0
-leftForarmMin = 380
-leftForarmMax = 100
+leftForarmMin = 400
+leftForarmMax = 180
 leftForearmOffset = 0
 leftHandMin = 280
 leftHandMax = 200
@@ -224,8 +224,8 @@ leftHandOffset = 0
 rightMainMin = 50
 rightMainMax = 550
 rightMainOffset = 0
-rightForarmMin = 100
-rightForarmMax = 380
+rightForarmMin = 180
+rightForarmMax = 400
 rightForearmOffset = 0
 rightHandMin = 200
 rightHandMax = 280
