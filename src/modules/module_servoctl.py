@@ -221,12 +221,24 @@ def step_forward():
         MOVING = True
         _notify_movement_start()
         try:
+
+            """ 
             move_legs(50, 50, 50, 50, 0.9)
             move_legs(42, 42, 40, 40, 0.9)
             move_legs(70, 70, 23, 23, 0.9)
             move_legs(30, 30, 30, 30, 0.8)
             move_legs(70, 70, 35, 35, 0.9)
             move_legs(60, 60, 50, 50, 0.9)
+            move_legs(50, 50, 50, 50, 0.9)
+            """
+
+
+            move_legs(50, 50, 50, 50, 0.9)
+            move_legs(32, 32, 20, 20, 0.9)
+            move_legs(68, 68, 8, 8, 0.9)
+            move_legs(15, 15, 17, 17, 0.9)
+            move_legs(75, 75, 24, 24, 0.9)
+            move_legs(70, 70, 50, 50, 0.9)
             move_legs(50, 50, 50, 50, 0.9)
             time.sleep(0.1)
             disable_all_servos()
@@ -240,12 +252,12 @@ def walk_forward():
         MOVING = True
         _notify_movement_start()
         try:
-            move_legs(50, 50, 50, 50, 0.8)
+            """ move_legs(50, 50, 50, 50, 0.8)
             sequence = [
-                (50, 70, 50, 50),
-                (50, 70, 35, 50),
-                (70, 50, 50, 50),
-                (70, 50, 50, 35),
+                (40, 70, 50, 50),
+                (40, 70, 35, 50),
+                (70, 40, 50, 50),
+                (70, 40, 50, 35),
             ]
             for _ in range(2):
                 for a, b, c, d in sequence:
@@ -253,7 +265,24 @@ def walk_forward():
             move_legs(70, 70, 50, 50, 0.6)
             move_legs(50, 50, 50, 50, 0.8) 
             time.sleep(0.1)
+            disable_all_servos() """
+
+            move_legs(50, 50, 50, 50, 0.8)
+            sequence = [
+                (40, 70, 50, 50),
+                (40, 70, 25, 50),
+                (70, 40, 50, 50),
+                (70, 40, 50, 25),
+            ]
+            for _ in range(2):
+                for a, b, c, d in sequence:
+                    move_legs(a, b, c, d, 0.6)
+            move_legs(70, 70, 50, 50, 0.7)
+            move_legs(50, 50, 50, 50, 0.8) 
+            time.sleep(0.1)
             disable_all_servos()
+
+
         finally:
             MOVING = False
             _notify_movement_end()
