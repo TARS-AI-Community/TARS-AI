@@ -276,7 +276,7 @@ def walk_forward():
             ]
             for _ in range(2):
                 for a, b, c, d in sequence:
-                    move_legs(a, b, c, d, 0.6)
+                    move_legs(a, b, c, d, 0.75)
             move_legs(70, 70, 50, 50, 0.7)
             move_legs(50, 50, 50, 50, 0.8) 
             time.sleep(0.1)
