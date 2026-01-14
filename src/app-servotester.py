@@ -139,10 +139,10 @@ def set_all_servos_preset():
     set_servo_pulse(2, 300)
     set_servo_pulse(3, 300)
     set_servo_pulse(4, 550)
-    set_servo_pulse(5, 400)
+    set_servo_pulse(5, 460)
     set_servo_pulse(6, 280)
     set_servo_pulse(7, 50)
-    set_servo_pulse(8, 180)
+    set_servo_pulse(8, 200)
     set_servo_pulse(9, 200)
     print("OK Preset applied - Servos under power")
     return "OK Preset applied - Servos under power"
@@ -1719,10 +1719,10 @@ if __name__ == "__main__":
     print("\nSelect Mode:")
     print("1. GUI Mode (graphical interface)")
     print("2. Terminal Mode (text-based)")
-    print("3. Test Custom Movements (Need to be added in the code)")
+    print("3. Test Custom Movements (You need to add these in the code yourself.)")
     print("="*50)
     
-    mode_choice = input("\nEnter your choice (1 or 2): ").strip()
+    mode_choice = input("\nEnter your choice (1, 2 or 3): ").strip()
     
     try:
         if mode_choice == '1':
@@ -1736,18 +1736,21 @@ if __name__ == "__main__":
             #move_legs(50, 50, 50, 50, 0.8) -- neutral legs
             #move_arm(1, 1, 1, 1, 1, 1, 0.8) -- neutral arms
 
-            move_legs(50, 50, 50, 50, 0.8)
-            move_legs(50, 100, 50, 60, 0.8)
+            #move_legs(50, 50, 50, 50, 0.8)
+            #move_legs(50, 50, 50, 50, 0.8)
 
+            #disable_all_servos()
+            reset_positions()
+            move_legs(80, 80, 60, 60, 0.8)
 
-            move_arm(0, 0, 0, 1, 1, 1, 0.8)
-            move_arm(0, 0, 0, 100, 1, 1, 0.8)
-            move_arm(0, 0, 0, 100, 50, 1, 0.8)
+            move_arm(60, None, None, 60, None, None, 0.9)
+            move_arm(None, 50, None, None, 80, None, 1)
+            move_arm(None, 50, 50, None, 80, 50, 1)
             time.sleep(3)
-           
-            move_arm(1, 1, 1, 1, 1, 1, 0.8)
+            move_arm(98, 50, 1, 98, 80, 1, 0.9)
+            move_arm(98, 1, 1, 98, 1, 1, 0.9)
+            move_arm(1, 1, 1, 1, 1, 1, 0.9)
             move_legs(50, 50, 50, 50, 0.8)
-
 
             disable_all_servos()
             pass
