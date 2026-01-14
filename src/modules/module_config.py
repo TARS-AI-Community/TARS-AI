@@ -239,6 +239,7 @@ def load_config():
         },
         "SERVO": {
             # Arm Servos
+            "arms_present": config.getboolean('SERVO', 'arms_present'),
             "leftMainMin": config['SERVO']['leftMainMin'],
             "leftForarmMin": config['SERVO']['leftForarmMin'],
             "leftHandMin": config['SERVO']['leftHandMin'],
