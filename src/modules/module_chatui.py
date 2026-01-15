@@ -603,6 +603,56 @@ def execute_action():
         queue_message(f"Error executing action: {e}")
         return jsonify({"error": f"Failed to execute action: {str(e)}"}), 500
 
+@flask_app.route('/move_legs', methods=['POST'])
+def move_legs_endpoint():
+    """
+    Handles direct leg servo control.
+    Expects JSON with fields: left_height, right_height, left_leg, right_leg, speed
+    Each value should be between 1-100, with 50 being neutral.
+    Speed should be between 0.5 and 1.
+    """
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    
+    data = request.get_json()
+    
+    try:
+        left_height = int(data.get('left_height', 50))
+        right_height = int(data.get('right_height', 50))
+        left_leg = int(data.get('left_leg', 50))
+        right_leg = int(data.get('right_leg', 50))
+        speed = float(data.get('speed', 0.5))
+        
+        # Validate values are within range
+        for value, name in [(left_height, 'left_height'), (right_height, 'right_height'), 
+                            (left_leg, 'left_leg'), (right_leg, 'right_leg')]:
+            if not (5 <= value <= 100):
+                return jsonify({"error": f"{name} must be between 5 and 100"}), 400
+        
+        # Validate speed range
+        if not (0.65 <= speed <= 1.0):
+            return jsonify({"error": "speed must be between 0.65 and 1"}), 400
+        
+        # Call the move_legs function from module_servoctl
+        move_legs(left_height, right_height, left_leg, right_leg, speed)
+        
+        return jsonify({
+            "success": True, 
+            "message": "Leg positions updated",
+            "values": {
+                "left_height": left_height,
+                "right_height": right_height,
+                "left_leg": left_leg,
+                "right_leg": right_leg,
+                "speed": speed
+            }
+        }), 200
+        
+    except Exception as e:
+        queue_message(f"Error moving legs: {e}")
+        return jsonify({"error": f"Failed to move legs: {str(e)}"}), 500
+
+
 def parse_config_with_comments(file_path):
     """Parse config file and extract comments for each field"""
     comments = {}

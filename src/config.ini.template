@@ -190,7 +190,7 @@ channel_id = 811470553139249186
 
 [SERVO]
 # are the arms present on the build
-arm_present = False
+arms_present = False
 # Use the app-servotester to adjust the offsets after you have built the robot. You should not have to modify any value here.
 # servo 0 (Main Servo - Raise and Lowers the legs)
 leftUpHeight = 220
