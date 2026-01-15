@@ -65,9 +65,7 @@ async def synthesize_resemble_streaming(chunk):
             sample_rate=44100,
             output_format="mp3",
             include_timestamps=False,
-            pace=CONFIG['TTS']['resemble_speed'],
-            exaggeration=CONFIG['TTS']['resemble_exaggeration'],
-            temperature=CONFIG['TTS']['resemble_temperature']
+            voice_settings_preset_uuid=CONFIG['TTS']['resemble_preset_uuid']
         )
 
         if 'item' in response and 'audio_src' in response['item']:
@@ -106,9 +104,7 @@ async def synthesize_resemble_complete(text):
             sample_rate=44100,
             output_format="mp3",
             include_timestamps=False,
-            pace=CONFIG['TTS']['resemble_speed'],
-            exaggeration=CONFIG['TTS']['resemble_exaggeration'],
-            temperature=CONFIG['TTS']['resemble_temperature']
+            voice_settings_preset_uuid=CONFIG['TTS']['resemble_preset_uuid']
         )
 
         if 'item' in response and 'audio_src' in response['item']:
