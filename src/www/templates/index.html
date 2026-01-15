@@ -508,6 +508,279 @@
       }
     }
 
+    /* Compact Servo Control Container */
+    .servo-control-container-compact {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+      padding: 20px;
+      overflow: hidden;
+    }
+
+    .compact-section-title {
+      font-size: 12px;
+      color: #0d6efd;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-transform: uppercase;
+      font-family: 'Press Start 2P', cursive;
+    }
+
+    .compact-section-title i {
+      font-size: 14px;
+    }
+
+    .speed-slider-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 25px;
+      width: 100%;
+      max-width: 300px;
+    }
+
+    .speed-slider-container .speed-label {
+      font-size: 10px;
+      color: #f8f9fa;
+      text-transform: uppercase;
+      font-family: 'Press Start 2P', cursive;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .speed-slider-container .speed-label i {
+      font-size: 14px;
+      color: #0d6efd;
+    }
+
+    .speed-slider {
+      width: 100%;
+      height: 8px;
+      background: linear-gradient(135deg, #1a1d20, #0d1117);
+      border: 2px solid rgba(13, 110, 253, 0.3);
+      border-radius: 10px;
+      outline: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+
+    .speed-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: linear-gradient(145deg, #0d6efd, #0056b3);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(13, 110, 253, 0.5);
+      transition: all 0.2s ease;
+    }
+
+    .speed-slider::-webkit-slider-thumb:hover {
+      background: linear-gradient(145deg, #4da3ff, #0d6efd);
+      box-shadow: 0 0 15px rgba(13, 110, 253, 0.8);
+      transform: scale(1.1);
+    }
+
+    .speed-slider::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      background: linear-gradient(145deg, #0d6efd, #0056b3);
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 0 10px rgba(13, 110, 253, 0.5);
+      transition: all 0.2s ease;
+    }
+
+    .speed-slider::-moz-range-thumb:hover {
+      background: linear-gradient(145deg, #4da3ff, #0d6efd);
+      box-shadow: 0 0 15px rgba(13, 110, 253, 0.8);
+      transform: scale(1.1);
+    }
+
+    .servo-controls-compact {
+      display: flex;
+      flex-direction: row;
+      gap: 25px;
+      justify-content: center;
+      align-items: flex-start;
+      margin-bottom: 30px;
+    }
+
+    .servo-compact-slider {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+      background: linear-gradient(145deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.2));
+      border: 2px solid rgba(13, 110, 253, 0.3);
+      border-radius: 10px;
+      padding: 20px 15px;
+      min-width: 80px;
+    }
+
+    .servo-label-compact {
+      font-size: 8px;
+      color: #f8f9fa;
+      text-transform: uppercase;
+      text-align: center;
+      font-family: 'Press Start 2P', cursive;
+      white-space: nowrap;
+    }
+
+    .servo-slider {
+      writing-mode: bt-lr;
+      -webkit-appearance: slider-vertical;
+      width: 8px;
+      height: 150px;
+      background: linear-gradient(to top, #1a1d20, #0d1117);
+      border: 2px solid rgba(13, 110, 253, 0.3);
+      border-radius: 10px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .servo-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: linear-gradient(145deg, #0d6efd, #0056b3);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(13, 110, 253, 0.5);
+      transition: all 0.2s ease;
+    }
+
+    .servo-slider::-webkit-slider-thumb:hover {
+      background: linear-gradient(145deg, #4da3ff, #0d6efd);
+      box-shadow: 0 0 15px rgba(13, 110, 253, 0.8);
+      transform: scale(1.1);
+    }
+
+    .servo-slider::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      background: linear-gradient(145deg, #0d6efd, #0056b3);
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 0 10px rgba(13, 110, 253, 0.5);
+      transition: all 0.2s ease;
+    }
+
+    .servo-slider::-moz-range-thumb:hover {
+      background: linear-gradient(145deg, #4da3ff, #0d6efd);
+      box-shadow: 0 0 15px rgba(13, 110, 253, 0.8);
+      transform: scale(1.1);
+    }
+
+    .servo-value-display {
+      font-size: 12px;
+      color: #0d6efd;
+      font-family: 'Press Start 2P', cursive;
+      text-align: center;
+      min-width: 35px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .servo-value-display:hover {
+      color: #4da3ff;
+      transform: scale(1.1);
+    }
+
+    .compact-controls-buttons {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+    }
+
+    .compact-reset-btn {
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 12px;
+      padding: 12px 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      font-family: 'Press Start 2P', cursive;
+      white-space: nowrap;
+      background: linear-gradient(135deg, #6c757d, #495057);
+    }
+
+    .compact-reset-btn:hover {
+      background: linear-gradient(135deg, #495057, #343a40);
+      transform: translateY(-2px);
+    }
+
+    /* Responsive adjustments for compact layout */
+    @media (max-width: 768px) {
+      .servo-controls-compact {
+        gap: 20px;
+      }
+      
+      .servo-compact-slider {
+        padding: 15px 12px;
+        min-width: 70px;
+      }
+      
+      .servo-slider {
+        height: 130px;
+      }
+      
+      .compact-section-title {
+        font-size: 10px;
+        margin-bottom: 15px;
+      }
+      
+      .compact-reset-btn {
+        font-size: 10px;
+        padding: 10px 15px;
+      }
+      
+      .speed-slider-container {
+        max-width: 250px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .servo-controls-compact {
+        gap: 15px;
+      }
+      
+      .servo-compact-slider {
+        padding: 12px 10px;
+        min-width: 60px;
+      }
+      
+      .servo-slider {
+        height: 110px;
+      }
+      
+      .servo-label-compact {
+        font-size: 7px;
+      }
+      
+      .servo-value-display {
+        font-size: 10px;
+      }
+      
+      .speed-slider-container {
+        max-width: 200px;
+      }
+    }
+
     .control-buttons {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -868,6 +1141,11 @@
       </button>
     </li>
     <li class="nav-item" role="presentation">
+      <button class="nav-link custom-tab" id="legs-tab" data-bs-toggle="tab" data-bs-target="#legs" type="button" role="tab" aria-label="Leg Controls">
+        <i class="bi bi-sliders"></i>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
       <button class="nav-link custom-tab" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab" aria-label="Configuration">
         <i class="bi bi-gear-fill"></i>
       </button>
@@ -993,6 +1271,63 @@
         </div>
       </div>
     </div>
+
+    <!-- LEGS TAB -->
+    <div class="tab-pane fade p-0" id="legs" role="tabpanel">
+      <div class="servo-control-container-compact">
+        <h3 class="compact-section-title">
+          <i class="bi bi-bezier2"></i>
+          LEG CONTROLS
+        </h3>
+        
+        <!-- Speed Slider -->
+        <div class="speed-slider-container">
+          <label class="speed-label">
+            <i class="bi bi-speedometer2"></i>
+            SPEED
+          </label>
+          <input type="range" id="speedSlider" class="speed-slider" min="0.65" max="1" step="0.05" value="0.85">
+        </div>
+        
+        <div class="servo-controls-compact">
+          <!-- Left Leg -->
+          <div class="servo-compact-slider">
+            <label class="servo-label-compact">L Leg</label>
+            <input type="range" id="leftLeg" class="servo-slider" min="5" max="100" step="5" value="50" onchange="applyLegControls()" oninput="updateValueDisplay(this, 0)">
+            <span class="servo-value-display" onclick="resetServo('leftLeg', 0)">50</span>
+          </div>
+
+          <!-- Left Height -->
+          <div class="servo-compact-slider">
+            <label class="servo-label-compact">L Height</label>
+            <input type="range" id="leftHeight" class="servo-slider" min="5" max="100" step="5" value="50" onchange="applyLegControls()" oninput="updateValueDisplay(this, 1)">
+            <span class="servo-value-display" onclick="resetServo('leftHeight', 1)">50</span>
+          </div>
+
+          <!-- Right Height -->
+          <div class="servo-compact-slider">
+            <label class="servo-label-compact">R Height</label>
+            <input type="range" id="rightHeight" class="servo-slider" min="5" max="100" step="5" value="50" onchange="applyLegControls()" oninput="updateValueDisplay(this, 2)">
+            <span class="servo-value-display" onclick="resetServo('rightHeight', 2)">50</span>
+          </div>
+
+          <!-- Right Leg -->
+          <div class="servo-compact-slider">
+            <label class="servo-label-compact">R Leg</label>
+            <input type="range" id="rightLeg" class="servo-slider" min="5" max="100" step="5" value="50" onchange="applyLegControls()" oninput="updateValueDisplay(this, 3)">
+            <span class="servo-value-display" onclick="resetServo('rightLeg', 3)">50</span>
+          </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="compact-controls-buttons">
+          <button class="compact-reset-btn" onclick="resetAllLegs()">
+            RESET
+          </button>
+        </div>
+      </div>
+    </div>
+
 
     <!-- CONFIG TAB -->
     <div class="tab-pane fade p-0" id="config" role="tabpanel">
@@ -1230,6 +1565,111 @@ function executeAction() {
   .catch(error => {
     console.error('Error executing action:', error);
   });
+}
+
+// Servo Control Functions
+function resetServo(servoId, index) {
+  const input = document.getElementById(servoId);
+  input.value = 50;
+  
+  // Update display
+  const displays = document.querySelectorAll('.servo-value-display');
+  displays[index].textContent = '50';
+  
+  // Apply the change
+  applyLegControls();
+}
+
+function updateValueDisplay(slider, index) {
+  const displays = document.querySelectorAll('.servo-value-display');
+  displays[index].textContent = slider.value;
+}
+
+function applyLegControls() {
+  const leftHeight = parseInt(document.getElementById('leftHeight').value);
+  const rightHeight = parseInt(document.getElementById('rightHeight').value);
+  const leftLeg = parseInt(document.getElementById('leftLeg').value);
+  const rightLeg = parseInt(document.getElementById('rightLeg').value);
+  const speed = parseFloat(document.getElementById('speedSlider').value);
+
+  fetch('/move_legs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      left_height: leftHeight,
+      right_height: rightHeight,
+      left_leg: leftLeg,
+      right_leg: rightLeg,
+      speed: speed
+    }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Leg control response:', data);
+  })
+  .catch(error => {
+    console.error('Error applying leg controls:', error);
+  });
+}
+
+function sendLegCommand(leftHeight, rightHeight, leftLeg, rightLeg, speedOverride = null) {
+  const speed = speedOverride !== null ? speedOverride : parseFloat(document.getElementById('speedSlider').value);
+  
+  return fetch('/move_legs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      left_height: leftHeight,
+      right_height: rightHeight,
+      left_leg: leftLeg,
+      right_leg: rightLeg,
+      speed: speed
+    }),
+  });
+}
+
+function resetAllLegs() {
+  // Get current leg positions
+  const leftLeg = parseInt(document.getElementById('leftLeg').value);
+  const rightLeg = parseInt(document.getElementById('rightLeg').value);
+  
+  // Step 1: Raise both heights to 90 (keep leg positions) - use speed 0.75
+  sendLegCommand(90, 90, leftLeg, rightLeg, 0.75)
+    .then(() => {
+      // Wait a bit for movement to complete
+      return new Promise(resolve => setTimeout(resolve, 1000));
+    })
+    .then(() => {
+      // Step 2: Move legs to 50 (keep heights at 90) - use speed 0.75
+      return sendLegCommand(90, 90, 50, 50, 0.75);
+    })
+    .then(() => {
+      // Wait a bit for movement to complete
+      return new Promise(resolve => setTimeout(resolve, 1000));
+    })
+    .then(() => {
+      // Step 3: Lower heights to 50 - use speed 0.75
+      return sendLegCommand(50, 50, 50, 50, 0.75);
+    })
+    .then(() => {
+      // Update sliders and displays
+      document.getElementById('leftHeight').value = 50;
+      document.getElementById('rightHeight').value = 50;
+      document.getElementById('leftLeg').value = 50;
+      document.getElementById('rightLeg').value = 50;
+      
+      const displays = document.querySelectorAll('.servo-value-display');
+      displays.forEach(display => display.textContent = '50');
+      
+      console.log('Safe reset completed');
+    })
+    .catch(error => {
+      console.error('Error during reset sequence:', error);
+    });
 }
 
 
