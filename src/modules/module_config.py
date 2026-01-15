@@ -59,7 +59,6 @@ class TTSConfig:
     resemble_api_key: Optional[str] = None
     voice_uuid: Optional[str] = None
     project_uuid: Optional[str] = None
-    resemble_preset_uuid: Optional[str] = None
 
 
 
@@ -113,8 +112,7 @@ class TTSConfig:
             openai_api_key=config_dict.get('openai_api_key'),
             resemble_api_key=config_dict.get('resemble_api_key'),
             voice_uuid=config_dict.get('voice_uuid'),
-            project_uuid=config_dict.get('project_uuid'),
-            resemble_preset_uuid=config_dict.get('resemble_preset_uuid')
+            project_uuid=config_dict.get('project_uuid')
         )
 
 def load_config():
@@ -241,7 +239,6 @@ def load_config():
             "resemble_api_key": os.getenv('RESEMBLE_API_KEY'),
             "voice_uuid": config['TTS']['voice_uuid'],
             "project_uuid": config['TTS']['project_uuid'],
-            "resemble_preset_uuid": config.get('TTS', 'resemble_preset_uuid', fallback=None),
         }),
         "CHATUI": {
             "enabled": config['CHATUI']['enabled'],
