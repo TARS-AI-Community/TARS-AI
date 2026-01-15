@@ -1605,6 +1605,8 @@ if __name__ == "__main__":
             move_arm(1, 1, 1, 1, None, None,  0.92)
             move_legs(50, 50, 50, 50, 0.8)
 
+            step_forward()
+
             move_legs(50, 100, 50, 60, 0.8)
             move_arm(None, None, None, 98, None, None, 0.92)
             move_arm(None, None, None, None, 100, None, 1)
@@ -1618,6 +1620,8 @@ if __name__ == "__main__":
             move_arm(None, None, None, 98, 1, 1, 0.92)
             move_arm(1, None, None, 1, 1, 1, 0.92)
             move_legs(50, 50, 50, 50, 0.8)
+
+            walk_backward()
 
             """keep code enclosed"""
             disable_all_servos()
