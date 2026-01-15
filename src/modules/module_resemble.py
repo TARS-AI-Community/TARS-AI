@@ -65,7 +65,7 @@ async def synthesize_resemble_streaming(chunk):
             sample_rate=44100,
             output_format="mp3",
             include_timestamps=False,
-            speed=CONFIG['TTS']['resemble_speed'],
+            pace=CONFIG['TTS']['resemble_speed'],
             exaggeration=CONFIG['TTS']['resemble_exaggeration'],
             temperature=CONFIG['TTS']['resemble_temperature']
         )
@@ -106,7 +106,7 @@ async def synthesize_resemble_complete(text):
             sample_rate=44100,
             output_format="mp3",
             include_timestamps=False,
-            speed=CONFIG['TTS']['resemble_speed'],
+            pace=CONFIG['TTS']['resemble_speed'],
             exaggeration=CONFIG['TTS']['resemble_exaggeration'],
             temperature=CONFIG['TTS']['resemble_temperature']
         )
