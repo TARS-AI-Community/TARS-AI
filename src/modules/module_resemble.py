@@ -64,7 +64,10 @@ async def synthesize_resemble_streaming(chunk):
             title=f"TARS_{hash(chunk) % 10000}",
             sample_rate=44100,
             output_format="mp3",
-            include_timestamps=False
+            include_timestamps=False,
+            speed=CONFIG['TTS']['resemble_speed'],
+            exaggeration=CONFIG['TTS']['resemble_exaggeration'],
+            temperature=CONFIG['TTS']['resemble_temperature']
         )
 
         if 'item' in response and 'audio_src' in response['item']:
@@ -102,7 +105,10 @@ async def synthesize_resemble_complete(text):
             title=f"TARS_{hash(text) % 10000}",
             sample_rate=44100,
             output_format="mp3",
-            include_timestamps=False
+            include_timestamps=False,
+            speed=CONFIG['TTS']['resemble_speed'],
+            exaggeration=CONFIG['TTS']['resemble_exaggeration'],
+            temperature=CONFIG['TTS']['resemble_temperature']
         )
 
         if 'item' in response and 'audio_src' in response['item']:

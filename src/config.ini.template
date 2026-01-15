@@ -113,6 +113,12 @@ voice_uuid = your_voice_uuid_here
 # UUID of your custom voice agent from Resemble AI
 project_uuid = your_project_uuid_here
 # UUID of your Resemble AI project
+resemble_speed = 1.2
+# Speaking pace/speed (0.5-2.0, where 1.0 = normal speed)
+resemble_exaggeration = 0.4
+# Emotional expressiveness/exaggeration (0.0-1.0)
+resemble_temperature = 0.9
+# Voice creativity/randomness (0.0-1.0)
 is_talking_override = False
 # Debug flag to override talking state
 is_talking = False
