@@ -5,6 +5,7 @@ sentence-transformers           # Sentence embeddings and semantic search
 
 # TTS (Text-to-Speech) Tools
 elevenlabs                      # External TTS using 11Labs API
+resemble                        # External TTS using Resemble AI API
 piper-tts                       # Local TTS with voice cloning support
 azure-cognitiveservices-speech  # Azure TTS API
 

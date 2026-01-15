@@ -55,6 +55,11 @@ class TTSConfig:
     openai_voice: Optional[str] = None
     openai_api_key: Optional[str] = None
 
+    # Resemble AI specific settings
+    resemble_api_key: Optional[str] = None
+    voice_uuid: Optional[str] = None
+    project_uuid: Optional[str] = None
+
 
 
     def __getitem__(self, key):
@@ -75,6 +80,16 @@ class TTSConfig:
             if not self.ttsurl:
                 queue_message("ERROR: TTS URL is required for server-based TTS")
                 return False
+        elif self.ttsoption == "resemble":
+            if not self.resemble_api_key:
+                queue_message("ERROR: Resemble AI API key is required for Resemble AI TTS")
+                return False
+            if not self.voice_uuid:
+                queue_message("ERROR: Voice UUID is required for Resemble AI TTS")
+                return False
+            if not self.project_uuid:
+                queue_message("ERROR: Project UUID is required for Resemble AI TTS")
+                return False
         return True
 
     @classmethod
@@ -94,7 +109,10 @@ class TTSConfig:
             model_id=config_dict.get('model_id'),
             ttsurl=config_dict.get('ttsurl'),
             openai_voice=config_dict.get('openai_voice'),
-            openai_api_key=config_dict.get('openai_api_key')
+            openai_api_key=config_dict.get('openai_api_key'),
+            resemble_api_key=config_dict.get('resemble_api_key'),
+            voice_uuid=config_dict.get('voice_uuid'),
+            project_uuid=config_dict.get('project_uuid')
         )
 
 def load_config():
@@ -218,6 +236,9 @@ def load_config():
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
             "openai_voice" : config['TTS']['openai_voice'],
             "openai_api_key": os.getenv('OPENAI_API_KEY'),
+            "resemble_api_key": os.getenv('RESEMBLE_API_KEY'),
+            "voice_uuid": config['TTS']['voice_uuid'],
+            "project_uuid": config['TTS']['project_uuid'],
         }),
         "CHATUI": {
             "enabled": config['CHATUI']['enabled'],

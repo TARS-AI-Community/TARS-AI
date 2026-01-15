@@ -87,12 +87,12 @@ enabled = false
 emotion_model = SamLowe/roberta-base-go_emotions
 # Hugging Face model for emotion analysis
 
-[TTS] # Text-to-Speech configuration 
+[TTS] # Text-to-Speech configuration
 ttsoption = piper
 # Onboard Options: espeak, piper, silero
 # External SelfHosted: alltalk
-# Externally Hosted: azure, elevenlabs, openai
-# for other languages than english, use elevenlabs or openai
+# Externally Hosted: azure, elevenlabs, openai, resemble
+# for other languages than english, use elevenlabs, openai, or resemble
 azure_region = eastus
 # Azure region for Azure TTS (e.g., eastus)
 ttsurl = http://192.168.2.57:7852
@@ -107,6 +107,12 @@ model_id = eleven_multilingual_v2
 # Model ID of ElevenLabs (e.g.,eleven_multilingual_v2)
 openai_voice = onyx
 # openai voice : alloy, echo, fable, onyx, nova, shimmer
+resemble_api_key = your_resemble_api_key_here
+# Resemble AI API key (set in .env file)
+voice_uuid = your_voice_uuid_here
+# UUID of your custom voice agent from Resemble AI
+project_uuid = your_project_uuid_here
+# UUID of your Resemble AI project
 is_talking_override = False
 # Debug flag to override talking state
 is_talking = False
