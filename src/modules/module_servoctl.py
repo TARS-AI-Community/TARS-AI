@@ -206,7 +206,8 @@ def disable_all_servos():
     time.sleep(0.05)
 
 
-def reset_positions():  
+def reset_positions():
+    disable_all_servos()  
     move_legs(50, 50, 50, 50, 0.2)
     time.sleep(0.5)
     move_arm(1, 1, 1, 1, 1, 1, 0.3)

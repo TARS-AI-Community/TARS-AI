@@ -11,6 +11,10 @@ import json
 from pathlib import Path
 from typing import List, Tuple, Callable, Optional
 
+from modules.module_config import load_config
+
+CONFIG = load_config()
+
 class TerminalSystem:
     def __init__(self, width: int, height: int, bg_color=(0, 0, 0), bg_alpha=13, 
                  battery_module=None,
@@ -686,7 +690,7 @@ class TerminalSystem:
                     if len(parts) == 2:
                         user_part, msg_part = parts
 
-                        if user_part.upper() == "TARS":
+                        if user_part == CONFIG['CHAR']['character_name']:
                             msg_color = (100, 200, 255)
                             code_color_base = (100, 200, 255)
                         elif user_part.upper() == "USER":
@@ -712,7 +716,7 @@ class TerminalSystem:
                         temp_surface2.blit(msg_surface, (0, 0))
                         self.overlay_surface.blit(temp_surface2, (x_pos + code_surface.get_width() + 5, y_offset))
                 else:
-                    if key.upper() == "TARS":
+                    if key == CONFIG['CHAR']['character_name']:
                         cont_color = (100, 200, 255)
                     elif key.upper() == "USER":
                         cont_color = (255, 255, 255)

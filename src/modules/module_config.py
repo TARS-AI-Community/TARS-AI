@@ -173,6 +173,7 @@ def load_config():
             "picovoice_api_key": os.getenv('PICOVOICE_API_KEY')
         },
         "CHAR": {
+            "character_name": character_name,  # Add character name for easy access
             "character_card_path": config['CHAR']['character_card_path'],
             "user_name": config['CHAR']['user_name'],
             "user_details": config['CHAR']['user_details'],

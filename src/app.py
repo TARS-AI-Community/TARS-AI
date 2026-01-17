@@ -25,7 +25,7 @@ from modules.module_character import CharacterManager
 from modules.module_memory import MemoryManager
 from modules.module_stt import STTManager
 from modules.module_tts import update_tts_settings
-from modules.module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread, start_discord_bot, process_discord_message_callback
+from modules.module_main import initialize_managers, wake_word_callback, utterance_callback, post_utterance_callback, start_bt_controller_thread, start_discord_bot, process_discord_message_callback, startup_initialization
 from modules.module_vision import initialize_blip
 from modules.module_llm import initialize_manager_llm
 from modules.module_ui import UIManager
@@ -145,6 +145,7 @@ if __name__ == "__main__":
     if CONFIG['VISION']['enabled'] == "True" and CONFIG['VISION']['server_hosted'] != "True":
         initialize_blip()
 
+    startup_initialization()
     
     try:
         queue_message(f"LOAD: TARS-AI v"+VERSION+" running.")        
