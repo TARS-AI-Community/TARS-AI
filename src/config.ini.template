@@ -214,21 +214,21 @@ perfectRightLegOffset = 0
 leftMainMin = 550
 leftMainMax = 50
 leftMainOffset = 0
-leftForarmMin = 560
-leftForarmMax = 300
+leftForarmMin = 500
+leftForarmMax = 230
 leftForearmOffset = 0
-leftHandMin = 400
+leftHandMin = 420
 leftHandMax = 300
 leftHandOffset = 0
 # RIGHT ARM
 rightMainMin = 50
 rightMainMax = 550
 rightMainOffset = 0
-rightForarmMin = 300
-rightForarmMax = 560
+rightForarmMin = 230
+rightForarmMax = 500
 rightForearmOffset = 0
 rightHandMin = 300
-rightHandMax = 400
+rightHandMax = 420
 rightHandOffset = 0
 
 [BATTERY]

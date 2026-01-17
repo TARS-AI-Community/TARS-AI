@@ -187,13 +187,11 @@ class STTManager:
         """Pause STT processing (e.g., during video playback)."""
         with self.pause_lock:
             self.paused = True
-        queue_message("STT Manager paused")
     
     def resume(self):
         """Resume STT processing."""
         with self.pause_lock:
             self.paused = False
-        queue_message("STT Manager resumed")
     
     def is_paused(self):
         """Check if STT is currently paused."""
