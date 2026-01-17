@@ -610,10 +610,16 @@
     .servo-controls-compact {
       display: flex;
       flex-direction: row;
+      flex-wrap: wrap;
       gap: 25px;
       justify-content: center;
       align-items: flex-start;
-      margin-bottom: 30px;
+      margin-bottom: 20px;
+      max-width: 100%;
+    }
+    
+    #arms .servo-controls-compact {
+      margin-bottom: 10px;
     }
 
     .servo-compact-slider {
@@ -640,10 +646,10 @@
     .servo-slider {
       writing-mode: bt-lr;
       -webkit-appearance: slider-vertical;
-      width: 8px;
+      width: 12px;
       height: 150px;
-      background: linear-gradient(to top, #1a1d20, #0d1117);
-      border: 2px solid rgba(13, 110, 253, 0.3);
+      background: linear-gradient(to top, rgba(13, 110, 253, 0.3) 0%, rgba(13, 110, 253, 0.3) 100%);
+      border: 2px solid rgba(13, 110, 253, 0.5);
       border-radius: 10px;
       outline: none;
       cursor: pointer;
@@ -705,6 +711,27 @@
       justify-content: center;
     }
 
+    .compact-execute-btn {
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 12px;
+      padding: 12px 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      font-family: 'Press Start 2P', cursive;
+      white-space: nowrap;
+      background: linear-gradient(135deg, #0d6efd, #0056b3);
+      box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+    }
+
+    .compact-execute-btn:hover {
+      background: linear-gradient(135deg, #0056b3, #004085);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(13, 110, 253, 0.5);
+    }
+
     .compact-reset-btn {
       border: none;
       border-radius: 8px;
@@ -725,9 +752,15 @@
     }
 
     /* Responsive adjustments for compact layout */
-    @media (max-width: 768px) {
+    @media (max-width: 1024px) {
       .servo-controls-compact {
         gap: 20px;
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .servo-controls-compact {
+        gap: 15px;
       }
       
       .servo-compact-slider {
@@ -744,6 +777,7 @@
         margin-bottom: 15px;
       }
       
+      .compact-execute-btn,
       .compact-reset-btn {
         font-size: 10px;
         padding: 10px 15px;
@@ -1146,6 +1180,11 @@
       </button>
     </li>
     <li class="nav-item" role="presentation">
+      <button class="nav-link custom-tab" id="arms-tab" data-bs-toggle="tab" data-bs-target="#arms" type="button" role="tab" aria-label="Arm Controls">
+        <i class="bi bi-sliders2"></i>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
       <button class="nav-link custom-tab" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab" aria-label="Configuration">
         <i class="bi bi-gear-fill"></i>
       </button>
@@ -1293,34 +1332,37 @@
           <!-- Left Leg -->
           <div class="servo-compact-slider">
             <label class="servo-label-compact">L Leg</label>
-            <input type="range" id="leftLeg" class="servo-slider" min="5" max="100" step="5" value="50" onchange="applyLegControls()" oninput="updateValueDisplay(this, 0)">
+            <input type="range" id="leftLeg" class="servo-slider" min="5" max="100" step="5" value="50" oninput="updateValueDisplay(this, 0)">
             <span class="servo-value-display" onclick="resetServo('leftLeg', 0)">50</span>
           </div>
 
           <!-- Left Height -->
           <div class="servo-compact-slider">
             <label class="servo-label-compact">L Height</label>
-            <input type="range" id="leftHeight" class="servo-slider" min="5" max="100" step="5" value="50" onchange="applyLegControls()" oninput="updateValueDisplay(this, 1)">
+            <input type="range" id="leftHeight" class="servo-slider" min="5" max="100" step="5" value="50" oninput="updateValueDisplay(this, 1)">
             <span class="servo-value-display" onclick="resetServo('leftHeight', 1)">50</span>
           </div>
 
           <!-- Right Height -->
           <div class="servo-compact-slider">
             <label class="servo-label-compact">R Height</label>
-            <input type="range" id="rightHeight" class="servo-slider" min="5" max="100" step="5" value="50" onchange="applyLegControls()" oninput="updateValueDisplay(this, 2)">
+            <input type="range" id="rightHeight" class="servo-slider" min="5" max="100" step="5" value="50" oninput="updateValueDisplay(this, 2)">
             <span class="servo-value-display" onclick="resetServo('rightHeight', 2)">50</span>
           </div>
 
           <!-- Right Leg -->
           <div class="servo-compact-slider">
             <label class="servo-label-compact">R Leg</label>
-            <input type="range" id="rightLeg" class="servo-slider" min="5" max="100" step="5" value="50" onchange="applyLegControls()" oninput="updateValueDisplay(this, 3)">
+            <input type="range" id="rightLeg" class="servo-slider" min="5" max="100" step="5" value="50" oninput="updateValueDisplay(this, 3)">
             <span class="servo-value-display" onclick="resetServo('rightLeg', 3)">50</span>
           </div>
         </div>
 
         <!-- Control Buttons -->
         <div class="compact-controls-buttons">
+          <button class="compact-execute-btn" onclick="applyLegControls()">
+            EXECUTE
+          </button>
           <button class="compact-reset-btn" onclick="resetAllLegs()">
             RESET
           </button>
@@ -1328,6 +1370,84 @@
       </div>
     </div>
 
+
+
+    <!-- ARMS TAB -->
+    <div class="tab-pane fade p-0" id="arms" role="tabpanel">
+      <div class="servo-control-container-compact">
+        <h3 class="compact-section-title">
+          <i class="bi bi-hand-index"></i>
+          ARM CONTROLS
+        </h3>
+        
+        <!-- Speed Slider -->
+        <div class="speed-slider-container">
+          <label class="speed-label">
+            <i class="bi bi-speedometer2"></i>
+            SPEED
+          </label>
+          <input type="range" id="armSpeedSlider" class="speed-slider" min="0.65" max="1" step="0.05" value="0.85">
+        </div>
+        
+        <!-- Left Arms Row -->
+        <div class="servo-controls-compact">
+          <!-- Left Main -->
+          <div class="servo-compact-slider">
+            <label class="servo-label-compact">L Main</label>
+            <input type="range" id="leftMain" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this, 0); updateArmConstraints();">
+            <span class="servo-value-display" onclick="resetArmServo('leftMain', 0)">1</span>
+          </div>
+
+          <!-- Left Forearm -->
+          <div class="servo-compact-slider">
+            <label class="servo-label-compact">L Forearm</label>
+            <input type="range" id="leftForearm" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this, 1); updateArmConstraints();">
+            <span class="servo-value-display" onclick="resetArmServo('leftForearm', 1)">1</span>
+          </div>
+
+          <!-- Left Hand -->
+          <div class="servo-compact-slider">
+            <label class="servo-label-compact">L Hand</label>
+            <input type="range" id="leftHand" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this, 2)">
+            <span class="servo-value-display" onclick="resetArmServo('leftHand', 2)">1</span>
+          </div>
+        </div>
+
+        <!-- Right Arms Row -->
+        <div class="servo-controls-compact">
+          <!-- Right Main -->
+          <div class="servo-compact-slider">
+            <label class="servo-label-compact">R Main</label>
+            <input type="range" id="rightMain" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this, 3); updateArmConstraints();">
+            <span class="servo-value-display" onclick="resetArmServo('rightMain', 3)">1</span>
+          </div>
+
+          <!-- Right Forearm -->
+          <div class="servo-compact-slider">
+            <label class="servo-label-compact">R Forearm</label>
+            <input type="range" id="rightForearm" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this, 4); updateArmConstraints();">
+            <span class="servo-value-display" onclick="resetArmServo('rightForearm', 4)">1</span>
+          </div>
+
+          <!-- Right Hand -->
+          <div class="servo-compact-slider">
+            <label class="servo-label-compact">R Hand</label>
+            <input type="range" id="rightHand" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this, 5)">
+            <span class="servo-value-display" onclick="resetArmServo('rightHand', 5)">1</span>
+          </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="compact-controls-buttons">
+          <button class="compact-execute-btn" onclick="applyArmControls()">
+            EXECUTE
+          </button>
+          <button class="compact-reset-btn" onclick="resetAllArms()">
+            RESET
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- CONFIG TAB -->
     <div class="tab-pane fade p-0" id="config" role="tabpanel">
@@ -1548,6 +1668,271 @@ if (blob) {
 .catch(error => console.error("Error fetching next MP3 chunk:", error));
 }
 
+
+// Arm Control Functions
+
+// Update arm slider constraints based on mechanical limits
+function updateArmConstraints() {
+  const armTab = document.getElementById('arms');
+  const displays = armTab.querySelectorAll('.servo-value-display');
+  
+  // Left arm
+  const leftMain = parseInt(document.getElementById('leftMain').value);
+  const leftForearmSlider = document.getElementById('leftForearm');
+  const leftHandSlider = document.getElementById('leftHand');
+  
+  // Calculate max forearm based on main position
+  let maxLeftForearm;
+  if (leftMain <= 50) {
+    maxLeftForearm = Math.max(1, Math.round(leftMain / 2));
+  } else {
+    maxLeftForearm = Math.round(25 + (leftMain - 50) * 1.5);
+  }
+  
+  // Clamp forearm if it exceeds new max
+  let leftForearmValue = parseInt(leftForearmSlider.value);
+  if (leftForearmValue > maxLeftForearm) {
+    leftForearmSlider.value = maxLeftForearm;
+    displays[1].textContent = maxLeftForearm;
+    leftForearmValue = maxLeftForearm;
+  }
+  
+  // Update visual gauge for forearm
+  updateSliderGauge(leftForearmSlider, maxLeftForearm);
+  
+  // Calculate max hand based on CURRENT forearm value
+  let maxLeftHand;
+  if (leftForearmValue <= 50) {
+    maxLeftHand = Math.max(1, Math.round(leftForearmValue / 2));
+  } else {
+    maxLeftHand = Math.round(25 + (leftForearmValue - 50) * 1.5);
+  }
+  
+  // Clamp hand if it exceeds new max
+  let leftHandValue = parseInt(leftHandSlider.value);
+  if (leftHandValue > maxLeftHand) {
+    leftHandSlider.value = maxLeftHand;
+    displays[2].textContent = maxLeftHand;
+  }
+  
+  // Update visual gauge for hand
+  updateSliderGauge(leftHandSlider, maxLeftHand);
+  
+  // Right arm
+  const rightMain = parseInt(document.getElementById('rightMain').value);
+  const rightForearmSlider = document.getElementById('rightForearm');
+  const rightHandSlider = document.getElementById('rightHand');
+  
+  // Calculate max forearm based on main position
+  let maxRightForearm;
+  if (rightMain <= 50) {
+    maxRightForearm = Math.max(1, Math.round(rightMain / 2));
+  } else {
+    maxRightForearm = Math.round(25 + (rightMain - 50) * 1.5);
+  }
+  
+  // Clamp forearm if it exceeds new max
+  let rightForearmValue = parseInt(rightForearmSlider.value);
+  if (rightForearmValue > maxRightForearm) {
+    rightForearmSlider.value = maxRightForearm;
+    displays[4].textContent = maxRightForearm;
+    rightForearmValue = maxRightForearm;
+  }
+  
+  // Update visual gauge for forearm
+  updateSliderGauge(rightForearmSlider, maxRightForearm);
+  
+  // Calculate max hand based on CURRENT forearm value
+  let maxRightHand;
+  if (rightForearmValue <= 50) {
+    maxRightHand = Math.max(1, Math.round(rightForearmValue / 2));
+  } else {
+    maxRightHand = Math.round(25 + (rightForearmValue - 50) * 1.5);
+  }
+  
+  // Clamp hand if it exceeds new max
+  let rightHandValue = parseInt(rightHandSlider.value);
+  if (rightHandValue > maxRightHand) {
+    rightHandSlider.value = maxRightHand;
+    displays[5].textContent = maxRightHand;
+  }
+  
+  // Update visual gauge for hand
+  updateSliderGauge(rightHandSlider, maxRightHand);
+}
+
+// Update slider visual gauge to show allowed/forbidden zones
+function updateSliderGauge(slider, maxAllowed) {
+  const percent = (maxAllowed / 100) * 100;
+  // Create gradient: green up to maxAllowed, red after
+  slider.style.background = `linear-gradient(to top, 
+    rgba(13, 110, 253, 0.3) 0%, 
+    rgba(13, 110, 253, 0.3) ${percent}%, 
+    rgba(220, 53, 69, 0.3) ${percent}%, 
+    rgba(220, 53, 69, 0.3) 100%)`;
+}
+
+function updateArmValueDisplay(slider, index) {
+  const armTab = document.getElementById('arms');
+  const displays = armTab.querySelectorAll('.servo-value-display');
+  displays[index].textContent = slider.value;
+}
+
+function resetArmServo(servoId, index) {
+  const input = document.getElementById(servoId);
+  input.value = 1;
+  
+  // Update display
+  const armTab = document.getElementById('arms');
+  const displays = armTab.querySelectorAll('.servo-value-display');
+  displays[index].textContent = '1';
+  
+  // Update constraints since we changed a value
+  updateArmConstraints();
+}
+
+function sendArmCommand(leftMain, leftForearm, leftHand, rightMain, rightForearm, rightHand, speedOverride = null) {
+  const speed = speedOverride !== null ? speedOverride : parseFloat(document.getElementById('armSpeedSlider').value);
+  
+  return fetch('/move_arms', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      left_main: leftMain,
+      left_forearm: leftForearm,
+      left_hand: leftHand,
+      right_main: rightMain,
+      right_forearm: rightForearm,
+      right_hand: rightHand,
+      speed: speed
+    }),
+  });
+}
+
+function applyArmControls() {
+  const leftMain = parseInt(document.getElementById('leftMain').value);
+  const leftForearm = parseInt(document.getElementById('leftForearm').value);
+  const leftHand = parseInt(document.getElementById('leftHand').value);
+  const rightMain = parseInt(document.getElementById('rightMain').value);
+  const rightForearm = parseInt(document.getElementById('rightForearm').value);
+  const rightHand = parseInt(document.getElementById('rightHand').value);
+  const speed = parseFloat(document.getElementById('armSpeedSlider').value);
+
+  fetch('/move_arms', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      left_main: leftMain,
+      left_forearm: leftForearm,
+      left_hand: leftHand,
+      right_main: rightMain,
+      right_forearm: rightForearm,
+      right_hand: rightHand,
+      speed: speed
+    }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Arm control response:', data);
+  })
+  .catch(error => {
+    console.error('Error applying arm controls:', error);
+  });
+}
+
+function resetAllArms() {
+  // Get current arm positions
+  const leftMain = parseInt(document.getElementById('leftMain').value);
+  const leftForearm = parseInt(document.getElementById('leftForearm').value);
+  const leftHand = parseInt(document.getElementById('leftHand').value);
+  const rightMain = parseInt(document.getElementById('rightMain').value);
+  const rightForearm = parseInt(document.getElementById('rightForearm').value);
+  const rightHand = parseInt(document.getElementById('rightHand').value);
+  
+  // For arms, we'll do a simple reset sequence - just move everything to neutral (1)
+  // Using speed 0.75
+  sendArmCommand(1, 1, 1, 1, 1, 1, 0.75)
+    .then(() => {
+      // Update sliders and displays
+      document.getElementById('leftMain').value = 1;
+      document.getElementById('leftForearm').value = 1;
+      document.getElementById('leftHand').value = 1;
+      document.getElementById('rightMain').value = 1;
+      document.getElementById('rightForearm').value = 1;
+      document.getElementById('rightHand').value = 1;
+      
+      const armTab = document.getElementById('arms');
+      const displays = armTab.querySelectorAll('.servo-value-display');
+      displays.forEach(display => display.textContent = '1');
+      
+      // Update visual gauges
+      updateArmConstraints();
+      
+      console.log('Arm reset completed');
+      
+      // Disable servos since all are at neutral
+      return fetch('/disable_servos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+    })
+    .then(response => {
+      if (response) {
+        return response.json();
+      }
+    })
+    .then(data => {
+      if (data) {
+        console.log('Servos disabled after arm reset:', data);
+      }
+      
+      // Call reset_positions
+      return fetch('/reset_positions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+    })
+    .then(response => {
+      if (response) {
+        return response.json();
+      }
+    })
+    .then(data => {
+      if (data) {
+        console.log('Reset positions called:', data);
+      }
+      
+      // Finally disable all servos
+      return fetch('/disable_servos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+    })
+    .then(response => {
+      if (response) {
+        return response.json();
+      }
+    })
+    .then(data => {
+      if (data) {
+        console.log('All servos disabled:', data);
+      }
+    })
+    .catch(error => {
+      console.error('Error during arm reset sequence:', error);
+    });
+}
+
 function executeAction() {
   const selectedAction = document.getElementById('actionSelect').value;
 
@@ -1575,9 +1960,6 @@ function resetServo(servoId, index) {
   // Update display
   const displays = document.querySelectorAll('.servo-value-display');
   displays[index].textContent = '50';
-  
-  // Apply the change
-  applyLegControls();
 }
 
 function updateValueDisplay(slider, index) {
@@ -1633,43 +2015,48 @@ function sendLegCommand(leftHeight, rightHeight, leftLeg, rightLeg, speedOverrid
 }
 
 function resetAllLegs() {
-  // Get current leg positions
-  const leftLeg = parseInt(document.getElementById('leftLeg').value);
-  const rightLeg = parseInt(document.getElementById('rightLeg').value);
-  
-  // Step 1: Raise both heights to 90 (keep leg positions) - use speed 0.75
-  sendLegCommand(90, 90, leftLeg, rightLeg, 0.75)
-    .then(() => {
-      // Wait a bit for movement to complete
-      return new Promise(resolve => setTimeout(resolve, 1000));
-    })
-    .then(() => {
-      // Step 2: Move legs to 50 (keep heights at 90) - use speed 0.75
-      return sendLegCommand(90, 90, 50, 50, 0.75);
-    })
-    .then(() => {
-      // Wait a bit for movement to complete
-      return new Promise(resolve => setTimeout(resolve, 1000));
-    })
-    .then(() => {
-      // Step 3: Lower heights to 50 - use speed 0.75
-      return sendLegCommand(50, 50, 50, 50, 0.75);
-    })
-    .then(() => {
-      // Update sliders and displays
-      document.getElementById('leftHeight').value = 50;
-      document.getElementById('rightHeight').value = 50;
-      document.getElementById('leftLeg').value = 50;
-      document.getElementById('rightLeg').value = 50;
-      
-      const displays = document.querySelectorAll('.servo-value-display');
-      displays.forEach(display => display.textContent = '50');
-      
-      console.log('Safe reset completed');
-    })
-    .catch(error => {
-      console.error('Error during reset sequence:', error);
+  // Call neutral_legs which handles the safe reset sequence
+  fetch('/neutral_legs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Neutral legs completed:', data);
+    
+    // Update sliders and displays
+    document.getElementById('leftHeight').value = 50;
+    document.getElementById('rightHeight').value = 50;
+    document.getElementById('leftLeg').value = 50;
+    document.getElementById('rightLeg').value = 50;
+    
+    const legsTab = document.getElementById('legs');
+    const displays = legsTab.querySelectorAll('.servo-value-display');
+    displays.forEach(display => display.textContent = '50');
+    
+    // Call reset_positions
+    return fetch('/reset_positions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
     });
+  })
+  .then(response => {
+    if (response) {
+      return response.json();
+    }
+  })
+  .then(data => {
+    if (data) {
+      console.log('Reset positions called:', data);
+    }
+  })
+  .catch(error => {
+    console.error('Error during reset sequence:', error);
+  });
 }
 
 
@@ -2527,6 +2914,68 @@ if (saveBtn) {
         saveConfiguration();
     });
 }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  const legsTab = document.getElementById('legs-tab');
+  const armsTab = document.getElementById('arms-tab');
+  const allTabs = document.querySelectorAll('.custom-tab');
+  
+  // When legs tab is being hidden (user leaving), reset if needed
+  if (legsTab) {
+    legsTab.addEventListener('hide.bs.tab', function(e) {
+      const leftHeight = parseInt(document.getElementById('leftHeight').value);
+      const rightHeight = parseInt(document.getElementById('rightHeight').value);
+      const leftLeg = parseInt(document.getElementById('leftLeg').value);
+      const rightLeg = parseInt(document.getElementById('rightLeg').value);
+      
+      if (leftHeight !== 50 || rightHeight !== 50 || leftLeg !== 50 || rightLeg !== 50) {
+        console.log('Legs not at neutral, calling reset');
+        resetAllLegs();
+      }
+    });
+  }
+  
+  // When arms tab is being hidden (user leaving), reset if needed
+  if (armsTab) {
+    armsTab.addEventListener('hide.bs.tab', function(e) {
+      const leftMain = parseInt(document.getElementById('leftMain').value);
+      const leftForearm = parseInt(document.getElementById('leftForearm').value);
+      const leftHand = parseInt(document.getElementById('leftHand').value);
+      const rightMain = parseInt(document.getElementById('rightMain').value);
+      const rightForearm = parseInt(document.getElementById('rightForearm').value);
+      const rightHand = parseInt(document.getElementById('rightHand').value);
+      
+      if (leftMain !== 1 || leftForearm !== 1 || leftHand !== 1 || 
+          rightMain !== 1 || rightForearm !== 1 || rightHand !== 1) {
+        console.log('Arms not at neutral, calling reset');
+        resetAllArms();
+      }
+    });
+  }
+  
+  // When legs or arms tab is shown (user entering), call reset_positions
+  allTabs.forEach(tab => {
+    tab.addEventListener('shown.bs.tab', function(e) {
+      const newTabId = e.target.getAttribute('data-bs-target').replace('#', '');
+      
+      if (newTabId === 'legs' || newTabId === 'arms') {
+        fetch('/reset_positions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Reset positions called on enter:', data);
+        })
+        .catch(error => {
+          console.error('Error calling reset_positions:', error);
+        });
+      }
+    });
+  });
 });
 
 // Fullscreen toggle function - outside DOMContentLoaded so it's globally accessible

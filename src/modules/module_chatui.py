@@ -208,6 +208,17 @@ STATIC_DIR = os.path.join(BASE_DIR, "www", "static")
 
 # Initialize Flask app with absolute paths
 flask_app = Flask(__name__, template_folder=CHARACTER_DIR, static_url_path='/static', static_folder=STATIC_DIR)
+
+# Track previous arm positions to determine movement direction
+previous_arm_positions = {
+    'left_main': 1,
+    'left_forearm': 1,
+    'left_hand': 1,
+    'right_main': 1,
+    'right_forearm': 1,
+    'right_hand': 1
+}
+
 CORS(flask_app)
 socketio = SocketIO(flask_app, cors_allowed_origins="*", logger=False, engineio_logger=False)
 
@@ -651,6 +662,196 @@ def move_legs_endpoint():
     except Exception as e:
         queue_message(f"Error moving legs: {e}")
         return jsonify({"error": f"Failed to move legs: {str(e)}"}), 500
+
+@flask_app.route('/disable_servos', methods=['POST'])
+def disable_servos_endpoint():
+    """
+    Disables all servos
+    """
+    try:
+        disable_all_servos()
+        return jsonify({
+            "success": True, 
+            "message": "All servos disabled"
+        }), 200
+        
+    except Exception as e:
+        queue_message(f"Error disabling servos: {e}")
+        return jsonify({"error": f"Failed to disable servos: {str(e)}"}), 500
+
+@flask_app.route('/reset_positions', methods=['POST'])
+def reset_positions_endpoint():
+    """
+    Calls reset_positions from module_servoctl
+    """
+    try:
+        reset_positions()
+        return jsonify({
+            "success": True, 
+            "message": "Positions reset"
+        }), 200
+        
+    except Exception as e:
+        queue_message(f"Error resetting positions: {e}")
+        return jsonify({"error": f"Failed to reset positions: {str(e)}"}), 500
+
+@flask_app.route('/neutral_legs', methods=['POST'])
+def neutral_legs_endpoint():
+    """
+    Calls neutral_legs from module_servoctl
+    """
+    try:
+        neutral_legs()
+        return jsonify({
+            "success": True, 
+            "message": "Legs neutralized"
+        }), 200
+        
+    except Exception as e:
+        queue_message(f"Error neutralizing legs: {e}")
+        return jsonify({"error": f"Failed to neutralize legs: {str(e)}"}), 500
+
+
+
+@flask_app.route('/move_arms', methods=['POST'])
+def move_arms_endpoint():
+    """
+    Handles direct arm servo control with leg sequence and sequential movement.
+    Opens legs before moving arms, moves servos in sequence to avoid mechanical conflicts.
+    - Increasing values: Main → Forearm → Hand
+    - Decreasing values: Hand → Forearm → Main
+    """
+    global previous_arm_positions
+    
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    
+    data = request.get_json()
+    
+    try:
+        left_main = int(data.get('left_main', 1))
+        left_forearm = int(data.get('left_forearm', 1))
+        left_hand = int(data.get('left_hand', 1))
+        right_main = int(data.get('right_main', 1))
+        right_forearm = int(data.get('right_forearm', 1))
+        right_hand = int(data.get('right_hand', 1))
+        speed = float(data.get('speed', 0.85))
+        
+        # Validate values are within range
+        for value, name in [(left_main, 'left_main'), (left_forearm, 'left_forearm'), 
+                            (left_hand, 'left_hand'), (right_main, 'right_main'),
+                            (right_forearm, 'right_forearm'), (right_hand, 'right_hand')]:
+            if not (1 <= value <= 100):
+                return jsonify({"error": f"{name} must be between 1 and 100"}), 400
+        
+        # Validate speed range
+        if not (0.65 <= speed <= 1.0):
+            return jsonify({"error": "speed must be between 0.65 and 1"}), 400
+        
+        # Get previous positions
+        prev_left_main = previous_arm_positions['left_main']
+        prev_left_forearm = previous_arm_positions['left_forearm']
+        prev_left_hand = previous_arm_positions['left_hand']
+        prev_right_main = previous_arm_positions['right_main']
+        prev_right_forearm = previous_arm_positions['right_forearm']
+        prev_right_hand = previous_arm_positions['right_hand']
+        
+        # Check if arms need to move
+        left_arm_moving = (left_main != 1 or left_forearm != 1 or left_hand != 1)
+        right_arm_moving = (right_main != 1 or right_forearm != 1 or right_hand != 1)
+        
+        # Open left leg if left arm needs to move
+        if left_arm_moving:
+            move_legs(80, None, None, None, 0.9)  # Raise left height
+            move_legs(80, None, 65, None, 0.9)    # Open left leg
+        
+        # Open right leg if right arm needs to move
+        if right_arm_moving:
+            move_legs(None, 80, None, None, 0.9)  # Raise right height
+            move_legs(None, 80, None, 65, 0.9)    # Open right leg
+        
+        # Determine movement direction for left arm
+        left_increasing = (left_main + left_forearm + left_hand) > (prev_left_main + prev_left_forearm + prev_left_hand)
+        
+        # Determine movement direction for right arm
+        right_increasing = (right_main + right_forearm + right_hand) > (prev_right_main + prev_right_forearm + prev_right_hand)
+        
+        # Move left arm in sequence
+        if left_increasing:
+            # Increasing: Main → Forearm → Hand
+            if left_main != prev_left_main:
+                move_arm(left_main, None, None, None, None, None, speed)
+            if left_forearm != prev_left_forearm:
+                move_arm(None, left_forearm, None, None, None, None, speed)
+            if left_hand != prev_left_hand:
+                move_arm(None, None, left_hand, None, None, None, speed)
+        else:
+            # Decreasing: Hand → Forearm → Main
+            if left_hand != prev_left_hand:
+                move_arm(None, None, left_hand, None, None, None, speed)
+            if left_forearm != prev_left_forearm:
+                move_arm(None, left_forearm, None, None, None, None, speed)
+            if left_main != prev_left_main:
+                move_arm(left_main, None, None, None, None, None, speed)
+        
+        # Move right arm in sequence
+        if right_increasing:
+            # Increasing: Main → Forearm → Hand
+            if right_main != prev_right_main:
+                move_arm(None, None, None, right_main, None, None, speed)
+            if right_forearm != prev_right_forearm:
+                move_arm(None, None, None, None, right_forearm, None, speed)
+            if right_hand != prev_right_hand:
+                move_arm(None, None, None, None, None, right_hand, speed)
+        else:
+            # Decreasing: Hand → Forearm → Main
+            if right_hand != prev_right_hand:
+                move_arm(None, None, None, None, None, right_hand, speed)
+            if right_forearm != prev_right_forearm:
+                move_arm(None, None, None, None, right_forearm, None, speed)
+            if right_main != prev_right_main:
+                move_arm(None, None, None, right_main, None, None, speed)
+        
+        # Update previous positions
+        previous_arm_positions['left_main'] = left_main
+        previous_arm_positions['left_forearm'] = left_forearm
+        previous_arm_positions['left_hand'] = left_hand
+        previous_arm_positions['right_main'] = right_main
+        previous_arm_positions['right_forearm'] = right_forearm
+        previous_arm_positions['right_hand'] = right_hand
+        
+        # Check if arms are back at neutral
+        left_arm_neutral = (left_main == 1 and left_forearm == 1 and left_hand == 1)
+        right_arm_neutral = (right_main == 1 and right_forearm == 1 and right_hand == 1)
+        
+        # Close left leg if left arm is at neutral (all values = 1)
+        if left_arm_neutral:
+            move_legs(80, None, 50, None, 0.9)    # Close left leg
+            move_legs(50, None, None, None, 0.9)  # Lower left height
+        
+        # Close right leg if right arm is at neutral (all values = 1)
+        if right_arm_neutral:
+            move_legs(None, 80, None, 50, 0.9)    # Close right leg
+            move_legs(None, 50, None, None, 0.9)  # Lower right height
+        
+        return jsonify({
+            "success": True, 
+            "message": "Arm positions updated with sequential movement",
+            "values": {
+                "left_main": left_main,
+                "left_forearm": left_forearm,
+                "left_hand": left_hand,
+                "right_main": right_main,
+                "right_forearm": right_forearm,
+                "right_hand": right_hand,
+                "speed": speed
+            }
+        }), 200
+        
+    except Exception as e:
+        queue_message(f"Error moving arms: {e}")
+        return jsonify({"error": f"Failed to move arms: {str(e)}"}), 500
+
 
 
 def parse_config_with_comments(file_path):
