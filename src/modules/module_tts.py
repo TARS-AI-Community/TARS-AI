@@ -175,7 +175,6 @@ async def play_audio_chunks(text, config, is_wakeword=False):
         
         while True:
             try:
-                # Get next chunk (with timeout to check if done)
                 try:
                     audio_chunk = await asyncio.wait_for(audio_queue.get(), timeout=0.1)
                 except asyncio.TimeoutError:
@@ -183,21 +182,24 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                         break
                     continue
                 
-                # Play the chunk
+                # Play the chunk with normalization and gain boost
                 data, samplerate = sf.read(audio_chunk, dtype='float32')
+                
+                # Normalize to use full dynamic range
+                max_val = np.max(np.abs(data))
+                if max_val > 0:
+                    data = data / max_val
+                
+                gain = 1.5
+                data = np.clip(data * gain, -1.0, 1.0)
+                
                 sd.play(data, samplerate)
-                sd.wait()  # Wait for this chunk to finish
+                sd.wait()
                 
             except Exception as e:
                 queue_message(f"ERROR: Failed to play chunk: {e}")
                 if synthesis_done.is_set() and audio_queue.empty():
                     break
-        
-        # Stop talking when done
-        try:
-            requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
-        except:
-            pass
     
     # Run synthesis and playback concurrently
     await asyncio.gather(

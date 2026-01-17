@@ -24,6 +24,7 @@ from modules.module_tts import play_audio_chunks
 from modules.module_messageQue import queue_message
 from modules.module_ui import UIManager
 from modules.module_btcontroller import start_controls
+from modules.module_servoctl import initialize_servos
 
 # === Constants and Globals ===
 ui_manager = None
@@ -94,7 +95,7 @@ def wake_word_callback(wake_response):
     - wake_response (str): The response to the wake word.
     """ 
 
-    character_name = os.path.splitext(os.path.basename(CONFIG['CHAR']['character_card_path']))[0]
+    character_name = CONFIG['CHAR']['character_name']
     ui_manager.update_data(character_name, wake_response, character_name)
     
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption'], True))
@@ -146,8 +147,9 @@ def utterance_callback(message):
             pass
 
         # Stream the AI's reply
-        ui_manager.update_data("TARS", reply, "TARS")
-        queue_message(f"TARS: {reply}", stream=False) 
+        character_name = CONFIG['CHAR']['character_name']
+        ui_manager.update_data(character_name, reply, "TARS")
+        queue_message(f"{character_name}: {reply}", stream=False) 
 
         # Strip special chars so he doesnt say them
         reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-]', '', reply)
@@ -187,3 +189,15 @@ def initialize_managers(mem_manager, char_manager, stt_mgr, ui_mgr, shutdown_evt
     ui_manager = ui_mgr
     shutdown_event = shutdown_evt
     battery_module = battery_mod
+
+def startup_initialization():
+    """
+    Perform startup initialization tasks.
+    Call this function after all managers are initialized to set up hardware and systems.
+    """
+    try:
+        queue_message("SYSTEM: Starting servo initialization...")
+        initialize_servos()
+        queue_message("SYSTEM: Servo initialization complete")
+    except Exception as e:
+        queue_message(f"ERROR: Servo initialization failed - {e}")
