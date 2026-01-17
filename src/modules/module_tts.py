@@ -182,10 +182,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                         break
                     continue
                 
-                # Play the chunk with normalization and gain boost
                 data, samplerate = sf.read(audio_chunk, dtype='float32')
-                
-                # Normalize to use full dynamic range
                 max_val = np.max(np.abs(data))
                 if max_val > 0:
                     data = data / max_val
@@ -200,6 +197,11 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 queue_message(f"ERROR: Failed to play chunk: {e}")
                 if synthesis_done.is_set() and audio_queue.empty():
                     break
+        
+        try:
+            requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
+        except:
+            pass
     
     # Run synthesis and playback concurrently
     await asyncio.gather(
