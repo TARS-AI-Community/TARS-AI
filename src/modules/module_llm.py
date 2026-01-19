@@ -198,6 +198,7 @@ def llm_process(user_input, bot_response):
     bot_response["question"] = normalize_field(bot_response.get("question", ""))
     bot_response["reply"] = normalize_field(bot_response.get("reply", ""))
     bot_response["function_calls"] = bot_response.get("function_calls", [])
+    bot_response["new_memories"] = bot_response.get("new_memories", [])
 
     print(f"Data: {bot_response}")
 
@@ -210,6 +211,18 @@ def llm_process(user_input, bot_response):
             target=memory_manager.write_longterm_memory,
             args=(user_input, bot_response["reply"])
         ).start()
+        
+        # Save new memories from LLM response (no extra API call needed)
+        new_memories = bot_response.get("new_memories", [])
+        if isinstance(new_memories, list) and len(new_memories) > 0:
+            def save_memories():
+                try:
+                    import json
+                    memory_manager.update_topic_index_with_ai_response(json.dumps(new_memories))
+                except Exception as e:
+                    queue_message(f"MEMORY: Failed to save: {e}")
+            
+            threading.Thread(target=save_memories).start()
 
     if CONFIG["EMOTION"]["enabled"]:
         threading.Thread(

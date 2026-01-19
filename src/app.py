@@ -30,6 +30,7 @@ from modules.module_vision import initialize_blip
 from modules.module_llm import initialize_manager_llm
 from modules.module_ui import UIManager
 from modules.module_battery import BatteryModule
+from modules.module_cputemp import CPUTempModule
 from modules.module_btcontroller import *
 import modules.module_chatui
 from modules import module_servoctl
@@ -106,8 +107,12 @@ if __name__ == "__main__":
     battery = BatteryModule()
     battery.start()
 
+    cpu_temp = CPUTempModule()
+    temp = cpu_temp.get_temperature()
+    print(f"CPU Temperature: {temp:.1f}°C")
+
     # Create global UI manager instance
-    ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery)
+    ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery, cpu_temp_module=cpu_temp)
     if show_ui and CONFIG["UI"]["UI_enabled"]:
         ui_manager.start()
     ui_manager.update_data("System", "Initializing application...", "DEBUG")

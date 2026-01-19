@@ -45,59 +45,114 @@ def get_cache_filename(text):
     return os.path.join(CACHE_DIR, f"elevenlabs_{text_hash}.mp3")
 
 async def synthesize_elevenlabs_streaming(chunk):
+    """
+    Synthesize using direct REST API to ensure SSML tags are processed.
+    The Python SDK sometimes doesn't handle SSML properly, so we use direct HTTP.
+    """
     try:
-
-        audio_stream = elevenlabs_client.text_to_speech.stream(
-            text=chunk,
-            voice_id=CONFIG['TTS']['voice_id'],
-            model_id=CONFIG['TTS']['model_id'],
-            output_format="mp3_44100_128",
-            optimize_streaming_latency=3,  
-
-        )
-
-        audio_bytes = b""
-        first_byte = True
-
-        for audio_chunk in audio_stream:
-            if isinstance(audio_chunk, bytes):
-                if first_byte:
-                    first_byte = False
-                audio_bytes += audio_chunk
-
-        if not audio_bytes:
-            queue_message(f"ERROR: ElevenLabs returned empty response")
-            return None
-
-        audio_buffer = io.BytesIO(audio_bytes)
-        audio_buffer.seek(0)
-        return audio_buffer
+        import aiohttp
+        
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{CONFIG['TTS']['voice_id']}/stream"
+        headers = {
+            "xi-api-key": CONFIG['TTS']['elevenlabs_api_key'],
+            "Content-Type": "application/json"
+        }
+        
+        # Check if model supports SSML
+        model_id = CONFIG['TTS']['model_id']
+        is_eleven_v3 = 'v3' in model_id.lower()
+        
+        if is_eleven_v3 and '<break' in chunk:
+            # Eleven V3 doesn't support SSML, log warning
+            queue_message(f"WARNING: Model {model_id} doesn't support SSML tags. Use [pause], [short pause], [long pause] instead.")
+        
+        payload = {
+            "text": chunk,
+            "model_id": model_id,
+            "output_format": "mp3_44100_128",
+            "optimize_streaming_latency": 3,
+            "enable_ssml": True  # CRITICAL: Enable SSML parsing
+        }
+        
+        # Log the actual text being sent (for debugging)
+        if '<break' in chunk:
+            queue_message(f"DEBUG: Sending text with SSML: {chunk[:100]}...")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    queue_message(f"ERROR: ElevenLabs API returned {response.status}: {error_text}")
+                    return None
+                
+                audio_bytes = await response.read()
+                
+                if not audio_bytes:
+                    queue_message(f"ERROR: ElevenLabs returned empty response")
+                    return None
+                
+                audio_buffer = io.BytesIO(audio_bytes)
+                audio_buffer.seek(0)
+                return audio_buffer
 
     except Exception as e:
         queue_message(f"ERROR: ElevenLabs streaming failed: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 async def synthesize_elevenlabs_complete(text):
+    """
+    Synthesize complete speech using direct REST API.
+    """
     try:
-        audio_generator = elevenlabs_client.text_to_speech.convert(
-            text=text,
-            voice_id=CONFIG['TTS']['voice_id'],
-            model_id=CONFIG['TTS']['model_id'],
-            output_format="mp3_44100_128",
-        )
-
-        audio_bytes = b"".join(audio_generator)
-
-        if not audio_bytes:
-            queue_message(f"ERROR: ElevenLabs returned empty response")
-            return None
-
-        audio_buffer = io.BytesIO(audio_bytes)
-        audio_buffer.seek(0)
-        return audio_buffer
+        import aiohttp
+        
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{CONFIG['TTS']['voice_id']}"
+        headers = {
+            "xi-api-key": CONFIG['TTS']['elevenlabs_api_key'],
+            "Content-Type": "application/json"
+        }
+        
+        # Check if model supports SSML
+        model_id = CONFIG['TTS']['model_id']
+        is_eleven_v3 = 'v3' in model_id.lower()
+        
+        if is_eleven_v3 and '<break' in text:
+            queue_message(f"WARNING: Model {model_id} doesn't support SSML tags. Use [pause], [short pause], [long pause] instead.")
+        
+        payload = {
+            "text": text,
+            "model_id": model_id,
+            "output_format": "mp3_44100_128",
+            "enable_ssml": True  # CRITICAL: Enable SSML parsing
+        }
+        
+        # Log if SSML is present
+        if '<break' in text:
+            queue_message(f"DEBUG: Sending wakeword with SSML: {text}")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    queue_message(f"ERROR: ElevenLabs API returned {response.status}: {error_text}")
+                    return None
+                
+                audio_bytes = await response.read()
+                
+                if not audio_bytes:
+                    queue_message(f"ERROR: ElevenLabs returned empty response")
+                    return None
+                
+                audio_buffer = io.BytesIO(audio_bytes)
+                audio_buffer.seek(0)
+                return audio_buffer
 
     except Exception as e:
         queue_message(f"ERROR: ElevenLabs synthesis failed: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 async def text_to_speech_with_pipelining_elevenlabs(text, is_wakeword):    

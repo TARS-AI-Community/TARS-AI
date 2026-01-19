@@ -975,10 +975,6 @@ def get_config():
             'options': ['Euler a', 'Euler', 'DPM++ 2M Karras', 'DPM++ SDE Karras', 'DDIM'],
             'description': 'Stable Diffusion sampler'
         },
-        'UI.background_id': {
-            'options': ['0', '1', '2', '3', '4', '5'],
-            'description': 'Background animation (0=none, 1=image, 2=stars, 3-5=video)'
-        },
         'UI.rotation': {
             'options': ['0', '90', '180', '270'],
             'description': 'Screen rotation in degrees'
