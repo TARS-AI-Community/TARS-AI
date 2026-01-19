@@ -95,6 +95,10 @@ def wake_word_callback(wake_response):
     - wake_response (str): The response to the wake word.
     """ 
 
+    # Deactivate screensaver when wake word is detected
+    if ui_manager:
+        ui_manager.deactivate_screensaver()
+
     character_name = CONFIG['CHAR']['character_name']
     ui_manager.update_data(character_name, wake_response, character_name)
     
@@ -108,6 +112,10 @@ def utterance_callback(message):
     - message (str): The recognized message from the Speech-to-Text (STT) module.
     """
     try:
+        # Deactivate screensaver when user speaks
+        if ui_manager:
+            ui_manager.deactivate_screensaver()
+        
         # Parse the user message
         message_dict = json.loads(message)
         if not message_dict.get('text'):  # Handles cases where text is "" or missing
@@ -152,7 +160,7 @@ def utterance_callback(message):
         queue_message(f"{character_name}: {reply}", stream=False) 
 
         # Strip special chars so he doesnt say them
-        reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-]', '', reply)
+        reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
         
         # Stream TTS audio to speakers
         asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))

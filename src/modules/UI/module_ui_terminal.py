@@ -18,6 +18,8 @@ CONFIG = load_config()
 class TerminalSystem:
     def __init__(self, width: int, height: int, bg_color=(0, 0, 0), bg_alpha=13, 
                  battery_module=None,
+                 cpu_temp_module=None,
+                 show_cpu_temp=False,
                  on_background_change: Optional[Callable] = None,
                  on_shutdown: Optional[Callable] = None,
                  on_spectrum_change: Optional[Callable] = None,
@@ -29,6 +31,14 @@ class TerminalSystem:
         self.bg_alpha = bg_alpha
 
         self.battery_module = battery_module
+        self.cpu_temp_module = cpu_temp_module
+        self.show_cpu_temp = show_cpu_temp
+
+        self.last_cpu_update_time = 0
+        self.cpu_update_interval = 30
+        self.current_cpu_temp = 0.0
+        self.cpu_temp_history = []
+        self.max_temp_history = 20
         self.on_background_change = on_background_change
         self.on_shutdown = on_shutdown
         self.on_spectrum_change = on_spectrum_change
@@ -424,6 +434,14 @@ class TerminalSystem:
 
         self.status_blink = (self.status_blink + 0.1) % (2 * 3.14159)
 
+        if self.cpu_temp_module:
+            if current_time - self.last_cpu_update_time >= self.cpu_update_interval:
+                self.current_cpu_temp = self.cpu_temp_module.get_temperature()
+                self.cpu_temp_history.append(self.current_cpu_temp)
+                if len(self.cpu_temp_history) > self.max_temp_history:
+                    self.cpu_temp_history.pop(0)
+                self.last_cpu_update_time = current_time
+
     def _draw_tech_button(self, surface, rect, label, code, active=False, color_type=None, disabled=False):
         if disabled:
 
@@ -464,7 +482,6 @@ class TerminalSystem:
         surface.blit(text_surface, text_rect)
 
     def _draw_battery_indicator(self, surface, x, y, width, height):
-        """Draw battery indicator with percentage"""
         if not self.battery_module:
             return
 
@@ -533,9 +550,70 @@ class TerminalSystem:
         except Exception as e:
             pass  
 
-    def _draw_power_menu(self, surface):
-        """Draw the power menu modal"""
+    def _draw_cpu_temp_indicator(self, surface, x, y, width, height):
+        if not self.cpu_temp_module:
+            return
+        
+        try:
+            temp = self.current_cpu_temp
+            text_color = self.text_color
+            border_color = (*self.border_color, 200)
+            rect = pygame.Rect(x, y, width, height)
+            bg_color = (*self.bg_panel, 200)
+            pygame.draw.rect(surface, bg_color, rect)
+            pygame.draw.rect(surface, border_color, rect, 2)
+            inner_rect = rect.inflate(-4, -4)
+            pygame.draw.rect(surface, (*self.accent_color, 150), inner_rect, 1)
+            bracket_size = 6
+            bracket_color = border_color
+            pygame.draw.line(surface, bracket_color, rect.topleft, (rect.left + bracket_size, rect.top), 2)
+            pygame.draw.line(surface, bracket_color, rect.topleft, (rect.left, rect.top + bracket_size), 2)
+            pygame.draw.line(surface, bracket_color, rect.topright, (rect.right - bracket_size, rect.top), 2)
+            pygame.draw.line(surface, bracket_color, (rect.right - 1, rect.top), (rect.right - 1, rect.top + bracket_size), 2)
+            text = f"{int(temp)}°C"
+            text_surface = self.toolbar_font.render(text, True, text_color)
+            text_rect = text_surface.get_rect(center=(rect.centerx, rect.centery - 5))
+            surface.blit(text_surface, text_rect)
+            graph_area_y = text_rect.bottom + 4
+            graph_area_height = rect.bottom - graph_area_y - 6
+            graph_area_left = rect.left + 8
+            graph_area_right = rect.right - 8
+            graph_area_width = graph_area_right - graph_area_left
+            
+            if self.cpu_temp_history and len(self.cpu_temp_history) > 1 and graph_area_height > 0:
+                min_temp = 30
+                max_temp = 85
+                temp_range = max_temp - min_temp
 
+                num_points = len(self.cpu_temp_history)
+                point_spacing = graph_area_width / max(num_points - 1, 1)
+                
+                if temp < 70:
+                    graph_color = (0, 200, 80)
+                elif temp < 75:
+                    graph_color = (255, 160, 0)
+                else:
+                    graph_color = (255, 40, 40)
+                
+                points = []
+                for i, temp_val in enumerate(self.cpu_temp_history):
+                    x_pos = graph_area_left + (i * point_spacing)
+                    temp_normalized = (temp_val - min_temp) / temp_range
+                    temp_normalized = max(0, min(1, temp_normalized))
+                    y_pos = graph_area_y + graph_area_height - (temp_normalized * graph_area_height)
+                    
+                    points.append((int(x_pos), int(y_pos)))
+                
+                if len(points) > 1:
+                    pygame.draw.lines(surface, graph_color, False, points, 2)
+                    for point in points:
+                        pygame.draw.circle(surface, graph_color, point, 2)
+            
+        except Exception as e:
+            pass
+
+
+    def _draw_power_menu(self, surface):
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         surface.blit(overlay, (0, 0))
@@ -622,6 +700,7 @@ class TerminalSystem:
             battery_y = 5
             self._draw_battery_indicator(self.overlay_surface, battery_x, battery_y, 
                                         battery_width, battery_height)
+
 
         terminal_rect = pygame.Rect(0, self.toolbar_height, self.width, self.terminal_height)
         terminal_bg = pygame.Surface((self.width, self.terminal_height), pygame.SRCALPHA)
@@ -795,6 +874,14 @@ class TerminalSystem:
                                        button["label"], button["code"],
                                        is_active,
                                        button.get("color"))
+
+        if self.cpu_temp_module and self.show_cpu_temp:
+            cpu_width = 80
+            cpu_height = self.bottom_toolbar_height - 10
+            cpu_x = self.width - cpu_width - 10 
+            cpu_y = bottom_toolbar_y + 5
+            self._draw_cpu_temp_indicator(self.overlay_surface, cpu_x, cpu_y,
+                                          cpu_width, cpu_height)
 
         surface.blit(self.overlay_surface, (0, 0))
 

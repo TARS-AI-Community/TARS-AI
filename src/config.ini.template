@@ -160,12 +160,14 @@ use_camera_module = True
 # enable the camera
 show_mouse = True
 # enable the software mouse
-background_id = 1
-# 0 = no background animation, # 1 = background image, # 2 = stars, # 3 = video 3 , 4 = video, 5 = video
 fullscreen = True
 # fullscreen or within a framed window
 font_size = 12
 # normally from 9 to 20 depending on your resolution
+screensaver_timer = 300
+# 0 = no screensaver, 60 = 1 minute before screensaver shows up. You can specify any amount of seconds.
+show_cpu_temp = False
+# Display the CPU temperature in the UI
 target_fps = 30
 # UI Refresh max FPS speed
 
@@ -175,6 +177,14 @@ strategy = hybrid
 # Options: naive (vector-only), hybrid (vector + BM25)
 top_k = 5
 # Number of documents to retrieve
+context_window = 2       
+# 2 memories before/after each match
+max_memories = 3         
+# Expand top 3 results
+recency_boost_days = 7   
+# Boost last week's chats
+enable_topic_tracking = True
+# Enable Very long memory
 
 [HOME_ASSISTANT] # HA Module
 enabled = False

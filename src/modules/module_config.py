@@ -227,6 +227,10 @@ def load_config():
             "strategy": config.get('RAG', 'strategy', fallback='naive'),
             "vector_weight": config.getfloat('RAG', 'vector_weight', fallback=0.5),
             "top_k": config.getint('RAG', 'top_k', fallback=5),
+            "context_window": config.getint('RAG', 'context_window', fallback=2),
+            "max_memories": config.getint('RAG', 'max_memories', fallback=3),
+            "recency_boost_days": config.getint('RAG', 'recency_boost_days', fallback=7),
+            "enable_topic_tracking": config.getboolean('RAG', 'enable_topic_tracking'),
         },
         "HOME_ASSISTANT": {
             "enabled": config['HOME_ASSISTANT']['enabled'],
@@ -298,10 +302,11 @@ def load_config():
             "rotation": int(config['UI']['rotation']),
             "show_mouse": config.getboolean('UI', 'show_mouse'),
             "use_camera_module": config.getboolean('UI', 'use_camera_module'),
-            "background_id": int(config['UI']['background_id']),
             "fullscreen": config.getboolean('UI', 'fullscreen'),
             "font_size": int(config['UI']['font_size']),  
-            "target_fps": int(config['UI']['target_fps']),       
+            "target_fps": int(config['UI']['target_fps']),
+            "screensaver_timer": config.getint('UI', 'screensaver_timer', fallback=300), 
+            "show_cpu_temp": config.getboolean('UI', 'show_cpu_temp', fallback=False), 
         },
         "BATTERY": {
             "battery_capacity_mAh":  int(config['BATTERY']['battery_capacity_mAh']),
@@ -342,44 +347,77 @@ def get_api_key(llm_backend: str) -> str:
     return api_key
 
 
+def reload_persona_settings():
+    """
+    Reload persona settings from persona.ini file.
+    This should be called before each LLM response to ensure fresh settings are used.
+    
+    Returns:
+    - dict: Dictionary of persona traits, or None if failed
+    """
+    global character_name
+    
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        persona_path = os.path.join(base_dir, 'character', character_name, 'persona.ini')
+        
+        if not os.path.exists(persona_path):
+            queue_message(f"WARNING: persona.ini not found at {persona_path}")
+            return None
+        
+        persona_config = configparser.ConfigParser()
+        persona_config.read(persona_path, encoding='utf-8')
+        
+        if 'PERSONA' not in persona_config:
+            queue_message("WARNING: [PERSONA] section not found in persona.ini")
+            return None
+        
+        # Convert all values to integers
+        persona_traits = {key: int(value) for key, value in persona_config['PERSONA'].items()}
+        
+        return persona_traits
+        
+    except Exception as e:
+        queue_message(f"ERROR reloading persona settings: {e}")
+        return None
+
 def update_character_setting(setting, value):
     global character_name
     """
-    Update a specific setting in the [CHAR] section of the config.ini file.
+    Update a specific setting in the [PERSONA] section of persona.ini file.
 
     Parameters:
-    - setting (str): The setting to update (e.g., 'humor', 'honesty').
-    - value (int): The new value for the setting.
+    - setting (str): The setting to update (e.g., 'humor', 'honesty', 'sarcasm').
+    - value (int): The new value for the setting (0-100).
 
     Returns:
     - bool: True if the update is successful, False otherwise.
     """
-    # Determine the path to config.ini in the same folder as this script
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'character', character_name, 'persona.ini')
-    config = configparser.ConfigParser()
-
     try:
-        # Read the config file
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config_path = os.path.join(base_dir, 'character', character_name, 'persona.ini')
+        
+        if not os.path.exists(config_path):
+            queue_message(f"ERROR: persona.ini not found at {config_path}")
+            return False
+        
+        config = configparser.ConfigParser()
         config.read(config_path, encoding='utf-8')
 
-
-        # Check if [CHAR] section exists
         if 'PERSONA' not in config:
-            queue_message("Error: [PERSONA] section not found in the config file.")
+            queue_message("ERROR: [PERSONA] section not found")
             return False
 
-        # Update the setting
-        config['PERSONA'][setting] = str(value)
+        config['PERSONA'][setting] = str(int(value))
 
-        # Write the changes back to the file
-        with open(config_path, 'w') as config_file:
+        with open(config_path, 'w', encoding='utf-8') as config_file:
             config.write(config_file)
 
         queue_message(f"Updated {setting} to {value} in [PERSONA] section.")
         return True
 
     except Exception as e:
-        queue_message(f"Error updating setting: {e}")
+        queue_message(f"ERROR updating {setting}: {e}")
         return False
 
 
@@ -475,7 +513,7 @@ class TarsConfigIntegration:
             # Integer fields - accept int, numeric strings
             elif field_name in ['sensitivity', 'speechdelay', 'contextsize', 'max_tokens',
                               'seed', 'top_k', 'steps', 'width', 'height', 'screen_width',
-                              'screen_height', 'rotation', 'background_id', 'font_size',
+                              'screen_height', 'rotation', 'font_size',
                               'target_fps', 'battery_capacity_mAh']:
                 try:
                     int(float(str_value))  # Allow "8.0" -> 8

@@ -26,7 +26,8 @@ from UI.module_ui_tesseract import TesseractSystem
 from UI.module_ui_terminal import TerminalSystem
 from UI.module_ui_spectrum import SpectrumSystem
 from UI.module_ui_video import VideoSystem
-from UI.module_ui_camera import CameraModule  
+from UI.module_ui_camera import CameraModule
+from UI.module_ui_screensaver import ScreensaverManager  
 
 CONFIG = load_config()
 screenWidth = CONFIG['UI']['screen_width']
@@ -34,22 +35,24 @@ screenHeight = CONFIG['UI']['screen_height']
 rotation = CONFIG['UI']['rotation']
 show_mouse = CONFIG['UI']['show_mouse']
 use_camera_module = CONFIG['UI']['use_camera_module']
-background_id = CONFIG['UI']['background_id']
 fullscreen = CONFIG['UI']['fullscreen']
 font_size = CONFIG['UI']['font_size']
 target_fps = CONFIG['UI']['target_fps']
+screensaver_timer = CONFIG['UI']['screensaver_timer']
+show_cpu_temp = CONFIG['UI']['show_cpu_temp']
 speechdelay = CONFIG['STT']['speechdelay']
 
 BASE_WIDTH = 800
 BASE_HEIGHT = 600
 
 class UIManager(threading.Thread):
-    def __init__(self, shutdown_event, battery_module, use_camera_module=use_camera_module, show_mouse=show_mouse, 
+    def __init__(self, shutdown_event, battery_module, cpu_temp_module=None, use_camera_module=use_camera_module, show_mouse=show_mouse, 
                  width: int = screenWidth, height: int = screenHeight, rotation_value=rotation, 
                  background_type='particles'):
         super().__init__()
         self.shutdown_event = shutdown_event
         self.battery_module = battery_module
+        self.cpu_temp_module = cpu_temp_module
         self.running = False
         self.paused = False  
 
@@ -93,6 +96,8 @@ class UIManager(threading.Thread):
         self.spectrum_system = None
 
         self.terminal_system = None
+
+        self.screensaver_manager = None
 
         self.camera_module = None
         self.show_camera = False
@@ -168,6 +173,15 @@ class UIManager(threading.Thread):
     def toggle_camera(self):
         self.show_camera = not self.show_camera
 
+        # Deactivate screensaver when camera is toggled (especially when turning on)
+        if self.screensaver_manager:
+            if self.show_camera:
+                # Force deactivate if camera is being turned on
+                self.screensaver_manager.deactivate()
+            else:
+                # Just reset timer if camera is being turned off
+                self.screensaver_manager.reset_timer()
+
         if self.show_camera:
             if self.terminal_system:
                 self.terminal_system.set_camera_active(True)
@@ -180,6 +194,11 @@ class UIManager(threading.Thread):
 
     def resume(self):
         self.paused = False
+
+    def deactivate_screensaver(self):
+        """Deactivate the screensaver (called by wake word callback)."""
+        if self.screensaver_manager:
+            self.screensaver_manager.deactivate()
 
     def exit_program(self):
         print("Program exit initiated by user")
@@ -435,12 +454,21 @@ class UIManager(threading.Thread):
                     self.logical_height,
                     bg_alpha=13,
                     battery_module=self.battery_module,  
+                    cpu_temp_module=self.cpu_temp_module,
+                    show_cpu_temp=show_cpu_temp,
                     on_background_change=self.cycle_background,
                     on_shutdown=self.initiate_shutdown,
                     on_spectrum_change=self.cycle_spectrum_style,
                     on_camera_toggle=self.toggle_camera,  
                     on_exit=self.exit_program  
 
+                )
+
+                self.screensaver_manager = ScreensaverManager(
+                    original_surface,
+                    self.logical_width,
+                    self.logical_height,
+                    timeout=screensaver_timer
                 )
 
             except Exception as e:
@@ -475,6 +503,10 @@ class UIManager(threading.Thread):
                     if event.type == pygame.QUIT:
                         self.running = False
                     elif event.type == pygame.KEYDOWN:
+                        # Reset screensaver on any key press
+                        if self.screensaver_manager:
+                            self.screensaver_manager.reset_timer()
+                        
                         if event.key == pygame.K_ESCAPE:
                             self.running = False
                         elif event.key == pygame.K_s:  # Press 'S' to cycle spectrum styles
@@ -482,6 +514,10 @@ class UIManager(threading.Thread):
                         elif event.key == pygame.K_c:  # Press 'C' to toggle camera
                             self.toggle_camera()
                     elif event.type == pygame.MOUSEBUTTONDOWN:
+                        # Reset screensaver on mouse click
+                        if self.screensaver_manager:
+                            self.screensaver_manager.reset_timer()
+                        
                         if self.terminal_system:
                             logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
                             self.terminal_system.handle_mouse_down(logical_pos)
@@ -491,12 +527,43 @@ class UIManager(threading.Thread):
                             logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
                             self.terminal_system.handle_mouse_up(logical_pos)
                     elif event.type == pygame.MOUSEMOTION:
+                        # Reset screensaver on mouse movement
+                        if self.screensaver_manager:
+                            self.screensaver_manager.reset_timer()
+                        
                         if self.terminal_system:
                             logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
                             self.terminal_system.handle_mouse_motion(logical_pos)
                     elif event.type == pygame.MOUSEWHEEL:
                         if self.terminal_system:
                             self.terminal_system.handle_scroll_wheel(event.y)
+
+                # Check if screensaver should activate (but not if camera is showing or if disabled)
+                if self.screensaver_manager:
+                    if self.show_camera:
+                        # Force deactivate screensaver if camera is active
+                        if self.screensaver_manager.is_active():
+                            self.screensaver_manager.deactivate()
+                        # Keep resetting the timer while camera is active
+                        self.screensaver_manager.reset_timer()
+                    elif screensaver_timer > 0:
+                        # Only check timeout when camera is not showing and screensaver is enabled
+                        self.screensaver_manager.check_timeout()
+                
+                # If screensaver is active, render only screensaver and skip all updates
+                if self.screensaver_manager and self.screensaver_manager.is_active():
+                    self.screensaver_manager.render()
+                    
+                    if self.rotate != 0:
+                        rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
+                        rotated_rect = rotated_surface.get_rect(center=(display_width // 2, display_height // 2))
+                        screen.blit(rotated_surface, rotated_rect)
+                    else:
+                        screen.blit(original_surface, (0, 0))
+                    
+                    pygame.display.flip()
+                    clock.tick(self.target_fps)
+                    continue  # Skip all background updates and normal rendering
 
                 screen.fill((0, 0, 0))
 
