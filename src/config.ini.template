@@ -148,7 +148,7 @@ negative_prompt = deformed, black and white, disfigured, low contrast, extra lim
 enabled = True
 
 [UI] # Graphical interface 
-UI_enabled = False
+UI_enabled = True
 #Enable or Disable the visuals
 screen_width = 1024
 # Adjust based on your screen resolution
