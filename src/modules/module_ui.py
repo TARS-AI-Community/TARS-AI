@@ -177,11 +177,9 @@ class UIManager(threading.Thread):
 
     def pause(self):
         self.paused = True
-        print("UIManager paused")
 
     def resume(self):
         self.paused = False
-        print("UIManager resumed")
 
     def exit_program(self):
         print("Program exit initiated by user")

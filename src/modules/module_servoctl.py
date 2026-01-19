@@ -197,18 +197,17 @@ def initialize_servos():
 
 def disable_all_servos():
     if pca is None:
-        return
-    
+        return   
     try:
         for channel in range(16):
             pca.channels[channel].duty_cycle = 0
     except Exception as e:
         queue_message(f"Error disabling servos: {e}")
-    
     time.sleep(0.05)
 
 
-def reset_positions():  
+def reset_positions():
+    disable_all_servos()  
     move_legs(50, 50, 50, 50, 0.2)
     time.sleep(0.5)
     move_arm(1, 1, 1, 1, 1, 1, 0.3)
@@ -744,6 +743,21 @@ def wave_left():
         finally:
             MOVING = False
             _notify_movement_end()
+
+def neutral_legs():
+    global MOVING
+    if not MOVING:
+        MOVING = True
+        _notify_movement_start()
+        try:
+            move_legs(90, 90, None, None, 0.8)
+            move_legs(90, 90, 50, 50, 0.8)
+            move_legs(50, 50, 50, 50, 0.8)
+            disable_all_servos()
+        finally:
+            MOVING = False
+            _notify_movement_end()
+
 
 
 def move_servos_synchronized(movements, speed_factor):

@@ -199,7 +199,7 @@ def llm_process(user_input, bot_response):
     bot_response["reply"] = normalize_field(bot_response.get("reply", ""))
     bot_response["function_calls"] = bot_response.get("function_calls", [])
 
-    print(f"TARS: {bot_response}")
+    print(f"Data: {bot_response}")
 
     if bot_response["function_calls"]:
         for func_call in bot_response["function_calls"]:

@@ -62,7 +62,6 @@ async def synthesize_elevenlabs_streaming(chunk):
         for audio_chunk in audio_stream:
             if isinstance(audio_chunk, bytes):
                 if first_byte:
-                    queue_message(f"First audio bytes received from API")
                     first_byte = False
                 audio_bytes += audio_chunk
 
@@ -136,10 +135,7 @@ async def text_to_speech_with_pipelining_elevenlabs(text, is_wakeword):
     else:
 
         chunks = split_into_sentences(text, max_length=80)
-        queue_message(f"Streaming {len(chunks)} chunks with optimize_streaming_latency=3")
-
         for i, chunk in enumerate(chunks):
-            queue_message(f"Chunk {i+1}/{len(chunks)}: {chunk[:50]}...")
             audio_buffer = await synthesize_elevenlabs_streaming(chunk)
             if audio_buffer:
                 yield audio_buffer

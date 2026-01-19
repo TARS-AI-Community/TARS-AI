@@ -26,7 +26,7 @@
      inkscape:document-units="mm"
      inkscape:zoom="1.654424"
      inkscape:cx="397.7215"
-     inkscape:cy="711.12363"
+     inkscape:cy="760.08327"
      inkscape:window-width="3840"
      inkscape:window-height="2054"
      inkscape:window-x="-11"
@@ -141,7 +141,7 @@
        sodipodi:nodetypes="cccc" />
     <path
        style="fill:none;fill-opacity:1;stroke:#ff0000;stroke-width:1.265;stroke-opacity:1"
-       d="M 64.018662,237.12824 H 182.84206 v -38.6007 h -20.27467"
+       d="M 64.018662,237.12824 H 182.84206 v -17.43403 h -20.27467"
        id="path11"
        sodipodi:nodetypes="cccc" />
     <image
@@ -161,10 +161,10 @@
        style="font-weight:bold;font-family:arial;-inkscape-font-specification:'arial Bold';text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect11);display:inline;fill:#000000;fill-opacity:1;stroke:none;stroke-width:4.7811;stroke-opacity:1"><tspan
          x="45.101562"
          y="520.60788"
-         id="tspan2">Wire lenght to Servo </tspan><tspan
+         id="tspan1">Wire lenght to Servo </tspan><tspan
          x="45.101562"
          y="535.60788"
-         id="tspan3">Controller : 30cm</tspan></text>
+         id="tspan11">Controller : 30cm</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458333,0,0,0.26458333,120.76082,36.473065)"
@@ -172,14 +172,14 @@
        style="font-weight:bold;font-family:arial;-inkscape-font-specification:'arial Bold';text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect11-0);display:inline;fill:#000000;fill-opacity:1;stroke:none;stroke-width:4.7811;stroke-opacity:1"><tspan
          x="45.101562"
          y="520.60788"
-         id="tspan4">Wire lenght to INA260:  
+         id="tspan12">Wire lenght to INA260:  
 </tspan><tspan
          x="45.101562"
          y="535.60788"
-         id="tspan5">Only use what is needed to </tspan><tspan
+         id="tspan13">Only use what is needed to </tspan><tspan
          x="45.101562"
          y="550.60788"
-         id="tspan6">reach the pins</tspan></text>
+         id="tspan14">reach the pins</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458333,0,0,0.26458333,2.0467485,91.226819)"
@@ -187,15 +187,22 @@
        style="font-weight:bold;font-family:arial;-inkscape-font-specification:'arial Bold';text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect11-0-4);display:inline;fill:#000000;fill-opacity:1;stroke:none;stroke-width:4.7811;stroke-opacity:1"><tspan
          x="45.101562"
          y="520.60788"
-         id="tspan7">Splice the wires going to the </tspan><tspan
+         id="tspan15">Splice the wires going to the </tspan><tspan
          x="45.101562"
          y="535.60788"
-         id="tspan8">INA260 after the length of the </tspan><tspan
+         id="tspan16">INA260 after the length of the </tspan><tspan
          x="45.101562"
          y="550.60788"
-         id="tspan9">Raspberry pi so they are not in </tspan><tspan
+         id="tspan17">Raspberry pi so they are not in </tspan><tspan
          x="45.101562"
          y="565.60788"
-         id="tspan10">the way.</tspan></text>
+         id="tspan18">the way.</tspan></text>
+    <rect
+       style="fill:#00d455;stroke:#00d455;stroke-width:0.264583"
+       id="rect1"
+       width="2.8786454"
+       height="4.9576669"
+       x="153.36783"
+       y="215.41862" />
   </g>
 </svg>

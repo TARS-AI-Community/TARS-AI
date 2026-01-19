@@ -122,16 +122,13 @@ def set_all_servos_preset():
     set_servo_pulse(1, 350)
     set_servo_pulse(2, 300)
     set_servo_pulse(3, 300)
+
     set_servo_pulse(4, 550)  
-
-    set_servo_pulse(5, 560)  
-
-    set_servo_pulse(6, 400)  
+    set_servo_pulse(5, 500)  
+    set_servo_pulse(6, 420)  
 
     set_servo_pulse(7, 50)   
-
-    set_servo_pulse(8, 300)  
-
+    set_servo_pulse(8, 230)  
     set_servo_pulse(9, 300)  
 
     print("OK Preset applied - Servos under power")
@@ -851,10 +848,10 @@ class ServoControllerGUI:
 
         arm_base_values = {
             'leftMainOffset': (int(servo_config.get('leftMainMin', 550)), int(servo_config.get('leftMainMax', 50))),
-            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 560)), int(servo_config.get('leftForarmMax', 300))),
+            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 500)), int(servo_config.get('leftForarmMax', 230))),
             'leftHandOffset': (int(servo_config.get('leftHandMin', 400)), int(servo_config.get('leftHandMax', 300))),
             'rightMainOffset': (int(servo_config.get('rightMainMin', 50)), int(servo_config.get('rightMainMax', 550))),
-            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 300)), int(servo_config.get('rightForarmMax', 560))),
+            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 230)), int(servo_config.get('rightForarmMax', 500))),
             'rightHandOffset': (int(servo_config.get('rightHandMin', 300)), int(servo_config.get('rightHandMax', 400)))
         }
 
@@ -1083,10 +1080,10 @@ class ServoControllerGUI:
 
         arm_base_values = {
             'leftMainOffset': (int(servo_config.get('leftMainMin', 550)), int(servo_config.get('leftMainMax', 50))),
-            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 560)), int(servo_config.get('leftForarmMax', 300))),
+            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 500)), int(servo_config.get('leftForarmMax', 230))),
             'leftHandOffset': (int(servo_config.get('leftHandMin', 400)), int(servo_config.get('leftHandMax', 300))),
             'rightMainOffset': (int(servo_config.get('rightMainMin', 50)), int(servo_config.get('rightMainMax', 550))),
-            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 300)), int(servo_config.get('rightForarmMax', 560))),
+            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 230)), int(servo_config.get('rightForarmMax', 500))),
             'rightHandOffset': (int(servo_config.get('rightHandMin', 300)), int(servo_config.get('rightHandMax', 400)))
         }
 
@@ -1385,7 +1382,7 @@ def adjust_offsets():
                 base_pulse = int(servo_config.get('leftMainMin', 550))  
 
             elif channel == 5:
-                base_pulse = int(servo_config.get('leftForarmMin', 560))  
+                base_pulse = int(servo_config.get('leftForarmMin', 500))  
 
             elif channel == 6:
                 base_pulse = int(servo_config.get('leftHandMin', 400))  
@@ -1394,7 +1391,7 @@ def adjust_offsets():
                 base_pulse = int(servo_config.get('rightMainMin', 50))  
 
             elif channel == 8:
-                base_pulse = int(servo_config.get('rightForarmMin', 300))  
+                base_pulse = int(servo_config.get('rightForarmMin', 230))  
 
             elif channel == 9:
                 base_pulse = int(servo_config.get('rightHandMin', 300))  
@@ -1605,6 +1602,8 @@ if __name__ == "__main__":
             move_arm(1, 1, 1, 1, None, None,  0.92)
             move_legs(50, 50, 50, 50, 0.8)
 
+            step_forward()
+
             move_legs(50, 100, 50, 60, 0.8)
             move_arm(None, None, None, 98, None, None, 0.92)
             move_arm(None, None, None, None, 100, None, 1)
@@ -1618,6 +1617,8 @@ if __name__ == "__main__":
             move_arm(None, None, None, 98, 1, 1, 0.92)
             move_arm(1, None, None, 1, 1, 1, 0.92)
             move_legs(50, 50, 50, 50, 0.8)
+
+            walk_backward()
 
             """keep code enclosed"""
             disable_all_servos()

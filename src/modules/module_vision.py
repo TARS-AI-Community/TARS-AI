@@ -84,7 +84,8 @@ def describe_camera_view() -> str:
             return output
         
     except Exception as e:
-        queue_message(f"TARS is unable to see right now")
+        character_name = CONFIG['CHAR']['character_name']
+        queue_message(f"{character_name} is unable to see right now")
         return f"Error: {e}"
     
 
