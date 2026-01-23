@@ -40,6 +40,8 @@ librosa                         # Audio analysis and feature extraction
 configobj                       # Maintain comments in config.ini during updates
 python-dotenv                   # Load environment variables from a .env file
 pygame                          # Game development & multimedia support
+PyOpenGL                        # Game development & multimedia support
+PyOpenGL-accelerate             # Game development & multimedia support
 evdev                           # Handle Linux input devices (keyboards, mice, controllers)
 moviepy                         # Video editing and playback support
 adafruit-circuitpython-pca9685  # PCA9685 servo controller libraries

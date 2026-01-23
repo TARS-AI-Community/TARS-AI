@@ -199,13 +199,23 @@ def initialize_managers(mem_manager, char_manager, stt_mgr, ui_mgr, shutdown_evt
     battery_module = battery_mod
 
 def startup_initialization():
-    """
-    Perform startup initialization tasks.
-    Call this function after all managers are initialized to set up hardware and systems.
-    """
     try:
         queue_message("SYSTEM: Starting servo initialization...")
         initialize_servos()
         queue_message("SYSTEM: Servo initialization complete")
+        try:
+            from modules.module_cputemp import (
+                CPUTempModule,
+                set_cpu_temp_instance, 
+                set_ventilate_callback, 
+                start_thermal_monitoring
+            )
+            from modules.module_servoctl import ventilate_on
+            cpu_temp_module = CPUTempModule()
+            set_cpu_temp_instance(cpu_temp_module)
+            set_ventilate_callback(ventilate_on)
+            start_thermal_monitoring()
+        except Exception as e:
+            pass
     except Exception as e:
         queue_message(f"ERROR: Servo initialization failed - {e}")

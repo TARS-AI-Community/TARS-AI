@@ -1588,37 +1588,16 @@ if __name__ == "__main__":
             """-----------------------------------"""
 
 
-            move_legs(100, 50, 60, 50, 0.8)
-            move_arm(98, None, None, None, None, None, 0.92)
-            move_arm(None, 100, None, None, None, None,  1)
-            move_arm(None, 50, 90, None, None, None,  0.92)
-            move_arm(None, 100, 20, None, None, None,  0.92)
-            move_arm(None, 50, 90, None, None, None,  0.92)
-            move_arm(None, 100, 20, None, None, None,  0.92)
-            move_arm(None, 50, 90, None, None, None,  0.92)
-            move_arm(None, 100, 20, None, None, None,  0.92)
-            move_arm(98, 80, 1, None, None, None,  0.92)
-            move_arm(98, 1, 1, None, None, None,  0.92)
-            move_arm(1, 1, 1, 1, None, None,  0.92)
             move_legs(50, 50, 50, 50, 0.8)
+            move_legs(25, 25, 50, 50, 0.75)
+            move_legs(25, 25, 42, 42, 0.75)
+            move_legs(55, 55, 30, 30, 0.75)
 
-            step_forward()
+            move_legs(55, 55, 30, 30, 0.75)
+            move_legs(25, 25, 30, 30, 0.75)
+            move_legs(25, 25, 50, 50, 0.75)
+            move_legs(50, 50, 50, 50, 0.75)
 
-            move_legs(50, 100, 50, 60, 0.8)
-            move_arm(None, None, None, 98, None, None, 0.92)
-            move_arm(None, None, None, None, 100, None, 1)
-            move_arm(None, None, None, None, 50, 90, 0.92)
-            move_arm(None, None, None, None, 100, 20, 0.92)
-            move_arm(None, None, None, None, 50, 90, 0.92)
-            move_arm(None, None, None, None, 100, 20, 0.92)
-            move_arm(None, None, None, None, 50, 90, 0.92)
-            move_arm(None, None, None, None, 100, 20, 0.92)
-            move_arm(None, None, None, 98, 80, 1, 0.92)
-            move_arm(None, None, None, 98, 1, 1, 0.92)
-            move_arm(1, None, None, 1, 1, 1, 0.92)
-            move_legs(50, 50, 50, 50, 0.8)
-
-            walk_backward()
 
             """keep code enclosed"""
             disable_all_servos()

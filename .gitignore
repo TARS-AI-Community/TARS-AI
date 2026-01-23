@@ -150,7 +150,7 @@ output.wav
 
 # Memory files
 *.pickle.gz
-/memory/TARS_topics.json
+src//memory/TARS_topics.json
 TARS.wav
 /memory/initial_memory.json
 /memory/initial_memory.loaded

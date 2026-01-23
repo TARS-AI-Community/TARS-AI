@@ -581,7 +581,12 @@ class MemoryManager:
         if not hasattr(self, '_fallback_warning_logged'):
             self._fallback_warning_logged = False
 
-        if llm_backend in ["openai", "deepinfra"]:
+        if llm_backend == "grok":
+            word_count = len(text.split())
+            estimated_tokens = int(word_count / 0.75)
+            return {"length": estimated_tokens}
+        
+        elif llm_backend in ["openai", "deepinfra"]:
             try:
                 import tiktoken
                 override_encoding_model = self.config['LLM'].get('override_encoding_model', "cl100k_base")

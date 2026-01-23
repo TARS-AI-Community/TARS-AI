@@ -44,13 +44,15 @@ responses = ["Hi", "Yes?", "hey!", "What's up?", "Can I help you?", "What do you
 thinking_responses = ["Let me think...", "soooo.....", "soo....", "Let's seeee...", "Let me seeee...", "Let's see.....", "One Moment...", "One Moment", "hum", "humm", "Analyzing...", "Processing...", "Calculating...", "Computing...", "Running the numbers...", "Checking...", "One moment...", "Scanning data...", "Assessing...", "Evaluating...", "Let me calculate...", "Working on it...", "Just a moment...", "Reviewing...", "Compiling...", "Cross-referencing...", "Thinking it through...", "Give me a second...", "Hold on..."]
 # what tars replies after detecting the wakeword (you can change these and add or remove new ones)
 
-[LLM] # Large Language Model configuration (OpenAI, Tabby, Ooba, or LOCAL)
+[LLM] # Large Language Model configuration (OpenAI, Grok, Tabby, Ooba, or LOCAL)
 llm_backend = openai
-# Backend for LLM: [openai, tabby, ooba] 
+# Backend for LLM: [openai, grok, tabby, ooba] 
 base_url = https://api.openai.com
-# URL for the LLM backend API [OpenAI: https://api.openai.com]
+# URL for the LLM backend API [OpenAI: https://api.openai.com] or [grok: https://api.x.ai]
 openai_model = gpt-4o-mini
 # OpenAI model to use for LLM if backend = openai IE gpt-4o-mini / llava-phi3:3.8b-mini-q4_0 / qwen2.5:3b
+grok_model = grok-4-1-fast-non-reasoning
+# grok model to use for LLM if backend = grok-4-1-fast-non-reasoning / grok-4-1-fast-reasoning / grok-3-mini
 override_encoding_model = cl100k_base
 #Model to use for counting tokens this is a override feature if automatic isnt working. 
 #cl100k_base,GPT-4, GPT-3.5-turbo,Modern encoding with large context windows; default for newer OpenAI models
@@ -69,8 +71,6 @@ seed = -1
 # Random seed for reproducibility (-1 means no fixed seed)
 systemprompt = You are to responding naturally and helpfully within the scenario. Be informative and conversational while maintaining your personality.
 # Prompt defining the LLM's behavior
-instructionprompt = You are {char}. Compose {char}s next message to {user}, using the provided chat history for context. Respond in plain text only, no emojis or ASCII art. Avoid using {char}s name, as you are embodying {char}. Your response should align with {char}s personality and address {user}s last message. Adhere to the established facts and continuity. You will respond in accordance with your personality settings. Be brief for simple questions, detailed for complex ones.
-# Instructions guiding the LLM's response style
 
 
 [VISION] # Vision-related configuration (e.g., image recognition)
@@ -91,28 +91,39 @@ emotion_model = SamLowe/roberta-base-go_emotions
 ttsoption = piper
 # Onboard Options: espeak, piper, silero
 # External SelfHosted: alltalk
-# Externally Hosted: azure, elevenlabs, openai
-# for other languages than english, use elevenlabs or openai
+# Externally Hosted: elevenlabs, minimax, openai or azure
+# for other languages than english, use elevenlabs minimax or openai
+#-- Azure ---------------------------------------------------
 azure_region = eastus
-# Azure region for Azure TTS (e.g., eastus)
 ttsurl = http://192.168.2.57:7852
-# URL of the TTS server (i.e., alltalk)
-toggle_charvoice = True
-# Use character-specific voice settings
 tts_voice = en-US-Steffan:DragonHDLatestNeural
+# URL of the TTS server (i.e., alltalk)
 # Name of the cloned voice to use (e.g., TARS2 or en-US-Steffan:DragonHDLatestNeural for azure)
-voice_id = JBFqnCBsd6RMkjVDRZzb
+# Azure region for Azure TTS (e.g., eastus)
+#-- Elevenlabs -----------------------------------------------
+elevenlabs_voice_id = JBFqnCBsd6RMkjVDRZzb
+elevenlabs_model = eleven_multilingual_v2
 # Voice ID of ElevenLabs (e.g.,JBFqnCBsd6RMkjVDRZzb)
-model_id = eleven_multilingual_v2
 # Model ID of ElevenLabs (e.g.,eleven_multilingual_v2)
+#-- Minimax --------------------------------------------------
+minimax_voice_id = English_CaptivatingStoryteller
+minimax_model = speech-2.8-turbo
+# Voice ID of Minimax (e.g., English_CaptivatingStoryteller)
+# Model ID of Minimax (e.g., speech-2.6-turbo / speech-2.8-turbo / speech-2.6-hd / speech-2.8-hd)
+#-- Openai ---------------------------------------------------
 openai_voice = onyx
 # openai voice : alloy, echo, fable, onyx, nova, shimmer
+#-- Misc -----------------------------------------------------
+toggle_charvoice = True
 is_talking_override = False
-# Debug flag to override talking state
 is_talking = False
-# Tracks whether the system is currently speaking
 global_timer_paused = False
+# Use character-specific voice settings
+# Debug flag to override talking state
+# Tracks whether the system is currently speaking
 # Pauses global timers
+
+
 
 [STABLE_DIFFUSION] # Stable Diffusion Image Generation Module
 enabled = False
@@ -166,6 +177,9 @@ font_size = 12
 # normally from 9 to 20 depending on your resolution
 screensaver_timer = 300
 # 0 = no screensaver, 60 = 1 minute before screensaver shows up. You can specify any amount of seconds.
+screensaver_list = random
+# List of screensavers to use. Options: "random" for all animations, or comma-separated list like for specific ones "blackhole,waves,matrix" or a single one like "starfield"
+# Available animations: blackhole, waves, matrix, starfield, hyperspace, terminal, face
 show_cpu_temp = False
 # Display the CPU temperature in the UI
 target_fps = 30
@@ -242,7 +256,7 @@ rightHandMax = 420
 rightHandOffset = 0
 
 [BATTERY]
-# This section is only required if you are using an INA260 Current + Voltage + Power Sensor
+# This section is only if you are using an INA260 Current + Voltage + Power Sensor
 # These values must match the battery you are using.
 battery_capacity_mAh = 3000
 # Total battery capacity in milliampere-hours (mAh). Set this to the battery's rated capacity (e.g., 5600 mAh for a 5.6Ah battery).
@@ -252,3 +266,7 @@ battery_cutoff_voltage = 10
 # Minimum safe voltage before discharge should stop (in volts). Set this based on the battery's safe discharge voltage (e.g., 10.5V for a 12V battery).
 auto_shutdown = True
 # Protects the Raspberry pi and battery, when it reaches 0% the raspberry pi will shutdown by itself.
+
+[MISC]
+ventilate = False
+# Enable to have the robot automatically take a pose that allows for better airflow
