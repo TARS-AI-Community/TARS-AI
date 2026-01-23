@@ -113,14 +113,14 @@ async def synthesize_elevenlabs_complete(text):
     try:
         import aiohttp
         
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{CONFIG['TTS']['voice_id']}"
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{CONFIG['TTS']['elevenlabs_voice_id']}"
         headers = {
             "xi-api-key": CONFIG['TTS']['elevenlabs_api_key'],
             "Content-Type": "application/json"
         }
         
         # Check if model supports SSML
-        model_id = CONFIG['TTS']['model_id']
+        model_id = CONFIG['TTS']['elevenlabs_model']
         is_eleven_v3 = 'v3' in model_id.lower()
         
         if is_eleven_v3 and '<break' in text:
