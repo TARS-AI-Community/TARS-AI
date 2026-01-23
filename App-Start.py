@@ -259,8 +259,24 @@ class TerminalScroll:
                     surface.blit(cursor_surface, (x_pos, y_pos))
 
 def check_required_file():
-    file_path = os.path.expanduser("~/.local/share/tars_ai/hey_tars_templates.pkl")
-    return os.path.exists(file_path)
+    config = configparser.ConfigParser()
+    config_path = os.path.join('src', 'config.ini')
+    
+    try:
+        config.read(config_path)
+        if config.has_option('STT', 'wake_word_processor'):
+            wake_word_processor = config.get('STT', 'wake_word_processor').strip().lower()
+            
+            if wake_word_processor == 'atomik':
+                file_path = os.path.expanduser("~/.local/share/tars_ai/hey_tars_templates.pkl")
+                return os.path.exists(file_path)
+            else:
+                return True
+        else:
+            return True
+    except Exception as e:
+        print(f"[CONFIG] Error reading config file: {e}")
+        return True
 
 def load_config():
     config = configparser.ConfigParser()
