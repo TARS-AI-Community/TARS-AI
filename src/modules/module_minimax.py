@@ -1,9 +1,22 @@
 """
-MINIMAX TTS - V3
-==========================
-# atomikspace (discord)
-# olivierdion1@hotmail.com
+Module: minimax TTS
+Author: Charles-Olivier Dion (Atomikspace)
+Contact: atomikspace.labs@gmail.com
+Copyright (c) 2026
+
+This module was originally created by Charles-Olivier Dion (Atomikspace).
+
+Permission is granted to use, copy, modify, and redistribute this module,
+in whole or in part, provided that:
+
+- This notice is retained in the source file(s)
+- The original author (Charles-Olivier Dion / Atomikspace) is clearly credited
+- Any modifications are clearly identified as such
+
+This notice applies only to this module and does not extend to the
+entire project or repository in which it may be included.
 """
+
 import io
 import re
 import asyncio
@@ -256,7 +269,6 @@ async def text_to_speech_with_pipelining_minimax(text, is_wakeword):
                 audio_buffer.seek(0)
                 yield audio_buffer
     else:
-        # Use non-streaming for short texts (< 300 chars)
         if len(text) < 100:
             queue_message(f"Minimax: Using non-streaming (text length: {len(text)} chars)")
             audio_buffer = await synthesize_minimax_non_streaming(text, speed, volume, pitch)
@@ -265,7 +277,6 @@ async def text_to_speech_with_pipelining_minimax(text, is_wakeword):
             else:
                 queue_message(f"WARNING: Minimax non-streaming synthesis failed")
         else:
-            # Use streaming for longer texts
             queue_message(f"Minimax: Using streaming (text length: {len(text)} chars)")
             chunks = split_into_sentences(text, max_length=80)
             for i, chunk in enumerate(chunks):
