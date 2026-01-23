@@ -1,7 +1,22 @@
 """
-# atomikspace (discord)
-# olivierdion1@hotmail.com
+Module: Terminal Screensaver
+Author: Charles-Olivier Dion (Atomikspace)
+Contact: atomikspace.labs@gmail.com
+Copyright (c) 2026
+
+This module was originally created by Charles-Olivier Dion (Atomikspace).
+
+Permission is granted to use, copy, modify, and redistribute this module,
+in whole or in part, provided that:
+
+- This notice is retained in the source file(s)
+- The original author (Charles-Olivier Dion / Atomikspace) is clearly credited
+- Any modifications are clearly identified as such
+
+This notice applies only to this module and does not extend to the
+entire project or repository in which it may be included.
 """
+
 
 import pygame
 import random

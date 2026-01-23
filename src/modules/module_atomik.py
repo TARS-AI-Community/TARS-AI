@@ -1,8 +1,15 @@
 """
-Atomik Wake Word Detection System
-Author: Olivier Dion (@atomikspace)
-Email: olivierdion1@hotmail.com
-License: All Rights Reserved
+Module: Atomik WakeWord
+Author: Charles-Olivier Dion (Atomikspace)
+Contact: atomikspace.labs@gmail.com
+Copyright (c) 2026
+
+This module was originally created by Charles-Olivier Dion (Atomikspace).
+
+Permission is NOT granted to use, copy, modify, and redistribute unless permission granter by the author.
+
+This notice applies only to this module and does not extend to the
+entire project or repository in which it may be included.
 """
 
 import numpy as np
