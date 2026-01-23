@@ -29,8 +29,20 @@
       "first_mentioned": "2026-01-19T15:56:49.886985",
       "last_mentioned": "2026-01-19T15:56:49.886998",
       "mention_count": 1
+    },
+    {
+      "topic": "has dog named Max",
+      "first_mentioned": "2026-01-20T11:32:32.837025",
+      "last_mentioned": "2026-01-20T11:32:32.837038",
+      "mention_count": 1
+    },
+    {
+      "topic": "User asked about the meaning of life",
+      "first_mentioned": "2026-01-20T16:15:54.727704",
+      "last_mentioned": "2026-01-20T16:15:54.727713",
+      "mention_count": 1
     }
   ],
-  "last_updated": "2026-01-19T15:56:49.887004",
-  "total_conversations": 5
+  "last_updated": "2026-01-20T16:15:54.727717",
+  "total_conversations": 7
 }

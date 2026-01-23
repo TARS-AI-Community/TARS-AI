@@ -97,6 +97,19 @@ def _prepare_request_data(llm_backend, prompt):
             "top_p": CONFIG['LLM']['top_p'],
             "response_format": {"type": "json_object"}
         }
+    elif llm_backend == "grok":
+        url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
+        data = {
+            "model": CONFIG['LLM']['grok_model'],
+            "messages": [
+                {"role": "system", "content": CONFIG['LLM']['systemprompt']},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": CONFIG['LLM']['max_tokens'],
+            "temperature": CONFIG['LLM']['temperature'],
+            "top_p": CONFIG['LLM']['top_p'],
+            "response_format": {"type": "json_object"}
+        }
     elif llm_backend == "deepinfra":
         url = f"{CONFIG['LLM']['base_url']}/v1/openai/chat/completions"
         data = {
@@ -131,7 +144,7 @@ def _extract_text(response_json, istext):
         if 'choices' in response_json:
             return (
                 response_json['choices'][0]['message']['content']
-                if llm_backend in ["openai", "deepinfra"]
+                if llm_backend in ["openai", "grok", "deepinfra"]
                 else response_json['choices'][0]['text']
             ).strip()
         else:
@@ -237,7 +250,7 @@ def execute_function_call(func_call, bot_response, user_input):
     parameters = func_call.get("parameters", {})
 
     try:
-        if function_name == "execute_movement":
+        if function_name == "execute_movement" and CONFIG["CONTROLS"]["voicemovement"]:
             movements = parameters.get("movements", [])
             if movements:
                 execute_movement(movements)

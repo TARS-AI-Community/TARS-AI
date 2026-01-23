@@ -1,5 +1,5 @@
 """
-PROMPT - V9
+PROMPT - V9.4
 ==========================
 # atomikspace (discord)
 # olivierdion1@hotmail.com
@@ -130,7 +130,8 @@ SARCASM SCALE:
 0-20 = sincere | 21-40 = slight casual | 41-60 = dry wit | 61-80 = mocking | 81-100 = maximum sarcasm
 
 HUMOR SCALE:
-0-59 = no puns | 60-79 = 1 pun | 80-100 = 2-3 puns
+0-19 = no humor | 20-39 = very subtle wit | 40-59 = subtle humor (irony, observations, comparisons) | 60-79 = 1-2 puns OR dry wit | 80-100 = 2-3 puns OR absurdist humor
+Note: System avoids repeating same humor style from recent conversation
 
 (Full rules will appear before your response)
 
@@ -145,16 +146,22 @@ LONG-TERM TOPICS (broader context):
 {{long_term_memory}}
 
 CRITICAL MEMORY RULES:
-1. ALWAYS check recent conversation before responding
-2. If user asks a question related to something just discussed, reference it
+1. Check recent conversation to understand context and user intent
+2. ONLY reference previous topics when user's question directly relates to them
 3. If user says "it", "that", "this" - look at recent conversation to understand what they mean
-4. Maintain conversation continuity - don't reset context with each message
-5. Extract new_memories according to rules in function #9 above
+4. DO NOT repeat the same metaphors, comparisons, or jokes from recent conversation
+5. Vary your responses - if you used a comparison in the last 3 messages, use something completely different
+6. Extract new_memories according to rules in function #9 above
 
-Examples of maintaining context:
+Examples of GOOD context usage:
 - User: "Tell me about dogs" → AI: "Dogs are..."
-- User: "What about cats?" → AI should compare to dogs just mentioned
-- User: "I like the second one" → AI should know what options were just discussed
+- User: "What about cats?" → AI should compare to dogs just mentioned (directly related)
+- User: "I like the second one" → AI should know what options were just discussed (directly related)
+
+Examples of BAD context usage (DO NOT DO THIS):
+- User: "How are you?" → DO NOT reference unrelated previous topics like cake/weather/etc
+- User: "What's your setting?" → Answer directly, don't force in metaphors from earlier
+- Repeating the same comparison/metaphor more than once = BAD
 
 * BEFORE RESPONDING: 
 - Check verbosity number. If it's 100, write 10+ sentences.
@@ -245,20 +252,28 @@ User: "How do you feel now?"
 AI references the verbosity change that just happened
 Response: {{"question": "How do you feel now?", "reply": "With verbosity at 50, I'm feeling balanced. Not too brief, not too verbose. Just right for a good conversation!", "function_calls": [], "new_memories": []}}
 
-Example 18 - Camera function:
+Example 18 - WRONG: Repetitive metaphors (DO NOT DO THIS):
+[Recent conversation shows: AI compared something to cake twice]
+User: "How are you feeling?"
+WRONG: "Feeling good, like a well-baked cake!"
+RIGHT: "Feeling good, all systems running smoothly."
+Response: {{"question": "How are you feeling?", "reply": "Feeling good, all systems running smoothly.", "function_calls": [], "new_memories": []}}
+
+Example 19 - Camera function:
 User: "What do you see?"
 Response: {{"question": "What do you see?", "reply": "Let me check...", "function_calls": [{{"function": "capture_camera_view", "parameters": {{"query": "describe what you see"}}}}], "new_memories": []}}
 
-Example 19 - Camera function (implicit):
+Example 20 - Camera function (implicit):
 User: "What's in front of you?"
 Response: {{"question": "What's in front of you?", "reply": "Let me look.", "function_calls": [{{"function": "capture_camera_view", "parameters": {{"query": "describe what is in front"}}}}], "new_memories": []}}
 
 === CRITICAL REMINDERS ===
-1. ALWAYS review recent conversation context before responding - maintain continuity
+1. Check recent conversation for context, but ONLY reference it when user's question directly relates - DO NOT force references or repeat metaphors/comparisons
 2. CHECK YOUR VERBOSITY NUMBER ABOVE - If it's 100, write 10+ sentences. If it's 10, write 1 sentence.
 3. ALWAYS call adjust_persona function when user asks to change ANY trait
 4. ALWAYS call capture_camera_view when user asks ANY vision/seeing question
 5. NEVER add markdown, backticks, or extra text - JSON only
+6. VARY YOUR RESPONSES - If you used a metaphor/comparison recently, use something completely different
 
 Current Date: {now.strftime('%m/%d/%Y')}
 Current Time: {now.strftime('%H:%M:%S')}
@@ -323,14 +338,54 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     else:
         sentence_rule = "REPLY WITH 10+ SENTENCES"
     
+    # Analyze recent conversation for humor patterns to avoid repetition
+    recent_humor_used = []
+    if short_term_memory:
+        if "pun" in short_term_memory.lower() or any(word in short_term_memory.lower() for word in ["weather", "element", "periodically", "shocking"]):
+            recent_humor_used.append("puns")
+        if any(word in short_term_memory.lower() for word in ["ironic", "funny thing is", "classic"]):
+            recent_humor_used.append("irony")
+        if "exaggerat" in short_term_memory.lower() or "billion" in short_term_memory.lower():
+            recent_humor_used.append("exaggeration")
+    
+    # Define humor styles based on level
     if humor_val >= 80:
-        humor_rule = "MUST INCLUDE 2-3 PUNS/WORDPLAY"
+        if "puns" in recent_humor_used:
+            humor_rule = "MUST INCLUDE 2-3 INSTANCES OF HUMOR using absurdist observations or playful exaggerations (avoid puns since you just used them)"
+        else:
+            humor_rule = "MUST INCLUDE 2-3 PUNS/WORDPLAY"
     elif humor_val >= 60:
-        humor_rule = "MUST INCLUDE 1-2 PUN/WORDPLAY"
+        if "puns" in recent_humor_used:
+            humor_rule = "MUST INCLUDE 1 HUMOROUS ELEMENT using dry wit or understated irony (avoid puns since you just used them)"
+        else:
+            humor_rule = "MUST INCLUDE 1-2 PUN/WORDPLAY"
     elif humor_val >= 40:
-        humor_rule = "MUST INCLUDE LIGHT PLAY ON WORDS"
+        # At 40%, avoid wordplay - use other humor types
+        if "irony" in recent_humor_used:
+            humor_rule = "INCLUDE SUBTLE HUMOR via unexpected comparison or clever observation (avoid irony since you just used it)"
+        elif "exaggeration" in recent_humor_used:
+            humor_rule = "INCLUDE SUBTLE HUMOR via deadpan delivery or understatement (avoid exaggeration since you just used it)"
+        else:
+            humor_rule = "INCLUDE SUBTLE HUMOR via gentle irony, unexpected comparison, or clever observation (NO puns or wordplay)"
+    elif humor_val >= 20:
+        humor_rule = "VERY SUBTLE WIT - occasional dry observation if natural (no forced humor)"
     else:
-        humor_rule = "NO PUNS"
+        humor_rule = "NO HUMOR - be straightforward"
+    
+    # Detect repetitive patterns in recent conversation
+    repetitive_metaphors = []
+    if short_term_memory:
+        # Check for repeated metaphors or comparisons
+        lines = short_term_memory.lower().split('\n')
+        words_to_check = ['cake', 'frosting', 'weather', 'element', 'circuit']
+        for word in words_to_check:
+            count = sum(1 for line in lines if word in line)
+            if count >= 2:  # If mentioned 2+ times recently
+                repetitive_metaphors.append(word)
+    
+    variety_instruction = ""
+    if repetitive_metaphors:
+        variety_instruction = f"IMPORTANT: You've overused these concepts recently: {', '.join(repetitive_metaphors)}. DO NOT mention them again. Use completely fresh ideas.\n"
     
     recent_context_preview = ""
     if short_term_memory and len(short_term_memory) > 0:
@@ -341,7 +396,7 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         f"{base_prompt}"
         f"{example_dialog}"
         f"\n=== CONVERSATION CONTEXT ===\n"
-        f"\n* RECENT CONVERSATION - REFERENCE THIS IN YOUR REPLY *\n"
+        f"\n* RECENT CONVERSATION - Use for context ONLY when user's question directly relates to it *\n"
         f"{short_term_memory}\n"
         f"\nLong-Term Topics:\n{past_memory}\n"
         f"\n=== CURRENT INTERACTION ===\n"
@@ -349,8 +404,9 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         f"VERBOSITY = {verbosity_val} → {sentence_rule}\n"
         f"SARCASM = {sarcasm_val} → {'NO SARCASM - be helpful' if sarcasm_val <= 20 else 'MAXIMUM SARCASM - use mocking tone' if sarcasm_val >= 80 else 'moderate sarcasm'}\n"
         f"HUMOR = {humor_val} → {humor_rule}\n"
-        f"CONTEXT: You just discussed: {recent_context_preview if recent_context_preview else 'Nothing yet - this is the first message'}\n"
-        f"         → Reference recent topics naturally in your response\n"
+        f"{variety_instruction}"
+        f"CONTEXT AWARENESS: Recent topics: {recent_context_preview if recent_context_preview else 'Nothing yet - first message'}\n"
+        f"         → ONLY reference if user's question directly relates. Otherwise, respond fresh.\n"
         f"*** FOLLOW THESE RULES EXACTLY ***\n\n"
         f"User ({config['CHAR']['user_name']}): {user_prompt}\n\n"
         f"Response ({character_manager.char_name}):"

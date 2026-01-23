@@ -49,17 +49,22 @@ async def synthesize_elevenlabs_streaming(chunk):
     Synthesize using direct REST API to ensure SSML tags are processed.
     The Python SDK sometimes doesn't handle SSML properly, so we use direct HTTP.
     """
+    api_key = CONFIG['TTS']['elevenlabs_api_key']
+    if not api_key:
+        queue_message("ERROR: Elevenlabs API key not found in env file")
+        return
+
     try:
         import aiohttp
         
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{CONFIG['TTS']['voice_id']}/stream"
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{CONFIG['TTS']['elevenlabs_voice_id']}/stream"
         headers = {
-            "xi-api-key": CONFIG['TTS']['elevenlabs_api_key'],
+            "xi-api-key": api_key,
             "Content-Type": "application/json"
         }
         
         # Check if model supports SSML
-        model_id = CONFIG['TTS']['model_id']
+        model_id = CONFIG['TTS']['elevenlabs_model']
         is_eleven_v3 = 'v3' in model_id.lower()
         
         if is_eleven_v3 and '<break' in chunk:

@@ -27,6 +27,7 @@ from modules.module_alltalk import text_to_speech_with_pipelining_alltalk
 from modules.module_elevenlabs import text_to_speech_with_pipelining_elevenlabs
 from modules.module_azure import text_to_speech_with_pipelining_azure
 from modules.module_openai import text_to_speech_with_pipelining_openai
+from modules.module_minimax import text_to_speech_with_pipelining_minimax
 from modules.module_messageQue import queue_message
 
 def update_tts_settings(ttsurl):
@@ -132,6 +133,10 @@ async def generate_tts_audio(text, ttsoption, is_wakeword=False, azure_api_key=N
 
         elif ttsoption == "elevenlabs":
             async for chunk in text_to_speech_with_pipelining_elevenlabs(text, is_wakeword):
+                yield chunk
+
+        elif ttsoption == "minimax":
+            async for chunk in text_to_speech_with_pipelining_minimax(text, is_wakeword):
                 yield chunk
 
         elif ttsoption == "silero":

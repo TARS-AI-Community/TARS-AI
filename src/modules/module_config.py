@@ -45,8 +45,8 @@ class TTSConfig:
     
     # ElevenLabs specific settings
     elevenlabs_api_key: Optional[str] = None
-    voice_id: Optional[str] = None
-    model_id: Optional[str] = None
+    elevenlabs_voice_id: Optional[str] = None
+    elevenlabs_model: Optional[str] = None
     
     # Server specific settings
     ttsurl: Optional[str] = None
@@ -54,6 +54,10 @@ class TTSConfig:
     #openai tts
     openai_voice: Optional[str] = None
     openai_api_key: Optional[str] = None
+    
+    minimax_api_key: Optional[str] = None
+    minimax_voice_id: Optional[str] = None
+    minimax_model: Optional[str] = None
 
 
 
@@ -90,12 +94,41 @@ class TTSConfig:
             azure_api_key=config_dict.get('azure_api_key'),
             azure_region=config_dict.get('azure_region'),
             elevenlabs_api_key=config_dict.get('elevenlabs_api_key'),
-            voice_id=config_dict.get('voice_id'),
-            model_id=config_dict.get('model_id'),
+            elevenlabs_voice_id=config_dict.get('elevenlabs_voice_id'),
+            elevenlabs_model=config_dict.get('elevenlabs_model'),
             ttsurl=config_dict.get('ttsurl'),
             openai_voice=config_dict.get('openai_voice'),
-            openai_api_key=config_dict.get('openai_api_key')
+            openai_api_key=config_dict.get('openai_api_key'),
+            minimax_api_key=config_dict.get('minimax_api_key'),
+            minimax_voice_id=config_dict.get('minimax_voice_id'),
+            minimax_model=config_dict.get('minimax_model'),
         )
+
+def _parse_screensaver_list(value: str) -> List[str]:
+    """
+    Parse the screensaver_list configuration value.
+    
+    Args:
+        value: Configuration string (either "random" or comma-separated list)
+        
+    Returns:
+        List of screensaver names, or ["random"] if random mode is selected
+    """
+    value = value.strip()
+    
+    # If "random", return it as a single-item list
+    if value.lower() == "random":
+        return ["random"]
+    
+    # Otherwise, parse as comma-separated list
+    # Strip whitespace from each item and filter out empty strings
+    screensavers = [s.strip() for s in value.split(',') if s.strip()]
+    
+    # If list is empty after parsing, default to random
+    if not screensavers:
+        return ["random"]
+    
+    return screensavers
 
 def load_config():
     global character_name
@@ -173,11 +206,11 @@ def load_config():
             "picovoice_api_key": os.getenv('PICOVOICE_API_KEY')
         },
         "CHAR": {
-            "character_name": character_name,  # Add character name for easy access
+            "character_name": character_name,
             "character_card_path": config['CHAR']['character_card_path'],
             "user_name": config['CHAR']['user_name'],
             "user_details": config['CHAR']['user_details'],
-            "traits": persona_traits,  # Include the traits from persona.ini
+            "traits": persona_traits,
             "responses": config['CHAR']['responses'],
             "thinking_responses": config['CHAR']['thinking_responses'],
         },
@@ -186,6 +219,7 @@ def load_config():
             "base_url": config['LLM']['base_url'],
             "api_key": get_api_key(config['LLM']['llm_backend']),
             "openai_model": config['LLM']['openai_model'],
+            "grok_model": config['LLM']['grok_model'],
             "override_encoding_model": config['LLM']['override_encoding_model'],
             "contextsize": int(config['LLM']['contextsize']),
             "max_tokens": int(config['LLM']['max_tokens']),
@@ -193,7 +227,6 @@ def load_config():
             "top_p": float(config['LLM']['top_p']),
             "seed": int(config['LLM']['seed']),
             "systemprompt": config['LLM']['systemprompt'],
-            "instructionprompt": config['LLM']['instructionprompt']
         },
         "VISION": {
             "enabled": config.getboolean('VISION', 'enabled'),
@@ -209,16 +242,19 @@ def load_config():
             "azure_api_key": os.getenv('AZURE_API_KEY'),
             "elevenlabs_api_key": os.getenv('ELEVENLABS_API_KEY'),
             "azure_region": config['TTS']['azure_region'],
+            'minimax_api_key': os.getenv('MINIMAX_API_KEY'),
+            "openai_api_key": os.getenv('OPENAI_API_KEY'),
             "ttsurl": config['TTS']['ttsurl'],
             "toggle_charvoice": config.getboolean('TTS', 'toggle_charvoice'),
             "tts_voice": config['TTS']['tts_voice'],
-            "voice_id": config['TTS']['voice_id'],
-            "model_id": config['TTS']['model_id'],
+            "elevenlabs_voice_id": config['TTS']['elevenlabs_voice_id'],
+            "elevenlabs_model": config['TTS']['elevenlabs_model'],
+            "minimax_voice_id": config['TTS']['minimax_voice_id'],
+            "minimax_model": config['TTS']['minimax_model'],
             "is_talking_override": config.getboolean('TTS', 'is_talking_override'),
             "is_talking": config.getboolean('TTS', 'is_talking'),
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
-            "openai_voice" : config['TTS']['openai_voice'],
-            "openai_api_key": os.getenv('OPENAI_API_KEY'),
+            "openai_voice" : config['TTS']['openai_voice'],            
         }),
         "CHATUI": {
             "enabled": config['CHATUI']['enabled'],
@@ -306,13 +342,17 @@ def load_config():
             "font_size": int(config['UI']['font_size']),  
             "target_fps": int(config['UI']['target_fps']),
             "screensaver_timer": config.getint('UI', 'screensaver_timer', fallback=300), 
-            "show_cpu_temp": config.getboolean('UI', 'show_cpu_temp', fallback=False), 
+            "show_cpu_temp": config.getboolean('UI', 'show_cpu_temp', fallback=False),
+            "screensaver_list": _parse_screensaver_list(config.get('UI', 'screensaver_list', fallback='random')),
         },
         "BATTERY": {
             "battery_capacity_mAh":  int(config['BATTERY']['battery_capacity_mAh']),
             "battery_initial_voltage":  float(config['BATTERY']['battery_initial_voltage']),
             "battery_cutoff_voltage":  float(config['BATTERY']['battery_cutoff_voltage']),
             "auto_shutdown": config.getboolean('BATTERY', 'auto_shutdown')     
+        },
+        "MISC": {
+            "ventilate": config.getboolean('MISC', 'ventilate', fallback=False), 
         }
     }
 
@@ -330,6 +370,7 @@ def get_api_key(llm_backend: str) -> str:
     # Map the backend to the corresponding environment variable
     backend_to_env_var = {
         "openai": "OPENAI_API_KEY",
+        "grok": "GROK_API_KEY",
         "ooba": "OOBA_API_KEY",
         "tabby": "TABBY_API_KEY",
         "deepinfra": "DEEPINFRA_API_KEY"

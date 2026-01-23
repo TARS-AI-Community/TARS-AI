@@ -5,7 +5,9 @@ GUI - V3
 # olivierdion1@hotmail.com
 """
 import pygame
-from pygame.locals import DOUBLEBUF
+from pygame.locals import DOUBLEBUF, OPENGL
+from OpenGL.GL import *
+from OpenGL.GLU import *
 import threading
 
 from datetime import datetime
@@ -108,10 +110,7 @@ class UIManager(threading.Thread):
             self.face_detector = cv2.CascadeClassifier(cascade_path)
             if self.face_detector.empty():
                 self.face_detector = None
-            else:
-                print("Face detector loaded")
         except Exception as e:
-            print(f"Face detection initialization failed: {e}")
             self.face_detector = None
 
         if self.use_camera_module:
@@ -123,12 +122,9 @@ class UIManager(threading.Thread):
                 )
 
                 if not self.camera_module.running and self.camera_module.picam2 is not None:
-                    print("Camera was stopped, restarting...")
                     self.camera_module.start_camera()
 
-                print("Camera module initialized")
             except Exception as e:
-                print(f"Failed to initialize camera: {e}")
                 self.camera_module = None
 
     def _load_ui_settings(self):
@@ -145,9 +141,8 @@ class UIManager(threading.Thread):
 
                     self.spectrum_style = settings.get('spectrum_style', 'bars')
 
-                    print(f"Loaded UI settings: background={self.background_type}, spectrum={self.spectrum_style}")
         except Exception as e:
-            print(f"Could not load UI settings: {e}")
+            pass
 
     def _save_ui_settings(self):
         try:
@@ -163,7 +158,7 @@ class UIManager(threading.Thread):
                 json.dump(settings, f, indent=2)
 
         except Exception as e:
-            print(f"Could not save UI settings: {e}")
+            pass
 
     def cycle_background(self):
         self.current_background_index = (self.current_background_index + 1) % len(self.background_types)
@@ -201,14 +196,12 @@ class UIManager(threading.Thread):
             self.screensaver_manager.deactivate()
 
     def exit_program(self):
-        print("Program exit initiated by user")
         self.running = False
         self.shutdown_event.set()
         import os
         os._exit(0)  
 
     def initiate_shutdown(self):
-        print("System shutdown initiated by user")
         self.running = False
         self.shutdown_event.set()
         import subprocess
@@ -217,7 +210,7 @@ class UIManager(threading.Thread):
             subprocess.Popen(['sudo', 'shutdown', 'now'])  
 
         except Exception as e:
-            print(f"Failed to shutdown system: {e}")
+            pass
         os._exit(0)  
 
     def silence(self, progress):
@@ -354,6 +347,25 @@ class UIManager(threading.Thread):
 
             self._save_ui_settings()  
 
+    def _render_surface_to_opengl(self, surface, texture_id):
+        """Helper to render a pygame surface as an OpenGL texture"""
+        glClearColor(0.0, 0.0, 0.0, 0.0)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        
+        texture_data = pygame.image.tostring(surface, "RGBA", True)
+        glBindTexture(GL_TEXTURE_2D, texture_id)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface.get_width(), surface.get_height(), 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, texture_data)
+        
+        glBegin(GL_QUADS)
+        glTexCoord2f(0, 1); glVertex2f(0, 0)
+        glTexCoord2f(1, 1); glVertex2f(self.width, 0)
+        glTexCoord2f(1, 0); glVertex2f(self.width, self.height)
+        glTexCoord2f(0, 0); glVertex2f(0, self.height)
+        glEnd()
+
     def _draw_camera(self, surface):
         if not self.camera_module:
             return
@@ -426,7 +438,7 @@ class UIManager(threading.Thread):
             pygame.mouse.set_visible(self.show_mouse)
             os.environ['SDL_VIDEO_WINDOW_POS'] = '0,0'
 
-            display_flags = pygame.DOUBLEBUF | pygame.HWSURFACE
+            display_flags = pygame.DOUBLEBUF | OPENGL
 
             if fullscreen:
                 display_flags |= pygame.FULLSCREEN
@@ -436,6 +448,18 @@ class UIManager(threading.Thread):
 
             screen = pygame.display.set_mode((display_width, display_height), display_flags)
             pygame.display.set_caption("UI Manager")
+            
+            # Setup OpenGL
+            glMatrixMode(GL_PROJECTION)
+            glLoadIdentity()
+            gluOrtho2D(0, display_width, display_height, 0)
+            glMatrixMode(GL_MODELVIEW)
+            glLoadIdentity()
+            glEnable(GL_TEXTURE_2D)
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            
+            texture_id = glGenTextures(1)
 
             original_surface = pygame.Surface((self.logical_width, self.logical_height))
 
@@ -468,7 +492,10 @@ class UIManager(threading.Thread):
                     original_surface,
                     self.logical_width,
                     self.logical_height,
-                    timeout=screensaver_timer
+                    timeout=screensaver_timer,
+                    screensaver_list=CONFIG['UI']['screensaver_list'],
+                    display_width=self.width,
+                    display_height=self.height
                 )
 
             except Exception as e:
@@ -552,20 +579,48 @@ class UIManager(threading.Thread):
                 
                 # If screensaver is active, render only screensaver and skip all updates
                 if self.screensaver_manager and self.screensaver_manager.is_active():
-                    self.screensaver_manager.render()
+                    needs_flip = self.screensaver_manager.render()
                     
-                    if self.rotate != 0:
-                        rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
-                        rotated_rect = rotated_surface.get_rect(center=(display_width // 2, display_height // 2))
-                        screen.blit(rotated_surface, rotated_rect)
-                    else:
-                        screen.blit(original_surface, (0, 0))
+                    # For pygame screensavers, we need to upload the surface to OpenGL and flip
+                    if needs_flip:
+                        # Handle rotation just like normal UI rendering
+                        if self.rotate != 0:
+                            rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
+                            self._render_surface_to_opengl(rotated_surface, texture_id)
+                        else:
+                            self._render_surface_to_opengl(original_surface, texture_id)
+                        pygame.display.flip()
+                    # OpenGL screensavers handle their own display.flip() and projection setup
                     
-                    pygame.display.flip()
                     clock.tick(self.target_fps)
                     continue  # Skip all background updates and normal rendering
+                
+                # Reset OpenGL to 2D mode for normal UI rendering
+                glViewport(0, 0, display_width, display_height)
+                
+                # Reset projection matrix
+                glMatrixMode(GL_PROJECTION)
+                glLoadIdentity()
+                gluOrtho2D(0, display_width, display_height, 0)
+                
+                # Reset modelview matrix
+                glMatrixMode(GL_MODELVIEW)
+                glLoadIdentity()
+                
+                # Reset OpenGL state for 2D UI rendering
+                glDisable(GL_DEPTH_TEST)
+                glEnable(GL_TEXTURE_2D)
+                glEnable(GL_BLEND)
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+                
+                # CRITICAL: Reset color to white (screensaver sets various colors)
+                glColor4f(1.0, 1.0, 1.0, 1.0)
+                
+                # Clear any residual OpenGL errors
+                while glGetError() != GL_NO_ERROR:
+                    pass
 
-                screen.fill((0, 0, 0))
+                # Note: screen.fill() doesn't work in OpenGL mode, glClear handles it
 
                 if self.background_type == 'particles' and self.particle_system is not None:
 
@@ -586,10 +641,9 @@ class UIManager(threading.Thread):
 
                     if self.rotate != 0:
                         rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
-                        rotated_rect = rotated_surface.get_rect(center=(display_width // 2, display_height // 2))
-                        screen.blit(rotated_surface, rotated_rect)
+                        self._render_surface_to_opengl(rotated_surface, texture_id)
                     else:
-                        screen.blit(original_surface, (0, 0))
+                        self._render_surface_to_opengl(original_surface, texture_id)
 
                 elif self.background_type == 'starfield' and self.starfield_system is not None:
 
@@ -610,10 +664,9 @@ class UIManager(threading.Thread):
 
                     if self.rotate != 0:
                         rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
-                        rotated_rect = rotated_surface.get_rect(center=(display_width // 2, display_height // 2))
-                        screen.blit(rotated_surface, rotated_rect)
+                        self._render_surface_to_opengl(rotated_surface, texture_id)
                     else:
-                        screen.blit(original_surface, (0, 0))
+                        self._render_surface_to_opengl(original_surface, texture_id)
 
                 elif self.background_type == 'tesseract' and self.tesseract_system is not None:
 
@@ -634,10 +687,9 @@ class UIManager(threading.Thread):
 
                     if self.rotate != 0:
                         rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
-                        rotated_rect = rotated_surface.get_rect(center=(display_width // 2, display_height // 2))
-                        screen.blit(rotated_surface, rotated_rect)
+                        self._render_surface_to_opengl(rotated_surface, texture_id)
                     else:
-                        screen.blit(original_surface, (0, 0))
+                        self._render_surface_to_opengl(original_surface, texture_id)
 
                 elif self.background_type == 'video' and self.video_system is not None:
 
@@ -658,19 +710,15 @@ class UIManager(threading.Thread):
 
                     if self.rotate != 0:
                         rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
-                        rotated_rect = rotated_surface.get_rect(center=(display_width // 2, display_height // 2))
-                        screen.blit(rotated_surface, rotated_rect)
+                        self._render_surface_to_opengl(rotated_surface, texture_id)
                     else:
-                        screen.blit(original_surface, (0, 0))
+                        self._render_surface_to_opengl(original_surface, texture_id)
 
                 pygame.display.flip()
 
                 clock.tick(self.target_fps)
 
         except Exception as e:
-            print(f"Fatal UI error: {e}")
-            import traceback
-            traceback.print_exc()
             self.running = False
 
         finally:
