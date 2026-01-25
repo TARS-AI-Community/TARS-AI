@@ -57,7 +57,7 @@ class NebulaAnimation:
         self.name_surface = None
         
         self.transition_duration = 2.0
-        self.display_duration = 5.0
+        self.display_duration = 20.0
         self.time_since_last_transition = 0.0
         self.transitioning = False
         self.transition_progress = 0.0
