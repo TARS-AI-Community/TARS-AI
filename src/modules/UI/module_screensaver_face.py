@@ -21,12 +21,17 @@ entire project or repository in which it may be included.
 import pygame
 import math
 import random
+from UI.module_screensaver_overlay import TimeOverlay
 
 class FaceAnimation:
-    def __init__(self, screen, width, height):
+    def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
         self.width = width
         self.height = height
+        
+        self.show_time = show_time
+        self.time_overlay = TimeOverlay(width, height) if show_time else None
+        
         self.animation_time = 0
         self.sleep_state = "sleeping"
         self.state_timer = 0
@@ -282,6 +287,9 @@ class FaceAnimation:
             self._draw_drool(center_y, head_offset)
         if self.sleep_state in ["sleeping", "waking", "one_eye_open", "back_to_sleep"]:
             self._draw_sleeping_z(center_x, center_y, head_offset)
+        
+        if self.show_time and self.time_overlay:
+            self.time_overlay.render(self.screen)
 
     def _draw_rounded_rect_eye(self, center_x, center_y, width, height, color, open_amount):
         x = center_x - width // 2

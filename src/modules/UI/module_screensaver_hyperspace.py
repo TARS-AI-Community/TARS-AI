@@ -20,14 +20,19 @@ entire project or repository in which it may be included.
 import pygame
 import random
 import math
+from UI.module_screensaver_overlay import TimeOverlay
 
 class HyperspaceAnimation:
-    def __init__(self, screen, width, height):
+    def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
         self.width = width
         self.height = height
         self.cx = width // 2
         self.cy = height * 0.65  
+        
+        # Time overlay
+        self.show_time = show_time
+        self.time_overlay = TimeOverlay(width, height) if show_time else None  
 
         self.lanes = self._create_lanes()
         self.trails = []
@@ -173,3 +178,6 @@ class HyperspaceAnimation:
                 if -10 < head_pos[0] < self.width + 10 and -10 < head_pos[1] < self.height + 10:
                     pygame.draw.circle(self.screen, color, (int(head_pos[0]), int(head_pos[1])), 3)
                     pygame.draw.circle(self.screen, (255, 255, 255), (int(head_pos[0]), int(head_pos[1])), 1)
+
+        if self.show_time and self.time_overlay:
+            self.time_overlay.render(self.screen)

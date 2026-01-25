@@ -19,12 +19,17 @@ entire project or repository in which it may be included.
 
 import pygame
 import random
+from UI.module_screensaver_overlay import TimeOverlay
 
 class MatrixAnimation:
-    def __init__(self, screen, width, height):
+    def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
         self.width = width
         self.height = height
+        
+        self.show_time = show_time
+        self.time_overlay = TimeOverlay(width, height) if show_time else None
+        
         self.font = pygame.font.Font("UI/pixelmix.ttf", 16)
         self.char_width = 10
         self.char_height = 16
@@ -145,3 +150,6 @@ class MatrixAnimation:
                 
                 text_surface = self.font.render(char, True, color)
                 self.screen.blit(text_surface, (stream['x'], char_y))
+
+        if self.show_time and self.time_overlay:
+            self.time_overlay.render(self.screen)

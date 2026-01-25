@@ -20,6 +20,7 @@ entire project or repository in which it may be included.
 
 import time
 import random
+from modules.module_config import load_config
 from UI.module_screensaver_face import FaceAnimation
 from UI.module_screensaver_terminal import TerminalAnimation
 from UI.module_screensaver_matrix import MatrixAnimation
@@ -30,6 +31,9 @@ from UI.module_screensaver_blackhole import BlackHoleAnimation
 from UI.module_screensaver_fractal import FractalAnimation
 from UI.module_screensaver_pacman import PacmanAnimation
 from UI.module_screensaver_waves import WavesAnimation
+from UI.module_screensaver_pictures import PicturesAnimation
+
+CONFIG = load_config()
 
 
 AVAILABLE_ANIMATIONS = {
@@ -41,10 +45,13 @@ AVAILABLE_ANIMATIONS = {
     "pacman": {"class": PacmanAnimation, "type": "pygame"},
     "blackhole": {"class": BlackHoleAnimation, "type": "opengl"},
     "fractal": {"class": FractalAnimation, "type": "opengl"},
-    "waves": {"class": WavesAnimation, "type": "opengl"}
+    "waves": {"class": WavesAnimation, "type": "opengl"},
+    "nebulas": {"class": NebulaAnimation, "type": "opengl"},
+    "pictures": {"class": PicturesAnimation, "type": "opengl"},
 }
 
 FALLBACK_ANIMATIONS = ["starfield", "matrix", "hyperspace", "pacman", "terminal", "face"]
+
 
 class ScreensaverManager:
     def __init__(self, screen, width, height, timeout=5.0, screensaver_list=None, display_width=None, display_height=None):
@@ -64,6 +71,8 @@ class ScreensaverManager:
         self.last_switch_time = None
         self.switch_interval = 300
         self.failed_animations = set()
+        
+        self.show_time = CONFIG['UI']['show_time']
         
         if screensaver_list is None or not screensaver_list:
             self.screensaver_list = ["random"]
@@ -116,9 +125,9 @@ class ScreensaverManager:
             animation_type = animation_info["type"]
             
             if animation_type == "opengl":
-                self.current_animation = animation_class(self.screen, self.display_width, self.display_height)
+                self.current_animation = animation_class(self.screen, self.display_width, self.display_height, show_time=self.show_time)
             else:
-                self.current_animation = animation_class(self.screen, self.width, self.height)
+                self.current_animation = animation_class(self.screen, self.width, self.height, show_time=self.show_time)
             
             self.current_animation_name = animation_name
             self.current_animation_type = animation_type

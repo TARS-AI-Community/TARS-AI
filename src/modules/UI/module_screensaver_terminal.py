@@ -20,12 +20,17 @@ entire project or repository in which it may be included.
 
 import pygame
 import random
+from UI.module_screensaver_overlay import TimeOverlay
 
 class TerminalAnimation:
-    def __init__(self, screen, width, height):
+    def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
         self.width = width
         self.height = height
+        
+        self.show_time = show_time
+        self.time_overlay = TimeOverlay(width, height) if show_time else None
+        
         self.font = pygame.font.Font(None, 16)
         self.font_bold = pygame.font.Font(None, 16)
         self.font_bold.set_bold(True)
@@ -308,3 +313,6 @@ class TerminalAnimation:
                 if (self.blink_counter // 15) % 2 == 0:
                     cursor_color = (0, 255, 255)
                     pygame.draw.rect(self.screen, cursor_color, (cursor_x, y, 8, self.line_height - 2))
+        
+        if self.show_time and self.time_overlay:
+            self.time_overlay.render(self.screen)

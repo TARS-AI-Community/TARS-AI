@@ -179,7 +179,11 @@ screensaver_timer = 300
 # 0 = no screensaver, 60 = 1 minute before screensaver shows up. You can specify any amount of seconds.
 screensaver_list = random
 # List of screensavers to use. Options: "random" for all animations, or comma-separated list like for specific ones "blackhole,waves,matrix" or a single one like "starfield"
-# Available animations: blackhole, waves, matrix, starfield, hyperspace, terminal, face, fractal, pacman
+# Available animations: blackhole, waves, matrix, starfield, hyperspace, terminal, face, fractal, pacman, nebulas, pictures
+show_time = True
+# Display time when the screensaver are running
+ampm_format = True
+# Time format AM/PM = True, Military = False
 show_cpu_temp = False
 # Display the CPU temperature in the UI
 target_fps = 30
