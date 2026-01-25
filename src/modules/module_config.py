@@ -345,7 +345,8 @@ def load_config():
             "show_cpu_temp": config.getboolean('UI', 'show_cpu_temp', fallback=False),
             "screensaver_list": _parse_screensaver_list(config.get('UI', 'screensaver_list', fallback='random')),
             "show_time": config.getboolean('UI', 'show_time', fallback=True),
-            "ampm_format": config.getboolean('UI', 'ampm_format', fallback=True)
+            "ampm_format": config.getboolean('UI', 'ampm_format', fallback=True),
+            "screensaver_cycle_interval": config.getint('UI', 'screensaver_cycle_interval', fallback=300), 
         },
         "BATTERY": {
             "battery_capacity_mAh":  int(config['BATTERY']['battery_capacity_mAh']),

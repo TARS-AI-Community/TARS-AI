@@ -20,6 +20,7 @@ entire project or repository in which it may be included.
 
 import time
 import random
+import pygame
 from modules.module_config import load_config
 from UI.module_screensaver_face import FaceAnimation
 from UI.module_screensaver_terminal import TerminalAnimation
@@ -32,6 +33,13 @@ from UI.module_screensaver_fractal import FractalAnimation
 from UI.module_screensaver_pacman import PacmanAnimation
 from UI.module_screensaver_waves import WavesAnimation
 from UI.module_screensaver_pictures import PicturesAnimation
+
+try:
+    from OpenGL.GL import *
+    from OpenGL.GLU import *
+    HAS_OPENGL = True
+except ImportError:
+    HAS_OPENGL = False
 
 CONFIG = load_config()
 
@@ -69,10 +77,20 @@ class ScreensaverManager:
         self.current_animation_name = None
         self.current_animation_type = None
         self.last_switch_time = None
-        self.switch_interval = 300
+        self.switch_interval = CONFIG['UI']['screensaver_cycle_interval']
         self.failed_animations = set()
         
         self.show_time = CONFIG['UI']['show_time']
+        self.gl_mode_active = False
+        try:
+            display_flags = pygame.display.get_surface().get_flags()
+            if display_flags & pygame.OPENGL:
+                self.gl_mode_active = True
+        except:
+            pass
+
+        self.offscreen_surface = None
+        self.gl_texture_id = None
         
         if screensaver_list is None or not screensaver_list:
             self.screensaver_list = ["random"]
@@ -90,6 +108,60 @@ class ScreensaverManager:
             ]
             if not self.enabled_animations:
                 self.enabled_animations = list(AVAILABLE_ANIMATIONS.keys())
+
+    def _ensure_offscreen_surface(self):
+        if self.offscreen_surface is None:
+            self.offscreen_surface = pygame.Surface((self.width, self.height))
+        return self.offscreen_surface
+
+    def _render_surface_to_gl(self, surface):
+        if not HAS_OPENGL:
+            return
+
+        texture_data = pygame.image.tostring(surface, "RGBA", True)
+        width, height = surface.get_size()
+  
+        if self.gl_texture_id is None:
+            self.gl_texture_id = glGenTextures(1)
+
+        glDisable(GL_DEPTH_TEST)
+        glDisable(GL_LIGHTING)
+        glDisable(GL_FOG)
+        glEnable(GL_TEXTURE_2D)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, self.display_width, 0, self.display_height, -1, 1)
+        
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+
+        glBindTexture(GL_TEXTURE_2D, self.gl_texture_id)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data)
+        
+
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glColor4f(1.0, 1.0, 1.0, 1.0)
+        
+        glBegin(GL_QUADS)
+        glTexCoord2f(1, 0); glVertex2f(0, 0)
+        glTexCoord2f(1, 1); glVertex2f(self.display_width, 0)
+        glTexCoord2f(0, 1); glVertex2f(self.display_width, self.display_height)
+        glTexCoord2f(0, 0); glVertex2f(0, self.display_height)
+        glEnd()
+        
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
+        
+        pygame.display.flip()
 
     def _select_animation(self):
         if self.enabled_animations:
@@ -126,8 +198,13 @@ class ScreensaverManager:
             
             if animation_type == "opengl":
                 self.current_animation = animation_class(self.screen, self.display_width, self.display_height, show_time=self.show_time)
+                self.gl_mode_active = True
             else:
-                self.current_animation = animation_class(self.screen, self.width, self.height, show_time=self.show_time)
+                if self.gl_mode_active and HAS_OPENGL:
+                    render_surface = self._ensure_offscreen_surface()
+                else:
+                    render_surface = self.screen
+                self.current_animation = animation_class(render_surface, self.width, self.height, show_time=self.show_time)
             
             self.current_animation_name = animation_name
             self.current_animation_type = animation_type
@@ -151,11 +228,16 @@ class ScreensaverManager:
         if self.active and self.last_switch_time is not None:
             if (time.time() - self.last_switch_time) >= self.switch_interval:
                 old_animation = self.current_animation_name
+                
+                if self.current_animation and hasattr(self.current_animation, 'cleanup'):
+                    self.current_animation.cleanup()
+                
                 self._select_animation()
                 
                 if self.current_animation and self.current_animation_name != old_animation:
                     self.current_animation.reset()
                     self.last_switch_time = time.time()
+    
 
     def reset_timer(self):
         self.last_activity = time.time()
@@ -203,6 +285,10 @@ class ScreensaverManager:
         try:
             self.current_animation.update()
             self.current_animation.render()
+            
+            if self.current_animation_type == "pygame" and self.gl_mode_active and HAS_OPENGL:
+                self._render_surface_to_gl(self.offscreen_surface)
+                return False
             
             return self.current_animation_type == "pygame"
         except Exception as e:
