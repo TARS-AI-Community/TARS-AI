@@ -68,10 +68,13 @@ class TimeOverlay:
         shadow_width = shadow_surface.get_width()
         shadow_height = shadow_surface.get_height()
         
+        glPushAttrib(GL_ALL_ATTRIB_BITS)
+        
         glDisable(GL_DEPTH_TEST)
         glEnable(GL_TEXTURE_2D)
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
         
         glMatrixMode(GL_PROJECTION)
         glPushMatrix()
@@ -147,3 +150,5 @@ class TimeOverlay:
         glPopMatrix()
         glMatrixMode(GL_MODELVIEW)
         glPopMatrix()
+        
+        glPopAttrib()
