@@ -20,14 +20,18 @@ entire project or repository in which it may be included.
 import pygame
 import random
 import math
+from UI.module_screensaver_overlay import TimeOverlay
 
 class StarfieldAnimation:
-    def __init__(self, screen, width, height):
+    def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
         self.width = width
         self.height = height
         self.cx = width // 2
         self.cy = height // 2
+        
+        self.show_time = show_time
+        self.time_overlay = TimeOverlay(width, height) if show_time else None
 
         self.stars = []
         self.max_stars = 450
@@ -143,3 +147,6 @@ class StarfieldAnimation:
                 pygame.draw.circle(dot_surf, color, (size + 1, size + 1), size)
                 dot_surf.set_alpha(alpha)
                 self.screen.blit(dot_surf, (x - size - 1, y - size - 1))
+        
+        if self.show_time and self.time_overlay:
+            self.time_overlay.render(self.screen)

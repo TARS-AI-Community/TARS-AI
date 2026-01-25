@@ -18,15 +18,19 @@ entire project or repository in which it may be included.
 import pygame
 import random
 import math
+from UI.module_screensaver_overlay import TimeOverlay
 
 STOP, UP, DOWN, LEFT, RIGHT = 0, 1, -1, 2, -2
 SCATTER, CHASE, FREIGHT = 0, 1, 2
 
 class PacmanAnimation:
-    def __init__(self, screen, width, height):
+    def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
         self.width = width
         self.height = height
+        
+        self.show_time = show_time
+        self.time_overlay = TimeOverlay(width, height) if show_time else None
 
         self.maze_template = [
             "XXXXXXXXXXXXXXXXXXXXXXXXXXXX",
@@ -1378,3 +1382,6 @@ class PacmanAnimation:
                     fruit_x = self.offset_x + self.maze_cols * ts - ts - i * (self.fruit_sprite_offset * 2 + 4)
                     self.screen.blit(self.fruit_sprites[fruit_type],
                                     (fruit_x - self.fruit_sprite_offset, fruit_y))
+        
+        if self.show_time and self.time_overlay:
+            self.time_overlay.render(self.screen)

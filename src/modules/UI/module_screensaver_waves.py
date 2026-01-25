@@ -23,10 +23,10 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 import math
 import random
-from datetime import datetime
+from UI.module_screensaver_overlay import TimeOverlay
 
 class WavesAnimation:
-    def __init__(self, screen, width, height):
+    def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
         self.width = width
         self.height = height
@@ -35,12 +35,12 @@ class WavesAnimation:
         self.clock = pygame.time.Clock()
         self.wireframe = True
         
+        self.show_time = show_time
+        self.time_overlay = TimeOverlay(width, height) if show_time else None
+        
         self.wireframe_r = random.uniform(0.05, 0.15)
         self.wireframe_g = random.uniform(0.1, 0.3)
         self.wireframe_b = random.uniform(0.2, 0.5)
-        
-        pygame.font.init()
-        self.font = pygame.font.Font(None, 60)
         
         self.waves = []
         for _ in range(8):
@@ -150,67 +150,15 @@ class WavesAnimation:
         
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
         
-        glMatrixMode(GL_PROJECTION)
-        glPushMatrix()
-        glLoadIdentity()
-        glOrtho(0, self.width, 0, self.height, -1, 1)
-        glMatrixMode(GL_MODELVIEW)
-        glPushMatrix()
-        glLoadIdentity()
+        if self.show_time and self.time_overlay:
+            self.time_overlay.render_gl()
         
-        glDisable(GL_DEPTH_TEST)
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        glEnable(GL_TEXTURE_2D)
-        
-        current_time = datetime.now()
-        time_str = current_time.strftime("%I:%M:%S %p")
-        text_surface = self.font.render(time_str, True, (255, 255, 255))
-        text_data = pygame.image.tostring(text_surface, "RGBA", False)
-        
-        text_width = text_surface.get_width()
-        text_height = text_surface.get_height()
-        
-        tex_id = glGenTextures(1)
-        glBindTexture(GL_TEXTURE_2D, tex_id)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, text_width, text_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, text_data)
-        
-        x_pos = self.width - 80
-        y_pos = self.height - 30
-        
-        glTranslatef(x_pos, y_pos, 0)
-        glRotatef(-90, 0, 0, 1)
-        
-        glColor4f(1, 1, 1, 1)
-        glBegin(GL_QUADS)
-        glTexCoord2f(0, 1)
-        glVertex2f(0, 0)
-        glTexCoord2f(1, 1)
-        glVertex2f(text_width, 0)
-        glTexCoord2f(1, 0)
-        glVertex2f(text_width, text_height)
-        glTexCoord2f(0, 0)
-        glVertex2f(0, text_height)
-        glEnd()
-        
-        glDeleteTextures([tex_id])
-        
-        glMatrixMode(GL_PROJECTION)
-        glPopMatrix()
-        glMatrixMode(GL_MODELVIEW)
-        glPopMatrix()
-        
-        glEnable(GL_DEPTH_TEST)
-        glDisable(GL_TEXTURE_2D)
-        glDisable(GL_BLEND)
+        pygame.display.flip()
         
         try:
             self.clock.tick(30)
         except:
             pass
-        pygame.display.flip()
     
     def reset(self):
         self.time = 0.0

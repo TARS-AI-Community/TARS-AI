@@ -150,7 +150,7 @@ output.wav
 
 # Memory files
 *.pickle.gz
-src//memory/TARS_topics.json
+src/memory/TARS_topics.json
 TARS.wav
 /memory/initial_memory.json
 /memory/initial_memory.loaded
@@ -203,5 +203,4 @@ character/
 !PLEX.onnx
 !PLEX.onnx.json
 
-src/modules/UI/ui_layout.json
-/src/modules/UI/ui_layout.json
+/src/modules/UI/pictures/*

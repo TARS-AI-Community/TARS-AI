@@ -23,15 +23,21 @@ import math
 import numpy as np
 from OpenGL.GL import *
 from OpenGL.GLU import *
+import pygame
+from UI.module_screensaver_overlay import TimeOverlay
 
 class BlackHoleAnimation:
-    def __init__(self, screen, width, height):
+    def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
         self.width = width
         self.height = height
         self.time = 0.0
         self.rotation_y = 0
         self.rotation_x = 0
+        
+        self.show_time = show_time
+        self.time_overlay = TimeOverlay(width, height) if show_time else None
+        
         self.disk_tilt_x = random.uniform(-25, 25)  
         self.disk_tilt_y = random.uniform(0, 360)   
         self.bh_radius = 3.5  
@@ -463,8 +469,6 @@ class BlackHoleAnimation:
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
     def render(self):
-        import pygame
-
         if not self.initialized:
             self.initialize()
 
@@ -499,7 +503,10 @@ class BlackHoleAnimation:
         glRotatef(self.disk_tilt_x, 1, 0, 0)  
         self.draw_accretion_disk()
         glPopMatrix()
-
+        
+        if self.show_time and self.time_overlay:
+            self.time_overlay.render_gl()
+        
         pygame.display.flip()
 
     def cleanup(self):

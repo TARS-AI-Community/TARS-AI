@@ -1,6 +1,6 @@
 #!/bin/bash
 # Atomikspace
-# email: olivierdion1@hotmail.com
+# email: atomikspace.labs@gmail.com
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -18,6 +18,7 @@ if [ -f "$DESKTOP_FILE" ]; then
 else
     # Create the launcher script
     cat > "$LAUNCHER_SCRIPT" << 'LAUNCHER_EOF'
+#!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -28,8 +29,8 @@ if [ -f "$HOME/.bashrc" ]; then
 fi
 
 export DISPLAY=:0
-
-lxterminal --working-directory="$SCRIPT_DIR" --command="bash -c 'python3 App-Start.py; exec bash'" &
+ 
+lxterminal --working-directory="$SCRIPT_DIR" --command="bash -c 'python3 "$SCRIPT_DIR/App-Start.py"; exec bash'" &
 
 echo "TARS-AI launched at $(date)" >> "$SCRIPT_DIR/autostart.log"
 LAUNCHER_EOF
