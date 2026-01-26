@@ -16,6 +16,7 @@ import importlib
 from modules.module_config import load_config
 import modules.module_servoctl as servoctl
 from modules.module_servoctl import *
+from modules.module_movement_registry import get_names, get_names_by_type, LEGS_ONLY, HAS_ARMS
 
 pygame.init()
 
@@ -48,21 +49,13 @@ def scale_font(base_size):
     return int(base_size * scale_factor)
 
 def get_fonts():
-    try:
-        mono_font = pygame.font.SysFont('couriernew', scale_font(20))
-        mono_font_small = pygame.font.SysFont('couriernew', scale_font(18))
-    except:
-        mono_font = pygame.font.Font(None, scale_font(20))
-        mono_font_small = pygame.font.Font(None, scale_font(18))
-
     return {
-        'title': pygame.font.Font(None, scale_font(36)),
+        'title': pygame.font.Font(None, scale_font(32)),
         'tab': pygame.font.Font(None, scale_font(22)),
-        'button': mono_font,
-        'label': mono_font_small,
-        'small': pygame.font.Font(None, scale_font(14)),
+        'button': pygame.font.Font(None, scale_font(20)),
+        'label': pygame.font.Font(None, scale_font(18)),
+        'small': pygame.font.Font(None, scale_font(16)),
         'direction': pygame.font.Font(None, scale_font(48))  
-
     }
 
 def scale_x(x):
@@ -212,7 +205,7 @@ def reload_and_test():
         reset_positions()
         return True
     except Exception as e:
-        print(f"⚠ Error during reload/test: {e}")
+        print(f"! Error during reload/test: {e}")
         return False
 
 class Button:
@@ -245,36 +238,36 @@ class Button:
 
         pygame.draw.rect(screen, BORDER_COLOR, self.rect, 2)
 
-        corner_size = scale_x(12)
-        corner_offset = scale_x(5)
+        corner_size = scale_x(6)
+        corner_color = TEXT_PRIMARY
 
-        pygame.draw.line(screen, ACCENT_AMBER, 
-                        (self.rect.left - corner_offset, self.rect.top + corner_size), 
-                        (self.rect.left - corner_offset, self.rect.top - corner_offset), 3)
-        pygame.draw.line(screen, ACCENT_AMBER, 
-                        (self.rect.left - corner_offset, self.rect.top - corner_offset), 
-                        (self.rect.left + corner_size, self.rect.top - corner_offset), 3)
+        pygame.draw.line(screen, corner_color, 
+                        (self.rect.left + 2, self.rect.top + 2), 
+                        (self.rect.left + 2, self.rect.top + corner_size), 2)
+        pygame.draw.line(screen, corner_color, 
+                        (self.rect.left + 2, self.rect.top + 2), 
+                        (self.rect.left + corner_size, self.rect.top + 2), 2)
 
-        pygame.draw.line(screen, ACCENT_AMBER, 
-                        (self.rect.right + corner_offset, self.rect.top + corner_size), 
-                        (self.rect.right + corner_offset, self.rect.top - corner_offset), 3)
-        pygame.draw.line(screen, ACCENT_AMBER, 
-                        (self.rect.right + corner_offset, self.rect.top - corner_offset), 
-                        (self.rect.right - corner_size, self.rect.top - corner_offset), 3)
+        pygame.draw.line(screen, corner_color, 
+                        (self.rect.right - 3, self.rect.top + 2), 
+                        (self.rect.right - 3, self.rect.top + corner_size), 2)
+        pygame.draw.line(screen, corner_color, 
+                        (self.rect.right - 3, self.rect.top + 2), 
+                        (self.rect.right - corner_size, self.rect.top + 2), 2)
 
-        pygame.draw.line(screen, ACCENT_AMBER, 
-                        (self.rect.left - corner_offset, self.rect.bottom - corner_size), 
-                        (self.rect.left - corner_offset, self.rect.bottom + corner_offset), 3)
-        pygame.draw.line(screen, ACCENT_AMBER, 
-                        (self.rect.left - corner_offset, self.rect.bottom + corner_offset), 
-                        (self.rect.left + corner_size, self.rect.bottom + corner_offset), 3)
+        pygame.draw.line(screen, corner_color, 
+                        (self.rect.left + 2, self.rect.bottom - 3), 
+                        (self.rect.left + 2, self.rect.bottom - corner_size), 2)
+        pygame.draw.line(screen, corner_color, 
+                        (self.rect.left + 2, self.rect.bottom - 3), 
+                        (self.rect.left + corner_size, self.rect.bottom - 3), 2)
 
-        pygame.draw.line(screen, ACCENT_AMBER, 
-                        (self.rect.right + corner_offset, self.rect.bottom - corner_size), 
-                        (self.rect.right + corner_offset, self.rect.bottom + corner_offset), 3)
-        pygame.draw.line(screen, ACCENT_AMBER, 
-                        (self.rect.right + corner_offset, self.rect.bottom + corner_offset), 
-                        (self.rect.right - corner_size, self.rect.bottom + corner_offset), 3)
+        pygame.draw.line(screen, corner_color, 
+                        (self.rect.right - 3, self.rect.bottom - 3), 
+                        (self.rect.right - 3, self.rect.bottom - corner_size), 2)
+        pygame.draw.line(screen, corner_color, 
+                        (self.rect.right - 3, self.rect.bottom - 3), 
+                        (self.rect.right - corner_size, self.rect.bottom - 3), 2)
 
         if self.arrow_dir:
             cx = self.rect.centerx
@@ -332,7 +325,7 @@ class Tab:
         pygame.draw.rect(screen, BORDER_COLOR, self.rect, 2)
 
         if self.active:
-            pygame.draw.line(screen, ACCENT_AMBER,
+            pygame.draw.line(screen, TEXT_PRIMARY,
                            (self.rect.left, self.rect.bottom - 2),
                            (self.rect.right, self.rect.bottom - 2), 3)
 
@@ -394,6 +387,148 @@ class InputBox:
                 self.text += event.unicode
         return None
 
+class Checkbox:
+    
+    def __init__(self, x, y, size, label, checked=False):
+        self.x_ref = x
+        self.y_ref = y
+        self.size_ref = size
+        self.label = label
+        self.checked = checked
+        self.update_rect()
+    
+    def update_rect(self):
+        x = scale_x(self.x_ref)
+        y = scale_y(self.y_ref)
+        size = scale_x(self.size_ref)
+        self.rect = pygame.Rect(x, y, size, size)
+    
+    def draw(self, screen, fonts):
+        self.update_rect()
+        
+        pygame.draw.rect(screen, PANEL_BG, self.rect)
+        pygame.draw.rect(screen, ACCENT_BLUE if self.checked else BORDER_COLOR, self.rect, 2)
+        
+        if self.checked:
+            inner_rect = self.rect.inflate(-scale_x(6), -scale_y(6))
+            pygame.draw.rect(screen, ACCENT_GREEN, inner_rect)
+        
+        label_surf = fonts['small'].render(self.label, True, TEXT_PRIMARY)
+        screen.blit(label_surf, (self.rect.right + scale_x(8), self.rect.centery - label_surf.get_height() // 2))
+    
+    def handle_event(self, event):
+        self.update_rect()
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            label_width = scale_x(200)
+            click_area = pygame.Rect(self.rect.x, self.rect.y, self.rect.width + label_width, self.rect.height)
+            if click_area.collidepoint(event.pos):
+                self.checked = not self.checked
+                return True
+        return False
+
+class CompactInputBox:
+    
+    def __init__(self, x, y, width, height, default_value="50"):
+        self.x_ref = x
+        self.y_ref = y
+        self.width_ref = width
+        self.height_ref = height
+        self.text = default_value
+        self.active = False
+        self.update_rect()
+
+    def update_rect(self):
+        x = scale_x(self.x_ref)
+        y = scale_y(self.y_ref)
+        width = scale_x(self.width_ref)
+        height = scale_y(self.height_ref)
+        self.rect = pygame.Rect(x, y, width, height)
+
+    def draw(self, screen, fonts):
+        self.update_rect()
+
+        bg_color = MID_DARK if self.active else PANEL_BG
+        border_color = ACCENT_BLUE if self.active else BORDER_COLOR
+
+        pygame.draw.rect(screen, bg_color, self.rect)
+        pygame.draw.rect(screen, border_color, self.rect, 2)
+
+        text_surf = fonts['small'].render(self.text, True, TEXT_PRIMARY)
+        text_rect = text_surf.get_rect(center=self.rect.center)
+        screen.blit(text_surf, text_rect)
+
+    def handle_event(self, event):
+        self.update_rect()
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            self.active = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.KEYDOWN and self.active:
+            if event.key == pygame.K_RETURN:
+                self.active = False
+                return self.text
+            elif event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            elif event.unicode.isdigit():
+                if len(self.text) < 3:
+                    self.text += event.unicode
+        return None
+    
+    def get_value(self):
+        
+        try:
+            val = int(self.text) if self.text else 50
+            return max(1, min(100, val))
+        except ValueError:
+            return 50
+
+class Slider:
+    def __init__(self, x, y, width, height, min_val=0.65, max_val=1.0, default=0.8):
+        self.x_ref = x
+        self.y_ref = y
+        self.width_ref = width
+        self.height_ref = height
+        self.min_val = min_val
+        self.max_val = max_val
+        self.value = default
+        self.dragging = False
+        self.update_rect()
+    
+    def update_rect(self):
+        self.rect = pygame.Rect(scale_x(self.x_ref), scale_y(self.y_ref), 
+                                scale_x(self.width_ref), scale_y(self.height_ref))
+    
+    def draw(self, screen, fonts):
+        self.update_rect()
+        
+        track_rect = pygame.Rect(self.rect.x, self.rect.y + self.rect.height // 2 - 2,
+                                  self.rect.width, 4)
+        pygame.draw.rect(screen, BORDER_COLOR, track_rect)
+        
+        fill_width = int((self.value - self.min_val) / (self.max_val - self.min_val) * self.rect.width)
+        fill_rect = pygame.Rect(self.rect.x, self.rect.y + self.rect.height // 2 - 2,
+                                fill_width, 4)
+        pygame.draw.rect(screen, ACCENT_BLUE, fill_rect)
+        
+        handle_x = self.rect.x + fill_width
+        handle_rect = pygame.Rect(handle_x - 6, self.rect.y, 12, self.rect.height)
+        pygame.draw.rect(screen, ACCENT_BLUE, handle_rect)
+        pygame.draw.rect(screen, TEXT_PRIMARY, handle_rect, 1)
+    
+    def handle_event(self, event):
+        self.update_rect()
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.dragging = True
+                self._update_value(event.pos[0])
+        elif event.type == pygame.MOUSEBUTTONUP:
+            self.dragging = False
+        elif event.type == pygame.MOUSEMOTION and self.dragging:
+            self._update_value(event.pos[0])
+    
+    def _update_value(self, mouse_x):
+        relative_x = mouse_x - self.rect.x
+        ratio = max(0, min(1, relative_x / self.rect.width))
+        self.value = self.min_val + ratio * (self.max_val - self.min_val)
+
 class Dropdown:
     def __init__(self, x, y, width, height, options, max_visible=6):
         self.x_ref = x
@@ -401,9 +536,9 @@ class Dropdown:
         self.width_ref = width
         self.height_ref = height
         self.options = options
+        self.max_visible = max_visible
         self.selected_index = 0
         self.is_open = False
-        self.max_visible = max_visible
         self.scroll_offset = 0
         self.update_rect()
 
@@ -615,76 +750,130 @@ class ServoControllerGUI:
         self.tab1_mode = "main"  
 
     def create_tab2_elements(self):
+        
         self.leg_offset_info = {
-            'perfectLeftHeightOffset': ('LEFT HEIGHT', 0),
-            'perfectRightHeightOffset': ('RIGHT HEIGHT', 1),
-            'perfectLeftLegOffset': ('LEFT LEG', 2),
-            'perfectRightLegOffset': ('RIGHT LEG', 3)
+            'perfectLeftHeightOffset': ('LEFT-HEIGHT', 0),
+            'perfectRightHeightOffset': ('RIGHT-HEIGHT', 1),
+            'perfectLeftLegOffset': ('LEFT-ROTATION', 2),
+            'perfectRightLegOffset': ('RIGHT-ROTATION', 3)
         }
 
         self.selected_leg_offset = 'perfectLeftHeightOffset'
 
-        self.leg_offset_custom_input = InputBox(80, 325, 70, 30, "", "0")
-
         self.leg_offset_rows = {
-            'perfectLeftHeightOffset': 90,
-            'perfectRightHeightOffset': 140,
+            'perfectLeftHeightOffset': 100,
+            'perfectRightHeightOffset': 145,
             'perfectLeftLegOffset': 190,
-            'perfectRightLegOffset': 240
+            'perfectRightLegOffset': 235
         }
 
-        btn_width = 45
-        btn_height = 30
+        btn_width = 38
+        btn_height = 32
 
         self.leg_offset_buttons = {}
         for offset_name, y_pos in self.leg_offset_rows.items():
             self.leg_offset_buttons[offset_name] = {
-                'minus5': Button(460, y_pos, btn_width, btn_height, "-5", ACCENT_BLUE, ACCENT_BLUE_DARK),
-                'minus1': Button(510, y_pos, btn_width, btn_height, "-1", ACCENT_BLUE, ACCENT_BLUE_DARK),
-                'plus1': Button(560, y_pos, btn_width, btn_height, "+1", ACCENT_BLUE, ACCENT_BLUE_DARK),
-                'plus5': Button(610, y_pos, btn_width, btn_height, "+5", ACCENT_BLUE, ACCENT_BLUE_DARK)
+                'minus5': Button(250, y_pos, btn_width, btn_height, "-5", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                'minus1': Button(293, y_pos, btn_width, btn_height, "-1", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                'plus1': Button(336, y_pos, btn_width, btn_height, "+1", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                'plus5': Button(379, y_pos, btn_width, btn_height, "+5", ACCENT_BLUE, ACCENT_BLUE_DARK)
             }
-
-        self.apply_leg_custom_btn = Button(160, 325, 60, 30, "SET", ACCENT_BLUE, ACCENT_BLUE_DARK)
-        self.test_leg_offsets_btn = Button(230, 325, 150, 30, "TEST OFFSETS", ACCENT_GREEN, ACCENT_GREEN_DARK)
+        
+        self.leg_move_inputs = {
+            'left_height': CompactInputBox(480, 110, 42, 26, "50"),
+            'right_height': CompactInputBox(600, 110, 42, 26, "50"),
+            'left_leg': CompactInputBox(480, 155, 42, 26, "50"),
+            'right_leg': CompactInputBox(600, 155, 42, 26, "50"),
+        }
+        
+        btn_w = 24
+        btn_h = 26
+        self.leg_move_adjust_buttons = {
+            'left_height': {'minus': Button(446, 110, btn_w, btn_h, "-", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                           'plus': Button(534, 110, btn_w, btn_h, "+", ACCENT_BLUE, ACCENT_BLUE_DARK)},
+            'right_height': {'minus': Button(566, 110, btn_w, btn_h, "-", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                            'plus': Button(654, 110, btn_w, btn_h, "+", ACCENT_BLUE, ACCENT_BLUE_DARK)},
+            'left_leg': {'minus': Button(446, 155, btn_w, btn_h, "-", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                        'plus': Button(534, 155, btn_w, btn_h, "+", ACCENT_BLUE, ACCENT_BLUE_DARK)},
+            'right_leg': {'minus': Button(566, 155, btn_w, btn_h, "-", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                         'plus': Button(654, 155, btn_w, btn_h, "+", ACCENT_BLUE, ACCENT_BLUE_DARK)},
+        }
+        
+        self.test_legs_btn = Button(700, 110, 70, 75, "TEST", ACCENT_GREEN, ACCENT_GREEN_DARK)
+        
+        self.reset_move_btn = Button(700, 110, 60, 28, "RESET", ACCENT_BLUE, ACCENT_BLUE_DARK, TEXT_PRIMARY, 'small')
+        
+        self.speed_slider = Slider(500, 250, 120, 20, min_val=0.65, max_val=1.0, default=0.8)
+        
+        self.disable_servos_btn = Button(30, 310, 200, 40, "DISABLE SERVO", ACCENT_RED, ACCENT_RED_DARK, TEXT_PRIMARY, 'small')
+        
+        self.manual_test_checkbox = Checkbox(30, 365, 16, "MANUAL TEST", checked=False)
+        
+        self.disable_after_action_checkbox = Checkbox(200, 365, 16, "DISABLE AFTER MOVE", checked=False)
 
     def create_tab3_elements(self):
+        
         self.arm_offset_info = {
-            'leftMainOffset': ('LEFT MAIN ARM', 4),
-            'leftForearmOffset': ('LEFT FOREARM', 5),
-            'leftHandOffset': ('LEFT HAND', 6),
-            'rightMainOffset': ('RIGHT MAIN ARM', 7),
-            'rightForearmOffset': ('RIGHT FOREARM', 8),
-            'rightHandOffset': ('RIGHT HAND', 9)
+            'leftMainOffset': ('LEFT-MAIN', 4),
+            'leftForearmOffset': ('LEFT-FOREARM', 5),
+            'leftHandOffset': ('LEFT-HAND', 6),
+            'rightMainOffset': ('RIGHT-MAIN', 7),
+            'rightForearmOffset': ('RIGHT-FOREARM', 8),
+            'rightHandOffset': ('RIGHT-HAND', 9)
         }
 
         self.selected_arm_offset = 'leftMainOffset'
 
-        self.arm_offset_custom_input = InputBox(80, 355, 70, 30, "", "0")
-
         self.arm_offset_rows = {
-            'leftMainOffset': 85,
-            'leftForearmOffset': 120,
-            'leftHandOffset': 155,
-            'rightMainOffset': 190,
-            'rightForearmOffset': 225,
-            'rightHandOffset': 260
+            'leftMainOffset': 100,
+            'leftForearmOffset': 135,
+            'leftHandOffset': 170,
+            'rightMainOffset': 205,
+            'rightForearmOffset': 240,
+            'rightHandOffset': 275
         }
 
-        btn_width = 45
+        btn_width = 38
         btn_height = 28
 
         self.arm_offset_buttons = {}
         for offset_name, y_pos in self.arm_offset_rows.items():
             self.arm_offset_buttons[offset_name] = {
-                'minus5': Button(460, y_pos, btn_width, btn_height, "-5", ACCENT_BLUE, ACCENT_BLUE_DARK),
-                'minus1': Button(510, y_pos, btn_width, btn_height, "-1", ACCENT_BLUE, ACCENT_BLUE_DARK),
-                'plus1': Button(560, y_pos, btn_width, btn_height, "+1", ACCENT_BLUE, ACCENT_BLUE_DARK),
-                'plus5': Button(610, y_pos, btn_width, btn_height, "+5", ACCENT_BLUE, ACCENT_BLUE_DARK)
+                'minus5': Button(250, y_pos, btn_width, btn_height, "-5", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                'minus1': Button(293, y_pos, btn_width, btn_height, "-1", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                'plus1': Button(336, y_pos, btn_width, btn_height, "+1", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                'plus5': Button(379, y_pos, btn_width, btn_height, "+5", ACCENT_BLUE, ACCENT_BLUE_DARK)
             }
-
-        self.apply_arm_custom_btn = Button(160, 355, 60, 30, "SET", ACCENT_BLUE, ACCENT_BLUE_DARK)
-        self.test_arm_offsets_btn = Button(230, 355, 150, 30, "TEST OFFSETS", ACCENT_GREEN, ACCENT_GREEN_DARK)
+        
+        self.arm_move_inputs = {
+            'left_main': CompactInputBox(480, 110, 42, 26, "1"),
+            'left_forearm': CompactInputBox(480, 140, 42, 26, "1"),
+            'left_hand': CompactInputBox(480, 170, 42, 26, "1"),
+            'right_main': CompactInputBox(480, 200, 42, 26, "1"),
+            'right_forearm': CompactInputBox(480, 230, 42, 26, "1"),
+            'right_hand': CompactInputBox(480, 260, 42, 26, "1"),
+        }
+        
+        btn_w = 24
+        btn_h = 26
+        self.arm_move_adjust_buttons = {}
+        for key in self.arm_move_inputs.keys():
+            self.arm_move_adjust_buttons[key] = {
+                'minus': Button(446, 110, btn_w, btn_h, "-", ACCENT_BLUE, ACCENT_BLUE_DARK),
+                'plus': Button(534, 110, btn_w, btn_h, "+", ACCENT_BLUE, ACCENT_BLUE_DARK)
+            }
+        
+        self.test_arms_btn = Button(700, 110, 70, 75, "TEST", ACCENT_GREEN, ACCENT_GREEN_DARK)
+        
+        self.reset_arm_move_btn = Button(700, 110, 60, 28, "RESET", ACCENT_BLUE, ACCENT_BLUE_DARK, TEXT_PRIMARY, 'small')
+        
+        self.arm_speed_slider = Slider(500, 250, 120, 20, min_val=0.65, max_val=1.0, default=0.8)
+        
+        self.disable_arm_servos_btn = Button(30, 330, 200, 40, "DISABLE SERVO", ACCENT_RED, ACCENT_RED_DARK, TEXT_PRIMARY, 'small')
+        
+        self.arm_manual_test_checkbox = Checkbox(30, 375, 16, "MANUAL TEST", checked=False)
+        
+        self.arm_disable_after_action_checkbox = Checkbox(200, 375, 16, "DISABLE AFTER MOVE", checked=False)
         
     def create_tab4_elements(self):
         self.movement_mode = "slow"  
@@ -706,17 +895,15 @@ class ServoControllerGUI:
         self.turn_right_btn = Button(keypad_center_x + btn_spacing - btn_size//2, keypad_center_y - btn_size//2, 
                                       btn_size, btn_size, "", ACCENT_GREEN, ACCENT_GREEN_DARK, TEXT_PRIMARY, 'direction', 'right')
 
-        self.actions = [
-            ("Reset Position", "reset_positions"),
-            ("Pose", "pose"),
-            ("Laugh", "laugh"),
-            ("Bow", "bow"),
-            ("Tilt Right", "tilt_right"),
-            ("Tilt Left", "tilt_left"),
-            ("Side-Side", "side_side"),
-            ("Wave Right", "wave_right"),
-            ("Wave Left", "wave_left")
-        ]
+        self.actions = []
+        
+        legs_movements = get_names_by_type(LEGS_ONLY)
+        for name, func_name in legs_movements:
+            self.actions.append((f"{name} [LEGS]", func_name))
+        
+        arm_movements = get_names_by_type(HAS_ARMS)
+        for name, func_name in arm_movements:
+            self.actions.append((f"{name} [ARMS]", func_name))
 
         self.action_dropdown = Dropdown(330, 85, 320, 35, self.actions)
         self.execute_action_btn = Button(660, 85, 105, 35, "EXECUTE", ACCENT_BLUE, ACCENT_BLUE_DARK)
@@ -784,139 +971,282 @@ class ServoControllerGUI:
             self.submit_servo_button.draw(self.screen, self.fonts)
 
     def draw_tab2(self):
-        title = self.fonts['tab'].render("LEG SERVO OFFSET CALIBRATION", True, TEXT_PRIMARY)
-        title_rect = title.get_rect(center=(WINDOW_WIDTH // 2, scale_y(67)))
-        self.screen.blit(title, title_rect)
+        
+        
+        panel_left = pygame.Rect(scale_x(20), scale_y(75), scale_x(405), scale_y(210))
+        pygame.draw.rect(self.screen, PANEL_BG, panel_left)
+        pygame.draw.rect(self.screen, ACCENT_BLUE, panel_left, 2)
+        
+        header_rect = pygame.Rect(scale_x(20), scale_y(75), scale_x(405), scale_y(22))
+        pygame.draw.rect(self.screen, ACCENT_BLUE_DARK, header_rect)
+        header_text = self.fonts['small'].render("// OFFSET CALIBRATION //", True, TEXT_PRIMARY)
+        header_text_rect = header_text.get_rect(center=header_rect.center)
+        self.screen.blit(header_text, header_text_rect)
 
         for offset_name, y_pos in self.leg_offset_rows.items():
             display_name, channel = self.leg_offset_info[offset_name]
             current_value = offset_values.get(offset_name, 0)
 
-            select_box = pygame.Rect(scale_x(60), scale_y(y_pos + 2), scale_x(20), scale_y(26))
-            is_selected = (offset_name == self.selected_leg_offset)
+            label_text = self.fonts['small'].render(f"{display_name} [CH{channel}]", True, TEXT_PRIMARY)
+            self.screen.blit(label_text, (scale_x(30), scale_y(y_pos + 6)))
 
-            pygame.draw.rect(self.screen, PANEL_BG, select_box)
-            pygame.draw.rect(self.screen, ACCENT_BLUE if is_selected else BORDER_COLOR, select_box, 2)
-
-            if is_selected:
-
-                inner_box = select_box.inflate(-scale_x(8), -scale_y(8))
-                pygame.draw.rect(self.screen, ACCENT_BLUE, inner_box)
-
-            label_text = self.fonts['label'].render(f"{display_name} (CH{channel}):", True, TEXT_PRIMARY)
-            self.screen.blit(label_text, (scale_x(90), scale_y(y_pos + 5)))
-
-            value_rect = pygame.Rect(scale_x(280), scale_y(y_pos), scale_x(70), scale_y(30))
-            pygame.draw.rect(self.screen, PANEL_BG, value_rect)
-            pygame.draw.rect(self.screen, ACCENT_BLUE if current_value != 0 else BORDER_COLOR, value_rect, 2)
-
-            value_text = self.fonts['label'].render(f"{current_value:+d}", True, ACCENT_AMBER if current_value != 0 else TEXT_SECONDARY)
+            value_rect = pygame.Rect(scale_x(200), scale_y(y_pos), scale_x(40), scale_y(32))
+            pygame.draw.rect(self.screen, MID_DARK, value_rect)
+            pygame.draw.rect(self.screen, ACCENT_AMBER if current_value != 0 else BORDER_COLOR, value_rect, 2)
+            value_text = self.fonts['small'].render(f"{current_value:+d}", True, ACCENT_AMBER if current_value != 0 else TEXT_SECONDARY)
             value_text_rect = value_text.get_rect(center=value_rect.center)
             self.screen.blit(value_text, value_text_rect)
-
-            base_pulse = 350 if channel in [0, 1] else 300
-            target_pulse = base_pulse + current_value
-            target_text = self.fonts['small'].render(f"→ {target_pulse}", True, TEXT_SECONDARY)
-            self.screen.blit(target_text, (scale_x(360), scale_y(y_pos + 7)))
 
             for btn in self.leg_offset_buttons[offset_name].values():
                 btn.draw(self.screen, self.fonts)
 
-        pygame.draw.line(self.screen, BORDER_COLOR, 
-                        (scale_x(60), scale_y(285)), 
-                        (scale_x(740), scale_y(285)), 2)
+        controls_panel = pygame.Rect(scale_x(20), scale_y(295), scale_x(405), scale_y(105))
+        pygame.draw.rect(self.screen, PANEL_BG, controls_panel)
+        pygame.draw.rect(self.screen, BORDER_COLOR, controls_panel, 2)
+        
+        ctrl_header = pygame.Rect(scale_x(20), scale_y(295), scale_x(405), scale_y(22))
+        pygame.draw.rect(self.screen, MID_DARK, ctrl_header)
+        ctrl_text = self.fonts['small'].render("// CONTROLS //", True, TEXT_SECONDARY)
+        ctrl_text_rect = ctrl_text.get_rect(center=ctrl_header.center)
+        self.screen.blit(ctrl_text, ctrl_text_rect)
+        
+        self.disable_servos_btn.x_ref = 30
+        self.disable_servos_btn.y_ref = 325
+        self.disable_servos_btn.width_ref = 180
+        self.disable_servos_btn.height_ref = 35
+        self.disable_servos_btn.draw(self.screen, self.fonts)
+        
+        self.manual_test_checkbox.x_ref = 230
+        self.manual_test_checkbox.y_ref = 328
+        self.manual_test_checkbox.draw(self.screen, self.fonts)
+        
+        self.disable_after_action_checkbox.x_ref = 230
+        self.disable_after_action_checkbox.y_ref = 360
+        self.disable_after_action_checkbox.draw(self.screen, self.fonts)
 
-        custom_label = self.fonts['label'].render("SET CUSTOM VALUE FOR", True, TEXT_SECONDARY)
-        self.screen.blit(custom_label, (scale_x(60), scale_y(300)))
-
-        selected_display = self.leg_offset_info[self.selected_leg_offset][0]
-        selected_text = self.fonts['label'].render(f"[{selected_display}]:", True, ACCENT_BLUE)
-        self.screen.blit(selected_text, (scale_x(300), scale_y(300)))
-
-        self.leg_offset_custom_input.draw(self.screen, self.fonts)
-        self.apply_leg_custom_btn.draw(self.screen, self.fonts)
-        self.test_leg_offsets_btn.draw(self.screen, self.fonts)
-
-        info_text = self.fonts['small'].render("CHANGES AUTO-SAVE TO CONFIG.INI | USE TEST BUTTON TO VERIFY", True, (0, 200, 255))
-        info_rect = info_text.get_rect(center=(WINDOW_WIDTH // 2, scale_y(400)))
+        panel_right = pygame.Rect(scale_x(430), scale_y(75), scale_x(365), scale_y(210))
+        pygame.draw.rect(self.screen, PANEL_BG, panel_right)
+        pygame.draw.rect(self.screen, ACCENT_GREEN, panel_right, 2)
+        
+        header_rect2 = pygame.Rect(scale_x(430), scale_y(75), scale_x(365), scale_y(22))
+        pygame.draw.rect(self.screen, ACCENT_GREEN_DARK, header_rect2)
+        header_text2 = self.fonts['small'].render("// MOVE SERVOS (1-100, 50=NEUTRAL) //", True, TEXT_PRIMARY)
+        header_text_rect2 = header_text2.get_rect(center=header_rect2.center)
+        self.screen.blit(header_text2, header_text_rect2)
+        
+        self.reset_move_btn.x_ref = 680
+        self.reset_move_btn.y_ref = 100
+        self.reset_move_btn.width_ref = 105
+        self.reset_move_btn.height_ref = 24
+        self.reset_move_btn.text = "RESET (50)"
+        self.reset_move_btn.draw(self.screen, self.fonts)
+        
+        row_y = [100, 130, 160, 190]
+        input_x = 555
+        minus_x = 600
+        plus_x = 626
+        
+        lh_label = self.fonts['small'].render("LEFT-HEIGHT", True, TEXT_PRIMARY)
+        self.screen.blit(lh_label, (scale_x(440), scale_y(row_y[0] + 5)))
+        self.leg_move_inputs['left_height'].x_ref = input_x
+        self.leg_move_inputs['left_height'].y_ref = row_y[0]
+        self.leg_move_inputs['left_height'].draw(self.screen, self.fonts)
+        self.leg_move_adjust_buttons['left_height']['minus'].x_ref = minus_x
+        self.leg_move_adjust_buttons['left_height']['minus'].y_ref = row_y[0]
+        self.leg_move_adjust_buttons['left_height']['plus'].x_ref = plus_x
+        self.leg_move_adjust_buttons['left_height']['plus'].y_ref = row_y[0]
+        self.leg_move_adjust_buttons['left_height']['minus'].draw(self.screen, self.fonts)
+        self.leg_move_adjust_buttons['left_height']['plus'].draw(self.screen, self.fonts)
+        
+        rh_label = self.fonts['small'].render("RIGHT-HEIGHT", True, TEXT_PRIMARY)
+        self.screen.blit(rh_label, (scale_x(440), scale_y(row_y[1] + 5)))
+        self.leg_move_inputs['right_height'].x_ref = input_x
+        self.leg_move_inputs['right_height'].y_ref = row_y[1]
+        self.leg_move_inputs['right_height'].draw(self.screen, self.fonts)
+        self.leg_move_adjust_buttons['right_height']['minus'].x_ref = minus_x
+        self.leg_move_adjust_buttons['right_height']['minus'].y_ref = row_y[1]
+        self.leg_move_adjust_buttons['right_height']['plus'].x_ref = plus_x
+        self.leg_move_adjust_buttons['right_height']['plus'].y_ref = row_y[1]
+        self.leg_move_adjust_buttons['right_height']['minus'].draw(self.screen, self.fonts)
+        self.leg_move_adjust_buttons['right_height']['plus'].draw(self.screen, self.fonts)
+        
+        ll_label = self.fonts['small'].render("LEFT-ROTATION", True, TEXT_PRIMARY)
+        self.screen.blit(ll_label, (scale_x(440), scale_y(row_y[2] + 5)))
+        self.leg_move_inputs['left_leg'].x_ref = input_x
+        self.leg_move_inputs['left_leg'].y_ref = row_y[2]
+        self.leg_move_inputs['left_leg'].draw(self.screen, self.fonts)
+        self.leg_move_adjust_buttons['left_leg']['minus'].x_ref = minus_x
+        self.leg_move_adjust_buttons['left_leg']['minus'].y_ref = row_y[2]
+        self.leg_move_adjust_buttons['left_leg']['plus'].x_ref = plus_x
+        self.leg_move_adjust_buttons['left_leg']['plus'].y_ref = row_y[2]
+        self.leg_move_adjust_buttons['left_leg']['minus'].draw(self.screen, self.fonts)
+        self.leg_move_adjust_buttons['left_leg']['plus'].draw(self.screen, self.fonts)
+        
+        rl_label = self.fonts['small'].render("RIGHT-ROTATION", True, TEXT_PRIMARY)
+        self.screen.blit(rl_label, (scale_x(440), scale_y(row_y[3] + 5)))
+        self.leg_move_inputs['right_leg'].x_ref = input_x
+        self.leg_move_inputs['right_leg'].y_ref = row_y[3]
+        self.leg_move_inputs['right_leg'].draw(self.screen, self.fonts)
+        self.leg_move_adjust_buttons['right_leg']['minus'].x_ref = minus_x
+        self.leg_move_adjust_buttons['right_leg']['minus'].y_ref = row_y[3]
+        self.leg_move_adjust_buttons['right_leg']['plus'].x_ref = plus_x
+        self.leg_move_adjust_buttons['right_leg']['plus'].y_ref = row_y[3]
+        self.leg_move_adjust_buttons['right_leg']['minus'].draw(self.screen, self.fonts)
+        self.leg_move_adjust_buttons['right_leg']['plus'].draw(self.screen, self.fonts)
+        
+        speed_label = self.fonts['small'].render("SPEED", True, TEXT_PRIMARY)
+        self.screen.blit(speed_label, (scale_x(695), scale_y(130)))
+        self.speed_slider.x_ref = 665
+        self.speed_slider.y_ref = 150
+        self.speed_slider.width_ref = 110
+        self.speed_slider.height_ref = 20
+        self.speed_slider.draw(self.screen, self.fonts)
+        
+        slow_label = self.fonts['small'].render("SLOW", True, TEXT_SECONDARY)
+        self.screen.blit(slow_label, (scale_x(665), scale_y(172)))
+        fast_label = self.fonts['small'].render("FAST", True, TEXT_SECONDARY)
+        self.screen.blit(fast_label, (scale_x(745), scale_y(172)))
+        
+        if self.manual_test_checkbox.checked:
+            self.test_legs_btn.x_ref = 430
+            self.test_legs_btn.y_ref = 295
+            self.test_legs_btn.width_ref = 365
+            self.test_legs_btn.height_ref = 45
+            self.test_legs_btn.draw(self.screen, self.fonts)
+        
+        info_text = self.fonts['small'].render("[ OFFSET CHANGES AUTO-SAVE TO CONFIG.INI ]", True, ACCENT_BLUE)
+        info_rect = info_text.get_rect(center=(WINDOW_WIDTH // 2, scale_y(420)))
         self.screen.blit(info_text, info_rect)
 
     def draw_tab3(self):
-        title = self.fonts['tab'].render("ARM SERVO OFFSET CALIBRATION", True, TEXT_PRIMARY)
-        title_rect = title.get_rect(center=(WINDOW_WIDTH // 2, scale_y(67)))
-        self.screen.blit(title, title_rect)
-
-        arm_base_values = {
-            'leftMainOffset': (int(servo_config.get('leftMainMin', 550)), int(servo_config.get('leftMainMax', 50))),
-            'leftForearmOffset': (int(servo_config.get('leftForarmMin', 500)), int(servo_config.get('leftForarmMax', 230))),
-            'leftHandOffset': (int(servo_config.get('leftHandMin', 400)), int(servo_config.get('leftHandMax', 300))),
-            'rightMainOffset': (int(servo_config.get('rightMainMin', 50)), int(servo_config.get('rightMainMax', 550))),
-            'rightForearmOffset': (int(servo_config.get('rightForarmMin', 230)), int(servo_config.get('rightForarmMax', 500))),
-            'rightHandOffset': (int(servo_config.get('rightHandMin', 300)), int(servo_config.get('rightHandMax', 400)))
-        }
+        
+        
+        panel_left = pygame.Rect(scale_x(20), scale_y(75), scale_x(405), scale_y(235))
+        pygame.draw.rect(self.screen, PANEL_BG, panel_left)
+        pygame.draw.rect(self.screen, ACCENT_BLUE, panel_left, 2)
+        
+        header_rect = pygame.Rect(scale_x(20), scale_y(75), scale_x(405), scale_y(22))
+        pygame.draw.rect(self.screen, ACCENT_BLUE_DARK, header_rect)
+        header_text = self.fonts['small'].render("// ARM OFFSET CALIBRATION //", True, TEXT_PRIMARY)
+        header_text_rect = header_text.get_rect(center=header_rect.center)
+        self.screen.blit(header_text, header_text_rect)
 
         for offset_name, y_pos in self.arm_offset_rows.items():
             display_name, channel = self.arm_offset_info[offset_name]
             current_value = offset_values.get(offset_name, 0)
 
-            select_box = pygame.Rect(scale_x(60), scale_y(y_pos + 2), scale_x(20), scale_y(24))
-            is_selected = (offset_name == self.selected_arm_offset)
+            label_text = self.fonts['small'].render(f"{display_name} [CH{channel}]", True, TEXT_PRIMARY)
+            self.screen.blit(label_text, (scale_x(30), scale_y(y_pos + 6)))
 
-            pygame.draw.rect(self.screen, PANEL_BG, select_box)
-            pygame.draw.rect(self.screen, ACCENT_BLUE if is_selected else BORDER_COLOR, select_box, 2)
-
-            if is_selected:
-
-                inner_box = select_box.inflate(-scale_x(8), -scale_y(8))
-                pygame.draw.rect(self.screen, ACCENT_BLUE, inner_box)
-
-            label_text = self.fonts['label'].render(f"{display_name} (CH{channel}):", True, TEXT_PRIMARY)
-            self.screen.blit(label_text, (scale_x(90), scale_y(y_pos + 3)))
-
-            value_rect = pygame.Rect(scale_x(300), scale_y(y_pos), scale_x(70), scale_y(28))
-            pygame.draw.rect(self.screen, PANEL_BG, value_rect)
-            pygame.draw.rect(self.screen, ACCENT_BLUE if current_value != 0 else BORDER_COLOR, value_rect, 2)
-
-            value_text = self.fonts['label'].render(f"{current_value:+d}", True, ACCENT_AMBER if current_value != 0 else TEXT_SECONDARY)
+            value_rect = pygame.Rect(scale_x(200), scale_y(y_pos), scale_x(40), scale_y(28))
+            pygame.draw.rect(self.screen, MID_DARK, value_rect)
+            pygame.draw.rect(self.screen, ACCENT_AMBER if current_value != 0 else BORDER_COLOR, value_rect, 2)
+            value_text = self.fonts['small'].render(f"{current_value:+d}", True, ACCENT_AMBER if current_value != 0 else TEXT_SECONDARY)
             value_text_rect = value_text.get_rect(center=value_rect.center)
             self.screen.blit(value_text, value_text_rect)
-
-            base_min, base_max = arm_base_values.get(offset_name, (0, 0))
-            target_min = base_min + current_value
-            target_max = base_max + current_value
-            target_text = self.fonts['small'].render(f"→ {target_min}-{target_max}", True, TEXT_SECONDARY)
-            self.screen.blit(target_text, (scale_x(380), scale_y(y_pos + 5)))
 
             for btn in self.arm_offset_buttons[offset_name].values():
                 btn.draw(self.screen, self.fonts)
 
-        pygame.draw.line(self.screen, BORDER_COLOR, 
-                        (scale_x(60), scale_y(295)), 
-                        (scale_x(740), scale_y(295)), 2)
+        controls_panel = pygame.Rect(scale_x(20), scale_y(320), scale_x(405), scale_y(80))
+        pygame.draw.rect(self.screen, PANEL_BG, controls_panel)
+        pygame.draw.rect(self.screen, BORDER_COLOR, controls_panel, 2)
+        
+        ctrl_header = pygame.Rect(scale_x(20), scale_y(320), scale_x(405), scale_y(22))
+        pygame.draw.rect(self.screen, MID_DARK, ctrl_header)
+        ctrl_text = self.fonts['small'].render("// CONTROLS //", True, TEXT_SECONDARY)
+        ctrl_text_rect = ctrl_text.get_rect(center=ctrl_header.center)
+        self.screen.blit(ctrl_text, ctrl_text_rect)
+        
+        self.disable_arm_servos_btn.x_ref = 30
+        self.disable_arm_servos_btn.y_ref = 350
+        self.disable_arm_servos_btn.width_ref = 180
+        self.disable_arm_servos_btn.height_ref = 35
+        self.disable_arm_servos_btn.draw(self.screen, self.fonts)
+        
+        self.arm_manual_test_checkbox.x_ref = 230
+        self.arm_manual_test_checkbox.y_ref = 350
+        self.arm_manual_test_checkbox.draw(self.screen, self.fonts)
+        
+        self.arm_disable_after_action_checkbox.x_ref = 230
+        self.arm_disable_after_action_checkbox.y_ref = 375
+        self.arm_disable_after_action_checkbox.draw(self.screen, self.fonts)
 
-        custom_label = self.fonts['label'].render("SET CUSTOM VALUE FOR", True, TEXT_SECONDARY)
-        self.screen.blit(custom_label, (scale_x(60), scale_y(310)))
-
-        selected_display = self.arm_offset_info[self.selected_arm_offset][0]
-        selected_text = self.fonts['label'].render(f"[{selected_display}]:", True, ACCENT_BLUE)
-        self.screen.blit(selected_text, (scale_x(300), scale_y(310)))
-
-        self.arm_offset_custom_input.draw(self.screen, self.fonts)
-        self.apply_arm_custom_btn.draw(self.screen, self.fonts)
-        self.test_arm_offsets_btn.draw(self.screen, self.fonts)
-
-        info_text = self.fonts['small'].render("CHANGES AUTO-SAVE TO CONFIG.INI | USE TEST BUTTON TO VERIFY", True, (0, 200, 255))
-        info_rect = info_text.get_rect(center=(WINDOW_WIDTH // 2, scale_y(410)))
+        panel_right = pygame.Rect(scale_x(430), scale_y(75), scale_x(365), scale_y(235))
+        pygame.draw.rect(self.screen, PANEL_BG, panel_right)
+        pygame.draw.rect(self.screen, ACCENT_GREEN, panel_right, 2)
+        
+        header_rect2 = pygame.Rect(scale_x(430), scale_y(75), scale_x(365), scale_y(22))
+        pygame.draw.rect(self.screen, ACCENT_GREEN_DARK, header_rect2)
+        header_text2 = self.fonts['small'].render("// MOVE ARMS (1-100, 1=NEUTRAL) //", True, TEXT_PRIMARY)
+        header_text_rect2 = header_text2.get_rect(center=header_rect2.center)
+        self.screen.blit(header_text2, header_text_rect2)
+        
+        self.reset_arm_move_btn.x_ref = 680
+        self.reset_arm_move_btn.y_ref = 100
+        self.reset_arm_move_btn.width_ref = 105
+        self.reset_arm_move_btn.height_ref = 24
+        self.reset_arm_move_btn.text = "RESET (1)"
+        self.reset_arm_move_btn.draw(self.screen, self.fonts)
+        
+        row_y = [100, 130, 160, 190, 220, 250]
+        input_x = 555
+        minus_x = 600
+        plus_x = 626
+        
+        arm_labels = [
+            ('left_main', "LEFT-MAIN"),
+            ('left_forearm', "LEFT-FOREARM"),
+            ('left_hand', "LEFT-HAND"),
+            ('right_main', "RIGHT-MAIN"),
+            ('right_forearm', "RIGHT-FOREARM"),
+            ('right_hand', "RIGHT-HAND"),
+        ]
+        
+        for i, (key, label) in enumerate(arm_labels):
+            y = row_y[i]
+            lbl = self.fonts['small'].render(label, True, TEXT_PRIMARY)
+            self.screen.blit(lbl, (scale_x(440), scale_y(y + 5)))
+            self.arm_move_inputs[key].x_ref = input_x
+            self.arm_move_inputs[key].y_ref = y
+            self.arm_move_inputs[key].draw(self.screen, self.fonts)
+            self.arm_move_adjust_buttons[key]['minus'].x_ref = minus_x
+            self.arm_move_adjust_buttons[key]['minus'].y_ref = y
+            self.arm_move_adjust_buttons[key]['plus'].x_ref = plus_x
+            self.arm_move_adjust_buttons[key]['plus'].y_ref = y
+            self.arm_move_adjust_buttons[key]['minus'].draw(self.screen, self.fonts)
+            self.arm_move_adjust_buttons[key]['plus'].draw(self.screen, self.fonts)
+        
+        speed_label = self.fonts['small'].render("SPEED", True, TEXT_PRIMARY)
+        self.screen.blit(speed_label, (scale_x(695), scale_y(190)))
+        self.arm_speed_slider.x_ref = 665
+        self.arm_speed_slider.y_ref = 210
+        self.arm_speed_slider.width_ref = 110
+        self.arm_speed_slider.height_ref = 20
+        self.arm_speed_slider.draw(self.screen, self.fonts)
+        
+        slow_label = self.fonts['small'].render("SLOW", True, TEXT_SECONDARY)
+        self.screen.blit(slow_label, (scale_x(665), scale_y(232)))
+        fast_label = self.fonts['small'].render("FAST", True, TEXT_SECONDARY)
+        self.screen.blit(fast_label, (scale_x(745), scale_y(232)))
+        
+        if self.arm_manual_test_checkbox.checked:
+            self.test_arms_btn.x_ref = 430
+            self.test_arms_btn.y_ref = 320
+            self.test_arms_btn.width_ref = 365
+            self.test_arms_btn.height_ref = 45
+            self.test_arms_btn.draw(self.screen, self.fonts)
+        
+        info_text = self.fonts['small'].render("[ OFFSET CHANGES AUTO-SAVE TO CONFIG.INI ]", True, ACCENT_BLUE)
+        info_rect = info_text.get_rect(center=(WINDOW_WIDTH // 2, scale_y(420)))
         self.screen.blit(info_text, info_rect)
 
     def draw_tab4(self):
-        if self.movement_mode == "slow":
-            self.mode_slow_btn.color = ACCENT_BLUE
-            self.mode_fast_btn.color = MID_DARK
-        else:
-            self.mode_slow_btn.color = MID_DARK
-            self.mode_fast_btn.color = ACCENT_BLUE
+        mode_title = self.fonts['label'].render("MODE:", True, TEXT_SECONDARY)
+        self.screen.blit(mode_title, (scale_x(20), scale_y(93)))
 
+        self.mode_slow_btn.color = ACCENT_GREEN if self.movement_mode == "slow" else ACCENT_BLUE
+        self.mode_fast_btn.color = ACCENT_GREEN if self.movement_mode == "fast" else ACCENT_BLUE
         self.mode_slow_btn.draw(self.screen, self.fonts)
         self.mode_fast_btn.draw(self.screen, self.fonts)
 
@@ -972,13 +1302,15 @@ class ServoControllerGUI:
                     self.set_status("WARNING Please enter valid numbers")
 
     def handle_tab2_events(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            mouse_pos = event.pos
-            for offset_name, y_pos in self.leg_offset_rows.items():
-                select_box = pygame.Rect(scale_x(60), scale_y(y_pos + 2), scale_x(20), scale_y(26))
-                if select_box.collidepoint(mouse_pos):
-                    self.selected_leg_offset = offset_name
-                    return
+        
+        
+        self.disable_after_action_checkbox.handle_event(event)
+        self.manual_test_checkbox.handle_event(event)
+        
+        if self.disable_servos_btn.handle_event(event):
+            disable_all_servos()
+            self.set_status("OK Servos disabled")
+            return
 
         for offset_name, buttons in self.leg_offset_buttons.items():
             for btn_type, btn in buttons.items():
@@ -996,87 +1328,107 @@ class ServoControllerGUI:
 
                     channel = self.leg_offset_info[offset_name][1]
                     if channel in [0, 1]:  
-
                         base_up = int(servo_config.get('leftUpHeight' if channel == 0 else 'rightUpHeight', 350))
                         base_down = int(servo_config.get('leftDownHeight' if channel == 0 else 'rightDownHeight', 350))
-
                         target_up = base_up + new_value
                         target_down = base_down + new_value
                         if target_up < 10 or target_up > 600 or target_down < 10 or target_down > 600:
-                            self.set_status(f"⚠ Value would exceed safe range (10-600)")
+                            self.set_status(f"! Value would exceed safe range (10-600)")
                             return
-                    else:  # Leg servos
+                    else:
                         base_forward = int(servo_config.get('forwardLeftLeg' if channel == 2 else 'forwardRightLeg', 300))
                         base_back = int(servo_config.get('backLeftLeg' if channel == 2 else 'backRightLeg', 300))
-
                         target_forward = base_forward + new_value
                         target_back = base_back + new_value
                         if target_forward < 10 or target_forward > 600 or target_back < 10 or target_back > 600:
-                            self.set_status(f"⚠ Value would exceed safe range (10-600)")
+                            self.set_status(f"! Value would exceed safe range (10-600)")
                             return
 
                     offset_values[offset_name] = new_value
 
                     if save_offset_to_config(offset_name, new_value):
                         display_name = self.leg_offset_info[offset_name][0]
-                        self.set_status(f"✓ {display_name}: {new_value:+d} saved")
+                        self.set_status(f"OK {display_name}: {new_value:+d}")
+                        if not self.manual_test_checkbox.checked:
+                            self._do_move()
                     else:
-                        self.set_status(f"⚠ Failed to save offset")
+                        self.set_status(f"! Failed to save offset")
 
                     return
 
-        self.leg_offset_custom_input.handle_event(event)
-
-        if self.apply_leg_custom_btn.handle_event(event):
-            try:
-                custom_value = int(self.leg_offset_custom_input.text)
-
-                channel = self.leg_offset_info[self.selected_leg_offset][1]
-                if channel in [0, 1]:  
-
-                    base_up = int(servo_config.get('leftUpHeight' if channel == 0 else 'rightUpHeight', 350))
-                    base_down = int(servo_config.get('leftDownHeight' if channel == 0 else 'rightDownHeight', 350))
-                    target_up = base_up + custom_value
-                    target_down = base_down + custom_value
-                    if target_up < 10 or target_up > 600 or target_down < 10 or target_down > 600:
-                        self.set_status(f"⚠ Value would exceed safe range (10-600)")
-                        return
-                else:  # Leg servos
-                    base_forward = int(servo_config.get('forwardLeftLeg' if channel == 2 else 'forwardRightLeg', 300))
-                    base_back = int(servo_config.get('backLeftLeg' if channel == 2 else 'backRightLeg', 300))
-                    target_forward = base_forward + custom_value
-                    target_back = base_back + custom_value
-                    if target_forward < 10 or target_forward > 600 or target_back < 10 or target_back > 600:
-                        self.set_status(f"⚠ Value would exceed safe range (10-600)")
-                        return
-
-                offset_values[self.selected_leg_offset] = custom_value
-
-                if save_offset_to_config(self.selected_leg_offset, custom_value):
-                    display_name = self.leg_offset_info[self.selected_leg_offset][0]
-                    self.set_status(f"✓ {display_name}: {custom_value:+d} saved")
-
-                    self.leg_offset_custom_input.text = "0"
-                else:
-                    self.set_status(f"⚠ Failed to save offset")
-            except ValueError:
-                self.set_status("⚠ Invalid value - enter a number")
-
-        if self.test_leg_offsets_btn.handle_event(event):
-            self.set_status("⏳ Testing offsets...")
-            if reload_and_test():
-                self.set_status("✓ Offsets tested - servos at reset position")
-            else:
-                self.set_status("⚠ Test failed - check console")
+        for input_box in self.leg_move_inputs.values():
+            input_box.handle_event(event)
+        
+        for key, buttons in self.leg_move_adjust_buttons.items():
+            input_box = self.leg_move_inputs[key]
+            if buttons['minus'].handle_event(event):
+                current_val = input_box.get_value()
+                new_val = max(1, current_val - 5)
+                input_box.text = str(new_val)
+                if not self.manual_test_checkbox.checked:
+                    self._do_move()
+                return
+            if buttons['plus'].handle_event(event):
+                current_val = input_box.get_value()
+                new_val = min(100, current_val + 5)
+                input_box.text = str(new_val)
+                if not self.manual_test_checkbox.checked:
+                    self._do_move()
+                return
+        
+        if self.reset_move_btn.handle_event(event):
+            for input_box in self.leg_move_inputs.values():
+                input_box.text = "50"
+            self.set_status("OK Reset to neutral (50)")
+            if not self.manual_test_checkbox.checked:
+                self._do_move()
+            return
+        
+        self.speed_slider.handle_event(event)
+        
+        if self.manual_test_checkbox.checked and self.test_legs_btn.handle_event(event):
+            self._do_move()
+    
+    def _do_move(self):
+        
+        left_height = self.leg_move_inputs['left_height'].get_value()
+        right_height = self.leg_move_inputs['right_height'].get_value()
+        left_leg = self.leg_move_inputs['left_leg'].get_value()
+        right_leg = self.leg_move_inputs['right_leg'].get_value()
+        speed = self.speed_slider.value
+        
+        print(f"[MOVE] L-Height={left_height}, R-Height={right_height}, L-Rot={left_leg}, R-Rot={right_leg}, Speed={speed:.2f}")
+        
+        try:
+            saved_positions = servoctl.servo_positions.copy()
+            saved_initialized = servoctl._channels_initialized.copy()
+            
+            importlib.reload(servoctl)
+            
+            servoctl.servo_positions.update(saved_positions)
+            servoctl._channels_initialized.update(saved_initialized)
+            
+            servoctl.move_legs(left_height, right_height, left_leg, right_leg, speed)
+            self.set_status(f"OK Moved (speed={speed:.2f})")
+            
+            if self.disable_after_action_checkbox.checked:
+                time.sleep(0.3)
+                servoctl.disable_all_servos()
+                self.set_status("OK Moved - servos disabled")
+        except Exception as e:
+            print(f"[ERROR] Move failed: {str(e)}")
+            self.set_status(f"! Move failed: {str(e)}")
 
     def handle_tab3_events(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            mouse_pos = event.pos
-            for offset_name, y_pos in self.arm_offset_rows.items():
-                select_box = pygame.Rect(scale_x(60), scale_y(y_pos + 2), scale_x(20), scale_y(24))
-                if select_box.collidepoint(mouse_pos):
-                    self.selected_arm_offset = offset_name
-                    return
+        
+        
+        self.arm_disable_after_action_checkbox.handle_event(event)
+        self.arm_manual_test_checkbox.handle_event(event)
+        
+        if self.disable_arm_servos_btn.handle_event(event):
+            disable_all_servos()
+            self.set_status("OK Servos disabled")
+            return
 
         arm_base_values = {
             'leftMainOffset': (int(servo_config.get('leftMainMin', 550)), int(servo_config.get('leftMainMax', 50))),
@@ -1106,51 +1458,85 @@ class ServoControllerGUI:
                     target_max = base_max + new_value
 
                     if target_min < 10 or target_min > 600 or target_max < 10 or target_max > 600:
-                        self.set_status(f"⚠ Value would exceed safe range (10-600)")
+                        self.set_status(f"! Value would exceed safe range (10-600)")
                         return
 
                     offset_values[offset_name] = new_value
 
                     if save_offset_to_config(offset_name, new_value):
                         display_name = self.arm_offset_info[offset_name][0]
-                        self.set_status(f"✓ {display_name}: {new_value:+d} saved")
+                        self.set_status(f"OK {display_name}: {new_value:+d}")
+                        if not self.arm_manual_test_checkbox.checked:
+                            self._do_arm_move()
                     else:
-                        self.set_status(f"⚠ Failed to save offset")
+                        self.set_status(f"! Failed to save offset")
 
                     return
 
-        self.arm_offset_custom_input.handle_event(event)
-
-        if self.apply_arm_custom_btn.handle_event(event):
-            try:
-                custom_value = int(self.arm_offset_custom_input.text)
-
-                base_min, base_max = arm_base_values.get(self.selected_arm_offset, (0, 0))
-                target_min = base_min + custom_value
-                target_max = base_max + custom_value
-
-                if target_min < 10 or target_min > 600 or target_max < 10 or target_max > 600:
-                    self.set_status(f"⚠ Value would exceed safe range (10-600)")
-                    return
-
-                offset_values[self.selected_arm_offset] = custom_value
-
-                if save_offset_to_config(self.selected_arm_offset, custom_value):
-                    display_name = self.arm_offset_info[self.selected_arm_offset][0]
-                    self.set_status(f"✓ {display_name}: {custom_value:+d} saved")
-
-                    self.arm_offset_custom_input.text = "0"
-                else:
-                    self.set_status(f"⚠ Failed to save offset")
-            except ValueError:
-                self.set_status("⚠ Invalid value - enter a number")
-
-        if self.test_arm_offsets_btn.handle_event(event):
-            self.set_status("⏳ Testing offsets...")
-            if reload_and_test():
-                self.set_status("✓ Offsets tested - servos at reset position")
-            else:
-                self.set_status("⚠ Test failed - check console")
+        for input_box in self.arm_move_inputs.values():
+            input_box.handle_event(event)
+        
+        for key, buttons in self.arm_move_adjust_buttons.items():
+            input_box = self.arm_move_inputs[key]
+            if buttons['minus'].handle_event(event):
+                current_val = input_box.get_value()
+                new_val = max(1, current_val - 5)
+                input_box.text = str(new_val)
+                if not self.arm_manual_test_checkbox.checked:
+                    self._do_arm_move()
+                return
+            if buttons['plus'].handle_event(event):
+                current_val = input_box.get_value()
+                new_val = min(100, current_val + 5)
+                input_box.text = str(new_val)
+                if not self.arm_manual_test_checkbox.checked:
+                    self._do_arm_move()
+                return
+        
+        if self.reset_arm_move_btn.handle_event(event):
+            for input_box in self.arm_move_inputs.values():
+                input_box.text = "1"
+            self.set_status("OK Reset to neutral (1)")
+            if not self.arm_manual_test_checkbox.checked:
+                self._do_arm_move()
+            return
+        
+        self.arm_speed_slider.handle_event(event)
+        
+        if self.arm_manual_test_checkbox.checked and self.test_arms_btn.handle_event(event):
+            self._do_arm_move()
+    
+    def _do_arm_move(self):
+        
+        left_main = self.arm_move_inputs['left_main'].get_value()
+        left_forearm = self.arm_move_inputs['left_forearm'].get_value()
+        left_hand = self.arm_move_inputs['left_hand'].get_value()
+        right_main = self.arm_move_inputs['right_main'].get_value()
+        right_forearm = self.arm_move_inputs['right_forearm'].get_value()
+        right_hand = self.arm_move_inputs['right_hand'].get_value()
+        speed = self.arm_speed_slider.value
+        
+        print(f"[ARM MOVE] L-Main={left_main}, L-Forearm={left_forearm}, L-Hand={left_hand}, R-Main={right_main}, R-Forearm={right_forearm}, R-Hand={right_hand}, Speed={speed:.2f}")
+        
+        try:
+            saved_positions = servoctl.servo_positions.copy()
+            saved_initialized = servoctl._channels_initialized.copy()
+            
+            importlib.reload(servoctl)
+            
+            servoctl.servo_positions.update(saved_positions)
+            servoctl._channels_initialized.update(saved_initialized)
+            
+            servoctl.move_arm(left_main, left_forearm, left_hand, right_main, right_forearm, right_hand, speed)
+            self.set_status(f"OK Arms moved (speed={speed:.2f})")
+            
+            if self.arm_disable_after_action_checkbox.checked:
+                time.sleep(0.3)
+                servoctl.disable_all_servos()
+                self.set_status("OK Arms moved - servos disabled")
+        except Exception as e:
+            print(f"[ERROR] Arm move failed: {str(e)}")
+            self.set_status(f"! Move failed: {str(e)}")
 
     def handle_tab4_events(self, event):
         if self.mode_slow_btn.handle_event(event):
@@ -1261,44 +1647,6 @@ class ServoControllerGUI:
             for tab in self.tabs:
                 tab.draw(self.screen, self.fonts)
 
-            content_x = scale_x(25)
-            content_y = scale_y(53)
-            content_w = scale_x(750)
-            content_h = scale_y(387)
-            content_rect = pygame.Rect(content_x, content_y, content_w, content_h)
-
-            pygame.draw.rect(self.screen, MID_DARK, content_rect)
-            pygame.draw.rect(self.screen, BORDER_COLOR, content_rect, 2)
-
-            bracket_size = scale_x(20)
-            bracket_thickness = 2
-
-            pygame.draw.line(self.screen, (0, 200, 255), 
-                           (content_x, content_y), (content_x + bracket_size, content_y), bracket_thickness)
-            pygame.draw.line(self.screen, (0, 200, 255), 
-                           (content_x, content_y), (content_x, content_y + bracket_size), bracket_thickness)
-
-            pygame.draw.line(self.screen, (0, 200, 255), 
-                           (content_x + content_w, content_y), (content_x + content_w - bracket_size, content_y), bracket_thickness)
-            pygame.draw.line(self.screen, (0, 200, 255), 
-                           (content_x + content_w, content_y), (content_x + content_w, content_y + bracket_size), bracket_thickness)
-
-            pygame.draw.line(self.screen, (0, 200, 255), 
-                           (content_x, content_y + content_h), (content_x + bracket_size, content_y + content_h), bracket_thickness)
-            pygame.draw.line(self.screen, (0, 200, 255), 
-                           (content_x, content_y + content_h), (content_x, content_y + content_h - bracket_size), bracket_thickness)
-
-            pygame.draw.line(self.screen, (0, 200, 255), 
-                           (content_x + content_w, content_y + content_h), (content_x + content_w - bracket_size, content_y + content_h), bracket_thickness)
-            pygame.draw.line(self.screen, (0, 200, 255), 
-                           (content_x + content_w, content_y + content_h), (content_x + content_w, content_y + content_h - bracket_size), bracket_thickness)
-
-            grid_spacing = scale_x(50)
-            for x in range(content_x, content_x + content_w, grid_spacing):
-                pygame.draw.line(self.screen, (30, 32, 35), (x, content_y), (x, content_y + content_h), 1)
-            for y in range(content_y, content_y + content_h, grid_spacing):
-                pygame.draw.line(self.screen, (30, 32, 35), (content_x, y), (content_x + content_w, y), 1)
-
             if self.current_tab == 0:
                 self.draw_tab1()
             elif self.current_tab == 1:
@@ -1313,157 +1661,140 @@ class ServoControllerGUI:
             pygame.display.flip()
             self.clock.tick(60)
 
-        disable_all_servos()
         pygame.quit()
-        sys.exit()
 
 def adjust_offsets():
-    global offset_values
+    offsets = [
+        ('perfectLeftHeightOffset', 'Left Height', 0),
+        ('perfectRightHeightOffset', 'Right Height', 1),
+        ('perfectLeftLegOffset', 'Left Leg', 2),
+        ('perfectRightLegOffset', 'Right Leg', 3),
+        ('leftMainOffset', 'Left Main Arm', 4),
+        ('leftForearmOffset', 'Left Forearm', 5),
+        ('leftHandOffset', 'Left Hand', 6),
+        ('rightMainOffset', 'Right Main Arm', 7),
+        ('rightForearmOffset', 'Right Forearm', 8),
+        ('rightHandOffset', 'Right Hand', 9)
+    ]
 
     while True:
-        print("\n" + "="*60)
-        print("SERVO OFFSET ADJUSTMENT")
-        print("="*60)
-        print("\nCurrent Offset Values:")
-        print(f"  1. Left Height Offset:    {offset_values['perfectLeftHeightOffset']:+4d}")
-        print(f"  2. Right Height Offset:   {offset_values['perfectRightHeightOffset']:+4d}")
-        print(f"  3. Left Leg Offset:       {offset_values['perfectLeftLegOffset']:+4d}")
-        print(f"  4. Right Leg Offset:      {offset_values['perfectRightLegOffset']:+4d}")
-        print(f"  5. Left Main Arm Offset:  {offset_values['leftMainOffset']:+4d}")
-        print(f"  6. Left Forearm Offset:   {offset_values['leftForearmOffset']:+4d}")
-        print(f"  7. Left Hand Offset:      {offset_values['leftHandOffset']:+4d}")
-        print(f"  8. Right Main Arm Offset: {offset_values['rightMainOffset']:+4d}")
-        print(f"  9. Right Forearm Offset:  {offset_values['rightForearmOffset']:+4d}")
-        print(f" 10. Right Hand Offset:     {offset_values['rightHandOffset']:+4d}")
-        print("\n 11. Return to main menu")
-        print("="*60)
+        print("\n=== SERVO OFFSET ADJUSTMENT ===")
+        for i, (key, name, channel) in enumerate(offsets, 1):
+            current_value = offset_values.get(key, 0)
+            print(f"{i}. {name:18} (CH{channel}): {current_value:+4d}")
+        print("11. Back to main menu")
+        print("================================\n")
 
-        choice = input("\nSelect offset to adjust (1-11): ").strip()
-
+        choice = input("> ")
         if choice == '11':
-            print("\nFinalizing...")
-            try:
-                global config
-                config = load_config()
-                importlib.reload(servoctl)
-                globals().update({name: getattr(servoctl, name) for name in dir(servoctl) if not name.startswith('_')})
-                print("OK Ready")
-            except Exception as e:
-                print(f"WARNING Reload error: {e}")
             break
 
-        elif choice in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']:
-            offset_map = {
-                '1': ('perfectLeftHeightOffset', 'Left Height', 0),
-                '2': ('perfectRightHeightOffset', 'Right Height', 1),
-                '3': ('perfectLeftLegOffset', 'Left Leg', 2),
-                '4': ('perfectRightLegOffset', 'Right Leg', 3),
-                '5': ('leftMainOffset', 'Left Main Arm', 4),
-                '6': ('leftForearmOffset', 'Left Forearm', 5),
-                '7': ('leftHandOffset', 'Left Hand', 6),
-                '8': ('rightMainOffset', 'Right Main Arm', 7),
-                '9': ('rightForearmOffset', 'Right Forearm', 8),
-                '10': ('rightHandOffset', 'Right Hand', 9)
-            }
+        try:
+            choice_num = int(choice)
+            if 1 <= choice_num <= 10:
+                offset_name, servo_name, channel = offsets[choice_num - 1]
+                current_value = offset_values.get(offset_name, 0)
 
-            offset_name, servo_name, channel = offset_map[choice]
-            current_value = offset_values[offset_name]
+                if channel in [0, 1]:
+                    base_pulse = 350
+                elif channel in [2, 3]:
+                    base_pulse = 300
+                elif channel == 4:
+                    base_pulse = int(servo_config.get('leftMainMin', 550))
+                elif channel == 5:
+                    base_pulse = int(servo_config.get('leftForarmMin', 500))
+                elif channel == 6:
+                    base_pulse = int(servo_config.get('leftHandMin', 400))
+                elif channel == 7:
+                    base_pulse = int(servo_config.get('rightMainMin', 50))
+                elif channel == 8:
+                    base_pulse = int(servo_config.get('rightForarmMin', 230))
+                elif channel == 9:
+                    base_pulse = int(servo_config.get('rightHandMin', 300))
 
-            print(f"\n--- Adjusting {servo_name} Offset ---")
-            print(f"Current value: {current_value:+d}")
-
-            if channel in [0, 1]:
-                base_pulse = 350  
-
-            elif channel in [2, 3]:
-                base_pulse = 300  
-
-            elif channel == 4:
-                base_pulse = int(servo_config.get('leftMainMin', 550))  
-
-            elif channel == 5:
-                base_pulse = int(servo_config.get('leftForarmMin', 500))  
-
-            elif channel == 6:
-                base_pulse = int(servo_config.get('leftHandMin', 400))  
-
-            elif channel == 7:
-                base_pulse = int(servo_config.get('rightMainMin', 50))  
-
-            elif channel == 8:
-                base_pulse = int(servo_config.get('rightForarmMin', 230))  
-
-            elif channel == 9:
-                base_pulse = int(servo_config.get('rightHandMin', 300))  
-
-            else:
-                base_pulse = 300
-
-            print(f"Base pulse: {base_pulse}, Current target: {base_pulse} {current_value:+d} = {base_pulse + current_value}")
-
-            print("\nCommands:")
-            print("  +   = Increase by 5")
-            print("  -   = Decrease by 5")
-            print("  ++  = Increase by 1")
-            print("  --  = Decrease by 1")
-            print("  num = Set to value")
-            print("  q   = Done")
-
-            while True:
-                target_position = base_pulse + offset_values[offset_name]
-                offset_str = f"{offset_values[offset_name]:+d}"
-                print(f"\n{servo_name} Offset: {offset_values[offset_name]:+4d}  (Target: {base_pulse}{offset_str}={target_position})", end="  ")
-                cmd = input("> ").strip().lower()
-
-                if cmd == 'q':
-                    break
-                elif cmd == '+':
-                    offset_values[offset_name] += 5
-                    save_offset_to_config(offset_name, offset_values[offset_name])
-                    reload_and_test()
-                elif cmd == '-':
-                    offset_values[offset_name] -= 5
-                    save_offset_to_config(offset_name, offset_values[offset_name])
-                    reload_and_test()
-                elif cmd == '++':
-                    offset_values[offset_name] += 1
-                    save_offset_to_config(offset_name, offset_values[offset_name])
-                    reload_and_test()
-                elif cmd == '--':
-                    offset_values[offset_name] -= 1
-                    save_offset_to_config(offset_name, offset_values[offset_name])
-                    reload_and_test()
                 else:
-                    try:
-                        new_value = int(cmd)
-                        offset_values[offset_name] = new_value
+                    base_pulse = 300
+
+                print(f"Base pulse: {base_pulse}, Current target: {base_pulse} {current_value:+d} = {base_pulse + current_value}")
+
+                print("\nCommands:")
+                print("  +   = Increase by 5")
+                print("  -   = Decrease by 5")
+                print("  ++  = Increase by 1")
+                print("  --  = Decrease by 1")
+                print("  num = Set to value")
+                print("  q   = Done")
+
+                while True:
+                    target_position = base_pulse + offset_values[offset_name]
+                    offset_str = f"{offset_values[offset_name]:+d}"
+                    print(f"\n{servo_name} Offset: {offset_values[offset_name]:+4d}  (Target: {base_pulse}{offset_str}={target_position})", end="  ")
+                    cmd = input("> ").strip().lower()
+
+                    if cmd == 'q':
+                        break
+                    elif cmd == '+':
+                        offset_values[offset_name] += 5
                         save_offset_to_config(offset_name, offset_values[offset_name])
                         reload_and_test()
-                    except ValueError:
-                        print("Invalid command. Use +, -, ++, --, q, or a number.")
-        else:
+                    elif cmd == '-':
+                        offset_values[offset_name] -= 5
+                        save_offset_to_config(offset_name, offset_values[offset_name])
+                        reload_and_test()
+                    elif cmd == '++':
+                        offset_values[offset_name] += 1
+                        save_offset_to_config(offset_name, offset_values[offset_name])
+                        reload_and_test()
+                    elif cmd == '--':
+                        offset_values[offset_name] -= 1
+                        save_offset_to_config(offset_name, offset_values[offset_name])
+                        reload_and_test()
+                    else:
+                        try:
+                            new_value = int(cmd)
+                            offset_values[offset_name] = new_value
+                            save_offset_to_config(offset_name, offset_values[offset_name])
+                            reload_and_test()
+                        except ValueError:
+                            print("Invalid command. Use +, -, ++, --, q, or a number.")
+            else:
+                print("Invalid selection. Please choose 1-11.")
+        except ValueError:
             print("Invalid selection. Please choose 1-11.")
 
 def set_single_servo():
+    servo_ranges = {
+        0: ("Left Height", int(servo_config.get('leftUpHeight', 150)), int(servo_config.get('leftDownHeight', 550))),
+        1: ("Right Height", int(servo_config.get('rightUpHeight', 150)), int(servo_config.get('rightDownHeight', 550))),
+        2: ("Left Leg", int(servo_config.get('forwardLeftLeg', 100)), int(servo_config.get('backLeftLeg', 500))),
+        3: ("Right Leg", int(servo_config.get('forwardRightLeg', 100)), int(servo_config.get('backRightLeg', 500))),
+        4: ("Left Main Arm", int(servo_config.get('leftMainMin', 50)), int(servo_config.get('leftMainMax', 550))),
+        5: ("Left Forearm", int(servo_config.get('leftForarmMin', 50)), int(servo_config.get('leftForarmMax', 550))),
+        6: ("Left Hand", int(servo_config.get('leftHandMin', 50)), int(servo_config.get('leftHandMax', 550))),
+        7: ("Right Main Arm", int(servo_config.get('rightMainMin', 50)), int(servo_config.get('rightMainMax', 550))),
+        8: ("Right Forearm", int(servo_config.get('rightForarmMin', 50)), int(servo_config.get('rightForarmMax', 550))),
+        9: ("Right Hand", int(servo_config.get('rightHandMin', 50)), int(servo_config.get('rightHandMax', 550))),
+    }
+    
     while True:
         try:
             print("\n=== SERVO PIN LAYOUT ===")
             print("Height Servos:")
-            print("  #0 - Left Height Servo")
-            print("  #1 - Right Height Servo")
+            print(f"  #0 - Left Height    [{servo_ranges[0][1]} - {servo_ranges[0][2]}]")
+            print(f"  #1 - Right Height   [{servo_ranges[1][1]} - {servo_ranges[1][2]}]")
             print("\nLeg Servos:")
-            print("  #2 - Left Leg")
-            print("  #3 - Right Leg")
+            print(f"  #2 - Left Leg       [{servo_ranges[2][1]} - {servo_ranges[2][2]}]")
+            print(f"  #3 - Right Leg      [{servo_ranges[3][1]} - {servo_ranges[3][2]}]")
             print("\nLeft Arm Servos:")
-            print("  #4 - Left Main Arm")
-            print("  #5 - Left Forearm")
-            print("  #6 - Left Hand")
+            print(f"  #4 - Left Main Arm  [{servo_ranges[4][1]} - {servo_ranges[4][2]}]")
+            print(f"  #5 - Left Forearm   [{servo_ranges[5][1]} - {servo_ranges[5][2]}]")
+            print(f"  #6 - Left Hand      [{servo_ranges[6][1]} - {servo_ranges[6][2]}]")
             print("\nRight Arm Servos:")
-            print("  #7 - Right Main Arm")
-            print("  #8 - Right Forearm")
-            print("  #9 - Right Hand")
+            print(f"  #7 - Right Main Arm [{servo_ranges[7][1]} - {servo_ranges[7][2]}]")
+            print(f"  #8 - Right Forearm  [{servo_ranges[8][1]} - {servo_ranges[8][2]}]")
+            print(f"  #9 - Right Hand     [{servo_ranges[9][1]} - {servo_ranges[9][2]}]")
             print("\nOther:")
-            print("  #10-15 - Additional servos")
+            print(f"  #10-15 - Additional [{MIN_PULSE} - {MAX_PULSE}]")
             print("========================\n")
 
             channel = int(input(f"Enter servo number (0-15): "))
@@ -1471,7 +1802,11 @@ def set_single_servo():
                 print("Channel must be between 0 and 15")
                 continue
 
-            pulse = int(input(f"Enter pulse width for servo {channel} ({MIN_PULSE}-{MAX_PULSE}): "))
+            if channel in servo_ranges:
+                name, min_val, max_val = servo_ranges[channel]
+                pulse = int(input(f"Enter pulse for {name} [{min_val} - {max_val}]: "))
+            else:
+                pulse = int(input(f"Enter pulse width for servo {channel} ({MIN_PULSE}-{MAX_PULSE}): "))
             set_servo_pulse(channel, pulse)
             break
         except ValueError:
@@ -1479,41 +1814,28 @@ def set_single_servo():
             break
 
 def control():
-    actions = [
-        ("Reset Position", "reset_positions"),
-        ("Pose", "pose"),
-        ("Laugh", "laugh"),
-        ("Bow", "bow"),
-        ("Tilt Right", "tilt_right"),
-        ("Tilt Left", "tilt_left"),
-        ("Side-Side", "side_side"),
-        ("Wave Right", "wave_right"),
-        ("Wave Left", "wave_left"),
-        ("Move Forward", "step_forward"),
-        ("Move Backward", "step_backward"),
-        ("Turn Right", "turn_right"),
-        ("Turn Left", "turn_left"),
-        ("Walk Forward", "walk_forward"),
-        ("Walk Backward", "walk_backward"),
-        ("Turn Left Slow", "turn_left_slow"),
-        ("Turn Right Slow", "turn_right_slow")
-    ]
+    actions = [("Reset Position", "reset_positions")] + get_names()
 
     try:
         print("\n=== MOVEMENT CONTROLS ===")
-        for i, (name, _) in enumerate(actions):
-            print(f"{i} - {name}")
+        print("--- Legs Only ---")
+        for i, (display_name, func_name) in enumerate([("Reset Position", "reset_positions")] + get_names_by_type(LEGS_ONLY)):
+            print(f"{i} - {display_name}")
+        print("\n--- With Arms ---")
+        arms_start = 1 + len(get_names_by_type(LEGS_ONLY))
+        for i, (display_name, func_name) in enumerate(get_names_by_type(HAS_ARMS)):
+            print(f"{arms_start + i} - {display_name}")
         print("========================\n")
 
         main_input = input("> ")
         try:
             choice = int(main_input)
             if 0 <= choice < len(actions):
-                action_name, function_name = actions[choice]
-                print(f"Executing {action_name}...")
+                display_name, function_name = actions[choice]
+                print(f"Executing {display_name}...")
                 func = globals()[function_name]
                 func()
-                print(f"OK {action_name} complete")
+                print(f"OK {display_name} complete")
             else:
                 print("Invalid selection")
         except ValueError:
@@ -1583,26 +1905,23 @@ if __name__ == "__main__":
         elif mode_choice == '2':
             terminal_mode()
         elif mode_choice == '3':
-            """Custom Movements keep code enclosed"""
+            
             reset_positions()
-            """-----------------------------------"""
+            
 
+            move_legs(50, 50, 50, 50, 0.9)
+            move_legs(22, 22, 50, 50, 0.9)
+            move_legs(22, 22, 80, 80, 0.9)
+            move_legs(68, 68, 92, 92, 0.9)
+            move_legs(15, 15, 83, 83, 0.9)
+            move_legs(75, 75, 76, 76, 0.9)
+            move_legs(70, 70, 50, 50, 0.9)
+            move_legs(50, 50, 50, 50, 0.9)
 
-            move_legs(50, 50, 50, 50, 0.8)
-            move_legs(25, 25, 50, 50, 0.75)
-            move_legs(25, 25, 42, 42, 0.75)
-            move_legs(55, 55, 30, 30, 0.75)
-
-            move_legs(55, 55, 30, 30, 0.75)
-            move_legs(25, 25, 30, 30, 0.75)
-            move_legs(25, 25, 50, 50, 0.75)
-            move_legs(50, 50, 50, 50, 0.75)
-
-
-            """keep code enclosed"""
+            
             disable_all_servos()
             pass
-            """------------------"""
+            
         else:
             print("Invalid selection. Defaulting to GUI mode...")
             gui = ServoControllerGUI()
