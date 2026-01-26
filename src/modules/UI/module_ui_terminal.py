@@ -346,7 +346,6 @@ class TerminalSystem:
         self.camera_active = active
 
     def _init_power_menu(self):
-        """Initialize power menu button positions"""
         modal_center_x = self.width // 2
         modal_center_y = self.height // 2
         button_width = 160
@@ -541,24 +540,48 @@ class TerminalSystem:
                 pygame.draw.rect(surface, fill_color,
                                (body_x + 2, body_y + 2, fill_width, body_height - 4))
 
-            text = f"{percentage}"  
-
             try:
-                battery_font = pygame.font.SysFont("arial", 18, bold=True)
+                battery_font = pygame.font.SysFont("arial", 16, bold=True)
             except:
                 battery_font = self.font_bold
 
-            for offset_x in [-2, -1, 0, 1, 2]:
-                for offset_y in [-2, -1, 0, 1, 2]:
-                    if offset_x != 0 or offset_y != 0:  
-
-                        outline_surface = battery_font.render(text, True, (0, 0, 0))
-                        outline_rect = outline_surface.get_rect(center=(body_x + body_width // 2 + offset_x, body_y + body_height // 2 + offset_y))
-                        surface.blit(outline_surface, outline_rect)
-
+            text = f"{percentage}"
             text_surface = battery_font.render(text, True, (0, 255, 255))
-            text_rect = text_surface.get_rect(center=(body_x + body_width // 2, body_y + body_height // 2))
-            surface.blit(text_surface, text_rect)
+            
+            if is_charging:
+                center_x = body_x + body_width // 2
+                center_y = body_y + body_height // 2
+                
+                text_y = center_y - 10
+                for ox in [-1, 0, 1]:
+                    for oy in [-1, 0, 1]:
+                        if ox != 0 or oy != 0:
+                            outline = battery_font.render(text, True, (0, 0, 0))
+                            outline_rect = outline.get_rect(center=(center_x + ox, text_y + oy))
+                            surface.blit(outline, outline_rect)
+                text_rect = text_surface.get_rect(center=(center_x, text_y))
+                surface.blit(text_surface, text_rect)
+                
+                bolt_y = center_y + 6
+                bolt_points = [
+                    (center_x + 4, bolt_y - 10),
+                    (center_x - 4, bolt_y - 1),
+                    (center_x, bolt_y - 1),
+                    (center_x - 4, bolt_y + 10),
+                    (center_x + 4, bolt_y + 1),
+                    (center_x, bolt_y + 1),
+                ]
+                pygame.draw.polygon(surface, (0, 0, 0), bolt_points)
+            else:
+                for offset_x in [-1, 0, 1]:
+                    for offset_y in [-1, 0, 1]:
+                        if offset_x != 0 or offset_y != 0:
+                            outline_surface = battery_font.render(text, True, (0, 0, 0))
+                            outline_rect = outline_surface.get_rect(center=(body_x + body_width // 2 + offset_x, body_y + body_height // 2 + offset_y))
+                            surface.blit(outline_surface, outline_rect)
+
+                text_rect = text_surface.get_rect(center=(body_x + body_width // 2, body_y + body_height // 2))
+                surface.blit(text_surface, text_rect)
 
         except Exception as e:
             pass  

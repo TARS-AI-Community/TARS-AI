@@ -30,8 +30,8 @@ def step_forward():
 
             if servoctl.ARMS_PRESENT:
                 move_legs(50, 50, 50, 50, 0.9)
-                move_legs(32, 32, 20, 20, 0.9)
-                move_legs(68, 68, 8, 8, 0.9)
+                move_legs(32, 32, 25, 25, 0.9)
+                move_legs(88, 88, 8, 8, 1)
                 move_legs(15, 15, 17, 17, 0.9)
                 move_legs(75, 75, 24, 24, 0.9)
                 move_legs(70, 70, 50, 50, 0.9)

@@ -1,7 +1,20 @@
 """
-SERVO CONTROLLER GUI - V3
-==========================
+Module: SERVO CONTROLLER GUI - V3.1
+Author: Charles-Olivier Dion (Atomikspace)
+Contact: atomikspace.labs@gmail.com
+Copyright (c) 2026
 
+This module was originally redesigned by Charles-Olivier Dion (Atomikspace).
+
+Permission is granted to use, copy, modify, and redistribute this module,
+in whole or in part, provided that:
+
+- This notice is retained in the source file(s)
+- The original author (Charles-Olivier Dion / Atomikspace) is clearly credited
+- Any modifications are clearly identified as such
+
+This notice applies only to this module and does not extend to the
+entire project or repository in which it may be included.
 """
 
 import pygame
@@ -1038,7 +1051,7 @@ class ServoControllerGUI:
         self.reset_move_btn.y_ref = 100
         self.reset_move_btn.width_ref = 105
         self.reset_move_btn.height_ref = 24
-        self.reset_move_btn.text = "RESET (50)"
+        self.reset_move_btn.text = "RESET"
         self.reset_move_btn.draw(self.screen, self.fonts)
         
         row_y = [100, 130, 160, 190]
@@ -1186,7 +1199,7 @@ class ServoControllerGUI:
         self.reset_arm_move_btn.y_ref = 100
         self.reset_arm_move_btn.width_ref = 105
         self.reset_arm_move_btn.height_ref = 24
-        self.reset_arm_move_btn.text = "RESET (1)"
+        self.reset_arm_move_btn.text = "RESET"
         self.reset_arm_move_btn.draw(self.screen, self.fonts)
         
         row_y = [100, 130, 160, 190, 220, 250]
