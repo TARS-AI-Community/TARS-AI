@@ -22,7 +22,7 @@ APIs Used (No API Key Required):
 - JokeAPI (https://jokeapi.dev) - Jokes (multilingual)
 
 Configuration:
-- Edit dashboard.ini in the /src folder (project root)
+- Edit dashboard.ini in the /src folder
 - Set location, language, display options, and custom quotes
 """
 
@@ -43,6 +43,11 @@ import urllib.error
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 from html import unescape
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
 import re
 
 from modules.module_config import load_config
@@ -67,7 +72,7 @@ def load_ini_config():
         'weather_update_interval': 600,
         'news_update_interval': 300,
         'max_news_items': 30,
-        'news_scroll_speed': 8,
+        'scroll_speed': 18,
         'show_weather': True,
         'show_forecast': True,
         'show_sun_moon': True,
@@ -75,7 +80,13 @@ def load_ini_config():
         'show_clock': True,
         'show_date': True,
         'show_quotes': True,
+        'background_animation': True,
         'quote_mode': 'alternate',
+        'calendar_ics_urls': [],
+        'calendar_days_ahead': 7,
+        'calendar_max_events': 10,
+        'calendar_update_interval': 300,
+        'feed_mode': 'news',
     }
     
     if os.path.exists(INI_PATH):
@@ -99,7 +110,6 @@ def load_ini_config():
             if config.has_section('News'):
                 defaults['news_update_interval'] = config.getint('News', 'update_interval', fallback=defaults['news_update_interval'])
                 defaults['max_news_items'] = config.getint('News', 'max_items', fallback=defaults['max_news_items'])
-                defaults['news_scroll_speed'] = config.getint('News', 'scroll_speed', fallback=defaults['news_scroll_speed'])
             
             if config.has_section('Display'):
                 defaults['show_weather'] = config.getboolean('Display', 'show_weather', fallback=defaults['show_weather'])
@@ -109,9 +119,24 @@ def load_ini_config():
                 defaults['show_clock'] = config.getboolean('Display', 'show_clock', fallback=defaults['show_clock'])
                 defaults['show_date'] = config.getboolean('Display', 'show_date', fallback=defaults['show_date'])
                 defaults['show_quotes'] = config.getboolean('Display', 'show_quotes', fallback=defaults['show_quotes'])
+                defaults['background_animation'] = config.getboolean('Display', 'background_animation', fallback=defaults['background_animation'])
+                defaults['scroll_speed'] = config.getint('Display', 'scroll_speed', fallback=defaults['scroll_speed'])
             
             if config.has_section('QuoteMode'):
                 defaults['quote_mode'] = config.get('QuoteMode', 'mode', fallback=defaults['quote_mode'])
+            
+            if config.has_section('Calendar'):
+                ics_urls_str = config.get('Calendar', 'ics_urls', fallback='')
+                if not ics_urls_str:
+                    ics_urls_str = config.get('Calendar', 'ics_url', fallback='')
+                if ics_urls_str:
+                    defaults['calendar_ics_urls'] = [url.strip() for url in ics_urls_str.split(',') if url.strip()]
+                defaults['calendar_days_ahead'] = config.getint('Calendar', 'days_ahead', fallback=defaults['calendar_days_ahead'])
+                defaults['calendar_max_events'] = config.getint('Calendar', 'max_events', fallback=defaults['calendar_max_events'])
+                defaults['calendar_update_interval'] = config.getint('Calendar', 'update_interval', fallback=defaults['calendar_update_interval'])
+            
+            if config.has_section('Feed'):
+                defaults['feed_mode'] = config.get('Feed', 'mode', fallback=defaults['feed_mode'])
             
             pass
         except Exception as e:
@@ -173,11 +198,18 @@ class DashboardConfig:
         self.SHOW_CLOCK = ini_values['show_clock']
         self.SHOW_DATE = ini_values['show_date']
         self.SHOW_QUOTES = ini_values['show_quotes']
+        self.BACKGROUND_ANIMATION = ini_values['background_animation']
         
         self.QUOTE_MODE = ini_values['quote_mode']
         
         self.MAX_NEWS_ITEMS = ini_values['max_news_items']
-        self.NEWS_SCROLL_SPEED = ini_values['news_scroll_speed']
+        self.SCROLL_SPEED = ini_values['scroll_speed']
+        
+        self.CALENDAR_ICS_URLS = ini_values['calendar_ics_urls']
+        self.CALENDAR_DAYS_AHEAD = ini_values['calendar_days_ahead']
+        self.CALENDAR_MAX_EVENTS = ini_values['calendar_max_events']
+        self.CALENDAR_UPDATE_INTERVAL = ini_values['calendar_update_interval']
+        self.FEED_MODE = ini_values['feed_mode']
         
         self.FORECAST_DAYS = 5
     
@@ -260,6 +292,12 @@ UI_LABELS = {
         "sunset": "Sunset",
         "moon_phases": ["New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous", 
                         "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent"],
+        "calendar": "CALENDAR",
+        "loading_calendar": "Loading calendar...",
+        "no_events": "No events in the next {days} days",
+        "all_day": "All day",
+        "tomorrow": "Tomorrow",
+        "ongoing": "Ongoing",
     },
     "fr": {
         "current_weather": "MÉTÉO ACTUELLE",
@@ -280,6 +318,12 @@ UI_LABELS = {
         "sunset": "Coucher",
         "moon_phases": ["Nouvelle Lune", "Premier Croissant", "Premier Quartier", "Gibbeuse Croissante",
                         "Pleine Lune", "Gibbeuse Décroissante", "Dernier Quartier", "Dernier Croissant"],
+        "calendar": "CALENDRIER",
+        "loading_calendar": "Chargement calendrier...",
+        "no_events": "Aucun événement dans les {days} prochains jours",
+        "all_day": "Toute la journée",
+        "tomorrow": "Demain",
+        "ongoing": "En cours",
     },
     "es": {
         "current_weather": "CLIMA ACTUAL",
@@ -300,6 +344,12 @@ UI_LABELS = {
         "sunset": "Atardecer",
         "moon_phases": ["Luna Nueva", "Creciente", "Cuarto Creciente", "Gibosa Creciente",
                         "Luna Llena", "Gibosa Menguante", "Cuarto Menguante", "Menguante"],
+        "calendar": "CALENDARIO",
+        "loading_calendar": "Cargando calendario...",
+        "no_events": "Sin eventos en los próximos {days} días",
+        "all_day": "Todo el día",
+        "tomorrow": "Mañana",
+        "ongoing": "En curso",
     },
     "de": {
         "current_weather": "AKTUELLES WETTER",
@@ -320,6 +370,12 @@ UI_LABELS = {
         "sunset": "Sonnenuntergang",
         "moon_phases": ["Neumond", "Zunehmende Sichel", "Erstes Viertel", "Zunehmender Mond",
                         "Vollmond", "Abnehmender Mond", "Letztes Viertel", "Abnehmende Sichel"],
+        "calendar": "KALENDER",
+        "loading_calendar": "Kalender laden...",
+        "no_events": "Keine Termine in den nächsten {days} Tagen",
+        "all_day": "Ganztägig",
+        "tomorrow": "Morgen",
+        "ongoing": "Laufend",
     },
 }
 
@@ -464,10 +520,13 @@ class DataFetcher:
         self.forecast_data = None
         self.news_data = []
         self.jokes_data = []
+        self.calendar_data = []
+        self.calendar_loaded = False
         self.image_cache = {}
         self.last_weather_update = 0
         self.last_news_update = 0
         self.last_jokes_update = 0
+        self.last_calendar_update = 0
         self.lock = threading.Lock()
         self.running = True
         
@@ -484,9 +543,13 @@ class DataFetcher:
                 self._fetch_weather()
                 self.last_weather_update = current_time
             
-            if current_time - self.last_news_update > self.config.NEWS_UPDATE_INTERVAL:
+            if self.config.FEED_MODE in ("news", "alternate") and current_time - self.last_news_update > self.config.NEWS_UPDATE_INTERVAL:
                 self._fetch_news()
                 self.last_news_update = current_time
+            
+            if self.config.FEED_MODE in ("calendar", "alternate") and self.config.CALENDAR_ICS_URLS and current_time - self.last_calendar_update > self.config.CALENDAR_UPDATE_INTERVAL:
+                self._fetch_calendar()
+                self.last_calendar_update = current_time
             
             if self.config.QUOTE_MODE in ("jokes", "alternate") and current_time - self.last_jokes_update > 600:
                 self._fetch_jokes()
@@ -685,6 +748,14 @@ class DataFetcher:
         with self.lock:
             return list(self.jokes_data)
     
+    def get_calendar(self):
+        with self.lock:
+            return list(self.calendar_data)
+    
+    def is_calendar_loaded(self):
+        with self.lock:
+            return self.calendar_loaded
+    
     def _fetch_jokes(self):
         try:
             lang_map = {
@@ -719,6 +790,134 @@ class DataFetcher:
         except Exception as e:
             pass
     
+    def _fetch_calendar(self):
+        try:
+            urls = self.config.CALENDAR_ICS_URLS
+            if not urls:
+                return
+            
+            all_events = []
+            
+            for url in urls:
+                try:
+                    req = urllib.request.Request(url, headers={"User-Agent": "DashboardScreensaver/1.0"})
+                    with urllib.request.urlopen(req, timeout=15) as response:
+                        ics_data = response.read().decode('utf-8', errors='ignore')
+                    
+                    events = self._parse_ics(ics_data)
+                    all_events.extend(events)
+                except Exception as e:
+                    pass
+            
+            now = datetime.now()
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            future_limit = now + timedelta(days=self.config.CALENDAR_DAYS_AHEAD)
+            
+            upcoming = []
+            for event in all_events:
+                start = event.get('start')
+                end = event.get('end')
+                if start:
+                    if start >= today_start and start <= future_limit:
+                        upcoming.append(event)
+                    elif end and end >= now and start < now:
+                        upcoming.append(event)
+            
+            upcoming.sort(key=lambda x: x['start'])
+            upcoming = upcoming[:self.config.CALENDAR_MAX_EVENTS]
+            
+            with self.lock:
+                self.calendar_data = upcoming
+                self.calendar_loaded = True
+                
+        except Exception as e:
+            with self.lock:
+                self.calendar_loaded = True
+    
+    def _parse_ics(self, ics_data):
+        events = []
+        lines = ics_data.replace('\r\n ', '').replace('\r\n\t', '').split('\n')
+        
+        in_event = False
+        event = {}
+        
+        for line in lines:
+            line = line.strip()
+            
+            if line == 'BEGIN:VEVENT':
+                in_event = True
+                event = {'attendees': []}
+            elif line == 'END:VEVENT':
+                if event.get('start') and event.get('summary'):
+                    if event.get('start') and event.get('end'):
+                        delta = event['end'] - event['start']
+                        total_minutes = int(delta.total_seconds() / 60)
+                        hours, minutes = divmod(total_minutes, 60)
+                        if hours > 0 and minutes > 0:
+                            event['duration'] = f"{hours}h{minutes}m"
+                        elif hours > 0:
+                            event['duration'] = f"{hours}h"
+                        else:
+                            event['duration'] = f"{minutes}m"
+                    events.append(event)
+                in_event = False
+                event = {}
+            elif in_event:
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    key_parts = key.split(';')
+                    key_name = key_parts[0]
+                    
+                    if key_name == 'SUMMARY':
+                        event['summary'] = value.replace('\\,', ',').replace('\\n', ' ').replace('\\;', ';')
+                    elif key_name == 'DESCRIPTION':
+                        desc = value.replace('\\,', ',').replace('\\n', ' ').replace('\\;', ';').replace('\\N', ' ')
+                        desc = ' '.join(desc.split())
+                        event['description'] = desc
+                    elif key_name == 'LOCATION':
+                        event['location'] = value.replace('\\,', ',').replace('\\n', ' ')
+                    elif key_name == 'ATTENDEE':
+                        name = None
+                        for part in key_parts[1:]:
+                            if part.startswith('CN='):
+                                name = part[3:].strip('"')
+                                break
+                        if not name and value.startswith('mailto:'):
+                            name = value[7:].split('@')[0]
+                        if name and name not in event['attendees']:
+                            event['attendees'].append(name)
+                    elif key_name == 'ORGANIZER':
+                        name = None
+                        for part in key_parts[1:]:
+                            if part.startswith('CN='):
+                                name = part[3:].strip('"')
+                                break
+                        if name:
+                            event['organizer'] = name
+                    elif key_name in ('DTSTART', 'DTEND'):
+                        dt = self._parse_ics_datetime(value, key_parts)
+                        if dt:
+                            if key_name == 'DTSTART':
+                                event['start'] = dt
+                                event['all_day'] = len(value) == 8
+                            else:
+                                event['end'] = dt
+        
+        return events
+    
+    def _parse_ics_datetime(self, value, key_parts):
+        try:
+            value = value.replace('Z', '')
+            
+            if len(value) == 8:
+                return datetime.strptime(value, '%Y%m%d')
+            elif len(value) >= 15:
+                return datetime.strptime(value[:15], '%Y%m%dT%H%M%S')
+            else:
+                return None
+        except:
+            return None
+    
     def stop(self):
         self.running = False
 
@@ -731,6 +930,7 @@ class DashboardAnimation:
         self.time = 0.0
         self.initialized = False
         self.clock = pygame.time.Clock()
+        self.clock.tick()
         
         self.show_time = show_time
         self.config = DashboardConfig()
@@ -763,6 +963,22 @@ class DashboardAnimation:
         self.dim_color = (0.5, 0.5, 0.6)
         
         self.panels = {}
+        
+        self.feed_fbo = None
+        self.feed_texture = None
+        self.feed_surface = None
+        
+        self.feed_active = "news"
+        self.feed_switch_time = None
+        self.news_last_cycle = 0
+        self.news_cycle_complete = False
+        self.calendar_cycles = 0
+        self.calendar_last_cycle = 0
+        self.news_start_time = None
+        self.calendar_start_time = None
+        self.feed_startup_grace = True
+        self.news_first_render = True
+        self.calendar_first_render = True
     
     def initialize(self):
         if self.initialized:
@@ -829,6 +1045,9 @@ class DashboardAnimation:
         news_bottom = self.layout_height - margin - quote_height - 15
         news_height = news_bottom - news_top
         self.panels['news'] = {'x': margin, 'y': news_top, 'w': panel_width, 'h': news_height}
+        
+        self.feed_surface_width = int(panel_width)
+        self.feed_surface_height = int(news_height)
         
         self.initialized = True
     
@@ -897,6 +1116,205 @@ class DashboardAnimation:
         glVertex2f(x1, y1)
         glVertex2f(x2, y2)
         glEnd()
+    
+    def _init_background_animation(self):
+        self.ribbons = []
+        ribbon_configs = [
+            {'y_pct': 0.12, 'alpha': 0.08, 'thick': 40, 'amp_mult': 0.9},
+            {'y_pct': 0.22, 'alpha': 0.10, 'thick': 55, 'amp_mult': 1.3},
+            {'y_pct': 0.32, 'alpha': 0.06, 'thick': 35, 'amp_mult': 0.7},
+            {'y_pct': 0.42, 'alpha': 0.12, 'thick': 60, 'amp_mult': 1.5},
+            {'y_pct': 0.52, 'alpha': 0.07, 'thick': 45, 'amp_mult': 1.1},
+            {'y_pct': 0.62, 'alpha': 0.09, 'thick': 50, 'amp_mult': 1.4},
+            {'y_pct': 0.72, 'alpha': 0.08, 'thick': 55, 'amp_mult': 0.85},
+            {'y_pct': 0.82, 'alpha': 0.11, 'thick': 48, 'amp_mult': 1.2},
+            {'y_pct': 0.90, 'alpha': 0.06, 'thick': 38, 'amp_mult': 0.8},
+        ]
+        
+        for i, cfg in enumerate(ribbon_configs):
+            self.ribbons.append({
+                'y_base': self.layout_height * cfg['y_pct'],
+                'amplitude1': 70 * cfg['amp_mult'],
+                'amplitude2': 45 * cfg['amp_mult'],
+                'amplitude3': 25 * cfg['amp_mult'],
+                'amp_vary_speed': 0.012 + random.random() * 0.015,
+                'amp_vary_phase': random.random() * 6.28,
+                'amp_vary_range': 0.3 + random.random() * 0.4,
+                'freq1': 0.007 + (i % 4) * 0.001,
+                'freq2': 0.0035 + (i % 3) * 0.0005,
+                'freq3': 0.002,
+                'osc_speed1': 0.035 + (i % 5) * 0.006,
+                'osc_speed2': 0.025 + (i % 4) * 0.005,
+                'osc_speed3': 0.02 + (i % 3) * 0.004,
+                'phase': i * 0.7,
+                'alpha_base': cfg['alpha'],
+                'alpha_speed': 0.015 + random.random() * 0.025,
+                'alpha_phase': random.random() * 6.28,
+                'alpha_range': 0.4 + random.random() * 0.3,
+                'thickness_base': cfg['thick'],
+                'thickness_speed1': 0.025 + random.random() * 0.02,
+                'thickness_speed2': 0.018 + random.random() * 0.015,
+                'thickness_phase': random.random() * 6.28,
+                'color_speed': 0.02 + random.random() * 0.015,
+                'color_freq': 0.004 + random.random() * 0.002,
+                'color_phase': random.random() * 6.28
+            })
+    
+    def _render_background_animation(self):
+        if not hasattr(self, 'ribbons'):
+            self._init_background_animation()
+        
+        glDisable(GL_TEXTURE_2D)
+        glShadeModel(GL_SMOOTH)
+        
+        for ribbon in self.ribbons:
+            points = []
+            num_points = int(self.layout_width / 2) + 1
+            
+            osc1 = math.sin(self.time * ribbon['osc_speed1'])
+            osc2 = math.sin(self.time * ribbon['osc_speed2'] + 0.5)
+            osc3 = math.sin(self.time * ribbon['osc_speed3'] + 1.0)
+            
+            amp_pulse = 0.5 + 0.5 * math.sin(self.time * ribbon['amp_vary_speed'] + ribbon['amp_vary_phase'])
+            amp_mult = (1 - ribbon['amp_vary_range']) + ribbon['amp_vary_range'] * amp_pulse
+            
+            alpha_pulse = 0.5 + 0.5 * math.sin(self.time * ribbon['alpha_speed'] + ribbon['alpha_phase'])
+            ribbon_alpha = ribbon['alpha_base'] * ((1 - ribbon['alpha_range']) + ribbon['alpha_range'] * alpha_pulse)
+            
+            color_time = self.time * ribbon['color_speed'] * 100
+            
+            for i in range(num_points):
+                x = i * 2
+                
+                wave1 = math.sin(x * ribbon['freq1'] + ribbon['phase']) * ribbon['amplitude1'] * osc1 * amp_mult
+                wave2 = math.sin(x * ribbon['freq2'] + ribbon['phase'] * 1.3) * ribbon['amplitude2'] * osc2 * amp_mult
+                wave3 = math.sin(x * ribbon['freq3'] + ribbon['phase'] * 0.7) * ribbon['amplitude3'] * osc3 * amp_mult
+                
+                y = ribbon['y_base'] + wave1 + wave2 + wave3
+                
+                thick_t1 = self.time * ribbon['thickness_speed1'] * 100
+                thick_t2 = self.time * ribbon['thickness_speed2'] * 100
+                thickness_wave = 0.6 + 0.6 * math.sin((x - thick_t1) * 0.008 + ribbon['thickness_phase'])
+                thickness_wave2 = 0.7 + 0.5 * math.sin((x - thick_t2) * 0.004 + ribbon['thickness_phase'] * 1.5)
+                
+                thickness = ribbon['thickness_base'] * thickness_wave * thickness_wave2
+                thickness = max(thickness, ribbon['thickness_base'] * 0.4)
+                
+                blue_amount = 0.5 + 0.5 * math.sin((x - color_time) * ribbon['color_freq'] + ribbon['color_phase'])
+                blue_amount *= 0.5 + 0.5 * math.sin((x - color_time * 0.7) * ribbon['color_freq'] * 0.5 + ribbon['color_phase'] * 1.3)
+                
+                points.append((x, y, thickness, blue_amount))
+            
+            glBegin(GL_QUAD_STRIP)
+            for x, y, thick, blue_amt in points:
+                r = 0.70 - blue_amt * 0.25
+                g = 0.75 + blue_amt * 0.10
+                b = 0.80 + blue_amt * 0.20
+                glColor4f(r, g, b, 0)
+                glVertex2f(x, y - thick * 1.3)
+                glColor4f(r + 0.05, g + 0.04, b + 0.03, ribbon_alpha * 0.4)
+                glVertex2f(x, y - thick * 0.5)
+            glEnd()
+            
+            glBegin(GL_QUAD_STRIP)
+            for x, y, thick, blue_amt in points:
+                r = 0.70 - blue_amt * 0.25
+                g = 0.75 + blue_amt * 0.10
+                b = 0.80 + blue_amt * 0.20
+                alpha = ribbon_alpha
+                glColor4f(r + 0.05, g + 0.04, b + 0.03, alpha * 0.4)
+                glVertex2f(x, y - thick * 0.5)
+                glColor4f(r + 0.25, g + 0.20, b + 0.15, alpha)
+                glVertex2f(x, y - thick * 0.05)
+            glEnd()
+            
+            glBegin(GL_QUAD_STRIP)
+            for x, y, thick, blue_amt in points:
+                r = 0.70 - blue_amt * 0.25
+                g = 0.75 + blue_amt * 0.10
+                b = 0.80 + blue_amt * 0.20
+                alpha = ribbon_alpha
+                glColor4f(r + 0.25, g + 0.20, b + 0.15, alpha)
+                glVertex2f(x, y - thick * 0.05)
+                glColor4f(r + 0.18, g + 0.14, b + 0.10, alpha * 0.55)
+                glVertex2f(x, y + thick * 0.35)
+            glEnd()
+            
+            glBegin(GL_QUAD_STRIP)
+            for x, y, thick, blue_amt in points:
+                r = 0.70 - blue_amt * 0.25
+                g = 0.75 + blue_amt * 0.10
+                b = 0.80 + blue_amt * 0.20
+                alpha = ribbon_alpha
+                glColor4f(r + 0.18, g + 0.14, b + 0.10, alpha * 0.55)
+                glVertex2f(x, y + thick * 0.35)
+                glColor4f(r, g, b, 0)
+                glVertex2f(x, y + thick * 0.7)
+            glEnd()
+    
+    def _create_feed_surface(self, width, height):
+        surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        surface.fill((0, 0, 0, 0))
+        return surface
+    
+    def _draw_text_to_surface(self, surface, text, x, y, font_name, color):
+        if y < -50 or y > surface.get_height() + 50:
+            return
+        font = self.fonts.get(font_name, self.fonts['small'])
+        try:
+            text_surf = font.render(text, True, (int(color[0]*255), int(color[1]*255), int(color[2]*255)))
+            surface.blit(text_surf, (int(x), int(y)))
+        except:
+            pass
+    
+    def _draw_line_to_surface(self, surface, x1, y1, x2, y2, color, alpha=0.5):
+        if y1 < -10 or y1 > surface.get_height() + 10:
+            return
+        pygame.draw.line(surface, (int(color[0]*255), int(color[1]*255), int(color[2]*255), int(alpha*255)), (int(x1), int(y1)), (int(x2), int(y2)), 1)
+    
+    def _draw_surface_with_fade(self, surface, x, y, fade_top=40, fade_bottom=50, scroll_offset=0):
+        width, height = surface.get_size()
+        
+        if HAS_NUMPY:
+            arr = pygame.surfarray.pixels_alpha(surface)
+            
+            effective_fade_top = min(fade_top, scroll_offset) if scroll_offset > 0 else 0
+            for row in range(min(int(effective_fade_top), height)):
+                if effective_fade_top > 0:
+                    alpha_mult = row / effective_fade_top
+                    arr[:, row] = (arr[:, row] * alpha_mult).astype('uint8')
+            
+            for row in range(min(int(fade_bottom), height)):
+                alpha_mult = row / fade_bottom
+                screen_row = height - 1 - row
+                if screen_row >= 0 and screen_row < height:
+                    arr[:, screen_row] = (arr[:, screen_row] * alpha_mult).astype('uint8')
+            
+            del arr
+        
+        try:
+            texture_data = pygame.image.tostring(surface, "RGBA", True)
+            
+            tex_id = glGenTextures(1)
+            glBindTexture(GL_TEXTURE_2D, tex_id)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data)
+            
+            glEnable(GL_TEXTURE_2D)
+            glBindTexture(GL_TEXTURE_2D, tex_id)
+            glColor4f(1.0, 1.0, 1.0, 1.0)
+            
+            glBegin(GL_QUADS)
+            glTexCoord2f(0, 1); glVertex2f(x, y)
+            glTexCoord2f(1, 1); glVertex2f(x + width, y)
+            glTexCoord2f(1, 0); glVertex2f(x + width, y + height)
+            glTexCoord2f(0, 0); glVertex2f(x, y + height)
+            glEnd()
+            
+            glDeleteTextures([tex_id])
+        except:
+            pass
     
     def _render_clock(self):
         panel = self.panels['clock']
@@ -1183,24 +1601,11 @@ class DashboardAnimation:
             self._draw_text(self.labels["loading_news"], panel['x'], panel['y'] + 60, 'small', self.dim_color)
             return
         
-        content_top = panel['y'] + 35
-        content_height = panel['h'] - 40
-        content_bottom = content_top + content_height
+        content_height = int(panel['h'] - 40)
+        surface_width = int(panel['w'])
         
-        fade_zone_top = 25
-        fade_zone_bottom = 35
-        
-        def calc_alpha(y):
-            if y < content_top or y > content_bottom:
-                return 0.0
-            
-            if y < content_top + fade_zone_top:
-                return (y - content_top) / fade_zone_top
-            
-            if y > content_bottom - fade_zone_bottom:
-                return (content_bottom - y) / fade_zone_bottom
-            
-            return 1.0
+        fade_top = 35
+        fade_bottom = 45
         
         text_width = 45
         items_layout = []
@@ -1210,7 +1615,7 @@ class DashboardAnimation:
             desc = item.get('description', '')
             desc_lines = self._wrap_text(desc, text_width)[:8] if desc else []
             
-            item_height = 22 + (28 * len(title_lines)) + 5 + (20 * len(desc_lines)) + 25
+            item_height = 22 + (28 * len(title_lines)) + 5 + (20 * len(desc_lines)) + 20
             items_layout.append({
                 'item': item,
                 'title_lines': title_lines,
@@ -1220,76 +1625,312 @@ class DashboardAnimation:
         
         total_content_height = sum(it['height'] for it in items_layout)
         
-        scroll_speed = self.config.NEWS_SCROLL_SPEED
+        if self.news_first_render:
+            self.news_start_time = self.time
+            self.news_last_cycle = 0
+            self.news_first_render = False
         
-        scroll_offset = (self.time * scroll_speed) % total_content_height
+        news_elapsed = self.time - self.news_start_time
         
-        y_pos = content_top - scroll_offset
-        
-        for _ in range(2):
-            for layout in items_layout:
-                item = layout['item']
-                item_height = layout['height']
-                
-                if y_pos + item_height < content_top - fade_zone_top:
-                    y_pos += item_height
-                    continue
-                if y_pos > content_bottom + fade_zone_bottom:
-                    y_pos += item_height
-                    continue
-                
-                cur_y = y_pos
-                
-                alpha = calc_alpha(cur_y)
-                if alpha > 0:
-                    self._draw_text(item['source'], panel['x'], cur_y, 'tiny', self.accent_color, alpha=alpha)
-                cur_y += 22
-                
-                for line in layout['title_lines']:
-                    alpha = calc_alpha(cur_y)
-                    if alpha > 0:
-                        self._draw_text(line, panel['x'], cur_y, 'small', self.text_color, alpha=alpha)
-                    cur_y += 28
-                
-                if layout['desc_lines']:
-                    cur_y += 5
-                    for line in layout['desc_lines']:
-                        alpha = calc_alpha(cur_y)
-                        if alpha > 0:
-                            self._draw_text(line, panel['x'], cur_y, 'tiny', self.dim_color, alpha=alpha)
-                        cur_y += 20
-                
-                cur_y += 10
-                alpha = calc_alpha(cur_y)
-                if alpha > 0:
-                    self._draw_line(panel['x'], cur_y, panel['x'] + panel['w'] - 20, cur_y, self.dim_color, 0.15 * alpha)
-                
-                y_pos += item_height
-    
-    def _draw_gradient_overlay(self, x, y, w, h, color, from_top=True):
-        glDisable(GL_TEXTURE_2D)
-        
-        steps = 20
-        step_height = h / steps
-        
-        for i in range(steps):
-            if from_top:
-                alpha_start = 1.0 - (i / steps)
-                alpha_end = 1.0 - ((i + 1) / steps)
-                y_start = y + i * step_height
-            else:
-                alpha_start = i / steps
-                alpha_end = (i + 1) / steps
-                y_start = y + i * step_height
+        if total_content_height > content_height:
+            scroll_range = total_content_height - content_height + 50
+            scroll_speed = self.config.SCROLL_SPEED
+            scroll_time = scroll_range / scroll_speed
+            pause_before = 15
+            pause_after = 15
+            total_cycle = pause_before + scroll_time + pause_after
             
-            glBegin(GL_QUADS)
-            glColor4f(color[0], color[1], color[2], alpha_start)
-            glVertex2f(x, y_start)
-            glVertex2f(x + w, y_start)
-            glColor4f(color[0], color[1], color[2], alpha_end)
-            glVertex2f(x + w, y_start + step_height)
-            glVertex2f(x, y_start + step_height)
-            glEnd()
+            current_cycle = int(news_elapsed / total_cycle)
+            if current_cycle > self.news_last_cycle:
+                self.news_cycle_complete = True
+            self.news_last_cycle = current_cycle
+            
+            cycle_position = (news_elapsed % total_cycle)
+            if cycle_position < pause_before:
+                scroll_offset = 0
+            elif cycle_position < pause_before + scroll_time:
+                scroll_offset = (cycle_position - pause_before) * scroll_speed
+            else:
+                scroll_offset = scroll_range
+            
+            scroll_offset = min(scroll_offset, scroll_range)
+        else:
+            total_cycle = 30
+            current_cycle = int(news_elapsed / total_cycle)
+            if current_cycle > self.news_last_cycle:
+                self.news_cycle_complete = True
+            self.news_last_cycle = current_cycle
+            scroll_offset = 0
+        
+        feed_surface = self._create_feed_surface(surface_width, content_height)
+        
+        y_pos = -scroll_offset
+        
+        for layout in items_layout:
+            item = layout['item']
+            item_height = layout['height']
+            
+            if y_pos + item_height < -20:
+                y_pos += item_height
+                continue
+            if y_pos > content_height + 20:
+                break
+            
+            cur_y = y_pos
+            
+            self._draw_text_to_surface(feed_surface, item['source'], 0, cur_y, 'tiny', self.accent_color)
+            cur_y += 22
+            
+            for line in layout['title_lines']:
+                self._draw_text_to_surface(feed_surface, line, 0, cur_y, 'small', self.text_color)
+                cur_y += 28
+            
+            if layout['desc_lines']:
+                cur_y += 5
+                for line in layout['desc_lines']:
+                    self._draw_text_to_surface(feed_surface, line, 0, cur_y, 'tiny', self.dim_color)
+                    cur_y += 20
+            
+            cur_y += 5
+            self._draw_line_to_surface(feed_surface, 0, cur_y, surface_width - 20, cur_y, self.dim_color, 0.2)
+            
+            y_pos += item_height
+        
+        self._draw_surface_with_fade(feed_surface, panel['x'], panel['y'] + 35, fade_top, fade_bottom, scroll_offset)
+    
+    def _render_calendar(self):
+        panel = self.panels['news']
+        events = self.data_fetcher.get_calendar()
+        
+        self._draw_text(self.labels["calendar"], panel['x'], panel['y'], 'tiny', self.accent_color)
+        self._draw_line(panel['x'], panel['y'] + 25, panel['x'] + panel['w'], panel['y'] + 25, self.accent_color, 0.3)
+        
+        if not events:
+            if not self.config.CALENDAR_ICS_URLS:
+                self._draw_text("No calendar URL configured", panel['x'], panel['y'] + 60, 'small', self.dim_color)
+                if self.feed_switch_time is None and self.config.FEED_MODE == "alternate":
+                    self.feed_switch_time = self.time + 10
+            elif self.data_fetcher.is_calendar_loaded():
+                no_events_msg = self.labels["no_events"].format(days=self.config.CALENDAR_DAYS_AHEAD)
+                self._draw_text(no_events_msg, panel['x'], panel['y'] + 60, 'small', self.dim_color)
+                if self.feed_switch_time is None and self.config.FEED_MODE == "alternate":
+                    self.feed_switch_time = self.time + 10
+            else:
+                self._draw_text(self.labels["loading_calendar"], panel['x'], panel['y'] + 60, 'small', self.dim_color)
+            return
+        
+        content_height = int(panel['h'] - 40)
+        surface_width = int(panel['w'])
+        
+        fade_top = 35
+        fade_bottom = 45
+        
+        text_width = 45
+        items_layout = []
+        now = datetime.now()
+        
+        for event in events:
+            start = event.get('start')
+            end = event.get('end')
+            summary = event.get('summary', 'No title')
+            location = event.get('location', '')
+            description = event.get('description', '')
+            duration = event.get('duration', '')
+            attendees = event.get('attendees', [])
+            organizer = event.get('organizer', '')
+            all_day = event.get('all_day', False)
+            
+            is_ongoing = False
+            if start and end and not all_day:
+                if start <= now <= end:
+                    is_ongoing = True
+            
+            if start.date() == now.date():
+                date_str = self.labels.get("today", "Today")
+            elif start.date() == (now + timedelta(days=1)).date():
+                date_str = self.labels.get("tomorrow", "Tomorrow")
+            else:
+                day_names = self.labels.get("days", ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+                months = self.labels.get("months", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+                date_str = f"{day_names[start.weekday()]} {start.day} {months[start.month - 1][:3]}"
+            
+            if all_day:
+                time_str = self.labels.get("all_day", "All day")
+            elif is_ongoing:
+                if self.ampm_format:
+                    time_str = f"{start.strftime('%I:%M %p')} - {self.labels.get('ongoing', 'Ongoing')}"
+                else:
+                    time_str = f"{start.strftime('%H:%M')} - {self.labels.get('ongoing', 'Ongoing')}"
+            else:
+                if self.ampm_format:
+                    time_str = start.strftime("%I:%M %p")
+                else:
+                    time_str = start.strftime("%H:%M")
+                if duration:
+                    time_str = f"{time_str} ({duration})"
+            
+            all_title_lines = self._wrap_text(summary, text_width)
+            title_lines = all_title_lines[:2]
+            if len(all_title_lines) > 2 and title_lines:
+                title_lines[-1] = title_lines[-1].rstrip() + " (...)"
+            all_desc_lines = self._wrap_text(description, text_width) if description else []
+            desc_lines = all_desc_lines[:3]
+            if len(all_desc_lines) > 3 and desc_lines:
+                desc_lines[-1] = desc_lines[-1].rstrip() + " (...)"
+            all_loc_lines = self._wrap_text(location, text_width) if location else []
+            loc_lines = all_loc_lines[:1]
+            if len(all_loc_lines) > 1 and loc_lines:
+                loc_lines[-1] = loc_lines[-1].rstrip() + " (...)"
+            
+            people = []
+            if organizer:
+                people.append(organizer)
+            for att in attendees[:5]:
+                if att not in people:
+                    people.append(att)
+            people_str = ", ".join(people[:4])
+            if len(people) > 4:
+                people_str += f" +{len(people) - 4}"
+            all_people_lines = self._wrap_text(people_str, text_width) if people_str else []
+            people_lines = all_people_lines[:1]
+            if len(all_people_lines) > 1 and people_lines:
+                people_lines[-1] = people_lines[-1].rstrip() + " (...)"
+            
+            item_height = 22 + (28 * len(title_lines)) + (20 * len(desc_lines)) + (20 * len(loc_lines)) + (20 * len(people_lines)) + 20
+            items_layout.append({
+                'date_str': date_str,
+                'time_str': time_str,
+                'title_lines': title_lines,
+                'desc_lines': desc_lines,
+                'loc_lines': loc_lines,
+                'people_lines': people_lines,
+                'height': item_height,
+                'all_day': all_day
+            })
+        
+        total_content_height = sum(it['height'] for it in items_layout)
+        
+        if self.calendar_first_render:
+            self.calendar_start_time = self.time
+            self.calendar_last_cycle = 0
+            self.calendar_first_render = False
+            scroll_offset = 0
+            calendar_elapsed = 0
+        else:
+            calendar_elapsed = self.time - self.calendar_start_time
+            
+            if total_content_height > content_height:
+                scroll_range = total_content_height - content_height + 50
+                scroll_speed = self.config.SCROLL_SPEED
+                scroll_time = scroll_range / scroll_speed
+                pause_before = 15
+                pause_after = 3
+                total_cycle = pause_before + scroll_time + pause_after
+                
+                current_cycle = int(calendar_elapsed / total_cycle)
+                if current_cycle > self.calendar_last_cycle:
+                    self.calendar_cycles += 1
+                self.calendar_last_cycle = current_cycle
+                
+                cycle_position = (calendar_elapsed % total_cycle)
+                if cycle_position < pause_before:
+                    scroll_offset = 0
+                elif cycle_position < pause_before + scroll_time:
+                    scroll_offset = (cycle_position - pause_before) * scroll_speed
+                else:
+                    scroll_offset = scroll_range
+                
+                scroll_offset = min(scroll_offset, scroll_range)
+            else:
+                total_cycle = 20
+                current_cycle = int(calendar_elapsed / total_cycle)
+                if current_cycle > self.calendar_last_cycle:
+                    self.calendar_cycles += 1
+                self.calendar_last_cycle = current_cycle
+                scroll_offset = 0
+        
+        feed_surface = self._create_feed_surface(surface_width, content_height)
+        
+        y_pos = -scroll_offset
+        
+        for layout in items_layout:
+            item_height = layout['height']
+            
+            if y_pos + item_height < -20:
+                y_pos += item_height
+                continue
+            if y_pos > content_height + 20:
+                y_pos += item_height
+                continue
+            
+            cur_y = y_pos
+            
+            header = f"{layout['date_str']} • {layout['time_str']}"
+            self._draw_text_to_surface(feed_surface, header, 0, cur_y, 'tiny', self.accent_color)
+            cur_y += 22
+            
+            for line in layout['title_lines']:
+                self._draw_text_to_surface(feed_surface, line, 0, cur_y, 'small', self.text_color)
+                cur_y += 28
+            
+            if layout['desc_lines']:
+                for line in layout['desc_lines']:
+                    self._draw_text_to_surface(feed_surface, line, 0, cur_y, 'tiny', self.dim_color)
+                    cur_y += 20
+            
+            if layout['people_lines']:
+                for line in layout['people_lines']:
+                    self._draw_text_to_surface(feed_surface, f"👥 {line}", 0, cur_y, 'tiny', self.dim_color)
+                    cur_y += 20
+            
+            if layout['loc_lines']:
+                for line in layout['loc_lines']:
+                    self._draw_text_to_surface(feed_surface, f"📍 {line}", 0, cur_y, 'tiny', self.dim_color)
+                    cur_y += 20
+            
+            cur_y += 5
+            self._draw_line_to_surface(feed_surface, 0, cur_y, surface_width - 20, cur_y, self.dim_color, 0.2)
+            
+            y_pos += item_height
+        
+        self._draw_surface_with_fade(feed_surface, panel['x'], panel['y'] + 35, fade_top, fade_bottom, scroll_offset)
+    
+    def _render_feed(self):
+        mode = self.config.FEED_MODE
+        
+        if mode == "news":
+            self._render_news()
+        elif mode == "calendar":
+            self._render_calendar()
+        elif mode == "alternate":
+            if self.feed_startup_grace and self.time > 10:
+                self.feed_startup_grace = False
+            
+            if self.feed_switch_time is not None and self.time >= self.feed_switch_time:
+                if self.feed_active == "news":
+                    self.feed_active = "calendar"
+                    self.calendar_cycles = 0
+                    self.calendar_last_cycle = 0
+                    self.calendar_start_time = None
+                    self.calendar_first_render = True
+                else:
+                    self.feed_active = "news"
+                    self.news_cycle_complete = False
+                    self.news_last_cycle = 0
+                    self.news_start_time = None
+                    self.news_first_render = True
+                self.feed_switch_time = None
+            
+            if self.feed_active == "news":
+                self._render_news()
+                if self.news_cycle_complete and self.feed_switch_time is None and not self.feed_startup_grace:
+                    self.feed_switch_time = self.time + 15
+            else:
+                self._render_calendar()
+                if self.calendar_cycles >= 3 and self.feed_switch_time is None:
+                    self.feed_switch_time = self.time + 15
+        else:
+            self._render_news()
     
     def _draw_surface(self, surface, x, y):
         if surface is None:
@@ -1387,6 +2028,8 @@ class DashboardAnimation:
             except:
                 delta_time = 0.033
         
+        delta_time = min(delta_time, 0.1)
+        
         self.time += delta_time
         
         self.news_scroll_timer += delta_time
@@ -1414,6 +2057,9 @@ class DashboardAnimation:
         glTranslatef(self.width, 0, 0)
         glRotatef(90, 0, 0, 1)
         
+        if self.config.BACKGROUND_ANIMATION:
+            self._render_background_animation()
+        
         if self.config.SHOW_CLOCK:
             self._render_clock()
         
@@ -1427,7 +2073,7 @@ class DashboardAnimation:
             self._render_sun_moon()
         
         if self.config.SHOW_NEWS:
-            self._render_news()
+            self._render_feed()
         
         if self.config.SHOW_QUOTES:
             self._render_quote()
@@ -1444,6 +2090,16 @@ class DashboardAnimation:
         self.news_offset = 0
         self.news_scroll_timer = 0
         self.quote_timer = 0
+        self.news_start_time = None
+        self.calendar_start_time = None
+        self.feed_switch_time = None
+        self.news_cycle_complete = False
+        self.news_last_cycle = 0
+        self.calendar_cycles = 0
+        self.calendar_last_cycle = 0
+        self.feed_startup_grace = True
+        self.news_first_render = True
+        self.calendar_first_render = True
     
     def cleanup(self):
         self.initialized = False
@@ -1453,3 +2109,26 @@ class DashboardAnimation:
         glEnable(GL_DEPTH_TEST)
         glColor4f(1.0, 1.0, 1.0, 1.0)
 
+if __name__ == "__main__":
+    pygame.init()
+    
+    width, height = 800, 480
+    pygame.display.set_mode((width, height), DOUBLEBUF | OPENGL)
+    pygame.display.set_caption("Dashboard Screensaver Test")
+    
+    dashboard = DashboardAnimation(None, width, height)
+    
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                running = False
+            elif event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    running = False
+        
+        dashboard.update()
+        dashboard.render()
+    
+    dashboard.cleanup()
+    pygame.quit()
