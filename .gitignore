@@ -204,3 +204,4 @@ character/
 !PLEX.onnx.json
 
 /src/modules/UI/pictures/*
+dashboard.ini

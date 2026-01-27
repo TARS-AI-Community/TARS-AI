@@ -39,18 +39,23 @@ dpad_state = {"y": 0, "x": 0}
 last_dpad_time = 0
 DEBOUNCE_TIME = 0.1
 
+controller_search_notified = False
+
 def get_movement(name):
     return getattr(movements, name, None)
 
 def find_controller(controller_name):
-    global gamepad_path
+    global gamepad_path, controller_search_notified
     devices = [InputDevice(path) for path in list_devices()]
     for device in devices:
         if controller_name.lower() in device.name.lower():
             queue_message(f"LOAD: Controller found: {device.name} at {device.path}")
             gamepad_path = device.path
+            controller_search_notified = False
             return device
-    queue_message(f"LOAD: {controller_name} not found, searching...")
+    if not controller_search_notified:
+        queue_message(f"LOAD: {controller_name} not found, waiting for connection...")
+        controller_search_notified = True
     return None
 
 def execute_movement(name):

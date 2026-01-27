@@ -480,13 +480,20 @@ main() {
     retry_pip_install
     
     tars_say "Initializing configuration files..." "info"
-    
+
     if [ ! -f "config.ini" ]; then
         cp config.ini.template config.ini
     fi
     sudo chown $ACTUAL_USER:$ACTUAL_USER config.ini 2>/dev/null
     chmod 664 config.ini
     echo "|  [OK] config.ini (writable, run: nano config.ini)"
+
+    if [ ! -f "dashboard.ini" ]; then
+        cp dashboard.template.ini dashboard.ini
+    fi
+    sudo chown $ACTUAL_USER:$ACTUAL_USER dashboard.ini 2>/dev/null
+    chmod 664 dashboard.ini
+    echo "|  [OK] dashboard.ini (writable, run: nano dashboard.ini)"
     
     cd ..
     if [ ! -f ".env" ]; then

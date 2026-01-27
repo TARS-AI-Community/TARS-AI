@@ -1,5 +1,5 @@
 """
-Module: servo controller
+Module: Servo Controller V3.1
 Author: Charles-Olivier Dion (Atomikspace)
 Contact: atomikspace.labs@gmail.com
 Copyright (c) 2026
@@ -65,6 +65,16 @@ _channels_initialized = set(servo_positions.keys())
 
 pca = None
 MAX_RETRIES = 3
+
+battery_module = None
+
+def set_battery_module(battery_mod):
+    global battery_module
+    battery_module = battery_mod
+
+def signal_servo_activity():
+    if battery_module is not None:
+        battery_module.signal_servo_activity()
 
 def initialize_pca9685():
     
@@ -165,7 +175,7 @@ if not servo_positions:
     servo_positions[8] = rightForarmMin
     servo_positions[9] = rightHandMin
 else:
-    print(f"[SERVO] Loaded saved positions for channels: {list(servo_positions.keys())}")
+    print(f"[SERVO] Loaded saved positions")
 
 _on_movement_start = None
 _on_movement_end = None
@@ -176,10 +186,11 @@ def set_movement_callbacks(on_start=None, on_end=None):
     global _on_movement_start, _on_movement_end
     _on_movement_start = on_start
     _on_movement_end = on_end
-    queue_message("Servo movement callbacks configured")
 
 def _notify_movement_start():
     global _is_ventilate_operation
+    
+    signal_servo_activity()
     
     if not _is_ventilate_operation:
         try:
@@ -197,6 +208,8 @@ def _notify_movement_start():
             queue_message(f"ERROR: Failed to pause UI/STT: {e}")
 
 def _notify_movement_end():
+    
+    signal_servo_activity()
     
     if _on_movement_end:
         try:
@@ -254,50 +267,23 @@ def initialize_servos():
 
 def disable_all_servos():
     if pca is None:
-        return   
+        return
+    
     try:
         for channel in range(16):
             pca.channels[channel].duty_cycle = 0
     except Exception as e:
         queue_message(f"Error disabling servos: {e}")
+    
     time.sleep(0.05)
 
-def safe_init_positions():
-    
+def reset_positions():
     global servo_positions
     
     servo_positions[0] = leftNeutralHeight
     servo_positions[1] = rightNeutralHeight
     servo_positions[2] = neutralLeftLeg
     servo_positions[3] = neutralRightLeg
-    
-    servo_positions[4] = leftMainMin
-    servo_positions[5] = leftForarmMin
-    servo_positions[6] = leftHandMin
-    servo_positions[7] = rightMainMin
-    servo_positions[8] = rightForarmMin
-    servo_positions[9] = rightHandMin
-    
-    _save_servo_positions()
-    
-    print("[INIT] Servo positions initialized to neutral estimates")
-
-def reset_positions():
-    global servo_positions
-
-    def percentage_to_value(percent, min_val, max_val):
-        if percent == 0:
-            return None
-        normalized = (percent - 1) / 99.0
-        value = min_val + (max_val - min_val) * normalized
-        return int(round(value))
-    
-
-    servo_positions[0] = percentage_to_value(55, leftUpHeight, leftDownHeight)
-    servo_positions[1] = percentage_to_value(55, rightUpHeight, rightDownHeight)
-    servo_positions[2] = percentage_to_value(30, forwardLeftLeg, backLeftLeg)
-    servo_positions[3] = percentage_to_value(30, forwardRightLeg, backRightLeg)
-
     servo_positions[4] = leftMainMin
     servo_positions[5] = leftForarmMin
     servo_positions[6] = leftHandMin
@@ -320,6 +306,8 @@ def reset_positions():
 def move_servos_synchronized(movements, speed_factor):
     
     global _channels_initialized
+    
+    signal_servo_activity()
     
     servo_data = []
     has_uninitialized_channel = False
@@ -378,7 +366,6 @@ def move_servos_synchronized(movements, speed_factor):
     
     if has_uninitialized_channel:
         effective_speed = min(speed_factor, 0.3)
-        print(f"[BOOT] First movement - using safe slow speed {effective_speed:.2f}")
     else:
         effective_speed = speed_factor
     
@@ -411,6 +398,8 @@ def move_servos_synchronized(movements, speed_factor):
         servo_positions[servo['channel']] = servo['target']
     
     _save_servo_positions()
+    
+    signal_servo_activity()
     
     time.sleep(0.05)
 

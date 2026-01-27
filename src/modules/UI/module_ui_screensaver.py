@@ -33,6 +33,7 @@ from UI.module_screensaver_fractal import FractalAnimation
 from UI.module_screensaver_pacman import PacmanAnimation
 from UI.module_screensaver_waves import WavesAnimation
 from UI.module_screensaver_pictures import PicturesAnimation
+from UI.module_screensaver_dashboard import DashboardAnimation
 
 try:
     from OpenGL.GL import *
@@ -56,6 +57,7 @@ AVAILABLE_ANIMATIONS = {
     "waves": {"class": WavesAnimation, "type": "opengl"},
     "nebulas": {"class": NebulaAnimation, "type": "opengl"},
     "pictures": {"class": PicturesAnimation, "type": "opengl"},
+    "dashboard": {"class": DashboardAnimation, "type": "opengl"},
 }
 
 FALLBACK_ANIMATIONS = ["starfield", "matrix", "hyperspace", "pacman", "terminal", "face"]
