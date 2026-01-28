@@ -47,12 +47,27 @@ def get_movement(name):
 def find_controller(controller_name):
     global gamepad_path, controller_search_notified
     devices = [InputDevice(path) for path in list_devices()]
+    
+    matching_devices = []
     for device in devices:
         if controller_name.lower() in device.name.lower():
-            queue_message(f"LOAD: Controller found: {device.name} at {device.path}")
-            gamepad_path = device.path
-            controller_search_notified = False
-            return device
+            matching_devices.append(device)
+    
+    if matching_devices:
+        queue_message(f"LOAD: Found {len(matching_devices)} matching device(s):")
+        for device in matching_devices:
+            queue_message(f"      - {device.name} at {device.path}")
+        excluded_keywords = ["imu", "motion", "sensor"]
+        for device in matching_devices:
+            if not any(keyword in device.name.lower() for keyword in excluded_keywords):
+                queue_message(f"LOAD: Using: {device.name} at {device.path}")
+                gamepad_path = device.path
+                controller_search_notified = False
+                return device
+        
+        queue_message("LOAD: No suitable controller found")
+        return None
+    
     if not controller_search_notified:
         queue_message(f"LOAD: {controller_name} not found, waiting for connection...")
         controller_search_notified = True
