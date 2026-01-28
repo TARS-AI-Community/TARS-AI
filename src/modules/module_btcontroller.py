@@ -105,6 +105,7 @@ def start_controls():
         for event in gamepad.read_loop():
             if event.type == evdev.ecodes.EV_ABS:
                 if event.value < -DEADZONE or event.value > DEADZONE:
+                    pass
                     #queue_message(f"DEBUG ABS: code={event.code} value={event.value}")
             
             if event.type == evdev.ecodes.EV_KEY:
