@@ -47,27 +47,28 @@ def get_movement(name):
 def find_controller(controller_name):
     global gamepad_path, controller_search_notified
     devices = [InputDevice(path) for path in list_devices()]
-    
     matching_devices = []
     for device in devices:
         if controller_name.lower() in device.name.lower():
             matching_devices.append(device)
-    
     if matching_devices:
         queue_message(f"LOAD: Found {len(matching_devices)} matching device(s):")
         for device in matching_devices:
-            queue_message(f"      - {device.name} at {device.path}")
+            caps = device.capabilities(verbose=True)
+            has_buttons = ('EV_KEY', evdev.ecodes.EV_KEY) in caps
+            queue_message(f"      - {device.name} at {device.path} (buttons: {has_buttons})")
         excluded_keywords = ["imu", "motion", "sensor"]
         for device in matching_devices:
-            if not any(keyword in device.name.lower() for keyword in excluded_keywords):
+            if any(keyword in device.name.lower() for keyword in excluded_keywords):
+                continue
+            caps = device.capabilities(verbose=True)
+            if ('EV_KEY', evdev.ecodes.EV_KEY) in caps:
                 queue_message(f"LOAD: Using: {device.name} at {device.path}")
                 gamepad_path = device.path
                 controller_search_notified = False
                 return device
-        
-        queue_message("LOAD: No suitable controller found")
+        queue_message("LOAD: No suitable controller found (no device with button support)")
         return None
-    
     if not controller_search_notified:
         queue_message(f"LOAD: {controller_name} not found, waiting for connection...")
         controller_search_notified = True
@@ -81,6 +82,8 @@ def execute_movement(name):
 
 def start_controls():
     global gamepad_path, l2_held, r1_held, r2_held, dpad_state, last_dpad_time
+    
+    DEADZONE = 16000
     
     while gamepad_path is None:
         find_controller(controller_name)
@@ -100,7 +103,13 @@ def start_controls():
     queue_message("LOAD: Controls listening...")
     try:
         for event in gamepad.read_loop():
+            if event.type == evdev.ecodes.EV_ABS:
+                if event.value < -DEADZONE or event.value > DEADZONE:
+                    #queue_message(f"DEBUG ABS: code={event.code} value={event.value}")
+            
             if event.type == evdev.ecodes.EV_KEY:
+                #queue_message(f"DEBUG KEY: code={event.code} value={event.value}")
+                
                 if event.code == 312:
                     l2_held = (event.value == 1)
                 elif event.code == 311:
@@ -144,37 +153,49 @@ def start_controls():
             elif event.type == evdev.ecodes.EV_ABS:
                 current_time = time.time()
                 
-                if event.code == evdev.ecodes.ABS_HAT0Y:
-                    if event.value != dpad_state["y"]:
-                        dpad_state["y"] = event.value
+                if event.code in [evdev.ecodes.ABS_HAT0Y, evdev.ecodes.ABS_HAT0X]:
+                    new_state = event.value
+                else:
+                    if event.value < -DEADZONE:
+                        new_state = -1
+                    elif event.value > DEADZONE:
+                        new_state = 1
+                    else:
+                        new_state = 0
+                
+                if event.code in [evdev.ecodes.ABS_HAT0Y, evdev.ecodes.ABS_Y]:
+                    if new_state != dpad_state["y"]:
+                        dpad_state["y"] = new_state
                         last_dpad_time = current_time
+                        #queue_message(f"DEBUG: Y state changed to {new_state}")
                         
-                        if event.value < 0:
+                        if new_state < 0:
                             if l2_held:
                                 execute_movement("step_forward")
                             else:
                                 execute_movement("walk_forward")
-                        elif event.value > 0:
+                        elif new_state > 0:
                             if l2_held:
                                 execute_movement("step_backward")
                             else:
                                 execute_movement("walk_backward")
-                            
-                elif event.code == evdev.ecodes.ABS_HAT0X:
+                
+                elif event.code in [evdev.ecodes.ABS_HAT0X, evdev.ecodes.ABS_X]:
                     if dpad_state["y"] != 0:
                         continue
                     if (current_time - last_dpad_time) < DEBOUNCE_TIME:
                         continue
-                    if event.value != dpad_state["x"]:
-                        dpad_state["x"] = event.value
+                    if new_state != dpad_state["x"]:
+                        dpad_state["x"] = new_state
                         last_dpad_time = current_time
+                        #queue_message(f"DEBUG: X state changed to {new_state}")
                         
-                        if event.value < 0:
+                        if new_state < 0:
                             if l2_held:
                                 execute_movement("turn_left")
                             else:
                                 execute_movement("turn_left_slow")
-                        elif event.value > 0:
+                        elif new_state > 0:
                             if l2_held:
                                 execute_movement("turn_right")
                             else:
