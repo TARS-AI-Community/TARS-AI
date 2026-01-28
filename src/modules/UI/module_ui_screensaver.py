@@ -35,6 +35,7 @@ from UI.module_screensaver_waves import WavesAnimation
 from UI.module_screensaver_pictures import PicturesAnimation
 from UI.module_screensaver_dashboard import DashboardAnimation
 from UI.module_screensaver_defrag import DefragAnimation
+from UI.module_screensaver_bounce import BounceAnimation
 
 
 try:
@@ -61,6 +62,7 @@ AVAILABLE_ANIMATIONS = {
     "pictures": {"class": PicturesAnimation, "type": "opengl"},
     "dashboard": {"class": DashboardAnimation, "type": "opengl"},
     "defrag": {"class": DefragAnimation, "type": "pygame"},
+    "bounce": {"class": BounceAnimation, "type": "opengl"},
 }
 
 FALLBACK_ANIMATIONS = ["starfield", "matrix", "hyperspace", "pacman", "terminal", "face"]
