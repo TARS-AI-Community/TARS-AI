@@ -34,6 +34,8 @@ from UI.module_screensaver_pacman import PacmanAnimation
 from UI.module_screensaver_waves import WavesAnimation
 from UI.module_screensaver_pictures import PicturesAnimation
 from UI.module_screensaver_dashboard import DashboardAnimation
+from UI.module_screensaver_defrag import DefragAnimation
+
 
 try:
     from OpenGL.GL import *
@@ -58,6 +60,7 @@ AVAILABLE_ANIMATIONS = {
     "nebulas": {"class": NebulaAnimation, "type": "opengl"},
     "pictures": {"class": PicturesAnimation, "type": "opengl"},
     "dashboard": {"class": DashboardAnimation, "type": "opengl"},
+    "defrag": {"class": DefragAnimation, "type": "pygame"},
 }
 
 FALLBACK_ANIMATIONS = ["starfield", "matrix", "hyperspace", "pacman", "terminal", "face"]
