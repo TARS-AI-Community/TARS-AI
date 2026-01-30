@@ -39,7 +39,7 @@ from UI.module_screensaver_pictures import PicturesAnimation
 from UI.module_screensaver_dashboard import DashboardAnimation
 from UI.module_screensaver_defrag import DefragAnimation
 from UI.module_screensaver_bounce import BounceAnimation
-
+from UI.module_screensaver_endurance import EnduranceAnimation
 
 try:
     from OpenGL.GL import *
@@ -66,6 +66,7 @@ AVAILABLE_ANIMATIONS = {
     "dashboard": {"class": DashboardAnimation, "type": "opengl"},
     "defrag": {"class": DefragAnimation, "type": "pygame"},
     "bounce": {"class": BounceAnimation, "type": "opengl"},
+    "endurance": {"class": EnduranceAnimation, "type": "opengl"},
 }
 
 FALLBACK_ANIMATIONS = ["starfield", "matrix", "hyperspace", "pacman", "terminal", "face"]
