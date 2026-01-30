@@ -41,7 +41,6 @@ class CameraModule:
 
             try:
                 self.picam2 = Picamera2()
-                # Detect camera sensor
                 sensor_name = self.picam2.camera_controls.get("SensorName", "")
                 if "ov5647" in sensor_name.lower():
                     self.apply_corrections = True

@@ -927,6 +927,7 @@ class DashboardAnimation:
         self.screen = screen
         self.width = width
         self.height = height
+        self.is_portrait = height > width  # Detect portrait mode
         self.time = 0.0
         self.initialized = False
         self.clock = pygame.time.Clock()
@@ -984,8 +985,13 @@ class DashboardAnimation:
         if self.initialized:
             return
         
-        self.layout_width = self.height
-        self.layout_height = self.width
+        # For portrait mode, use dimensions directly; for landscape, swap for rotation
+        if self.is_portrait:
+            self.layout_width = self.width
+            self.layout_height = self.height
+        else:
+            self.layout_width = self.height
+            self.layout_height = self.width
         
         glClearColor(*self.bg_color, 1.0)
         glDisable(GL_DEPTH_TEST)
@@ -1043,11 +1049,11 @@ class DashboardAnimation:
         
         news_top = y_pos
         news_bottom = self.layout_height - margin - quote_height - 15
-        news_height = news_bottom - news_top
+        news_height = max(1, news_bottom - news_top)  # Ensure at least 1 pixel
         self.panels['news'] = {'x': margin, 'y': news_top, 'w': panel_width, 'h': news_height}
         
-        self.feed_surface_width = int(panel_width)
-        self.feed_surface_height = int(news_height)
+        self.feed_surface_width = max(1, int(panel_width))
+        self.feed_surface_height = max(1, int(news_height))
         
         self.initialized = True
     
@@ -1253,6 +1259,9 @@ class DashboardAnimation:
             glEnd()
     
     def _create_feed_surface(self, width, height):
+        # Ensure minimum dimensions for pygame Surface
+        width = max(1, int(width))
+        height = max(1, int(height))
         surface = pygame.Surface((width, height), pygame.SRCALPHA)
         surface.fill((0, 0, 0, 0))
         return surface
@@ -1601,8 +1610,8 @@ class DashboardAnimation:
             self._draw_text(self.labels["loading_news"], panel['x'], panel['y'] + 60, 'small', self.dim_color)
             return
         
-        content_height = int(panel['h'] - 40)
-        surface_width = int(panel['w'])
+        content_height = max(1, int(panel['h'] - 40))
+        surface_width = max(1, int(panel['w']))
         
         fade_top = 35
         fade_bottom = 45
@@ -1719,8 +1728,8 @@ class DashboardAnimation:
                 self._draw_text(self.labels["loading_calendar"], panel['x'], panel['y'] + 60, 'small', self.dim_color)
             return
         
-        content_height = int(panel['h'] - 40)
-        surface_width = int(panel['w'])
+        content_height = max(1, int(panel['h'] - 40))
+        surface_width = max(1, int(panel['w']))
         
         fade_top = 35
         fade_bottom = 45
@@ -2054,8 +2063,10 @@ class DashboardAnimation:
         glClear(GL_COLOR_BUFFER_BIT)
         glLoadIdentity()
         
-        glTranslatef(self.width, 0, 0)
-        glRotatef(90, 0, 0, 1)
+        # Only apply rotation when in landscape mode (OS doesn't handle rotation)
+        if not self.is_portrait:
+            glTranslatef(self.width, 0, 0)
+            glRotatef(90, 0, 0, 1)
         
         if self.config.BACKGROUND_ANIMATION:
             self._render_background_animation()

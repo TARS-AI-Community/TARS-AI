@@ -26,17 +26,19 @@ import random
 from UI.module_screensaver_overlay import TimeOverlay
 
 class WavesAnimation:
-    def __init__(self, screen, width, height, show_time=False):
+    def __init__(self, screen, width, height, show_time=False, rotation=0):
         self.screen = screen
         self.width = width
         self.height = height
+        self.rotation = rotation
+        self.is_portrait = height > width  # Detect portrait mode
         self.time = 0.0
         self.initialized = False
         self.clock = pygame.time.Clock()
         self.wireframe = True
         
         self.show_time = show_time
-        self.time_overlay = TimeOverlay(width, height) if show_time else None
+        self.time_overlay = TimeOverlay(width, height, rotation) if show_time else None
         
         self.wireframe_r = random.uniform(0.05, 0.15)
         self.wireframe_g = random.uniform(0.1, 0.3)
@@ -77,9 +79,16 @@ class WavesAnimation:
         glFogf(GL_FOG_START, 20.0)
         glFogf(GL_FOG_END, 60.0)
         
+        glViewport(0, 0, self.width, self.height)
+        
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
-        gluPerspective(50, self.width / self.height, 0.1, 100.0)
+        if self.is_portrait:
+            # Rotation first in code = applied last (after perspective)
+            glRotatef(90, 0, 0, 1)
+            gluPerspective(50, self.height / self.width, 0.1, 100.0)
+        else:
+            gluPerspective(50, self.width / self.height, 0.1, 100.0)
         glMatrixMode(GL_MODELVIEW)
         
         self.initialized = True
@@ -115,8 +124,8 @@ class WavesAnimation:
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
         
+        # Same camera for both modes - projection handles rotation for portrait
         gluLookAt(11, 0, 6, 0, 0, -6, 0, 1, 0)
-        
         glRotatef(90, 0, 0, 1)
         
         grid_size_x = 50

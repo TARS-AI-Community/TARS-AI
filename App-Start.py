@@ -9,6 +9,160 @@ import sys
 import configparser
 import random
 
+TEST_UPDATE_MODE = False
+
+def check_for_updates():
+    if TEST_UPDATE_MODE:
+        fake_commits = [
+            "Nothing to see here. Move along",
+            "if this code fail, blame atomikspace",
+            "this is an update"
+        ]
+        return len(fake_commits), fake_commits
+    
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        result = subprocess.run(
+            ["git", "fetch"],
+            cwd=script_dir,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode != 0:
+            return None, []
+        
+        branch_result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=script_dir,
+            capture_output=True,
+            text=True
+        )
+        current_branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "main"
+        
+        count_result = subprocess.run(
+            ["git", "rev-list", "--count", f"HEAD..origin/{current_branch}"],
+            cwd=script_dir,
+            capture_output=True,
+            text=True
+        )
+        
+        if count_result.returncode != 0:
+            return None, []
+        
+        commit_count = int(count_result.stdout.strip())
+        
+        if commit_count == 0:
+            return 0, []
+        
+        log_result = subprocess.run(
+            ["git", "log", "--oneline", "--no-decorate", f"HEAD..origin/{current_branch}"],
+            cwd=script_dir,
+            capture_output=True,
+            text=True
+        )
+        
+        commits = []
+        if log_result.returncode == 0:
+            commits = [line.strip() for line in log_result.stdout.strip().split('\n') if line.strip()]
+        
+        return commit_count, commits
+        
+    except subprocess.TimeoutExpired:
+        return None, []
+    except Exception as e:
+        return None, []
+
+
+def check_git_clean():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=script_dir,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            return False
+        return len(result.stdout.strip()) == 0
+    except:
+        return False
+
+
+def run_install_script():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        install_script = os.path.join(script_dir, "Install.sh")
+        
+        if not os.path.exists(install_script):
+            return False, "Install.sh not found"
+        
+        result = subprocess.run(
+            ["bash", install_script],
+            cwd=script_dir
+        )
+        
+        if result.returncode == 0:
+            return True, None
+        else:
+            return False, "Install script failed"
+        
+    except Exception as e:
+        return False, str(e)
+
+
+def handle_install_updates():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    print("\n" + "="*50)
+    print("  T.A.R.S UPDATE SYSTEM")
+    print("="*50)
+    print("\nThis will pull the latest changes and run Install.sh")
+    print("Make sure you have no unsaved work.\n")
+    
+    try:
+        response = input("Ready to start update? [y/N]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\nUpdate cancelled.")
+        return False
+    
+    if response not in ['y', 'yes']:
+        print("Update cancelled.")
+        return False
+    
+    print("\nChecking for local changes...")
+    if not check_git_clean():
+        print("ERROR: Local changes detected. Please commit or stash them first.")
+        input("\nPress Enter to return to menu...")
+        return False
+    
+    print("Pulling latest changes...")
+    pull_result = subprocess.run(
+        ["git", "pull"],
+        cwd=script_dir
+    )
+    
+    if pull_result.returncode != 0:
+        print("ERROR: Git pull failed.")
+        input("\nPress Enter to return to menu...")
+        return False
+    
+    print("\nRunning Install.sh...")
+    success, error = run_install_script()
+    
+    if not success:
+        print(f"ERROR: {error}")
+        input("\nPress Enter to return to menu...")
+        return False
+    
+    print("\nUpdate complete! Restarting...")
+    time.sleep(1)
+    
+    os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)])
+
 class TerminalScroll:
     def __init__(self, width, height, font, font_bold):
         self.width = width
@@ -282,30 +436,17 @@ def load_config():
     config = configparser.ConfigParser()
     config_path = os.path.join('src', 'config.ini')
 
-    rotation = 0
     ui_enabled = False
     font_size = 12
-    screen_width = 1024
-    screen_height = 600
 
     try:
         config.read(config_path)
-        if config.has_option('UI', 'rotation'):
-            rotation = config.getint('UI', 'rotation')
-            print(f"[CONFIG] Loaded rotation setting: {rotation}°")
 
         if config.has_option('UI', 'UI_enabled'):
             ui_enabled = config.getboolean('UI', 'UI_enabled')
-            print(f"[CONFIG] UI_enabled: {ui_enabled}")
 
         if config.has_option('UI', 'font_size'):
             font_size = config.getint('UI', 'font_size')
-
-        if config.has_option('UI', 'screen_width'):
-            screen_width = config.getint('UI', 'screen_width')
-
-        if config.has_option('UI', 'screen_height'):
-            screen_height = config.getint('UI', 'screen_height')
 
         print(f"Launching Main App")
 
@@ -313,7 +454,7 @@ def load_config():
         print(f"[CONFIG] Error reading config file: {e}")
         print("[CONFIG] Using default values")
 
-    return rotation, ui_enabled, font_size, screen_width, screen_height
+    return ui_enabled, font_size
 
 def stop_tars_ai():
     subprocess.Popen("killall xterm", shell=True)
@@ -375,7 +516,12 @@ def draw_technical_frame(surface, rect, color, thickness=2):
     pygame.draw.line(surface, color, (x + w + 5, y + h + 5), (x + w - corner_size, y + h + 5), thickness)
 
 def create_touch_menu():
-    rotation, ui_enabled, font_size, config_width, config_height = load_config()
+    ui_enabled, font_size = load_config()
+    
+    update_count, update_commits = check_for_updates()
+    if update_count is None:
+        update_count = 0
+        update_commits = []
 
     pygame.init()
 
@@ -383,26 +529,34 @@ def create_touch_menu():
     display_width = display_info.current_w
     display_height = display_info.current_h
 
-    base_width = config_width
-    base_height = config_height
-
-    if base_width > display_width * 0.9:
-        base_width = int(display_width * 0.9)
-        base_height = int(base_width * config_height / config_width)
-
-    if base_height > display_height * 0.9:
-        base_height = int(display_height * 0.9)
-        base_width = int(base_height * config_width / config_height)
-
-    ui_width = base_width
-    ui_height = base_height
-
-    if rotation in [90, 270]:
-        draw_surface = pygame.Surface((ui_height, ui_width))
-        window_width, window_height = ui_width, ui_height  
+    if display_height > display_width:
+        logical_width = display_width
+        logical_height = display_height
+        effective_rotate = 0
     else:
-        draw_surface = pygame.Surface((ui_width, ui_height))
-        window_width, window_height = ui_width, ui_height
+        logical_width = display_height
+        logical_height = display_width
+        effective_rotate = 270
+
+    max_width = int(display_width * 0.9)
+    max_height = int(display_height * 0.9)
+    
+    if effective_rotate in [90, 270]:
+        window_width = logical_height
+        window_height = logical_width
+    else:
+        window_width = logical_width
+        window_height = logical_height
+    
+    scale = min(max_width / window_width, max_height / window_height, 1.0)
+    window_width = int(window_width * scale)
+    window_height = int(window_height * scale)
+    logical_width = int(logical_width * scale)
+    logical_height = int(logical_height * scale)
+
+    print(f"[UI] Screen: {display_width}x{display_height}, Logical: {logical_width}x{logical_height}, Rotate: {effective_rotate}")
+
+    draw_surface = pygame.Surface((logical_width, logical_height))
 
     os.environ['SDL_VIDEO_CENTERED'] = '1'  
     screen = pygame.display.set_mode((window_width, window_height))
@@ -420,6 +574,7 @@ def create_touch_menu():
     DARK_CYAN = (0, 100, 150)
     ORANGE = (255, 150, 0)
     RED = (255, 50, 50)
+    GREEN = (0, 200, 100)
 
     try:
         title_font = pygame.font.SysFont('dejavusansmono', 80, bold=True)
@@ -459,10 +614,24 @@ def create_touch_menu():
     fullscreen_button = pygame.Rect(button_x, int(surf_height * 0.37), button_width, button_height)
     normal_button = pygame.Rect(button_x, int(surf_height * 0.58), button_width, button_height)
 
-    esc_button_width = int(surf_width * 0.12)
+    esc_button_width = int(surf_width * 0.15)
     esc_button_height = int(surf_height * 0.06)
     esc_button = pygame.Rect(40, surf_height - esc_button_height - 40, 
                              esc_button_width, esc_button_height)
+
+    updates_button_width = int(surf_width * 0.25)
+    updates_button_height = int(surf_height * 0.06)
+    updates_button = pygame.Rect(surf_width - updates_button_width - 40, 
+                                  surf_height - updates_button_height - 40,
+                                  updates_button_width, updates_button_height)
+
+    show_popup = False
+    popup_scroll_offset = 0
+    popup_max_visible = 8
+    popup_button_pressed = None
+    popup_open_time = 0
+    paused_time = 0
+    elapsed_time = 0
 
     countdown_seconds = 30
     start_time = time.time()
@@ -473,10 +642,13 @@ def create_touch_menu():
     button_pressed = None
 
     while running:
-        elapsed_time = time.time() - start_time
+        current_time = time.time()
+        
+        if not show_popup:
+            elapsed_time = current_time - start_time - paused_time
         remaining_time = countdown_seconds - elapsed_time
 
-        if remaining_time <= 0:
+        if remaining_time <= 0 and not show_popup:
             pygame.quit()
             stop_tars_ai()
             time.sleep(0.1)
@@ -490,11 +662,11 @@ def create_touch_menu():
 
         mouse_pos = pygame.mouse.get_pos()
 
-        if rotation == 270:
+        if effective_rotate == 270:
             transformed_mouse = (mouse_pos[1], surf_height - mouse_pos[0])
-        elif rotation == 90:
+        elif effective_rotate == 90:
             transformed_mouse = (surf_width - mouse_pos[1], mouse_pos[0])
-        elif rotation == 180:
+        elif effective_rotate == 180:
             transformed_mouse = (surf_width - mouse_pos[0], surf_height - mouse_pos[1])
         else:
             transformed_mouse = mouse_pos
@@ -502,6 +674,22 @@ def create_touch_menu():
         fullscreen_hover = fullscreen_button.collidepoint(transformed_mouse)
         normal_hover = normal_button.collidepoint(transformed_mouse)
         esc_hover = esc_button.collidepoint(transformed_mouse)
+        updates_hover = updates_button.collidepoint(transformed_mouse) if update_count > 0 else False
+
+        popup_width = int(surf_width * 0.85)
+        popup_height = int(surf_height * 0.7)
+        popup_x = (surf_width - popup_width) // 2
+        popup_y = (surf_height - popup_height) // 2
+        popup_rect = pygame.Rect(popup_x, popup_y, popup_width, popup_height)
+        
+        popup_btn_width = int(popup_width * 0.28)
+        popup_btn_height = int(popup_height * 0.09)
+        popup_btn_y = popup_y + popup_height - popup_btn_height - 25
+        popup_install_btn = pygame.Rect(popup_x + 20, popup_btn_y, popup_btn_width, popup_btn_height)
+        popup_skip_btn = pygame.Rect(popup_x + popup_width - popup_btn_width - 20, popup_btn_y, popup_btn_width, popup_btn_height)
+        
+        popup_install_hover = popup_install_btn.collidepoint(transformed_mouse) if show_popup else False
+        popup_skip_hover = popup_skip_btn.collidepoint(transformed_mouse) if show_popup else False
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -510,60 +698,103 @@ def create_touch_menu():
                 sys.exit()
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-                    pygame.quit()
-                    sys.exit()
+                if show_popup:
+                    if event.key == pygame.K_ESCAPE:
+                        show_popup = False
+                        paused_time += time.time() - popup_open_time
+                    elif event.key == pygame.K_RETURN:
+                        pygame.quit()
+                        handle_install_updates()
+                        create_touch_menu()
+                        return
+                    elif event.key == pygame.K_UP:
+                        popup_scroll_offset = max(0, popup_scroll_offset - 1)
+                    elif event.key == pygame.K_DOWN:
+                        popup_scroll_offset = min(max(0, len(update_commits) - popup_max_visible), popup_scroll_offset + 1)
+                else:
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
+                        pygame.quit()
+                        sys.exit()
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 click_pos = event.pos
 
-                if rotation == 270:
+                if effective_rotate == 270:
                     transformed_click = (click_pos[1], surf_height - click_pos[0])
-                elif rotation == 90:
+                elif effective_rotate == 90:
                     transformed_click = (surf_width - click_pos[1], click_pos[0])
-                elif rotation == 180:
+                elif effective_rotate == 180:
                     transformed_click = (surf_width - click_pos[0], surf_height - click_pos[1])
                 else:
                     transformed_click = click_pos
 
-                if fullscreen_button.collidepoint(transformed_click):
-                    button_pressed = 'fullscreen'
-                elif normal_button.collidepoint(transformed_click):
-                    button_pressed = 'normal'
-                elif esc_button.collidepoint(transformed_click):
-                    button_pressed = 'esc'
+                if show_popup:
+                    if event.button == 4:
+                        popup_scroll_offset = max(0, popup_scroll_offset - 1)
+                    elif event.button == 5:
+                        popup_scroll_offset = min(max(0, len(update_commits) - popup_max_visible), popup_scroll_offset + 1)
+                    elif event.button == 1:
+                        if popup_install_btn.collidepoint(transformed_click):
+                            popup_button_pressed = 'install'
+                        elif popup_skip_btn.collidepoint(transformed_click):
+                            popup_button_pressed = 'skip'
+                else:
+                    if fullscreen_button.collidepoint(transformed_click):
+                        button_pressed = 'fullscreen'
+                    elif normal_button.collidepoint(transformed_click):
+                        button_pressed = 'normal'
+                    elif esc_button.collidepoint(transformed_click):
+                        button_pressed = 'esc'
+                    elif update_count > 0 and updates_button.collidepoint(transformed_click):
+                        button_pressed = 'updates'
 
             if event.type == pygame.MOUSEBUTTONUP:
                 click_pos = event.pos
 
-                if rotation == 270:
+                if effective_rotate == 270:
                     transformed_click = (click_pos[1], surf_height - click_pos[0])
-                elif rotation == 90:
+                elif effective_rotate == 90:
                     transformed_click = (surf_width - click_pos[1], click_pos[0])
-                elif rotation == 180:
+                elif effective_rotate == 180:
                     transformed_click = (surf_width - click_pos[0], surf_height - click_pos[1])
                 else:
                     transformed_click = click_pos
 
-                if button_pressed == 'fullscreen' and fullscreen_button.collidepoint(transformed_click):
-                    pygame.quit()
-                    stop_tars_ai()
-                    time.sleep(0.1)
-                    run_tars_ai_fullscreen()
-                    return
+                if show_popup:
+                    if popup_button_pressed == 'install' and popup_install_btn.collidepoint(transformed_click):
+                        pygame.quit()
+                        handle_install_updates()
+                        create_touch_menu()
+                        return
+                    elif popup_button_pressed == 'skip' and popup_skip_btn.collidepoint(transformed_click):
+                        show_popup = False
+                        paused_time += time.time() - popup_open_time
+                    popup_button_pressed = None
+                else:
+                    if button_pressed == 'fullscreen' and fullscreen_button.collidepoint(transformed_click):
+                        pygame.quit()
+                        stop_tars_ai()
+                        time.sleep(0.1)
+                        run_tars_ai_fullscreen()
+                        return
 
-                elif button_pressed == 'normal' and normal_button.collidepoint(transformed_click):
-                    pygame.quit()
-                    run_tars_ai_normal()
-                    sys.exit()
+                    elif button_pressed == 'normal' and normal_button.collidepoint(transformed_click):
+                        pygame.quit()
+                        run_tars_ai_normal()
+                        sys.exit()
 
-                elif button_pressed == 'esc' and esc_button.collidepoint(transformed_click):
-                    running = False
-                    pygame.quit()
-                    sys.exit()
+                    elif button_pressed == 'esc' and esc_button.collidepoint(transformed_click):
+                        running = False
+                        pygame.quit()
+                        sys.exit()
 
-                button_pressed = None
+                    elif button_pressed == 'updates' and update_count > 0 and updates_button.collidepoint(transformed_click):
+                        show_popup = True
+                        popup_open_time = time.time()
+                        popup_scroll_offset = 0
+
+                    button_pressed = None
 
         draw_surface.fill(BLACK)
 
@@ -604,6 +835,15 @@ def create_touch_menu():
         esc_text_rect = esc_text.get_rect(center=esc_button.center)
         draw_surface.blit(esc_text, esc_text_rect)
 
+        if update_count > 0:
+            updates_color = GREEN if (updates_hover or button_pressed == 'updates') else DARK_GRAY
+            updates_bg_color = WHITE if button_pressed == 'updates' else updates_color
+            pygame.draw.rect(draw_surface, updates_bg_color, updates_button)
+            pygame.draw.rect(draw_surface, GREEN if (updates_hover or button_pressed == 'updates') else LIGHT_GRAY, updates_button, 2)
+            updates_text = small_font.render(f"UPDATES ({update_count})", True, GREEN if button_pressed == 'updates' else WHITE)
+            updates_text_rect = updates_text.get_rect(center=updates_button.center)
+            draw_surface.blit(updates_text, updates_text_rect)
+
         section_label = section_font.render("LAUNCH MODE SELECTION", True, WHITE)
         section_rect = section_label.get_rect(center=(surf_width // 2, int(surf_height * 0.32)))
         draw_surface.blit(section_label, section_rect)
@@ -637,27 +877,99 @@ def create_touch_menu():
 
         countdown_frame = pygame.Rect(int(surf_width * 0.4), int(surf_height * 0.85), 
                                       int(surf_width * 0.2), int(surf_height * 0.083))
-        draw_corner_brackets(draw_surface, countdown_frame, ORANGE if remaining_time <= 3 else CYAN, 15, 2)
+        
+        if show_popup:
+            frame_color = LIGHT_GRAY
+            countdown_color = LIGHT_GRAY
+        elif remaining_time <= 3:
+            frame_color = ORANGE
+            countdown_color = ORANGE
+        else:
+            frame_color = CYAN
+            countdown_color = CYAN
+            
+        draw_corner_brackets(draw_surface, countdown_frame, frame_color, 15, 2)
 
         countdown_label = tiny_font.render("AUTO.LAUNCH", True, LIGHT_GRAY)
         countdown_label_rect = countdown_label.get_rect(center=(surf_width // 2, int(surf_height * 0.833)))
         draw_surface.blit(countdown_label, countdown_label_rect)
 
-        countdown_color = ORANGE if remaining_time <= 3 else CYAN
-        countdown_text = countdown_font.render(f"{int(remaining_time):02d}s", True, countdown_color)
+        if show_popup:
+            countdown_text = section_font.render("PAUSED", True, countdown_color)
+        else:
+            countdown_text = countdown_font.render(f"{int(remaining_time):02d}s", True, countdown_color)
         countdown_rect = countdown_text.get_rect(center=(surf_width // 2, int(surf_height * 0.892)))
         draw_surface.blit(countdown_text, countdown_rect)
 
-        if remaining_time <= 3:
+        if remaining_time <= 3 and not show_popup:
             warning_text = tiny_font.render(">> INITIATING <<", True, ORANGE)
             warning_rect = warning_text.get_rect(center=(surf_width // 2, int(surf_height * 0.933)))
             draw_surface.blit(warning_text, warning_rect)
 
-        if rotation == 90:
+        if show_popup:
+            overlay = pygame.Surface((surf_width, surf_height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 200))
+            draw_surface.blit(overlay, (0, 0))
+            
+            pygame.draw.rect(draw_surface, BLACK, popup_rect)
+            pygame.draw.rect(draw_surface, CYAN, popup_rect, 2)
+            draw_corner_brackets(draw_surface, popup_rect, CYAN, 20, 2)
+            
+            popup_title = section_font.render("UPDATES AVAILABLE", True, CYAN)
+            popup_title_rect = popup_title.get_rect(center=(surf_width // 2, popup_y + 30))
+            draw_surface.blit(popup_title, popup_title_rect)
+            
+            count_text = tiny_font.render(f"{update_count} new commit(s) from remote:", True, WHITE)
+            draw_surface.blit(count_text, (popup_x + 20, popup_y + 55))
+            
+            list_margin = 20
+            list_top = popup_y + 80
+            list_height = popup_height - 170
+            list_rect_inner = pygame.Rect(popup_x + list_margin, list_top, popup_width - list_margin * 2, list_height)
+            pygame.draw.rect(draw_surface, (15, 15, 15), list_rect_inner)
+            pygame.draw.rect(draw_surface, DARK_CYAN, list_rect_inner, 1)
+            
+            commit_line_height = 24
+            visible_commits = update_commits[popup_scroll_offset:popup_scroll_offset + popup_max_visible]
+            for i, commit in enumerate(visible_commits):
+                max_chars = 45
+                display_text = commit[:max_chars] + "..." if len(commit) > max_chars else commit
+                color = CYAN if i % 2 == 0 else WHITE
+                commit_surface = tiny_font.render(f"• {display_text}", True, color)
+                draw_surface.blit(commit_surface, (popup_x + list_margin + 10, list_top + 8 + i * commit_line_height))
+            
+            if len(update_commits) > popup_max_visible:
+                scroll_text = tiny_font.render(
+                    f"[{popup_scroll_offset + 1}-{min(popup_scroll_offset + popup_max_visible, len(update_commits))}/{len(update_commits)}]", 
+                    True, LIGHT_GRAY
+                )
+                scroll_rect = scroll_text.get_rect(center=(surf_width // 2, list_top + list_height + 12))
+                draw_surface.blit(scroll_text, scroll_rect)
+            
+            install_color = GREEN if popup_install_hover else DARK_CYAN
+            install_bg = GREEN if popup_button_pressed == 'install' else (DARK_GRAY if not popup_install_hover else (30, 50, 30))
+            pygame.draw.rect(draw_surface, install_bg, popup_install_btn)
+            pygame.draw.rect(draw_surface, GREEN, popup_install_btn, 2)
+            install_text = small_font.render("INSTALL", True, BLACK if popup_button_pressed == 'install' else (WHITE if popup_install_hover else GREEN))
+            install_text_rect = install_text.get_rect(center=popup_install_btn.center)
+            draw_surface.blit(install_text, install_text_rect)
+            
+            skip_bg = WHITE if popup_button_pressed == 'skip' else (DARK_GRAY if not popup_skip_hover else (40, 40, 40))
+            pygame.draw.rect(draw_surface, skip_bg, popup_skip_btn)
+            pygame.draw.rect(draw_surface, WHITE if popup_skip_hover else LIGHT_GRAY, popup_skip_btn, 2)
+            skip_text = small_font.render("SKIP", True, BLACK if popup_button_pressed == 'skip' else WHITE)
+            skip_text_rect = skip_text.get_rect(center=popup_skip_btn.center)
+            draw_surface.blit(skip_text, skip_text_rect)
+            
+            hint_text = tiny_font.render("ENTER to install | ESC to close", True, LIGHT_GRAY)
+            hint_rect = hint_text.get_rect(center=(surf_width // 2, popup_y + popup_height - 8))
+            draw_surface.blit(hint_text, hint_rect)
+
+        if effective_rotate == 90:
             rotated_surface = pygame.transform.rotate(draw_surface, 90)  
-        elif rotation == 180:
+        elif effective_rotate == 180:
             rotated_surface = pygame.transform.rotate(draw_surface, 180)
-        elif rotation == 270:
+        elif effective_rotate == 270:
             rotated_surface = pygame.transform.rotate(draw_surface, 270)
         else:
             rotated_surface = draw_surface

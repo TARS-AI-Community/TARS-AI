@@ -27,9 +27,11 @@ CONFIG = load_config()
 
 class TimeOverlay:
     
-    def __init__(self, width, height):
+    def __init__(self, width, height, rotation=0):
         self.width = width
         self.height = height
+        self.rotation = rotation
+        self.is_portrait = height > width  # Detect portrait mode
         self.ampm_format = CONFIG['UI']['ampm_format']
         pygame.font.init()
         self.font = pygame.font.Font("UI/astrolab.ttf", 30)
@@ -79,14 +81,24 @@ class TimeOverlay:
         glMatrixMode(GL_PROJECTION)
         glPushMatrix()
         glLoadIdentity()
-        glOrtho(0, self.width, 0, self.height, -1, 1)
+        
+        if self.is_portrait:
+            # Rotation first in code = applied last (rotates the final 2D output)
+            glRotatef(90, 0, 0, 1)
+            glOrtho(0, self.height, 0, self.width, -1, 1)
+            # Position in logical landscape coordinates
+            x = self.height - 80
+            y = self.width - 30
+        else:
+            glOrtho(0, self.width, 0, self.height, -1, 1)
+            x = self.width - 80
+            y = self.height - 30
+        
+        text_rotate = -90
         
         glMatrixMode(GL_MODELVIEW)
         glPushMatrix()
         glLoadIdentity()
-        
-        x = self.width - 80
-        y = self.height - 30
         
         shadow_tex = glGenTextures(1)
         glBindTexture(GL_TEXTURE_2D, shadow_tex)
@@ -98,7 +110,7 @@ class TimeOverlay:
         
         glPushMatrix()
         glTranslatef(x + 4, y - 4, 0)
-        glRotatef(-90, 0, 0, 1)
+        glRotatef(text_rotate, 0, 0, 1)
         glColor4f(1.0, 1.0, 1.0, 1.0)
         glBegin(GL_QUADS)
         glTexCoord2f(0, 0); glVertex2f(0, 0)
@@ -110,7 +122,7 @@ class TimeOverlay:
         
         glPushMatrix()
         glTranslatef(x + 3, y - 3, 0)
-        glRotatef(-90, 0, 0, 1)
+        glRotatef(text_rotate, 0, 0, 1)
         glColor4f(1.0, 1.0, 1.0, 0.7)
         glBegin(GL_QUADS)
         glTexCoord2f(0, 0); glVertex2f(0, 0)
@@ -133,7 +145,7 @@ class TimeOverlay:
         
         glPushMatrix()
         glTranslatef(x, y, 0)
-        glRotatef(-90, 0, 0, 1)
+        glRotatef(text_rotate, 0, 0, 1)
         glColor4f(1.0, 1.0, 1.0, 1.0)
         glBegin(GL_QUADS)
         glTexCoord2f(0, 0); glVertex2f(0, 0)

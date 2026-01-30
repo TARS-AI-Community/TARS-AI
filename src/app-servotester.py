@@ -33,11 +33,24 @@ from modules.module_movement_registry import get_names, get_names_by_type, LEGS_
 
 pygame.init()
 
-WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 480
+# Auto-detect display size and scale to fit
+display_info = pygame.display.Info()
+display_width = display_info.current_w
+display_height = display_info.current_h
 
+# Reference dimensions (design size)
 REFERENCE_WIDTH = 800
 REFERENCE_HEIGHT = 480
+
+# Scale to fit 90% of available screen while maintaining aspect ratio
+max_width = int(display_width * 0.9)
+max_height = int(display_height * 0.9)
+
+scale = min(max_width / REFERENCE_WIDTH, max_height / REFERENCE_HEIGHT, 1.0)
+WINDOW_WIDTH = int(REFERENCE_WIDTH * scale)
+WINDOW_HEIGHT = int(REFERENCE_HEIGHT * scale)
+
+print(f"[UI] Screen: {display_width}x{display_height}, Window: {WINDOW_WIDTH}x{WINDOW_HEIGHT}")
 
 BLACK = (0, 0, 0)
 DARK_BG = (15, 15, 18)
@@ -706,6 +719,7 @@ class Dropdown:
 
 class ServoControllerGUI:
     def __init__(self):
+        os.environ['SDL_VIDEO_CENTERED'] = '1'
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("Servo Controller - V3")
         self.clock = pygame.time.Clock()

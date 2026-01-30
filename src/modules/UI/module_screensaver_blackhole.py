@@ -31,6 +31,7 @@ class BlackHoleAnimation:
         self.screen = screen
         self.width = width
         self.height = height
+        self.is_portrait = height > width  # Detect portrait mode
         self.time = 0.0
         self.rotation_y = 0
         self.rotation_x = 0
@@ -474,8 +475,14 @@ class BlackHoleAnimation:
 
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
-        aspect_ratio = self.width / max(1, self.height)
-        gluPerspective(45, aspect_ratio, 0.1, 50.0)
+        if self.is_portrait:
+            # Portrait mode: use swapped aspect and add rotation
+            aspect_ratio = self.height / max(1, self.width)
+            glRotatef(90, 0, 0, 1)
+            gluPerspective(45, aspect_ratio, 0.1, 50.0)
+        else:
+            aspect_ratio = self.width / max(1, self.height)
+            gluPerspective(45, aspect_ratio, 0.1, 50.0)
 
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
