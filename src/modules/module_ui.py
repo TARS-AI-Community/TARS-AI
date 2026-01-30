@@ -32,9 +32,9 @@ from UI.module_ui_camera import CameraModule
 from UI.module_ui_screensaver import ScreensaverManager  
 
 CONFIG = load_config()
-screenWidth = CONFIG['UI']['screen_width']
-screenHeight = CONFIG['UI']['screen_height']
-rotation = CONFIG['UI']['rotation']
+screenWidth = CONFIG['UI'].get('screen_width', 0)  # 0 = auto-detect
+screenHeight = CONFIG['UI'].get('screen_height', 0)  # 0 = auto-detect
+rotation = CONFIG['UI'].get('rotation', 0)  # 0 = auto-detect
 show_mouse = CONFIG['UI']['show_mouse']
 use_camera_module = CONFIG['UI']['use_camera_module']
 fullscreen = CONFIG['UI']['fullscreen']
@@ -66,6 +66,9 @@ class UIManager(threading.Thread):
         self.width = width
         self.height = height
         self.rotate = rotation_value
+        self.effective_rotate = rotation_value  # May be adjusted in run() based on OS rotation
+        self.actual_display_width = width  # May be adjusted in run() based on OS rotation
+        self.actual_display_height = height  # May be adjusted in run() based on OS rotation
         self.font_size = font_size
         self.silence_progress = 0
         self.speechdelay = speechdelay
@@ -83,12 +86,21 @@ class UIManager(threading.Thread):
 
         self._load_ui_settings()  
 
-        if self.rotate in (0, 180):
-            self.logical_width = self.width
-            self.logical_height = self.height
+        # Set initial logical dimensions based on config (will be updated in run() based on actual screen)
+        # Assume portrait mode as default for initialization
+        if self.width > 0 and self.height > 0:
+            if self.width > self.height:
+                # Config is landscape, assume we want portrait
+                self.logical_width = self.height
+                self.logical_height = self.width
+            else:
+                # Config is portrait
+                self.logical_width = self.width
+                self.logical_height = self.height
         else:
-            self.logical_width = self.height
-            self.logical_height = self.width
+            # Defaults
+            self.logical_width = 600
+            self.logical_height = 1024
 
         self.particle_system = None
         self.starfield_system = None
@@ -262,10 +274,11 @@ class UIManager(threading.Thread):
     def _transform_mouse_pos(self, screen_pos, display_width, display_height):
         x, y = screen_pos
 
-        if self.rotate == 0:
+        # Use effective_rotate (actual rotation being applied) not config rotate
+        if self.effective_rotate == 0:
             return (x, y)
 
-        if self.rotate in (90, 270):
+        if self.effective_rotate in (90, 270):
             rotated_width = self.logical_height
             rotated_height = self.logical_width
         else:
@@ -278,17 +291,18 @@ class UIManager(threading.Thread):
         x -= offset_x
         y -= offset_y
 
-        if self.rotate == 90:
-            logical_x = self.logical_width - y
+        if self.effective_rotate == 90:
+            logical_x = self.logical_width - 1 - y
             logical_y = x
 
-        elif self.rotate == 180:
-            logical_x = self.logical_width - x
-            logical_y = self.logical_height - y
+        elif self.effective_rotate == 180:
+            logical_x = self.logical_width - 1 - x
+            logical_y = self.logical_height - 1 - y
 
-        elif self.rotate == 270:
+        elif self.effective_rotate == 270:
+            # Original working formula
             logical_x = y
-            logical_y = self.logical_height - x
+            logical_y = self.logical_height - 1 - x
         else:
             logical_x = x
             logical_y = y
@@ -359,11 +373,15 @@ class UIManager(threading.Thread):
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface.get_width(), surface.get_height(), 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, texture_data)
         
+        # Use actual display dimensions (may be swapped for 90/270 rotation)
+        disp_w = self.actual_display_width if hasattr(self, 'actual_display_width') else self.width
+        disp_h = self.actual_display_height if hasattr(self, 'actual_display_height') else self.height
+        
         glBegin(GL_QUADS)
         glTexCoord2f(0, 1); glVertex2f(0, 0)
-        glTexCoord2f(1, 1); glVertex2f(self.width, 0)
-        glTexCoord2f(1, 0); glVertex2f(self.width, self.height)
-        glTexCoord2f(0, 0); glVertex2f(0, self.height)
+        glTexCoord2f(1, 1); glVertex2f(disp_w, 0)
+        glTexCoord2f(1, 0); glVertex2f(disp_w, disp_h)
+        glTexCoord2f(0, 0); glVertex2f(0, disp_h)
         glEnd()
 
     def _draw_camera(self, surface):
@@ -443,10 +461,45 @@ class UIManager(threading.Thread):
             if fullscreen:
                 display_flags |= pygame.FULLSCREEN
 
-            display_width = self.width
-            display_height = self.height
+            # Auto-detect screen dimensions from OS
+            display_info = pygame.display.Info()
+            os_width = display_info.current_w
+            os_height = display_info.current_h
+            
+            # Create display - use (0,0) to auto-detect, or config values for windowed
+            if fullscreen:
+                screen = pygame.display.set_mode((0, 0), display_flags)
+            else:
+                # Windowed mode: use config dimensions if valid, else use OS dimensions
+                win_w = self.width if self.width > 0 else os_width
+                win_h = self.height if self.height > 0 else os_height
+                screen = pygame.display.set_mode((win_w, win_h), display_flags)
+            
+            actual_size = screen.get_size()
+            display_width = actual_size[0]
+            display_height = actual_size[1]
+            
+            # Determine if display is portrait
+            actual_is_portrait = display_height > display_width
+            
+            # UI is designed for portrait mode - determine if we need rotation
+            if actual_is_portrait:
+                # OS is portrait, no rotation needed
+                self.logical_width = display_width
+                self.logical_height = display_height
+                self.effective_rotate = 0
+            else:
+                # OS is landscape, need software rotation to portrait
+                self.logical_width = display_height
+                self.logical_height = display_width
+                self.effective_rotate = 270
+            
+            # Store for use in _render_surface_to_opengl
+            self.actual_display_width = display_width
+            self.actual_display_height = display_height
+            
+            print(f"[UI] Screen: {display_width}x{display_height}, Logical: {self.logical_width}x{self.logical_height}, Rotate: {self.effective_rotate}")
 
-            screen = pygame.display.set_mode((display_width, display_height), display_flags)
             pygame.display.set_caption("UI Manager")
             
             # Setup OpenGL
@@ -494,8 +547,9 @@ class UIManager(threading.Thread):
                     self.logical_height,
                     timeout=screensaver_timer,
                     screensaver_list=CONFIG['UI']['screensaver_list'],
-                    display_width=self.width,
-                    display_height=self.height
+                    display_width=display_width,
+                    display_height=display_height,
+                    rotation=self.effective_rotate
                 )
 
             except Exception as e:
@@ -583,9 +637,8 @@ class UIManager(threading.Thread):
                     
                     # For pygame screensavers, we need to upload the surface to OpenGL and flip
                     if needs_flip:
-                        # Handle rotation just like normal UI rendering
-                        if self.rotate != 0:
-                            rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
+                        if self.effective_rotate != 0:
+                            rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
                             self._render_surface_to_opengl(rotated_surface, texture_id)
                         else:
                             self._render_surface_to_opengl(original_surface, texture_id)
@@ -639,8 +692,8 @@ class UIManager(threading.Thread):
                         self.terminal_system.update()
                         self.terminal_system.draw(original_surface)
 
-                    if self.rotate != 0:
-                        rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
+                    if self.effective_rotate != 0:
+                        rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
                         self._render_surface_to_opengl(rotated_surface, texture_id)
                     else:
                         self._render_surface_to_opengl(original_surface, texture_id)
@@ -662,8 +715,8 @@ class UIManager(threading.Thread):
                         self.terminal_system.update()
                         self.terminal_system.draw(original_surface)
 
-                    if self.rotate != 0:
-                        rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
+                    if self.effective_rotate != 0:
+                        rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
                         self._render_surface_to_opengl(rotated_surface, texture_id)
                     else:
                         self._render_surface_to_opengl(original_surface, texture_id)
@@ -685,8 +738,8 @@ class UIManager(threading.Thread):
                         self.terminal_system.update()
                         self.terminal_system.draw(original_surface)
 
-                    if self.rotate != 0:
-                        rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
+                    if self.effective_rotate != 0:
+                        rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
                         self._render_surface_to_opengl(rotated_surface, texture_id)
                     else:
                         self._render_surface_to_opengl(original_surface, texture_id)
@@ -708,8 +761,8 @@ class UIManager(threading.Thread):
                         self.terminal_system.update()
                         self.terminal_system.draw(original_surface)
 
-                    if self.rotate != 0:
-                        rotated_surface = pygame.transform.rotate(original_surface, self.rotate)
+                    if self.effective_rotate != 0:
+                        rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
                         self._render_surface_to_opengl(rotated_surface, texture_id)
                     else:
                         self._render_surface_to_opengl(original_surface, texture_id)

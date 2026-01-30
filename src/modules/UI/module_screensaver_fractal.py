@@ -32,6 +32,7 @@ class FractalAnimation:
         self.screen = screen
         self.width = width
         self.height = height
+        self.is_portrait = height > width  # Detect portrait mode
         self.time = 0.0
         self.initialized = False
         

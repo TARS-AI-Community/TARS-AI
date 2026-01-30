@@ -15,11 +15,14 @@ in whole or in part, provided that:
 
 This notice applies only to this module and does not extend to the
 entire project or repository in which it may be included.
+
+MODIFIED: Added rotation support for OpenGL screensavers
 """
 
 
 import time
 import random
+import inspect
 import pygame
 from modules.module_config import load_config
 from UI.module_screensaver_face import FaceAnimation
@@ -68,11 +71,22 @@ AVAILABLE_ANIMATIONS = {
 FALLBACK_ANIMATIONS = ["starfield", "matrix", "hyperspace", "pacman", "terminal", "face"]
 
 
+def _class_accepts_param(cls, param_name):
+    """Check if a class's __init__ method accepts a given parameter."""
+    try:
+        sig = inspect.signature(cls.__init__)
+        return param_name in sig.parameters
+    except (ValueError, TypeError):
+        return False
+
+
 class ScreensaverManager:
-    def __init__(self, screen, width, height, timeout=5.0, screensaver_list=None, display_width=None, display_height=None):
+    def __init__(self, screen, width, height, timeout=5.0, screensaver_list=None, 
+                 display_width=None, display_height=None, rotation=0):
         self.screen = screen
         self.width = width
         self.height = height
+        self.rotation = rotation  # NEW: Store rotation value
         
         self.display_width = display_width if display_width else width
         self.display_height = display_height if display_height else height
@@ -125,8 +139,17 @@ class ScreensaverManager:
         if not HAS_OPENGL:
             return
 
+        # Determine if we need to rotate for portrait output on landscape display
+        is_portrait_output = self.height > self.width
+        is_landscape_display = self.display_width > self.display_height
+        need_rotation = is_portrait_output and is_landscape_display
+
+        if need_rotation:
+            # Rotate 270 degrees for landscape display
+            surface = pygame.transform.rotate(surface, 270)
+
         texture_data = pygame.image.tostring(surface, "RGBA", True)
-        width, height = surface.get_size()
+        tex_width, tex_height = surface.get_size()
   
         if self.gl_texture_id is None:
             self.gl_texture_id = glGenTextures(1)
@@ -150,17 +173,18 @@ class ScreensaverManager:
         glBindTexture(GL_TEXTURE_2D, self.gl_texture_id)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_width, tex_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data)
         
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glColor4f(1.0, 1.0, 1.0, 1.0)
         
+        # Normal texture mapping - pygame rotation already handled orientation
         glBegin(GL_QUADS)
-        glTexCoord2f(1, 0); glVertex2f(0, 0)
-        glTexCoord2f(1, 1); glVertex2f(self.display_width, 0)
-        glTexCoord2f(0, 1); glVertex2f(self.display_width, self.display_height)
-        glTexCoord2f(0, 0); glVertex2f(0, self.display_height)
+        glTexCoord2f(0, 0); glVertex2f(0, 0)
+        glTexCoord2f(1, 0); glVertex2f(self.display_width, 0)
+        glTexCoord2f(1, 1); glVertex2f(self.display_width, self.display_height)
+        glTexCoord2f(0, 1); glVertex2f(0, self.display_height)
         glEnd()
         
         glMatrixMode(GL_PROJECTION)
@@ -204,7 +228,22 @@ class ScreensaverManager:
             animation_type = animation_info["type"]
             
             if animation_type == "opengl":
-                self.current_animation = animation_class(self.screen, self.display_width, self.display_height, show_time=self.show_time)
+                # Check if screensaver supports rotation parameter
+                if _class_accepts_param(animation_class, 'rotation'):
+                    self.current_animation = animation_class(
+                        self.screen, 
+                        self.display_width, 
+                        self.display_height, 
+                        show_time=self.show_time,
+                        rotation=self.rotation
+                    )
+                else:
+                    self.current_animation = animation_class(
+                        self.screen, 
+                        self.display_width, 
+                        self.display_height, 
+                        show_time=self.show_time
+                    )
                 self.gl_mode_active = True
             else:
                 if self.gl_mode_active and HAS_OPENGL:

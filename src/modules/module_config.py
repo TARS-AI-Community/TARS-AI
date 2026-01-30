@@ -333,9 +333,6 @@ def load_config():
         },
         "UI": {
             "UI_enabled": config.getboolean('UI', 'UI_enabled'),
-            "screen_width": int(config['UI']['screen_width']),
-            "screen_height": int(config['UI']['screen_height']),
-            "rotation": int(config['UI']['rotation']),
             "show_mouse": config.getboolean('UI', 'show_mouse'),
             "use_camera_module": config.getboolean('UI', 'use_camera_module'),
             "fullscreen": config.getboolean('UI', 'fullscreen'),
@@ -556,8 +553,7 @@ class TarsConfigIntegration:
             
             # Integer fields - accept int, numeric strings
             elif field_name in ['sensitivity', 'speechdelay', 'contextsize', 'max_tokens',
-                              'seed', 'top_k', 'steps', 'width', 'height', 'screen_width',
-                              'screen_height', 'rotation', 'font_size',
+                              'seed', 'top_k', 'steps', 'width', 'height', 'font_size',
                               'target_fps', 'battery_capacity_mAh']:
                 try:
                     int(float(str_value))  # Allow "8.0" -> 8
