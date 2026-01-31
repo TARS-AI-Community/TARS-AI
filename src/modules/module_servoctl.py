@@ -303,9 +303,19 @@ def reset_positions():
     
     disable_all_servos()
 
-def move_servos_synchronized(movements, speed_factor):
+def move_servos_synchronized(movements, speed_factor, easing_strength=None):
+    """
+    Move multiple servos simultaneously.
     
+    Parameters:
+    - movements: List of (channel, target_value) tuples
+    - speed_factor: Speed multiplier (0.0-1.0, higher is faster)
+    - easing_strength: Easing amount (None uses global default, 0 = linear, higher = more ease in/out)
+    """
     global _channels_initialized
+    
+    # Use provided easing or fall back to global default
+    effective_easing = easing_strength if easing_strength is not None else global_easing_strength
     
     signal_servo_activity()
     
@@ -383,12 +393,12 @@ def move_servos_synchronized(movements, speed_factor):
         else:
             progress = 1.0
         
-        if global_easing_strength > 0:
+        if effective_easing > 0:
             if progress < 0.5:
                 eased = 2 * progress * progress
             else:
                 eased = 1 - 2 * (1 - progress) * (1 - progress)
-            delay_multiplier = 1.0 + global_easing_strength * (1.0 - 4 * (eased - 0.5) ** 2)
+            delay_multiplier = 1.0 + effective_easing * (1.0 - 4 * (eased - 0.5) ** 2)
         else:
             delay_multiplier = 1.0
         
@@ -462,6 +472,9 @@ def move_arm(left_main=None, left_forearm=None, left_hand=None,
     arm_speed_curve = 0.2  # Lower = more boost to slow speeds
     adjusted_speed = speed_factor ** arm_speed_curve
     
+    # Arm-specific easing for smoother movements (ease in/out)
+    arm_easing_strength = 0.85
+    
     def percentage_to_value(percent, min_val, max_val):
         if percent == 0:
             return None
@@ -484,7 +497,7 @@ def move_arm(left_main=None, left_forearm=None, left_hand=None,
         (9, percentage_to_value(right_hand, rightHandMin, rightHandMax) if right_hand is not None and right_hand != 0 else None),
     ]
 
-    move_servos_synchronized(movements, adjusted_speed)
+    move_servos_synchronized(movements, adjusted_speed, easing_strength=arm_easing_strength)
 
 def cleanup():
     
@@ -500,6 +513,7 @@ from modules.module_movements import (
     turn_left,
     turn_left_slow,
     right_hi,
+    left_hi,
     laugh,
     excited,
     swing_legs,
