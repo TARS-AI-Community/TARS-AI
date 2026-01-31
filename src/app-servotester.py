@@ -1934,17 +1934,15 @@ if __name__ == "__main__":
         elif mode_choice == '3':
             
             reset_positions()
-            
 
-            move_legs(50, 50, 50, 50, 0.9)
-            move_legs(22, 22, 50, 50, 0.9)
-            move_legs(22, 22, 80, 80, 0.9)
-            move_legs(68, 68, 92, 92, 0.9)
-            move_legs(15, 15, 83, 83, 0.9)
-            move_legs(75, 75, 76, 76, 0.9)
-            move_legs(70, 70, 50, 50, 0.9)
-            move_legs(50, 50, 50, 50, 0.9)
 
+            move_arm(None, None, None, 40, 50, 100, 0.7)
+            time.sleep(1)
+            move_arm(None, None, None, 40, 50, 100, 0.7)
+            time.sleep(1)
+            move_arm(None, None, None, 40, 50, 1, 0.7)
+            time.sleep(1)
+            move_arm(None, None, None, 1, 1, 1, 0.7)
             
             disable_all_servos()
             pass
