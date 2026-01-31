@@ -457,6 +457,11 @@ def move_arm(left_main=None, left_forearm=None, left_hand=None,
     - speed_factor: Speed multiplier (0.0-1.0, higher is faster)
     """
     
+    # Apply curve for better arm speed control
+    # Aggressive curve: 0.4 input now gives similar speed to old 0.8
+    arm_speed_curve = 0.2  # Lower = more boost to slow speeds
+    adjusted_speed = speed_factor ** arm_speed_curve
+    
     def percentage_to_value(percent, min_val, max_val):
         if percent == 0:
             return None
@@ -479,7 +484,7 @@ def move_arm(left_main=None, left_forearm=None, left_hand=None,
         (9, percentage_to_value(right_hand, rightHandMin, rightHandMax) if right_hand is not None and right_hand != 0 else None),
     ]
 
-    move_servos_synchronized(movements, speed_factor)
+    move_servos_synchronized(movements, adjusted_speed)
 
 def cleanup():
     
