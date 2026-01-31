@@ -257,6 +257,44 @@ def right_hi():
             servoctl._notify_movement_end()
 
 
+def left_hi():
+    if not servoctl.MOVING:
+        servoctl.MOVING = True
+        servoctl._notify_movement_start()
+        try:
+            move_legs(50, None, 50, None, 0.8)
+            move_legs(80, None, 50, None, 0.8)
+            move_legs(80, None, 80, None, 0.8)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, None, None, None, 0.8)
+            time.sleep(0.2)
+            move_arm(100, 1, 1, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, None, None, None, 0.9)
+            time.sleep(0.2)
+            move_arm(100, 50, 1, None, None, None, 0.9)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, None, None, None, 0.9)
+            time.sleep(0.2)
+            move_arm(100, 50, 1, None, None, None, 0.9)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, None, None, None, 0.9)
+            time.sleep(0.2)
+            move_arm(100, 50, 1, None, None, None, 0.8)
+            time.sleep(0.2)
+            move_arm(100, 1, 1, None, None, None, 0.8)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_legs(80, None, 50, None, 0.8)
+            move_legs(50, None, 50, None, 0.8)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            servoctl.MOVING = False
+            servoctl._notify_movement_end()
+
+
 def laugh():
     if not servoctl.MOVING:
         servoctl.MOVING = True
@@ -346,7 +384,7 @@ def pezz_dispenser():
             servoctl._notify_movement_end()
 
 
-    """ if not servoctl.MOVING:
+    if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
         try:
@@ -374,7 +412,7 @@ def pezz_dispenser():
             disable_all_servos()
         finally:
             servoctl.MOVING = False
-            servoctl._notify_movement_end() """
+            servoctl._notify_movement_end()
 
 
 def monster():

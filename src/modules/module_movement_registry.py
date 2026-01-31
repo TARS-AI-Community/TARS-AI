@@ -22,6 +22,7 @@ MOVEMENTS = {
     "laugh": {"name": "Laugh", "type": LEGS_ONLY},
     "swing_legs": {"name": "Swing Legs", "type": LEGS_ONLY},
     "right_hi": {"name": "Right Hi", "type": HAS_ARMS},
+    "left_hi": {"name": "Left Hi", "type": HAS_ARMS},
     "pezz_dispenser": {"name": "Pezz Dispenser", "type": HAS_ARMS},
     "monster": {"name": "Monster", "type": HAS_ARMS},
 }
