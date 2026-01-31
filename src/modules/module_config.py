@@ -188,7 +188,8 @@ def load_config():
         "CONTROLS": {
             "controller_name": config['CONTROLS']['controller_name'],
             "enabled": config['CONTROLS']['enabled'],
-            "voicemovement": config['CONTROLS']['voicemovement'],         
+            "voicemovement": config['CONTROLS']['voicemovement'],
+            "swap_turn_directions": config.getboolean('CONTROLS', 'swap_turn_directions', fallback=False),
         },
         "STT": {
             "language" : config['STT']['language'],
@@ -809,3 +810,335 @@ def get_config_sync_status() -> Dict:
     """
     integration = TarsConfigIntegration()
     return integration.get_config_analysis()
+
+
+CONFIG_UI_FIELDS = {
+    'CONTROLS': {
+        '__description__': 'Controller settings',
+        'controller_name': {
+            'description': 'Name of the controller used for interaction'
+        },
+        'enabled': {
+            'description': 'Enable use of controller for interaction'
+        },
+        'voicemovement': {
+            'description': 'Enable or disable movement via voice control'
+        },
+        'swap_turn_directions': {
+            'description': 'Swap left and right turn directions (for mirrored robot orientation)'
+        },
+    },
+
+    'STT': {
+        '__description__': 'Speech-to-Text configuration',
+        'language': {
+            'description': 'Spoken language (if not english, use stt_processor = openai)'
+        },
+        'wake_word': {
+            'description': 'Wake word for activating the system'
+        },
+        'wake_word_processor': {
+            'options': ['picovoice', 'fastrtc', 'atomik'],
+            'description': 'Wake word detection processor'
+        },
+        'sensitivity': {
+            'description': 'Wake word sensitivity (1=lenient, 10=strict)'
+        },
+        'stt_processor': {
+            'options': ['vosk', 'faster-whisper', 'silero', 'fastrtc', 'openai', 'external'],
+            'description': 'Speech-to-text processor'
+        },
+        'use_indicators': {
+            'description': 'Use beeps to indicate when listening'
+        },
+        'external_url': {
+            'description': 'URL for external STT server'
+        },
+        'whisper_model': {
+            'options': ['tiny', 'base', 'small', 'medium', 'large'],
+            'description': 'Whisper model size for onboard transcription'
+        },
+        'vosk_model': {
+            'description': 'Vosk model name for local STT'
+        },
+        'vad_method': {
+            'options': ['silero', 'rms'],
+            'description': 'Voice activity detection method'
+        },
+        'speechdelay': {
+            'description': 'Tenths of seconds to wait before sleeping (20 = 2 seconds)'
+        },
+        'picovoice_keyword_path': {
+            'description': 'Path to Porcupine keyword file'
+        },
+    },
+
+    'CHAR': {
+        '__description__': 'Character-specific details',
+        'character_card_path': {
+            'description': 'Path to character JSON file'
+        },
+        'user_name': {
+            'description': 'Name of the user'
+        },
+        'user_details': {
+            'description': 'Additional user details for context'
+        },
+        'responses': {
+            'type': 'array',
+            'description': 'Wake word responses (what TARS says after hearing wake word)'
+        },
+        'thinking_responses': {
+            'type': 'array',
+            'description': 'Thinking responses (what TARS says while processing)'
+        },
+    },
+
+    'LLM': {
+        '__description__': 'Large Language Model configuration',
+        'llm_backend': {
+            'options': ['openai', 'grok', 'tabby', 'ooba'],
+            'description': 'LLM backend service'
+        },
+        'base_url': {
+            'description': 'API URL (OpenAI: https://api.openai.com, Grok: https://api.x.ai)'
+        },
+        'openai_model': {
+            'description': 'OpenAI model (gpt-4o-mini, gpt-4o, etc.)'
+        },
+        'grok_model': {
+            'options': ['grok-4-1-fast-non-reasoning', 'grok-4-1-fast-reasoning', 'grok-3-mini'],
+            'description': 'Grok model'
+        },
+        'override_encoding_model': {
+            'options': ['cl100k_base', 'p50k_base', 'r50k_base', 'gpt2'],
+            'description': 'Token encoding model override'
+        },
+        'contextsize': {
+            'description': 'Maximum token context size'
+        },
+        'max_tokens': {
+            'description': 'Maximum tokens per response'
+        },
+        'temperature': {
+            'description': 'Randomness (0.0-1.0, higher = more random)'
+        },
+        'top_p': {
+            'description': 'Nucleus sampling threshold'
+        },
+        'seed': {
+            'description': 'Random seed (-1 for random)'
+        },
+        'systemprompt': {
+            'description': 'System prompt defining LLM behavior'
+        },
+    },
+
+    'VISION': {
+        '__description__': 'Vision/image recognition configuration',
+        'enabled': {
+            'description': 'Enable vision module'
+        },
+        'server_hosted': {
+            'description': 'Vision server is hosted locally'
+        },
+        'base_url': {
+            'description': 'Vision server API URL'
+        },
+    },
+
+    'EMOTION': {
+        '__description__': 'Emotion detection for avatars',
+        'enabled': {
+            'description': 'Enable emotion detection'
+        },
+        'emotion_model': {
+            'description': 'HuggingFace model for emotion analysis'
+        },
+    },
+
+    'TTS': {
+        '__description__': 'Text-to-Speech configuration',
+        'ttsoption': {
+            'options': ['espeak', 'piper', 'silero', 'alltalk', 'elevenlabs', 'minimax', 'openai', 'azure'],
+            'description': 'TTS engine'
+        },
+        'ttsurl': {
+            'description': 'TTS server URL (for alltalk)'
+        },
+        'tts_voice': {
+            'description': 'Voice name (for azure/alltalk)'
+        },
+        'azure_region': {
+            'options': ['eastus', 'eastus2', 'westus', 'westus2', 'centralus', 'northeurope', 'westeurope'],
+            'description': 'Azure region'
+        },
+        'elevenlabs_voice_id': {
+            'description': 'ElevenLabs voice ID'
+        },
+        'elevenlabs_model': {
+            'options': ['eleven_multilingual_v2', 'eleven_monolingual_v1', 'eleven_turbo_v2'],
+            'description': 'ElevenLabs model'
+        },
+        'minimax_voice_id': {
+            'description': 'Minimax voice ID'
+        },
+        'minimax_model': {
+            'options': ['speech-2.6-turbo', 'speech-2.8-turbo', 'speech-2.6-hd', 'speech-2.8-hd'],
+            'description': 'Minimax model'
+        },
+        'openai_voice': {
+            'options': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
+            'description': 'OpenAI TTS voice'
+        },
+        'toggle_charvoice': {
+            'description': 'Use character-specific voice settings'
+        },
+    },
+
+    'STABLE_DIFFUSION': {
+        '__description__': 'Image Generation',
+        'enabled': {
+            'description': 'Enable image generation'
+        },
+        'service': {
+            'options': ['automatic1111', 'openai'],
+            'description': 'Image generation service'
+        },
+        'url': {
+            'description': 'Automatic1111 server URL'
+        },
+        'prompt_prefix': {
+            'description': 'Prefix added to image prompts'
+        },
+        'prompt_postfix': {
+            'description': 'Postfix added to image prompts'
+        },
+        'negative_prompt': {
+            'description': 'Negative prompt (things to avoid)'
+        },
+        'seed': {
+            'description': 'Seed (-1 for random)'
+        },
+        'sampler_name': {
+            'options': ['Euler a', 'Euler', 'DPM++ 2M Karras', 'DPM++ SDE Karras', 'DDIM'],
+            'description': 'Sampler'
+        },
+        'steps': {
+            'description': 'Generation steps'
+        },
+        'cfg_scale': {
+            'description': 'CFG scale (prompt adherence)'
+        },
+        'width': {
+            'description': 'Image width in pixels'
+        },
+        'height': {
+            'description': 'Image height in pixels'
+        },
+        'denoising_strength': {
+            'description': 'Denoising strength'
+        },
+        'restore_faces': {
+            'description': 'Enable face restoration'
+        },
+    },
+
+    'CHATUI': {
+        '__description__': 'Chat UI settings',
+        'enabled': {
+            'description': 'Enable Chat UI (required for avatars)'
+        },
+    },
+
+    'UI': {
+        '__description__': 'Graphical interface settings',
+        'UI_enabled': {
+            'description': 'Enable the visual UI'
+        },
+        'use_camera_module': {
+            'description': 'Enable camera'
+        },
+        'show_mouse': {
+            'description': 'Show software mouse cursor'
+        },
+        'fullscreen': {
+            'description': 'Run in fullscreen mode'
+        },
+        'font_size': {
+            'description': 'Font size (9-20)'
+        },
+        'screensaver_timer': {
+            'description': 'Seconds before screensaver (0 = disabled)'
+        },
+        'screensaver_cycle_interval': {
+            'description': 'Seconds between screensaver changes'
+        },
+        'screensaver_list': {
+            'type': 'array',
+            'description': 'Screensavers: random, or specific ones (blackhole, waves, matrix, starfield, hyperspace, terminal, face, fractal, pacman, nebulas, pictures, dashboard, defrag, bounce, endurance)'
+        },
+        'show_time': {
+            'description': 'Show time on screensaver'
+        },
+        'ampm_format': {
+            'description': 'Use AM/PM time format'
+        },
+        'show_cpu_temp': {
+            'description': 'Show CPU temperature'
+        },
+        'target_fps': {
+            'description': 'UI refresh rate (FPS)'
+        },
+    },
+
+    'RAG': {
+        '__description__': 'Retrieval Augmented Generation (Memory)',
+        'strategy': {
+            'options': ['naive', 'hybrid'],
+            'description': 'Retrieval strategy (naive=vector-only, hybrid=vector+BM25)'
+        },
+        'top_k': {
+            'description': 'Number of documents to retrieve'
+        },
+        'context_window': {
+            'description': 'Memories before/after each match'
+        },
+        'max_memories': {
+            'description': 'Max results to expand'
+        },
+        'recency_boost_days': {
+            'description': 'Days to boost recent chats'
+        },
+        'enable_topic_tracking': {
+            'description': 'Enable long-term memory'
+        },
+    },
+
+    'HOME_ASSISTANT': {
+        '__description__': 'Home Assistant integration',
+        'enabled': {
+            'description': 'Enable Home Assistant'
+        },
+        'url': {
+            'description': 'Home Assistant URL'
+        },
+    },
+
+    'DISCORD': {
+        '__description__': 'Discord bot integration',
+        'enabled': {
+            'description': 'Enable Discord integration'
+        },
+        'channel_id': {
+            'description': 'Discord channel ID'
+        },
+    },
+
+    'MISC': {
+        '__description__': 'Miscellaneous settings',
+        'ventilate': {
+            'description': 'Auto-ventilate pose for airflow'
+        },
+    },
+}

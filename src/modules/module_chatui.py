@@ -51,12 +51,14 @@ from PIL import Image, UnidentifiedImageError
 
 # === Custom Modules ===
 from modules.module_config import load_config
+from modules.module_config import CONFIG_UI_FIELDS
 from modules.module_llm import get_completion
 from modules.module_vision import get_image_caption_from_base64
 from modules.module_tts import generate_tts_audio
 from modules.module_llm import detect_emotion
 from modules.module_messageQue import queue_message
 from modules.module_servoctl import *
+from modules.module_movement_registry import get_names, get_names_by_type, LEGS_ONLY, HAS_ARMS, MOVEMENTS
 
 # Suppress Flask logs
 log = logging.getLogger('werkzeug')
@@ -557,11 +559,39 @@ def robot_move():
         queue_message(f"Error moving robot: {e}")
         return jsonify({"error": f"Failed to move robot: {str(e)}"}), 500
 
+@flask_app.route('/get_movements', methods=['GET'])
+def get_movements():
+    """
+    Returns available movements from the registry, organized by type.
+    """
+    try:
+        # Build the movements list with reset_positions first
+        movements = [{"id": "reset_positions", "name": "Reset Position", "type": "system"}]
+        
+        # Add legs-only movements
+        for func_name, info in MOVEMENTS.items():
+            movements.append({
+                "id": func_name,
+                "name": info["name"],
+                "type": info["type"]
+            })
+        
+        return jsonify({
+            "success": True,
+            "movements": movements,
+            "legs_only": [{"id": k, "name": v["name"]} for k, v in MOVEMENTS.items() if v["type"] == LEGS_ONLY],
+            "has_arms": [{"id": k, "name": v["name"]} for k, v in MOVEMENTS.items() if v["type"] == HAS_ARMS]
+        }), 200
+        
+    except Exception as e:
+        queue_message(f"Error getting movements: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @flask_app.route('/execute_action', methods=['POST'])
 def execute_action():
     """
     Handles execution of predefined actions selected from dropdown.
-    Expects JSON with an 'action' field containing an integer 0-14.
+    Expects JSON with an 'action' field containing a movement function name.
     """
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
@@ -569,46 +599,26 @@ def execute_action():
     data = request.get_json()
     action = data.get('action')
 
-    try:
-        action = int(action)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Invalid action format."}), 400
+    if not action:
+        return jsonify({"error": "No action specified."}), 400
 
     try:
-        if action == 0:
+        # Handle reset_positions specially
+        if action == "reset_positions":
             reset_positions()
-        elif action == 1:
-            step_forward()
-        elif action == 2:
-            step_backward()
-        elif action == 3:
-            turn_right()
-        elif action == 4:
-            turn_left()
-        elif action == 5:
-            right_hi()
-        elif action == 6:
-            laugh()
-        elif action == 7:
-            swing_legs()
-        elif action == 8:
-            pezz_dispenser()
-        elif action == 9:
-            now()
-        elif action == 10:
-            balance()
-        elif action == 11:
-            mic_drop()
-        elif action == 12:
-            monster()
-        elif action == 13:
-            pose()
-        elif action == 14:
-            bow()
+            return jsonify({"success": True, "message": "Reset positions executed successfully."}), 200
+        
+        # Check if action exists in the movement registry
+        if action in MOVEMENTS:
+            # Get the function from globals (imported from module_servoctl)
+            if action in globals():
+                func = globals()[action]
+                func()
+                return jsonify({"success": True, "message": f"{MOVEMENTS[action]['name']} executed successfully."}), 200
+            else:
+                return jsonify({"error": f"Movement function '{action}' not found."}), 400
         else:
-            return jsonify({"error": "Invalid action number."}), 400
-
-        return jsonify({"success": True, "message": f"Action {action} executed successfully."}), 200
+            return jsonify({"error": f"Unknown action: {action}"}), 400
 
     except Exception as e:
         queue_message(f"Error executing action: {e}")
@@ -906,119 +916,54 @@ def parse_config_with_comments(file_path):
 
 @flask_app.route('/get_config', methods=['GET'])
 def get_config():
-    """
-    Returns the current configuration with field options for dropdowns
-    """
     import configparser
-    
-    # Define field options for dropdowns and hardcoded hints
-    field_options = {
-        # CONTROLS Section
-        'CONTROLS.__section__': {'description': 'Controller settings'},
-        'CONTROLS.controller_name': {'description': 'Name of the controller used for interaction'},
-        'CONTROLS.enabled': {'description': 'Enable use of controller used for interaction'},
-        'CONTROLS.voicemovement': {'description': 'Enable or disable movement via voice control'},
-        
-        # STT Section
-        'STT.__section__': {'description': 'Speech-to-Text configuration'},
-        'STT.wake_word': {'description': 'Wake word for activating the system'},
-        'STT.sensitivity': {'description': 'Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for wake word detection'},
-        'STT.stt_processor': {
-            'options': ['vosk', 'faster-whisper', 'silero', 'fastrtc', 'external'],
-            'description': 'vosk, faster-whisper, silero, fastrtc, or external'
-        },
-        'STT.external_url': {'description': 'URL for the STT server (if enabled)'},
-        'STT.whisper_model': {
-            'options': ['tiny', 'base', 'small', 'medium', 'large'],
-            'description': 'Whisper model size'
-        },
-        'STT.vad_method': {
-            'options': ['silero', 'rms'],
-            'description': 'Voice activity detection method'
-        },
-        'STT.wake_word_processor': {
-            'options': ['picovoice', 'pocketsphinx', 'fastrtc'],
-            'description': 'Wake word detection processor'
-        },
-        'LLM.llm_backend': {
-            'options': ['openai', 'tabby', 'ooba', 'deepinfra'],
-            'description': 'LLM backend service'
-        },
-        'LLM.openai_model': {
-            'description': 'OpenAI model to use for LLM if backend = openai (e.g., gpt-4o-mini, gpt-4o, gpt-3.5-turbo, gpt-4)'
-        },
-        'LLM.override_encoding_model': {
-            'options': ['cl100k_base', 'p50k_base', 'r50k_base', 'gpt2'],
-            'description': 'Token encoding model'
-        },
-        'TTS.ttsoption': {
-            'options': ['espeak', 'piper', 'silero', 'alltalk', 'azure', 'elevenlabs', 'openai'],
-            'description': 'Text-to-speech service'
-        },
-        'TTS.azure_region': {
-            'options': ['eastus', 'westus', 'westus2', 'eastus2', 'centralus'],
-            'description': 'Azure region for TTS'
-        },
-        'TTS.openai_voice': {
-            'options': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
-            'description': 'OpenAI TTS voice'
-        },
-        'TTS.model_id': {
-            'options': ['eleven_multilingual_v2', 'eleven_monolingual_v1', 'eleven_turbo_v2'],
-            'description': 'ElevenLabs model ID'
-        },
-        'STABLE_DIFFUSION.service': {
-            'options': ['automatic1111', 'openai'],
-            'description': 'Image generation service'
-        },
-        'STABLE_DIFFUSION.sampler_name': {
-            'options': ['Euler a', 'Euler', 'DPM++ 2M Karras', 'DPM++ SDE Karras', 'DDIM'],
-            'description': 'Stable Diffusion sampler'
-        },
-        'UI.rotation': {
-            'options': ['0', '90', '180', '270'],
-            'description': 'Screen rotation in degrees'
-        },
-        'RAG.strategy': {
-            'options': ['naive', 'hybrid'],
-            'description': 'RAG retrieval strategy'
-        }
-    }
     
     try:
         config_file = os.path.join(BASE_DIR, 'config.ini')
         template_file = os.path.join(BASE_DIR, 'config.ini.template')
         
-        # Use template if config.ini doesn't exist
         file_to_read = config_file if os.path.exists(config_file) else template_file
         
         if not os.path.exists(file_to_read):
             return jsonify({"error": "No configuration file found"}), 404
         
         config = configparser.RawConfigParser()
-        config.optionxform = str  # Preserve case
+        config.optionxform = str
         config.read(file_to_read)
         
-        # Convert to dictionary
-        config_dict = {}
-        for section in config.sections():
-            config_dict[section] = dict(config[section])
+        filtered_config = {}
+        field_options = {}
         
-        # Parse comments from template
-        template_comments = parse_config_with_comments(template_file)
-        
-        # Merge comments with field_options
-        for key, comment in template_comments.items():
-            if key in field_options:
-                # Keep existing dropdown options, just update description if not set
-                if 'description' not in field_options[key] or not field_options[key]['description']:
-                    field_options[key]['description'] = comment
-            else:
-                # Add new field option with just description
-                field_options[key] = {'description': comment}
+        for section_name, section_def in CONFIG_UI_FIELDS.items():
+            if section_name not in config.sections():
+                continue
+            
+            if '__description__' in section_def:
+                field_options[f"{section_name}.__section__"] = {
+                    'description': section_def['__description__']
+                }
+            
+            filtered_config[section_name] = {}
+            
+            for field_name, field_def in section_def.items():
+                if field_name.startswith('__'):
+                    continue
+                
+                if field_name in config[section_name]:
+                    filtered_config[section_name][field_name] = config[section_name][field_name]
+                    
+                    field_key = f"{section_name}.{field_name}"
+                    field_options[field_key] = {}
+                    
+                    if 'options' in field_def:
+                        field_options[field_key]['options'] = field_def['options']
+                    if 'description' in field_def:
+                        field_options[field_key]['description'] = field_def['description']
+                    if 'type' in field_def:
+                        field_options[field_key]['type'] = field_def['type']
         
         return jsonify({
-            "config": config_dict,
+            "config": filtered_config,
             "field_options": field_options
         })
     except Exception as e:

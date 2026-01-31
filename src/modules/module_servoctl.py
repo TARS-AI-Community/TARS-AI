@@ -528,8 +528,11 @@ from modules.module_movements import (
     wave_left,
     neutral_legs,
     ventilate_on,
-    ventilate_off
+    ventilate_off,
+    set_swap_turn_directions
 )
+
+set_swap_turn_directions(config["CONTROLS"]["swap_turn_directions"])
 
 from modules.module_movement_registry import (
     MOVEMENTS,

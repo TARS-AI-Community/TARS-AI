@@ -11,6 +11,18 @@ move_legs = servoctl.move_legs
 move_arm = servoctl.move_arm
 disable_all_servos = servoctl.disable_all_servos
 
+# Direction swap configuration
+_swap_directions = False
+
+def set_swap_turn_directions(swap: bool):
+    """Set whether to swap left/right turn directions"""
+    global _swap_directions
+    _swap_directions = swap
+
+def get_swap_turn_directions() -> bool:
+    """Get current direction swap setting"""
+    return _swap_directions
+
 
 def step_forward():
     if not servoctl.MOVING:
@@ -147,7 +159,8 @@ def walk_backward():
             servoctl._notify_movement_end()
 
 
-def turn_right():
+def _turn_right_impl():
+    """Internal implementation of turn right"""
     if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
@@ -165,7 +178,8 @@ def turn_right():
             servoctl._notify_movement_end()
 
 
-def turn_right_slow():
+def _turn_right_slow_impl():
+    """Internal implementation of turn right slow"""
     if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
@@ -183,7 +197,8 @@ def turn_right_slow():
             servoctl._notify_movement_end()
 
 
-def turn_left():
+def _turn_left_impl():
+    """Internal implementation of turn left"""
     if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
@@ -201,7 +216,8 @@ def turn_left():
             servoctl._notify_movement_end()
 
 
-def turn_left_slow():
+def _turn_left_slow_impl():
+    """Internal implementation of turn left slow"""
     if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
@@ -217,6 +233,39 @@ def turn_left_slow():
         finally:
             servoctl.MOVING = False
             servoctl._notify_movement_end()
+
+
+# Public turn functions that respect swap_turn_directions setting
+def turn_right():
+    """Turn right (or left if swap_turn_directions is enabled)"""
+    if _swap_directions:
+        _turn_left_impl()
+    else:
+        _turn_right_impl()
+
+
+def turn_right_slow():
+    """Turn right slowly (or left if swap_turn_directions is enabled)"""
+    if _swap_directions:
+        _turn_left_slow_impl()
+    else:
+        _turn_right_slow_impl()
+
+
+def turn_left():
+    """Turn left (or right if swap_turn_directions is enabled)"""
+    if _swap_directions:
+        _turn_right_impl()
+    else:
+        _turn_left_impl()
+
+
+def turn_left_slow():
+    """Turn left slowly (or right if swap_turn_directions is enabled)"""
+    if _swap_directions:
+        _turn_right_slow_impl()
+    else:
+        _turn_left_slow_impl()
 
 
 def right_hi():
