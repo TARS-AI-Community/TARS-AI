@@ -230,7 +230,7 @@ def right_hi():
             time.sleep(0.2)
             move_arm(None, None, None, 1, 1, 1, 0.8)
             time.sleep(0.2)
-            move_arm(None, None, None, 100, 1, 1, 0.8)
+            move_arm(None, None, None, 100, 1, 1, 0.6)
             time.sleep(0.2)
             move_arm(None, None, None, 100, 100, 1, 0.9)
             time.sleep(0.2)
