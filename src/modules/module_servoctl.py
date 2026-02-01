@@ -160,6 +160,7 @@ neutralRightLeg = NEUTRAL_RIGHT_LEG + perfectRightLegOffset
 backRightLeg = int(config["SERVO"]["backRightLeg"]) + perfectRightLegOffset
 
 MOVING = False
+HOLD = -1
 ARMS_PRESENT = config["SERVO"]["arms_present"]
 
 if not servo_positions:
@@ -314,12 +315,12 @@ def move_servos_synchronized(movements, speed_factor, easing_strength=None):
     """
     global _channels_initialized
     
-    # Use provided easing or fall back to global default
     effective_easing = easing_strength if easing_strength is not None else global_easing_strength
     
     signal_servo_activity()
     
     servo_data = []
+    hold_channels = []
     has_uninitialized_channel = False
     
     for channel, target_value in movements:
@@ -348,6 +349,10 @@ def move_servos_synchronized(movements, speed_factor, easing_strength=None):
             current_value = neutral_positions.get(channel, 300)
             servo_positions[channel] = current_value
         
+        if target_value == -1:
+            hold_channels.append((channel, current_value))
+            continue
+        
         if current_value == target_value:
             continue
         
@@ -362,6 +367,9 @@ def move_servos_synchronized(movements, speed_factor, easing_strength=None):
             'distance': distance,
             'steps_taken': 0
         })
+    
+    for channel, value in hold_channels:
+        set_servo_pwm(channel, value)
     
     if not servo_data:
         return
@@ -458,26 +466,24 @@ def move_arm(left_main=None, left_forearm=None, left_hand=None,
     Move arm servos to specified positions.
     
     Parameters:
-    - left_main: Left main arm position (1-100, None to skip)
-    - left_forearm: Left forearm position (1-100, None to skip)
-    - left_hand: Left hand position (1-100, None to skip)
-    - right_main: Right main arm position (1-100, None to skip)
-    - right_forearm: Right forearm position (1-100, None to skip)
-    - right_hand: Right hand position (1-100, None to skip)
+    - left_main: Left main arm position (1-100, None to skip, -1 to hold)
+    - left_forearm: Left forearm position (1-100, None to skip, -1 to hold)
+    - left_hand: Left hand position (1-100, None to skip, -1 to hold)
+    - right_main: Right main arm position (1-100, None to skip, -1 to hold)
+    - right_forearm: Right forearm position (1-100, None to skip, -1 to hold)
+    - right_hand: Right hand position (1-100, None to skip, -1 to hold)
     - speed_factor: Speed multiplier (0.0-1.0, higher is faster)
     """
     
-    # Apply curve for better arm speed control
-    # Aggressive curve: 0.4 input now gives similar speed to old 0.8
-    arm_speed_curve = 0.2  # Lower = more boost to slow speeds
+    arm_speed_curve = 0.2
     adjusted_speed = speed_factor ** arm_speed_curve
-    
-    # Arm-specific easing for smoother movements (ease in/out)
     arm_easing_strength = 0.85
     
     def percentage_to_value(percent, min_val, max_val):
         if percent == 0:
             return None
+        if percent == -1:
+            return -1
         if percent == 1:
             return min_val
         if percent == 100:
@@ -488,13 +494,20 @@ def move_arm(left_main=None, left_forearm=None, left_hand=None,
             value = min_val - ((min_val - max_val) * (percent - 1) / 99)
         return int(round(value))
 
+    def get_value(val, min_val, max_val):
+        if val is None or val == 0:
+            return None
+        if val == -1:
+            return -1
+        return percentage_to_value(val, min_val, max_val)
+
     movements = [
-        (4, percentage_to_value(left_main, leftMainMin, leftMainMax) if left_main is not None and left_main != 0 else None),
-        (5, percentage_to_value(left_forearm, leftForarmMin, leftForarmMax) if left_forearm is not None and left_forearm != 0 else None),
-        (6, percentage_to_value(left_hand, leftHandMin, leftHandMax) if left_hand is not None and left_hand != 0 else None),
-        (7, percentage_to_value(right_main, rightMainMin, rightMainMax) if right_main is not None and right_main != 0 else None),
-        (8, percentage_to_value(right_forearm, rightForarmMin, rightForarmMax) if right_forearm is not None and right_forearm != 0 else None),
-        (9, percentage_to_value(right_hand, rightHandMin, rightHandMax) if right_hand is not None and right_hand != 0 else None),
+        (4, get_value(left_main, leftMainMin, leftMainMax)),
+        (5, get_value(left_forearm, leftForarmMin, leftForarmMax)),
+        (6, get_value(left_hand, leftHandMin, leftHandMax)),
+        (7, get_value(right_main, rightMainMin, rightMainMax)),
+        (8, get_value(right_forearm, rightForarmMin, rightForarmMax)),
+        (9, get_value(right_hand, rightHandMin, rightHandMax)),
     ]
 
     move_servos_synchronized(movements, adjusted_speed, easing_strength=arm_easing_strength)
@@ -528,8 +541,20 @@ from modules.module_movements import (
     wave_left,
     neutral_legs,
     ventilate_on,
-    ventilate_off
+    ventilate_off,
+    set_swap_turn_directions,
+    left_point,
+    right_point,
+    left_poke,
+    right_poke,
+    left_wave_open,
+    right_wave_open,
+    left_shy_wave,
+    right_shy_wave,
+    happy_dance
 )
+
+set_swap_turn_directions(config["CONTROLS"]["swap_turn_directions"])
 
 from modules.module_movement_registry import (
     MOVEMENTS,

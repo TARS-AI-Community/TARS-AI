@@ -10,6 +10,18 @@ import modules.module_servoctl as servoctl
 move_legs = servoctl.move_legs
 move_arm = servoctl.move_arm
 disable_all_servos = servoctl.disable_all_servos
+HOLD = servoctl.HOLD
+
+_swap_directions = False
+
+def set_swap_turn_directions(swap: bool):
+    """Set whether to swap left/right turn directions"""
+    global _swap_directions
+    _swap_directions = swap
+
+def get_swap_turn_directions() -> bool:
+    """Get current direction swap setting"""
+    return _swap_directions
 
 
 def step_forward():
@@ -147,7 +159,8 @@ def walk_backward():
             servoctl._notify_movement_end()
 
 
-def turn_right():
+def _turn_right_impl():
+    """Internal implementation of turn right"""
     if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
@@ -165,7 +178,8 @@ def turn_right():
             servoctl._notify_movement_end()
 
 
-def turn_right_slow():
+def _turn_right_slow_impl():
+    """Internal implementation of turn right slow"""
     if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
@@ -183,7 +197,8 @@ def turn_right_slow():
             servoctl._notify_movement_end()
 
 
-def turn_left():
+def _turn_left_impl():
+    """Internal implementation of turn left"""
     if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
@@ -201,7 +216,8 @@ def turn_left():
             servoctl._notify_movement_end()
 
 
-def turn_left_slow():
+def _turn_left_slow_impl():
+    """Internal implementation of turn left slow"""
     if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
@@ -217,6 +233,38 @@ def turn_left_slow():
         finally:
             servoctl.MOVING = False
             servoctl._notify_movement_end()
+
+
+def turn_right():
+    """Turn right (or left if swap_turn_directions is enabled)"""
+    if _swap_directions:
+        _turn_left_impl()
+    else:
+        _turn_right_impl()
+
+
+def turn_right_slow():
+    """Turn right slowly (or left if swap_turn_directions is enabled)"""
+    if _swap_directions:
+        _turn_left_slow_impl()
+    else:
+        _turn_right_slow_impl()
+
+
+def turn_left():
+    """Turn left (or right if swap_turn_directions is enabled)"""
+    if _swap_directions:
+        _turn_right_impl()
+    else:
+        _turn_left_impl()
+
+
+def turn_left_slow():
+    """Turn left slowly (or right if swap_turn_directions is enabled)"""
+    if _swap_directions:
+        _turn_right_slow_impl()
+    else:
+        _turn_left_slow_impl()
 
 
 def right_hi():
@@ -388,7 +436,7 @@ def pezz_dispenser():
         servoctl.MOVING = True
         servoctl._notify_movement_start()
         try:
-            move_legs(50, 50, 50, 50, 0.4)            
+            move_legs(50, 50, 50, 50, 0.8)            
             move_legs(None, 80, None, 50, 0.9)
             move_legs(None, 80, None, 80, 0.9)
             time.sleep(0.2)
@@ -428,37 +476,35 @@ def monster():
             time.sleep(0.2)
             move_arm(100, 1, 1, 100, 1, 1, 0.8)
             time.sleep(0.2)
-            move_arm(100, 100, 1, 100, 100, 1, 1)
+            move_arm(HOLD, 100, 1, HOLD, 100, 1, 1)
             time.sleep(0.2)
-            move_arm(100, 100, 100, 100, 100, 100, 1)
+            move_arm(HOLD, HOLD, 100, HOLD, HOLD, 100, 1)
             time.sleep(0.2)
-            move_arm(100, 100, 100, 100, 50, 100, 1)
+            move_arm(HOLD, 100, 100, HOLD, 50, 50, 0.8)
             time.sleep(0.2)
-            move_arm(100, 50, 50, 100, 100, 50, 1)
+            move_arm(HOLD, 50, 50, HOLD, 100, 100, 0.8)
             time.sleep(0.2)
-            move_arm(100, 100, 100, 100, 50, 100, 1)
+            move_arm(HOLD, 100, 100, HOLD, 50, 50, 0.8)
             time.sleep(0.2)
-            move_arm(100, 50, 50, 100, 100, 50, 1)
+            move_arm(HOLD, 50, 50, HOLD, 100, 100, 0.8)
             time.sleep(0.2)
-            move_arm(100, 100, 100, 100, 100, 100, 1)
+            move_arm(HOLD, 100, 100, HOLD, 100, 100, 0.8)
             time.sleep(0.2)
-            move_arm(100, 100, 1, 100, 100, 1, 1)
+            move_arm(HOLD, HOLD, 1, HOLD, HOLD, 100, 0.9)
             time.sleep(0.2)
-            move_arm(100, 100, 100, 100, 100, 100, 1)
+            move_arm(HOLD, HOLD, 100, HOLD, HOLD, 1, 0.9)
             time.sleep(0.2)
-            move_arm(100, 100, 1, 100, 100, 1, 1)
+            move_arm(HOLD, HOLD, 1, HOLD, HOLD, 100, 0.9)
             time.sleep(0.2)
-            move_arm(100, 100, 100, 100, 100, 100, 1)
+            move_arm(HOLD, HOLD, 100, HOLD, HOLD, 1, 0.9)
             time.sleep(0.2)
-            move_arm(100, 100, 1, 100, 100, 1, 1)
+            move_arm(HOLD, HOLD, 100, HOLD, HOLD, 100, 0.8)
             time.sleep(0.2)
-            move_arm(100, 100, 100, 100, 100, 100, 1)
+            move_arm(HOLD, HOLD, 1, HOLD, HOLD, 1, 0.8)
             time.sleep(0.2)
-            move_arm(100, 100, 1, 100, 100, 1, 1)
+            move_arm(HOLD, 1, HOLD, HOLD, 1, HOLD, 0.8)
             time.sleep(0.2)
-            move_arm(100, 1, 1, 100, 1, 1, 1)
-            time.sleep(0.2)
-            move_arm(1, 1, 1, 1, 1, 1, 0.8)
+            move_arm(1, HOLD, HOLD, 1, HOLD, HOLD, 0.8)
             time.sleep(0.2)
             move_legs(80, 80, 50, 50, 0.5)
             move_legs(50, 50, 50, 50, 0.4)
@@ -616,6 +662,392 @@ def neutral_legs():
             move_legs(90, 90, None, None, 0.8)
             move_legs(90, 90, 50, 50, 0.8)
             move_legs(50, 50, 50, 50, 0.8)
+            disable_all_servos()
+        finally:
+            servoctl.MOVING = False
+            servoctl._notify_movement_end()
+
+
+def left_point():
+    if not servoctl.MOVING:
+        servoctl.MOVING = True
+        servoctl._notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(80, None, 50, None, 0.9)
+            move_legs(80, None, 80, None, 0.9)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(100, 1, 1, None, None, None, 0.7)
+            time.sleep(0.2)
+            move_arm(100, 100, 1, None, None, None, 0.7)
+            time.sleep(0.5)
+            move_arm(100, 1, 1, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, None, None, None, 0.5)
+            time.sleep(0.2)
+            move_legs(80, None, 50, None, 0.9)
+            move_legs(50, None, 50, None, 0.9)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            servoctl.MOVING = False
+            servoctl._notify_movement_end()
+
+
+def right_point():
+    if not servoctl.MOVING:
+        servoctl.MOVING = True
+        servoctl._notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(None, 80, None, 50, 0.9)
+            move_legs(None, 80, None, 80, 0.9)
+            time.sleep(0.2)
+            move_arm(None, None, None, 1, 1, 1, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, 100, 1, 1, 0.7)
+            time.sleep(0.2)
+            move_arm(None, None, None, 100, 100, 1, 0.7)
+            time.sleep(0.5)
+            move_arm(None, None, None, 100, 1, 1, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, 1, 1, 1, 0.5)
+            time.sleep(0.2)
+            move_legs(None, 80, None, 50, 0.9)
+            move_legs(None, 50, None, 50, 0.9)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            servoctl.MOVING = False
+            servoctl._notify_movement_end()
+
+
+def left_poke():
+    if not servoctl.MOVING:
+        servoctl.MOVING = True
+        servoctl._notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(80, None, 50, None, 0.9)
+            move_legs(80, None, 80, None, 0.9)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(100, 1, 1, None, None, None, 0.7)
+            time.sleep(0.2)
+            move_arm(HOLD, 100, 1, None, None, None, 0.7)
+            time.sleep(0.15)
+            move_arm(HOLD, 70, 1, None, None, None, 0.6)
+            time.sleep(0.15)
+            move_arm(HOLD, 100, 1, None, None, None, 0.6)
+            time.sleep(0.15)
+            move_arm(HOLD, 70, 1, None, None, None, 0.6)
+            time.sleep(0.15)
+            move_arm(HOLD, 100, 1, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(HOLD, 1, 1, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(1, HOLD, HOLD, None, None, None, 0.5)
+            time.sleep(0.2)
+            move_legs(80, None, 50, None, 0.9)
+            move_legs(50, None, 50, None, 0.9)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            servoctl.MOVING = False
+            servoctl._notify_movement_end()
+
+
+def right_poke():
+    if not servoctl.MOVING:
+        servoctl.MOVING = True
+        servoctl._notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(None, 80, None, 50, 0.9)
+            move_legs(None, 80, None, 80, 0.9)
+            time.sleep(0.2)
+            move_arm(None, None, None, 1, 1, 1, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, 100, 1, 1, 0.7)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, 100, 1, 0.7)
+            time.sleep(0.15)
+            move_arm(None, None, None, HOLD, 70, 1, 0.6)
+            time.sleep(0.15)
+            move_arm(None, None, None, HOLD, 100, 1, 0.6)
+            time.sleep(0.15)
+            move_arm(None, None, None, HOLD, 70, 1, 0.6)
+            time.sleep(0.15)
+            move_arm(None, None, None, HOLD, 100, 1, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, 1, 1, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, 1, HOLD, HOLD, 0.5)
+            time.sleep(0.2)
+            move_legs(None, 80, None, 50, 0.9)
+            move_legs(None, 50, None, 50, 0.9)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            servoctl.MOVING = False
+            servoctl._notify_movement_end()
+
+
+def left_wave_open():
+    if not servoctl.MOVING:
+        servoctl.MOVING = True
+        servoctl._notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(80, None, 50, None, 0.9)
+            move_legs(80, None, 80, None, 0.9)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(100, 1, 1, None, None, None, 0.7)
+            time.sleep(0.2)
+            move_arm(HOLD, 100, 1, None, None, None, 0.7)
+            time.sleep(0.2)
+            move_arm(HOLD, HOLD, 100, None, None, None, 0.7)
+            time.sleep(0.2)
+            move_arm(HOLD, 70, HOLD, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(HOLD, 100, HOLD, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(HOLD, 70, HOLD, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(HOLD, 100, HOLD, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(HOLD, HOLD, 1, None, None, None, 0.7)
+            time.sleep(0.2)
+            move_arm(HOLD, 1, HOLD, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(1, HOLD, HOLD, None, None, None, 0.5)
+            time.sleep(0.2)
+            move_legs(80, None, 50, None, 0.9)
+            move_legs(50, None, 50, None, 0.9)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            servoctl.MOVING = False
+            servoctl._notify_movement_end()
+
+
+def right_wave_open():
+    if not servoctl.MOVING:
+        servoctl.MOVING = True
+        servoctl._notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(None, 80, None, 50, 0.9)
+            move_legs(None, 80, None, 80, 0.9)
+            time.sleep(0.2)
+            move_arm(None, None, None, 1, 1, 1, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, 100, 1, 1, 0.7)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, 100, 1, 0.7)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, HOLD, 100, 0.7)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, 70, HOLD, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, 100, HOLD, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, 70, HOLD, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, 100, HOLD, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, HOLD, 1, 0.7)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, 1, HOLD, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, 1, HOLD, HOLD, 0.5)
+            time.sleep(0.2)
+            move_legs(None, 80, None, 50, 0.9)
+            move_legs(None, 50, None, 50, 0.9)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            servoctl.MOVING = False
+            servoctl._notify_movement_end()
+
+
+def left_shy_wave():
+    if not servoctl.MOVING:
+        servoctl.MOVING = True
+        servoctl._notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(80, None, 50, None, 0.9)
+            move_legs(80, None, 80, None, 0.9)
+            time.sleep(0.2)
+            move_arm(1, 1, 1, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(100, 1, 1, None, None, None, 0.7)
+            time.sleep(0.2)
+            move_arm(HOLD, 100, 1, None, None, None, 0.7)
+            time.sleep(0.2)
+            move_arm(HOLD, HOLD, 100, None, None, None, 0.7)
+            time.sleep(0.2)
+            move_arm(92, 50, 40, None, None, None, 0.6)
+            move_legs(70, 90, 80, None, 0.9)
+            time.sleep(0.2)
+            move_arm(100, 100, 100, None, None, None, 0.6)
+            move_legs(90, 70, 80, None, 0.9)
+            time.sleep(0.2)
+            move_arm(92, 50, 40, None, None, None, 0.6)
+            move_legs(70, 90, 80, None, 0.9)
+            time.sleep(0.2)
+            move_arm(100, 100, 100, None, None, None, 0.6)
+            move_legs(90, 70, 80, None, 0.9)
+            time.sleep(0.2)
+            move_arm(92, 50, 40, None, None, None, 0.6)
+            move_legs(70, 90, 80, None, 0.9)
+            time.sleep(0.2)
+            move_arm(100, 100, 100, None, None, None, 0.6)
+            move_legs(80, 50, 80, 50, 0.9)
+            time.sleep(0.2)
+            move_arm(HOLD, HOLD, 1, None, None, None, 0.7)
+            time.sleep(0.2)
+            move_arm(HOLD, 1, HOLD, None, None, None, 0.6)
+            time.sleep(0.2)
+            move_arm(1, HOLD, HOLD, None, None, None, 0.5)
+            time.sleep(0.2)
+            move_legs(80, None, 50, None, 0.9)
+            move_legs(50, None, 50, None, 0.9)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            servoctl.MOVING = False
+            servoctl._notify_movement_end()
+
+
+def right_shy_wave():
+    if not servoctl.MOVING:
+        servoctl.MOVING = True
+        servoctl._notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(None, 80, None, 50, 0.9)
+            move_legs(None, 80, None, 80, 0.9)
+            time.sleep(0.2)
+            move_arm(None, None, None, 1, 1, 1, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, 100, 1, 1, 0.7)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, 100, 1, 0.7)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, HOLD, 100, 0.7)
+            time.sleep(0.2)
+            move_arm(None, None, None, 92, 50, 40, 0.6)
+            move_legs(90, 70, None, 80, 0.9)
+            time.sleep(0.2)
+            move_arm(None, None, None, 100, 100, 100, 0.6)
+            move_legs(70, 90, None, 80, 0.9)
+            time.sleep(0.2)
+            move_arm(None, None, None, 92, 50, 40, 0.6)
+            move_legs(90, 70, None, 80, 0.9)
+            time.sleep(0.2)
+            move_arm(None, None, None, 100, 100, 100, 0.6)
+            move_legs(70, 90, None, 80, 0.9)
+            time.sleep(0.2)
+            move_arm(None, None, None, 92, 50, 40, 0.6)
+            move_legs(90, 70, None, 80, 0.9)
+            time.sleep(0.2)
+            move_arm(None, None, None, 100, 100, 100, 0.6)
+            move_legs(50, 80, 50, 80, 0.9)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, HOLD, 1, 0.7)
+            time.sleep(0.2)
+            move_arm(None, None, None, HOLD, 1, HOLD, 0.6)
+            time.sleep(0.2)
+            move_arm(None, None, None, 1, HOLD, HOLD, 0.5)
+            time.sleep(0.2)
+            move_legs(None, 80, None, 50, 0.9)
+            move_legs(None, 50, None, 50, 0.9)
+            time.sleep(0.2)
+            disable_all_servos()
+        finally:
+            servoctl.MOVING = False
+            servoctl._notify_movement_end()
+
+
+def happy_dance():
+    if not servoctl.MOVING:
+        servoctl.MOVING = True
+        servoctl._notify_movement_start()
+        try:
+            move_legs(50, 50, 50, 50, 0.8)
+            move_legs(None, None, 45, 55, 0.9)
+            time.sleep(0.1)
+            move_legs(None, None, 55, 45, 0.9)
+            time.sleep(0.1)
+            move_legs(None, None, 45, 55, 0.9)
+            time.sleep(0.1)
+            move_legs(None, None, 50, 50, 0.9)
+            move_legs(20, 80, None, None, 0.9)
+            time.sleep(0.1)
+            move_legs(80, 20, None, None, 0.9)
+            time.sleep(0.1)
+            move_legs(20, 80, None, None, 0.9)
+            time.sleep(0.1)
+            move_legs(50, 50, None, None, 0.9)
+            move_legs(None, 80, None, 80, 0.9)
+            move_arm(None, HOLD, None, 85, HOLD, None, 0.8)
+            time.sleep(0.2)
+            move_legs(40, 70, None, None, 0.95)
+            time.sleep(0.1)
+            move_legs(60, 80, None, None, 0.95)
+            time.sleep(0.1)
+            move_legs(40, 70, None, None, 0.95)
+            time.sleep(0.1)
+            move_arm(None, HOLD, None, 1, HOLD, None, 0.8)
+            move_legs(80, None, 80, None, 0.9)
+            move_arm(85, HOLD, None, None, HOLD, None, 0.8)
+            time.sleep(0.15)
+            move_legs(80, 80, 70, 70, 0.9)
+            move_arm(85, HOLD, None, 85, HOLD, None, 0.7)
+            time.sleep(0.25)
+            move_legs(20, 90, None, None, 0.9)
+            time.sleep(0.12)
+            move_legs(90, 20, None, None, 0.9)
+            time.sleep(0.12)
+            move_legs(20, 90, None, None, 0.9)
+            time.sleep(0.12)
+            move_legs(80, 80, None, None, 0.9)
+            move_arm(1, HOLD, None, 1, HOLD, None, 0.7)
+            move_legs(None, None, 50, 50, 0.9)
+            time.sleep(0.1)
+            move_legs(50, 50, None, None, 0.8)
+            time.sleep(0.1)
+            move_legs(30, 30, None, None, 0.95)
+            time.sleep(0.08)
+            move_legs(65, 65, None, None, 0.95)
+            time.sleep(0.08)
+            move_legs(30, 30, None, None, 0.95)
+            time.sleep(0.08)
+            move_legs(50, 50, None, None, 0.9)
+            time.sleep(0.1)
+            move_legs(None, 80, None, 80, 0.95)
+            move_arm(None, HOLD, None, 85, HOLD, None, 0.9)
+            time.sleep(0.1)
+            move_arm(None, HOLD, None, 1, HOLD, None, 0.9)
+            move_legs(80, None, 80, None, 0.95)
+            move_arm(85, HOLD, None, None, HOLD, None, 0.9)
+            time.sleep(0.1)
+            move_arm(1, HOLD, None, None, HOLD, None, 0.9)
+            move_legs(None, 80, None, 80, 0.95)
+            move_arm(None, HOLD, None, 85, HOLD, None, 0.9)
+            time.sleep(0.1)
+            time.sleep(0.3)
+            move_arm(None, HOLD, None, 1, HOLD, None, 0.7)
+            move_legs(None, None, 50, 50, 0.9)
+            move_legs(50, 50, None, None, 0.8)
+            time.sleep(0.2)
             disable_all_servos()
         finally:
             servoctl.MOVING = False

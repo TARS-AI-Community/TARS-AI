@@ -25,6 +25,15 @@ MOVEMENTS = {
     "left_hi": {"name": "Left Hi", "type": HAS_ARMS},
     "pezz_dispenser": {"name": "Pezz Dispenser", "type": HAS_ARMS},
     "monster": {"name": "Monster", "type": HAS_ARMS},
+    "left_point": {"name": "Left Point", "type": HAS_ARMS},
+    "right_point": {"name": "Right Point", "type": HAS_ARMS},
+    "left_poke": {"name": "Left Poke", "type": HAS_ARMS},
+    "right_poke": {"name": "Right Poke", "type": HAS_ARMS},
+    "left_wave_open": {"name": "Left Wave Open", "type": HAS_ARMS},
+    "right_wave_open": {"name": "Right Wave Open", "type": HAS_ARMS},
+    "left_shy_wave": {"name": "Left Shy Wave", "type": HAS_ARMS},
+    "right_shy_wave": {"name": "Right Shy Wave", "type": HAS_ARMS},
+    "happy_dance": {"name": "Happy Dance", "type": HAS_ARMS},
 }
 
 def get_all():

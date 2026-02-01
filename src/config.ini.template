@@ -3,8 +3,10 @@ controller_name = 8BitDo
 # Name of the controller used for interaction
 enabled = False
 # enable use of controller used for interaction
-voicemovement = False
-#Enable or disable movement via voice control
+voicemovement = True
+# Enable or disable movement via voice control
+swap_turn_directions = False
+# Change the turn direction (left or right)
 
 [STT] # Speech-to-Text configuration
 language = english

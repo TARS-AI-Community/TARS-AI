@@ -1155,6 +1155,105 @@
     margin-top: 2px;
     flex-shrink: 0;
   }
+
+  .config-tag-input-container {
+    background: var(--bs-dark, #1a1d20);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 6px 8px;
+    min-height: 38px;
+    cursor: text;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .config-tag-input-container:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .config-tag-input-container:focus-within {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+  }
+
+  .config-tags-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .config-tag {
+    display: inline-flex;
+    align-items: center;
+    background: linear-gradient(135deg, #0d6efd, #0056b3);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    gap: 6px;
+    animation: tagAppear 0.2s ease-out;
+    max-width: 250px;
+  }
+
+  @keyframes tagAppear {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .config-tag-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .config-tag-remove {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    padding: 0;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+    transition: all 0.15s;
+  }
+
+  .config-tag-remove:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+
+  .config-tag-input {
+    flex: 1;
+    min-width: 120px;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #f8f9fa;
+    font-size: 13px;
+    padding: 4px 0;
+  }
+
+  .config-tag-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+  }
+
+  .config-array-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+    background: rgba(13, 110, 253, 0.2);
+    color: #6ea8fe;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
   </style>
 </head>
 
@@ -1289,17 +1388,7 @@
           <div class="actions-panel">
             <div class="actions-content">
               <select id="actionSelect" class="action-select">
-                <option value="0">Reset Position</option>
-                <option value="5">Greet</option>
-                <option value="6">Simulate Laughter</option>
-                <option value="7">Dynamic Motion</option>
-                <option value="8">PEZZ Dispenser</option>
-                <option value="9">Now!</option>
-                <option value="10">Balance</option>
-                <option value="11">Mic Drop</option>
-                <option value="12">Defensive Posture</option>
-                <option value="13">Pose</option>
-                <option value="14">Bow</option>
+                <option value="">Loading movements...</option>
               </select>
               <button class="execute-btn" onclick="executeAction()">
                 <i class="bi bi-play-circle-fill"></i>
@@ -1933,6 +2022,58 @@ function resetAllArms() {
     });
 }
 
+// Load movements from server and populate dropdown
+function loadMovements() {
+  fetch('/get_movements')
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        const select = document.getElementById('actionSelect');
+        select.innerHTML = ''; // Clear loading message
+        
+        // Add Reset Position first
+        const resetOption = document.createElement('option');
+        resetOption.value = 'reset_positions';
+        resetOption.textContent = 'Reset Position';
+        select.appendChild(resetOption);
+        
+        // Add separator and Legs Only movements
+        if (data.legs_only && data.legs_only.length > 0) {
+          const legsGroup = document.createElement('optgroup');
+          legsGroup.label = '── Legs Only ──';
+          data.legs_only.forEach(movement => {
+            const option = document.createElement('option');
+            option.value = movement.id;
+            option.textContent = movement.name;
+            legsGroup.appendChild(option);
+          });
+          select.appendChild(legsGroup);
+        }
+        
+        // Add Has Arms movements
+        if (data.has_arms && data.has_arms.length > 0) {
+          const armsGroup = document.createElement('optgroup');
+          armsGroup.label = '── With Arms ──';
+          data.has_arms.forEach(movement => {
+            const option = document.createElement('option');
+            option.value = movement.id;
+            option.textContent = movement.name;
+            armsGroup.appendChild(option);
+          });
+          select.appendChild(armsGroup);
+        }
+      } else {
+        console.error('Failed to load movements:', data.error);
+      }
+    })
+    .catch(error => {
+      console.error('Error loading movements:', error);
+    });
+}
+
+// Load movements when page loads
+document.addEventListener('DOMContentLoaded', loadMovements);
+
 function executeAction() {
   const selectedAction = document.getElementById('actionSelect').value;
 
@@ -2445,6 +2586,333 @@ function sendUserMessage(message, imageFile) {
     chatBody.scrollTop = chatBody.scrollHeight;
 }
 
+function detectArrayValue(value) {
+    if (typeof value !== 'string') {
+        return { isArray: false, type: null, items: [] };
+    }
+    const trimmed = value.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+                return { isArray: true, type: 'json', items: parsed };
+            }
+        } catch (e) {
+            const innerContent = trimmed.slice(1, -1).trim();
+            if (innerContent.includes(',')) {
+                const items = parseCommaSeparatedWithQuotes(innerContent);
+                if (items.length > 1) {
+                    return { isArray: true, type: 'json', items: items };
+                }
+            }
+        }
+    }
+    if (!trimmed.startsWith('[') && !trimmed.startsWith('http') && trimmed.includes(',')) {
+        const items = trimmed.split(',').map(item => item.trim()).filter(item => item.length > 0);
+        if (items.length > 1) {
+            return { isArray: true, type: 'csv', items: items };
+        }
+    }
+    return { isArray: false, type: null, items: [] };
+}
+
+function parseCommaSeparatedWithQuotes(str) {
+    const items = [];
+    let current = '';
+    let inQuote = false;
+    let quoteChar = null;
+    for (let i = 0; i < str.length; i++) {
+        const char = str[i];
+        if ((char === '"' || char === "'") && !inQuote) {
+            inQuote = true;
+            quoteChar = char;
+        } else if (char === quoteChar && inQuote) {
+            inQuote = false;
+            quoteChar = null;
+        } else if (char === ',' && !inQuote) {
+            const trimmed = current.trim().replace(/^["']|["']$/g, '');
+            if (trimmed) items.push(trimmed);
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    const trimmed = current.trim().replace(/^["']|["']$/g, '');
+    if (trimmed) items.push(trimmed);
+    return items;
+}
+
+function arrayToConfigValue(items, originalType) {
+    if (originalType === 'json') {
+        return JSON.stringify(items);
+    }
+    return items.join(',');
+}
+
+function escapeHtmlForTags(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function escapeForAttribute(str) {
+    return str.replace(/'/g, '&#39;');
+}
+
+function generateTagInputHtml(fieldId, section, key, items, arrayType) {
+    const tagsHtml = items.map((item, index) => `
+        <span class="config-tag" data-index="${index}">
+            <span class="config-tag-text">${escapeHtmlForTags(String(item))}</span>
+            <button type="button" class="config-tag-remove" data-index="${index}" aria-label="Remove">×</button>
+        </span>
+    `).join('');
+    return `
+        <div class="config-tag-input-container" id="${fieldId}" data-section="${section}" data-key="${key}" data-array-type="${arrayType}">
+            <div class="config-tags-wrapper">
+                ${tagsHtml}
+                <input type="text" class="config-tag-input" placeholder="Type and press Enter..." />
+            </div>
+            <input type="hidden" class="config-array-value" value='${escapeForAttribute(JSON.stringify(items))}' />
+        </div>
+    `;
+}
+
+function generateScreensaverSelectHtml(fieldId, section, key, currentValue, options) {
+    // Parse current value to get selected items
+    let selectedItems = [];
+    if (typeof currentValue === 'string') {
+        const trimmed = currentValue.trim().toLowerCase();
+        if (trimmed === 'random') {
+            selectedItems = ['random'];
+        } else if (trimmed) {
+            selectedItems = currentValue.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
+        }
+    }
+    
+    const optionsHtml = options.map(option => {
+        const isRandom = option.toLowerCase() === 'random';
+        const isSelected = selectedItems.includes(option.toLowerCase());
+        const selectedClass = isSelected ? 'selected' : '';
+        const randomClass = isRandom ? 'random-option' : '';
+        const icon = isRandom ? '<i class="bi bi-shuffle option-icon"></i>' : '';
+        
+        return `
+            <span class="screensaver-option ${selectedClass} ${randomClass}" data-value="${option}">
+                ${icon}${option}
+            </span>
+        `;
+    }).join('');
+    
+    return `
+        <div class="screensaver-select-container" id="${fieldId}" data-section="${section}" data-key="${key}">
+            <div class="screensaver-select-options">
+                ${optionsHtml}
+            </div>
+            <input type="hidden" class="screensaver-select-value" value="${escapeHtmlForTags(currentValue)}" />
+        </div>
+    `;
+}
+
+function initializeScreensaverSelects() {
+    document.querySelectorAll('.screensaver-select-container').forEach(container => {
+        const hiddenInput = container.querySelector('.screensaver-select-value');
+        const optionsWrapper = container.querySelector('.screensaver-select-options');
+        
+        function getSelectedItems() {
+            const value = hiddenInput.value.trim().toLowerCase();
+            if (value === 'random') return ['random'];
+            if (!value) return [];
+            return value.split(',').map(s => s.trim()).filter(s => s);
+        }
+        
+        function setSelectedItems(items) {
+            // Update hidden input
+            if (items.length === 0) {
+                hiddenInput.value = 'random';
+                items = ['random'];
+            } else if (items.includes('random')) {
+                hiddenInput.value = 'random';
+                items = ['random'];
+            } else {
+                hiddenInput.value = items.join(',');
+            }
+            
+            // Update visual state
+            optionsWrapper.querySelectorAll('.screensaver-option').forEach(opt => {
+                const optValue = opt.dataset.value.toLowerCase();
+                if (items.includes(optValue)) {
+                    opt.classList.add('selected');
+                } else {
+                    opt.classList.remove('selected');
+                }
+            });
+        }
+        
+        // Add click handlers to each option
+        optionsWrapper.querySelectorAll('.screensaver-option').forEach(option => {
+            option.addEventListener('click', function() {
+                const clickedValue = this.dataset.value.toLowerCase();
+                const isRandom = clickedValue === 'random';
+                let selectedItems = getSelectedItems();
+                
+                if (isRandom) {
+                    // Clicking random: toggle it, if selected clear all, if not set only random
+                    if (selectedItems.includes('random')) {
+                        // Can't deselect random without selecting something else
+                        // Keep random selected
+                        return;
+                    } else {
+                        // Select random, clear everything else
+                        setSelectedItems(['random']);
+                    }
+                } else {
+                    // Clicking a specific screensaver
+                    if (selectedItems.includes(clickedValue)) {
+                        // Deselect it
+                        selectedItems = selectedItems.filter(s => s !== clickedValue);
+                        if (selectedItems.length === 0 || (selectedItems.length === 1 && selectedItems[0] === 'random')) {
+                            // If nothing left, default to random
+                            setSelectedItems(['random']);
+                        } else {
+                            setSelectedItems(selectedItems);
+                        }
+                    } else {
+                        // Select it, remove random if present
+                        selectedItems = selectedItems.filter(s => s !== 'random');
+                        selectedItems.push(clickedValue);
+                        setSelectedItems(selectedItems);
+                    }
+                }
+            });
+        });
+    });
+}
+
+function initializeTagInputs() {
+    document.querySelectorAll('.config-tag-input-container').forEach(container => {
+        const input = container.querySelector('.config-tag-input');
+        const wrapper = container.querySelector('.config-tags-wrapper');
+        const hiddenInput = container.querySelector('.config-array-value');
+        function getItems() {
+            try { return JSON.parse(hiddenInput.value) || []; }
+            catch { return []; }
+        }
+        function setItems(items) {
+            hiddenInput.value = JSON.stringify(items);
+            renderTags();
+        }
+        function renderTags() {
+            const items = getItems();
+            wrapper.querySelectorAll('.config-tag').forEach(tag => tag.remove());
+            const tagsHtml = items.map((item, index) => `
+                <span class="config-tag" data-index="${index}">
+                    <span class="config-tag-text">${escapeHtmlForTags(String(item))}</span>
+                    <button type="button" class="config-tag-remove" data-index="${index}" aria-label="Remove">×</button>
+                </span>
+            `).join('');
+            input.insertAdjacentHTML('beforebegin', tagsHtml);
+            wrapper.querySelectorAll('.config-tag-remove').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const idx = parseInt(this.dataset.index);
+                    const items = getItems();
+                    items.splice(idx, 1);
+                    setItems(items);
+                });
+            });
+        }
+        // Check if this is the screensaver_list field (needs special "random" handling)
+        const isScreensaverList = container.dataset.section === 'UI' && container.dataset.key === 'screensaver_list';
+        
+        function addItem(text) {
+            const trimmed = text.trim();
+            if (trimmed) {
+                let items = getItems();
+                
+                // Special handling for screensaver_list
+                if (isScreensaverList) {
+                    const isRandom = trimmed.toLowerCase() === 'random';
+                    if (isRandom) {
+                        // If adding "random", clear everything and just set random
+                        items = ['random'];
+                    } else {
+                        // If adding a specific screensaver, remove "random" if present
+                        items = items.filter(item => item.toLowerCase() !== 'random');
+                        if (!items.includes(trimmed)) {
+                            items.push(trimmed);
+                        }
+                    }
+                    setItems(items);
+                } else {
+                    // Default behavior for other array fields
+                    if (!items.includes(trimmed)) {
+                        items.push(trimmed);
+                        setItems(items);
+                    }
+                }
+            }
+            input.value = '';
+        }
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addItem(this.value);
+            } else if (e.key === 'Backspace' && this.value === '') {
+                const items = getItems();
+                if (items.length > 0) {
+                    items.pop();
+                    setItems(items);
+                }
+            }
+        });
+        input.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+            const newItems = pastedText.split(/[,\n]/).map(s => s.trim()).filter(s => s);
+            if (newItems.length > 0) {
+                let items = getItems();
+                
+                // Special handling for screensaver_list
+                if (isScreensaverList) {
+                    const hasRandom = newItems.some(item => item.toLowerCase() === 'random');
+                    if (hasRandom) {
+                        // If pasting includes "random", just set random
+                        items = ['random'];
+                    } else {
+                        // Remove "random" from existing items, then add new ones
+                        items = items.filter(item => item.toLowerCase() !== 'random');
+                        newItems.forEach(item => {
+                            if (!items.includes(item)) items.push(item);
+                        });
+                    }
+                } else {
+                    // Default behavior for other array fields
+                    newItems.forEach(item => {
+                        if (!items.includes(item)) items.push(item);
+                    });
+                }
+                setItems(items);
+            }
+        });
+        container.addEventListener('click', function(e) {
+            if (e.target === container || e.target === wrapper) {
+                input.focus();
+            }
+        });
+        wrapper.querySelectorAll('.config-tag-remove').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const idx = parseInt(this.dataset.index);
+                const items = getItems();
+                items.splice(idx, 1);
+                setItems(items);
+            });
+        });
+    });
+}
+
 // Configuration Management Functions
 function loadConfiguration() {
     fetch('/get_config')
@@ -2455,7 +2923,6 @@ function loadConfiguration() {
             let sectionIndex = 0;
             
             for (const [section, fields] of Object.entries(data.config)) {
-                // Get section description
                 const sectionDesc = data.field_options[`${section}.__section__`];
                 const accordionId = `collapse${sectionIndex}`;
                 const isFirstSection = sectionIndex === 0;
@@ -2475,275 +2942,6 @@ function loadConfiguration() {
                             <div class="accordion-body config-accordion-body">
                 `;
                 
-                // Special handling for SERVO section - organize into groups
-                if (section === 'SERVO') {
-                    console.log('SERVO fields:', fields);
-                    const generalFields = ['voicemovement'];
-                    const v1Fields = ['Main', 'portForarm', 'portHand', 'starMain', 'starForarm', 'starHand'];
-                    const v2RightFields = ['MainMin', 'portMainMax', 'portForarmMin', 'portForarmMax', 'portHandMin', 'portHandMax'];
-                    const v2LeftFields = ['starMainMin', 'starMainMax', 'starForarmMin', 'starForarmMax', 'starHandMin', 'starHandMax'];
-                    const torsoFields = ['upHeight', 'neutralHeight', 'downHeight'];
-                    const leftLegFields = ['forwardStarboard', 'neutralStarboard', 'backStarboard', 'perfectStaroffset'];
-                    const rightLegFields = ['forwardPort', 'neutralPort', 'backPort', 'perfectPortoffset'];
-                    
-                    // General Settings
-                    formHtml += `
-                        <div class="servo-group mb-3">
-                            <h6 class="servo-group-title"><i class="bi bi-sliders me-2"></i>General Settings</h6>
-                            <div class="row g-3">
-                    `;
-                    generalFields.forEach(key => {
-                        if (fields[key] !== undefined) {
-                            const fieldId = `config_${section}_${key}`;
-                            const fieldInfo = data.field_options[`${section}.${key}`];
-                            const description = fieldInfo?.description || '';
-                            const value = fields[key];
-                            
-                            formHtml += `<div class="col-md-6">
-                                <div class="field-wrapper">
-                                    <label for="${fieldId}" class="form-label small d-flex align-items-center">
-                                        <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-                                        <span>${key}</span>
-                                    </label>`;
-                            
-                            if (fieldInfo && fieldInfo.options) {
-                                formHtml += `<select class="form-select form-select-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}">`;
-                                fieldInfo.options.forEach(option => {
-                                    const selected = String(value) === String(option) ? 'selected' : '';
-                                    formHtml += `<option value="${option}" ${selected}>${option}</option>`;
-                                });
-                                formHtml += '</select>';
-                            } else if (typeof value === 'boolean' || value === 'True' || value === 'False') {
-                                const checked = (value === true || value === 'True') ? 'checked' : '';
-                                formHtml += `
-                                    <div class="form-check form-switch mt-2">
-                                        <input class="form-check-input config-toggle" type="checkbox" id="${fieldId}" data-section="${section}" data-key="${key}" ${checked}>
-                                        <label class="form-check-label small text-white" for="${fieldId}" id="${fieldId}_label">
-                                            ${checked ? 'Enabled' : 'Disabled'}
-                                        </label>
-                                    </div>
-                                `;
-                            } else {
-                                formHtml += `<input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-                            }
-                            
-                            if (description) {
-                                formHtml += `
-                                    <div class="config-hint mt-1">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        <small>${description}</small>
-                                    </div>
-                                `;
-                            }
-                            formHtml += '</div></div>';
-                        }
-                    });
-                    formHtml += '</div></div>';
-                    
-//                     // V1 ARMS Variables
-//                     formHtml += `
-//                         <div class="servo-group mb-3">
-//                             <h6 class="servo-group-title"><i class="bi bi-joystick me-2"></i>V1 ARMS Variables (Legacy)</h6>
-//                             <div class="row g-3">
-//                     `;
-//                     v1Fields.forEach(key => {
-//                         if (fields[key] !== undefined) {
-//                             const fieldId = `config_${section}_${key}`;
-//                             const fieldInfo = data.field_options[`${section}.${key}`];
-//                             const description = fieldInfo?.description || '';
-//                             const value = fields[key];
-//                             
-//                             formHtml += `<div class="col-md-4">
-//                                 <div class="field-wrapper">
-//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
-//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-//                                         <span>${key}</span>
-//                                     </label>
-//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-//                             
-//                             if (description) {
-//                                 formHtml += `
-//                                     <div class="config-hint mt-1">
-//                                         <i class="bi bi-info-circle me-1"></i>
-//                                         <small>${description}</small>
-//                                     </div>
-//                                 `;
-//                             }
-//                             formHtml += '</div></div>';
-//                         }
-//                     });
-//                     formHtml += '</div></div>';
-//                     
-//                     // V2 RIGHT ARM Variables
-//                     formHtml += `
-//                         <div class="servo-group mb-3">
-//                             <h6 class="servo-group-title"><i class="bi bi-arrow-right-circle me-2"></i>V2 RIGHT ARM Variables</h6>
-//                             <div class="row g-3">
-//                     `;
-//                     v2RightFields.forEach(key => {
-//                         if (fields[key] !== undefined) {
-//                             const fieldId = `config_${section}_${key}`;
-//                             const fieldInfo = data.field_options[`${section}.${key}`];
-//                             const description = fieldInfo?.description || '';
-//                             const value = fields[key];
-//                             
-//                             formHtml += `<div class="col-md-4">
-//                                 <div class="field-wrapper">
-//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
-//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-//                                         <span>${key}</span>
-//                                     </label>
-//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-//                             
-//                             if (description) {
-//                                 formHtml += `
-//                                     <div class="config-hint mt-1">
-//                                         <i class="bi bi-info-circle me-1"></i>
-//                                         <small>${description}</small>
-//                                     </div>
-//                                 `;
-//                             }
-//                             formHtml += '</div></div>';
-//                         }
-//                     });
-//                     formHtml += '</div></div>';
-//                     
-//                     // V2 LEFT ARM Variables
-//                     formHtml += `
-//                         <div class="servo-group mb-3">
-//                             <h6 class="servo-group-title"><i class="bi bi-arrow-left-circle me-2"></i>V2 LEFT ARM Variables</h6>
-//                             <div class="row g-3">
-//                     `;
-//                     v2LeftFields.forEach(key => {
-//                         if (fields[key] !== undefined) {
-//                             const fieldId = `config_${section}_${key}`;
-//                             const fieldInfo = data.field_options[`${section}.${key}`];
-//                             const description = fieldInfo?.description || '';
-//                             const value = fields[key];
-//                             
-//                             formHtml += `<div class="col-md-4">
-//                                 <div class="field-wrapper">
-//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
-//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-//                                         <span>${key}</span>
-//                                     </label>
-//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-//                             
-//                             if (description) {
-//                                 formHtml += `
-//                                     <div class="config-hint mt-1">
-//                                         <i class="bi bi-info-circle me-1"></i>
-//                                         <small>${description}</small>
-//                                     </div>
-//                                 `;
-//                             }
-//                             formHtml += '</div></div>';
-//                         }
-//                     });
-//                     formHtml += '</div></div>';
-//                     
-//                     // Torso Height Variables
-//                     formHtml += `
-//                         <div class="servo-group mb-3">
-//                             <h6 class="servo-group-title"><i class="bi bi-arrow-up-down me-2"></i>Torso Height Variables</h6>
-//                             <div class="row g-3">
-//                     `;
-//                     torsoFields.forEach(key => {
-//                         if (fields[key] !== undefined) {
-//                             const fieldId = `config_${section}_${key}`;
-//                             const fieldInfo = data.field_options[`${section}.${key}`];
-//                             const description = fieldInfo?.description || '';
-//                             const value = fields[key];
-//                             
-//                             formHtml += `<div class="col-md-4">
-//                                 <div class="field-wrapper">
-//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
-//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-//                                         <span>${key}</span>
-//                                     </label>
-//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-//                             
-//                             if (description) {
-//                                 formHtml += `
-//                                     <div class="config-hint mt-1">
-//                                         <i class="bi bi-info-circle me-1"></i>
-//                                         <small>${description}</small>
-//                                     </div>
-//                                 `;
-//                             }
-//                             formHtml += '</div></div>';
-//                         }
-//                     });
-//                     formHtml += '</div></div>';
-//                     
-//                     // Left Leg Variables
-//                     formHtml += `
-//                         <div class="servo-group mb-3">
-//                             <h6 class="servo-group-title"><i class="bi bi-arrow-left me-2"></i>Left Leg Variables</h6>
-//                             <div class="row g-3">
-//                     `;
-//                     leftLegFields.forEach(key => {
-//                         if (fields[key] !== undefined) {
-//                             const fieldId = `config_${section}_${key}`;
-//                             const fieldInfo = data.field_options[`${section}.${key}`];
-//                             const description = fieldInfo?.description || '';
-//                             const value = fields[key];
-//                             
-//                             formHtml += `<div class="col-md-4 col-lg-3">
-//                                 <div class="field-wrapper">
-//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
-//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-//                                         <span>${key}</span>
-//                                     </label>
-//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-//                             
-//                             if (description) {
-//                                 formHtml += `
-//                                     <div class="config-hint mt-1">
-//                                         <i class="bi bi-info-circle me-1"></i>
-//                                         <small>${description}</small>
-//                                     </div>
-//                                 `;
-//                             }
-//                             formHtml += '</div></div>';
-//                         }
-//                     });
-//                     formHtml += '</div></div>';
-//                     
-//                     // Right Leg Variables
-//                     formHtml += `
-//                         <div class="servo-group mb-3">
-//                             <h6 class="servo-group-title"><i class="bi bi-arrow-right me-2"></i>Right Leg Variables</h6>
-//                             <div class="row g-3">
-//                     `;
-//                     rightLegFields.forEach(key => {
-//                         if (fields[key] !== undefined) {
-//                             const fieldId = `config_${section}_${key}`;
-//                             const fieldInfo = data.field_options[`${section}.${key}`];
-//                             const description = fieldInfo?.description || '';
-//                             const value = fields[key];
-//                             
-//                             formHtml += `<div class="col-md-4 col-lg-3">
-//                                 <div class="field-wrapper">
-//                                     <label for="${fieldId}" class="form-label small d-flex align-items-center">
-//                                         <i class="bi bi-gear-fill me-1" style="font-size: 10px; opacity: 0.5;"></i>
-//                                         <span>${key}</span>
-//                                     </label>
-//                                     <input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
-//                             
-//                             if (description) {
-//                                 formHtml += `
-//                                     <div class="config-hint mt-1">
-//                                         <i class="bi bi-info-circle me-1"></i>
-//                                         <small>${description}</small>
-//                                     </div>
-//                                 `;
-//                             }
-//                             formHtml += '</div></div>';
-//                         }
-//                     });
-//                     formHtml += '</div></div>';
-                } else {
                     // Regular sections - use standard layout
                     formHtml += '<div class="row g-3">';
                     
@@ -2759,7 +2957,10 @@ function loadConfiguration() {
                                 <span>${key}</span>
                             </label>`;
                     
-                    if (fieldInfo && fieldInfo.options) {
+                    // Check for screensaver_select type first (special multi-select component)
+                    if (fieldInfo && fieldInfo.type === 'screensaver_select') {
+                        formHtml += generateScreensaverSelectHtml(fieldId, section, key, value, fieldInfo.options || []);
+                    } else if (fieldInfo && fieldInfo.options && fieldInfo.type !== 'screensaver_select') {
                         // Dropdown for fields with predefined options
                         formHtml += `<select class="form-select form-select-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}">`;
                         fieldInfo.options.forEach(option => {
@@ -2767,9 +2968,8 @@ function loadConfiguration() {
                             formHtml += `<option value="${option}" ${selected}>${option}</option>`;
                         });
                         formHtml += '</select>';
-                    } else if (typeof value === 'boolean' || value === 'True' || value === 'False') {
-                        // Checkbox for boolean values
-                        const checked = (value === true || value === 'True') ? 'checked' : '';
+                    } else if (typeof value === 'boolean' || value === 'True' || value === 'False' || value === 'true' || value === 'false') {
+                        const checked = (value === true || value === 'True' || value === 'true') ? 'checked' : '';
                         formHtml += `
                             <div class="form-check form-switch mt-2">
                                 <input class="form-check-input config-toggle" type="checkbox" id="${fieldId}" data-section="${section}" data-key="${key}" ${checked}>
@@ -2779,8 +2979,20 @@ function loadConfiguration() {
                             </div>
                         `;
                     } else {
-                        // Text input for other values
-                        formHtml += `<input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${value}">`;
+                        const isArrayType = fieldInfo && fieldInfo.type === 'array';
+                        const arrayInfo = detectArrayValue(value);
+                        if (isArrayType || arrayInfo.isArray) {
+                            const items = arrayInfo.isArray ? arrayInfo.items : (value ? [value] : []);
+                            const arrayType = arrayInfo.isArray ? arrayInfo.type : 'csv';
+                            const typeBadge = arrayType === 'json' ? 'JSON' : 'LIST';
+                            formHtml = formHtml.replace(
+                                `<span>${key}</span>`,
+                                `<span>${key}</span><span class="config-array-badge">${typeBadge}</span>`
+                            );
+                            formHtml += generateTagInputHtml(fieldId, section, key, items, arrayType);
+                        } else {
+                            formHtml += `<input type="text" class="form-control form-control-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}" value="${escapeHtmlForTags(String(value))}">`;
+                        }
                     }
                     
                     if (description) {
@@ -2796,7 +3008,6 @@ function loadConfiguration() {
                     }
                     
                     formHtml += '</div>';  // Close row
-                }
                 
                 formHtml += '</div></div></div>';  // Close accordion-body, accordion-collapse, accordion-item
                 sectionIndex++;
@@ -2814,6 +3025,8 @@ function loadConfiguration() {
                     }
                 });
             });
+            initializeTagInputs();
+            initializeScreensaverSelects();
         })
         .catch(error => {
             console.error('Error loading configuration:', error);
@@ -2837,8 +3050,14 @@ function saveConfiguration() {
     const inputs = document.querySelectorAll('#configForm input, #configForm select');
     
     inputs.forEach(input => {
+        if (input.classList.contains('config-array-value')) return;
+        if (input.classList.contains('config-tag-input')) return;
+        if (input.classList.contains('screensaver-select-value')) return;
+        
         const section = input.getAttribute('data-section');
         const key = input.getAttribute('data-key');
+        
+        if (!section || !key) return;
         
         if (!configData[section]) {
             configData[section] = {};
@@ -2849,6 +3068,33 @@ function saveConfiguration() {
         } else {
             configData[section][key] = input.value;
         }
+    });
+    
+    document.querySelectorAll('.config-tag-input-container').forEach(container => {
+        const section = container.dataset.section;
+        const key = container.dataset.key;
+        const arrayType = container.dataset.arrayType;
+        const hiddenInput = container.querySelector('.config-array-value');
+        if (!configData[section]) {
+            configData[section] = {};
+        }
+        try {
+            const items = JSON.parse(hiddenInput.value) || [];
+            configData[section][key] = arrayToConfigValue(items, arrayType);
+        } catch {
+            configData[section][key] = '';
+        }
+    });
+    
+    // Handle screensaver select components
+    document.querySelectorAll('.screensaver-select-container').forEach(container => {
+        const section = container.dataset.section;
+        const key = container.dataset.key;
+        const hiddenInput = container.querySelector('.screensaver-select-value');
+        if (!configData[section]) {
+            configData[section] = {};
+        }
+        configData[section][key] = hiddenInput.value;
     });
     
     // Disable button while saving

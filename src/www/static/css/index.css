@@ -352,3 +352,83 @@ p {
 }
 
 
+
+/* Screensaver Multi-Select Component */
+.screensaver-select-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.screensaver-select-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  min-height: 40px;
+}
+
+.screensaver-option {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.screensaver-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.screensaver-option.selected {
+  background: rgba(13, 110, 253, 0.3);
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+.screensaver-option.selected:hover {
+  background: rgba(13, 110, 253, 0.4);
+}
+
+.screensaver-option.random-option {
+  border-color: rgba(255, 193, 7, 0.4);
+  color: rgba(255, 193, 7, 0.8);
+}
+
+.screensaver-option.random-option:hover {
+  background: rgba(255, 193, 7, 0.15);
+  border-color: rgba(255, 193, 7, 0.6);
+}
+
+.screensaver-option.random-option.selected {
+  background: rgba(255, 193, 7, 0.3);
+  border-color: #ffc107;
+  color: #fff;
+}
+
+.screensaver-option.random-option.selected:hover {
+  background: rgba(255, 193, 7, 0.4);
+}
+
+.screensaver-option .option-icon {
+  margin-right: 5px;
+  font-size: 10px;
+}
+
+.screensaver-select-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
