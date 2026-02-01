@@ -33,16 +33,13 @@ from modules.module_movement_registry import get_names, get_names_by_type, LEGS_
 
 pygame.init()
 
-# Auto-detect display size and scale to fit
 display_info = pygame.display.Info()
 display_width = display_info.current_w
 display_height = display_info.current_h
 
-# Reference dimensions (design size)
 REFERENCE_WIDTH = 800
 REFERENCE_HEIGHT = 480
 
-# Scale to fit 90% of available screen while maintaining aspect ratio
 max_width = int(display_width * 0.9)
 max_height = int(display_height * 0.9)
 

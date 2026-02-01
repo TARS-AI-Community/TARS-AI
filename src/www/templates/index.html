@@ -2677,6 +2677,117 @@ function generateTagInputHtml(fieldId, section, key, items, arrayType) {
     `;
 }
 
+function generateScreensaverSelectHtml(fieldId, section, key, currentValue, options) {
+    // Parse current value to get selected items
+    let selectedItems = [];
+    if (typeof currentValue === 'string') {
+        const trimmed = currentValue.trim().toLowerCase();
+        if (trimmed === 'random') {
+            selectedItems = ['random'];
+        } else if (trimmed) {
+            selectedItems = currentValue.split(',').map(s => s.trim().toLowerCase()).filter(s => s);
+        }
+    }
+    
+    const optionsHtml = options.map(option => {
+        const isRandom = option.toLowerCase() === 'random';
+        const isSelected = selectedItems.includes(option.toLowerCase());
+        const selectedClass = isSelected ? 'selected' : '';
+        const randomClass = isRandom ? 'random-option' : '';
+        const icon = isRandom ? '<i class="bi bi-shuffle option-icon"></i>' : '';
+        
+        return `
+            <span class="screensaver-option ${selectedClass} ${randomClass}" data-value="${option}">
+                ${icon}${option}
+            </span>
+        `;
+    }).join('');
+    
+    return `
+        <div class="screensaver-select-container" id="${fieldId}" data-section="${section}" data-key="${key}">
+            <div class="screensaver-select-options">
+                ${optionsHtml}
+            </div>
+            <input type="hidden" class="screensaver-select-value" value="${escapeHtmlForTags(currentValue)}" />
+        </div>
+    `;
+}
+
+function initializeScreensaverSelects() {
+    document.querySelectorAll('.screensaver-select-container').forEach(container => {
+        const hiddenInput = container.querySelector('.screensaver-select-value');
+        const optionsWrapper = container.querySelector('.screensaver-select-options');
+        
+        function getSelectedItems() {
+            const value = hiddenInput.value.trim().toLowerCase();
+            if (value === 'random') return ['random'];
+            if (!value) return [];
+            return value.split(',').map(s => s.trim()).filter(s => s);
+        }
+        
+        function setSelectedItems(items) {
+            // Update hidden input
+            if (items.length === 0) {
+                hiddenInput.value = 'random';
+                items = ['random'];
+            } else if (items.includes('random')) {
+                hiddenInput.value = 'random';
+                items = ['random'];
+            } else {
+                hiddenInput.value = items.join(',');
+            }
+            
+            // Update visual state
+            optionsWrapper.querySelectorAll('.screensaver-option').forEach(opt => {
+                const optValue = opt.dataset.value.toLowerCase();
+                if (items.includes(optValue)) {
+                    opt.classList.add('selected');
+                } else {
+                    opt.classList.remove('selected');
+                }
+            });
+        }
+        
+        // Add click handlers to each option
+        optionsWrapper.querySelectorAll('.screensaver-option').forEach(option => {
+            option.addEventListener('click', function() {
+                const clickedValue = this.dataset.value.toLowerCase();
+                const isRandom = clickedValue === 'random';
+                let selectedItems = getSelectedItems();
+                
+                if (isRandom) {
+                    // Clicking random: toggle it, if selected clear all, if not set only random
+                    if (selectedItems.includes('random')) {
+                        // Can't deselect random without selecting something else
+                        // Keep random selected
+                        return;
+                    } else {
+                        // Select random, clear everything else
+                        setSelectedItems(['random']);
+                    }
+                } else {
+                    // Clicking a specific screensaver
+                    if (selectedItems.includes(clickedValue)) {
+                        // Deselect it
+                        selectedItems = selectedItems.filter(s => s !== clickedValue);
+                        if (selectedItems.length === 0 || (selectedItems.length === 1 && selectedItems[0] === 'random')) {
+                            // If nothing left, default to random
+                            setSelectedItems(['random']);
+                        } else {
+                            setSelectedItems(selectedItems);
+                        }
+                    } else {
+                        // Select it, remove random if present
+                        selectedItems = selectedItems.filter(s => s !== 'random');
+                        selectedItems.push(clickedValue);
+                        setSelectedItems(selectedItems);
+                    }
+                }
+            });
+        });
+    });
+}
+
 function initializeTagInputs() {
     document.querySelectorAll('.config-tag-input-container').forEach(container => {
         const input = container.querySelector('.config-tag-input');
@@ -2711,13 +2822,34 @@ function initializeTagInputs() {
                 });
             });
         }
+        // Check if this is the screensaver_list field (needs special "random" handling)
+        const isScreensaverList = container.dataset.section === 'UI' && container.dataset.key === 'screensaver_list';
+        
         function addItem(text) {
             const trimmed = text.trim();
             if (trimmed) {
-                const items = getItems();
-                if (!items.includes(trimmed)) {
-                    items.push(trimmed);
+                let items = getItems();
+                
+                // Special handling for screensaver_list
+                if (isScreensaverList) {
+                    const isRandom = trimmed.toLowerCase() === 'random';
+                    if (isRandom) {
+                        // If adding "random", clear everything and just set random
+                        items = ['random'];
+                    } else {
+                        // If adding a specific screensaver, remove "random" if present
+                        items = items.filter(item => item.toLowerCase() !== 'random');
+                        if (!items.includes(trimmed)) {
+                            items.push(trimmed);
+                        }
+                    }
                     setItems(items);
+                } else {
+                    // Default behavior for other array fields
+                    if (!items.includes(trimmed)) {
+                        items.push(trimmed);
+                        setItems(items);
+                    }
                 }
             }
             input.value = '';
@@ -2739,10 +2871,27 @@ function initializeTagInputs() {
             const pastedText = (e.clipboardData || window.clipboardData).getData('text');
             const newItems = pastedText.split(/[,\n]/).map(s => s.trim()).filter(s => s);
             if (newItems.length > 0) {
-                const items = getItems();
-                newItems.forEach(item => {
-                    if (!items.includes(item)) items.push(item);
-                });
+                let items = getItems();
+                
+                // Special handling for screensaver_list
+                if (isScreensaverList) {
+                    const hasRandom = newItems.some(item => item.toLowerCase() === 'random');
+                    if (hasRandom) {
+                        // If pasting includes "random", just set random
+                        items = ['random'];
+                    } else {
+                        // Remove "random" from existing items, then add new ones
+                        items = items.filter(item => item.toLowerCase() !== 'random');
+                        newItems.forEach(item => {
+                            if (!items.includes(item)) items.push(item);
+                        });
+                    }
+                } else {
+                    // Default behavior for other array fields
+                    newItems.forEach(item => {
+                        if (!items.includes(item)) items.push(item);
+                    });
+                }
                 setItems(items);
             }
         });
@@ -2808,7 +2957,10 @@ function loadConfiguration() {
                                 <span>${key}</span>
                             </label>`;
                     
-                    if (fieldInfo && fieldInfo.options) {
+                    // Check for screensaver_select type first (special multi-select component)
+                    if (fieldInfo && fieldInfo.type === 'screensaver_select') {
+                        formHtml += generateScreensaverSelectHtml(fieldId, section, key, value, fieldInfo.options || []);
+                    } else if (fieldInfo && fieldInfo.options && fieldInfo.type !== 'screensaver_select') {
                         // Dropdown for fields with predefined options
                         formHtml += `<select class="form-select form-select-sm config-input" id="${fieldId}" data-section="${section}" data-key="${key}">`;
                         fieldInfo.options.forEach(option => {
@@ -2831,7 +2983,7 @@ function loadConfiguration() {
                         const arrayInfo = detectArrayValue(value);
                         if (isArrayType || arrayInfo.isArray) {
                             const items = arrayInfo.isArray ? arrayInfo.items : (value ? [value] : []);
-                            const arrayType = arrayInfo.isArray ? arrayInfo.type : 'json';
+                            const arrayType = arrayInfo.isArray ? arrayInfo.type : 'csv';
                             const typeBadge = arrayType === 'json' ? 'JSON' : 'LIST';
                             formHtml = formHtml.replace(
                                 `<span>${key}</span>`,
@@ -2874,6 +3026,7 @@ function loadConfiguration() {
                 });
             });
             initializeTagInputs();
+            initializeScreensaverSelects();
         })
         .catch(error => {
             console.error('Error loading configuration:', error);
@@ -2899,6 +3052,7 @@ function saveConfiguration() {
     inputs.forEach(input => {
         if (input.classList.contains('config-array-value')) return;
         if (input.classList.contains('config-tag-input')) return;
+        if (input.classList.contains('screensaver-select-value')) return;
         
         const section = input.getAttribute('data-section');
         const key = input.getAttribute('data-key');
@@ -2930,6 +3084,17 @@ function saveConfiguration() {
         } catch {
             configData[section][key] = '';
         }
+    });
+    
+    // Handle screensaver select components
+    document.querySelectorAll('.screensaver-select-container').forEach(container => {
+        const section = container.dataset.section;
+        const key = container.dataset.key;
+        const hiddenInput = container.querySelector('.screensaver-select-value');
+        if (!configData[section]) {
+            configData[section] = {};
+        }
+        configData[section][key] = hiddenInput.value;
     });
     
     // Disable button while saving

@@ -130,6 +130,47 @@ def _parse_screensaver_list(value: str) -> List[str]:
     
     return screensavers
 
+def _format_screensaver_list(value) -> str:
+    """
+    Format the screensaver_list value for saving to config.ini.
+    Converts arrays/lists back to the proper string format.
+    
+    Args:
+        value: Either a string, list, or JSON string representation of a list
+        
+    Returns:
+        String in the format expected by config.ini (either "random" or comma-separated)
+    """
+    # Handle list/array input
+    if isinstance(value, list):
+        if len(value) == 0:
+            return "random"
+        elif len(value) == 1 and value[0].lower() == "random":
+            return "random"
+        else:
+            return ",".join(str(item).strip() for item in value if str(item).strip())
+    
+    # Handle string input
+    str_value = str(value).strip()
+    
+    # Check if it's a JSON array string like '["random"]' or '["blackhole","waves"]'
+    if str_value.startswith('[') and str_value.endswith(']'):
+        try:
+            import json
+            parsed = json.loads(str_value)
+            if isinstance(parsed, list):
+                if len(parsed) == 0:
+                    return "random"
+                elif len(parsed) == 1 and str(parsed[0]).lower() == "random":
+                    return "random"
+                else:
+                    return ",".join(str(item).strip() for item in parsed if str(item).strip())
+        except (json.JSONDecodeError, ValueError):
+            pass
+    
+    # Return as-is if it's already a proper string format
+    return str_value
+
 def load_config():
     global character_name
     """
@@ -643,7 +684,14 @@ class TarsConfigIntegration:
                     # Determine the value to use
                     if section_name in config_data and field_name in config_data[section_name]:
                         # Use value from web input
-                        new_value = str(config_data[section_name][field_name])
+                        new_value = config_data[section_name][field_name]
+                        
+                        # Special handling for screensaver_list - convert arrays back to config format
+                        if section_name == 'UI' and field_name == 'screensaver_list':
+                            new_value = _format_screensaver_list(new_value)
+                        else:
+                            new_value = str(new_value)
+                        
                         actions_taken.append(f"Updated [{section_name}] {field_name} = {new_value}")
                     elif section_name in existing_sections and field_name in existing_sections[section_name].fields:
                         # Preserve existing value
@@ -1075,8 +1123,9 @@ CONFIG_UI_FIELDS = {
             'description': 'Seconds between screensaver changes'
         },
         'screensaver_list': {
-            'type': 'array',
-            'description': 'Screensavers: random, or specific ones (blackhole, waves, matrix, starfield, hyperspace, terminal, face, fractal, pacman, nebulas, pictures, dashboard, defrag, bounce, endurance)'
+            'type': 'screensaver_select',
+            'options': ['random', 'blackhole', 'waves', 'matrix', 'starfield', 'hyperspace', 'terminal', 'face', 'fractal', 'pacman', 'nebulas', 'pictures', 'dashboard', 'defrag', 'bounce', 'endurance'],
+            'description': 'Select "random" for all, or pick specific screensavers'
         },
         'show_time': {
             'description': 'Show time on screensaver'
