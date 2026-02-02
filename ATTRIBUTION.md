@@ -15,7 +15,7 @@ As we continue to build and expand the TARS project, below are the guidelines fo
 
 ---
 
-## Specific Guidelines for CAD, Scripts, and Modules
+## Specific Guidelines for CAD, STL, Scripts, and Modules
 
 - The original CAD files and scripts are provided by Charlie Diaz.  
 - If you modify or extend these files:  
@@ -24,7 +24,6 @@ As we continue to build and expand the TARS project, below are the guidelines fo
 
 - Files authored or significantly modified by Charles-Olivier Dion (AtomikSpace) are **dual-licensed**:  
   - Free for non-commercial use under CC-BY-NC 4.0.  
-  - Commercial use requires a separate license (see `COMMERCIAL_LICENSE.md` and file headers).  
 
 ---
 
@@ -46,7 +45,7 @@ As we continue to build and expand the TARS project, below are the guidelines fo
 ## Legal Considerations
 
 - Non-commercial use is free under CC-BY-NC 4.0.  
-- Commercial use of AtomikSpace contributions **requires a separate license** (see `COMMERCIAL_LICENSE.md`).  
+- Commercial use of AtomikSpace contributions **requires a separate license** 
 - This project includes code/inspiration (module engine and memory functions) from AME by Exploding Cat, licensed under the MIT License. The original license and copyright notice are included in the source code.  
 - The remainder of the project is licensed under CC-BY-NC 4.0.
 

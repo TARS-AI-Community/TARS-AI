@@ -25,45 +25,55 @@
 </p>
 
 <p align="center">
-  A recreation of the robot TARS from Interstellar, featuring AI capabilities.
+  A recreation of the robot TARS from <i>Interstellar</i>, featuring AI capabilities.
 </p>
 
 ---
 
-## 🚀 To Start Building TARS-AI
-- See the documentation: [TARS-AI Wiki](https://github.com/TARS-AI-Community/TARS-AI/wiki/Home)
+## 🚀 Getting Started
+
+- See the documentation:  
+  👉 https://github.com/TARS-AI-Community/TARS-AI/wiki/Home
 
 ---
 
-## 🤝 To Start Contributing
-- Join the Discord community: [discord.gg/AmE2Gv9EUt](https://discord.gg/AmE2Gv9EUt)
+## 🤝 Contributing
+
+- Join the community on Discord:  
+  👉 https://discord.gg/AmE2Gv9EUt
 
 ---
 
 ## 📜 License
 
-### Open Source (Non-Commercial Use)
 This project is licensed under **Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0)**.
 
-You may use, modify, and share this project for personal, educational, and research purposes.
+You may:
+- Build and modify your own TARS robot
+- Share improvements and derivatives
+- Use the project for personal, educational, and research purposes
 
-Commercial use is **not permitted without explicit written permission from the author**.
+You may **not** use this project for commercial purposes without explicit permission from the author(s).
+Commercial use includes, but is not limited to:
+
+- Selling 3D printed parts, kits, or complete robots  
+- Selling or distributing STL / CAD files for money  
+- Offering paid assembly, customization, or installation services  
+- Monetized YouTube, Patreon, or subscription content that distributes project files or derivatives  
+- Using this project in paid products, commercial research, or corporate projects  
+- Integrating this project into commercial software or hardware products  
+- Selling derivatives or modified versions of the hardware or software  
+
+If you are unsure whether your use case is commercial, assume it is and request permission from the author(s).
+
 
 See the [LICENSE](./LICENSE) file for details.
 
 ---
 
-### Commercial Use
-Some files authored or significantly modified by **Charles-Olivier Dion (AtomikSpace)** are dual-licensed.
-
-Commercial use of these files requires a separate license agreement.  
-See **COMMERCIAL_LICENSE.md** and file headers for details.
-
----
-
 ## 🧾 Attribution
 
-As we continue to build and expand TARS-AI, please review attribution guidelines when sharing or publishing derivative work:
+Please follow the attribution guidelines when sharing or publishing derivative work:
 
 👉 [ATTRIBUTION.md](./ATTRIBUTION.md)
 
