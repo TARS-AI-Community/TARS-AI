@@ -70,8 +70,3 @@ As we continue to build and expand TARS-AI, please review attribution guidelines
 
 ---
 
-## ❤️ Support the Project
-
-If you like this project and want to support development:
-
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/atomikspace)
