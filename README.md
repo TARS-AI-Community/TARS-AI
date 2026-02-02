@@ -53,18 +53,18 @@ You may:
 - Share improvements and derivatives
 - Use the project for personal, educational, and research purposes
 
-You may **not** use this project for commercial purposes without explicit permission from the author(s).
+You may **not** use this project for commercial purposes without explicit permission from the authors.
 Commercial use includes, but is not limited to:
 
 - Selling 3D printed parts, kits, or complete robots  
 - Selling or distributing STL / CAD files for money  
 - Offering paid assembly, customization, or installation services  
-- Monetized YouTube, Patreon, or subscription content that distributes project files or derivatives  
+- Monetized YouTube, Social Media, Patreon, or subscription content that distributes project files or derivatives  
 - Using this project in paid products, commercial research, or corporate projects  
 - Integrating this project into commercial software or hardware products  
 - Selling derivatives or modified versions of the hardware or software  
 
-If you are unsure whether your use case is commercial, assume it is and request permission from the author(s).
+If you are unsure whether your use case is commercial, assume it is and request permission from the authors.
 
 
 See the [LICENSE](./LICENSE) file for details.
