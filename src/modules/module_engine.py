@@ -7,16 +7,51 @@ Core module for TARS-AI responsible for:
 
 import threading
 
-from modules.module_websearch import search_google, search_google_news
-from modules.module_vision import describe_camera_view
-from modules.module_stablediffusion import generate_image
-from modules.module_homeassistant import send_prompt_to_homeassistant
-from modules.module_tts import generate_tts_audio
 from modules.module_config import load_config
 from modules.module_messageQue import queue_message
-from modules.module_servoctl import walk_forward, walk_backward, turn_right_slow, turn_left_slow
 
 CONFIG = load_config()
+
+# All function imports - try each one, set to None if unavailable
+search_google = None
+search_google_news = None
+try:
+    from modules.module_websearch import search_google, search_google_news
+except ImportError:
+    pass
+
+describe_camera_view = None
+try:
+    from modules.module_vision import describe_camera_view
+except ImportError:
+    pass
+
+generate_image = None
+try:
+    from modules.module_stablediffusion import generate_image
+except ImportError:
+    pass
+
+send_prompt_to_homeassistant = None
+try:
+    from modules.module_homeassistant import send_prompt_to_homeassistant
+except ImportError:
+    pass
+
+generate_tts_audio = None
+try:
+    from modules.module_tts import generate_tts_audio
+except ImportError:
+    pass
+
+walk_forward = None
+walk_backward = None
+turn_right_slow = None
+turn_left_slow = None
+try:
+    from modules.module_servoctl import walk_forward, walk_backward, turn_right_slow, turn_left_slow
+except ImportError:
+    pass
 
 def execute_movement(movements):
     """
@@ -64,6 +99,8 @@ def call_function(module_name, *args, **kwargs):
     if module_name not in FUNCTION_REGISTRY:
         return "Not a Function"
     func = FUNCTION_REGISTRY[module_name]
+    if func is None:
+        return f"{module_name} is not available on this device."
     try:
         if func.__code__.co_argcount == 0:
             return func()

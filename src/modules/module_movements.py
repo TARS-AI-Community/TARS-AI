@@ -1,9 +1,21 @@
 """
-module_movements.py
-Atomikspace
-V3
-"""
+Module: Movements
+Author: Charles-Olivier Dion (AtomikSpace)
+Contact: atomikspace.labs@gmail.com
+Copyright (c) 2026 Charles-Olivier Dion
 
+This file is authored by Charles-Olivier Dion and is dual-licensed.
+
+Non-Commercial License:
+This file is licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0).
+You may use, modify, and redistribute this file for NON-COMMERCIAL purposes only, with attribution.
+
+Commercial License:
+Commercial use (including selling products, paid services, SaaS, subscriptions, Patreon rewards, or derivatives)
+requires a separate written license from Charles-Olivier Dion (AtomikSpace).
+
+This license applies only to this file and does not override licenses of other files in the repository.
+"""
 import time
 import modules.module_servoctl as servoctl
 
@@ -67,28 +79,38 @@ def walk_forward():
                 sequence = [
                     (40, 70, 50, 50),
                     (40, 70, 35, 50),
+                    (50, 50, 35, 50),
                     (70, 40, 50, 50),
                     (70, 40, 50, 35),
+                    (50, 50, 50, 35),
                 ]
                 for _ in range(2):
                     for a, b, c, d in sequence:
                         move_legs(a, b, c, d, 0.5)
-                move_legs(70, 70, 50, 50, 0.6)
-                move_legs(50, 50, 50, 50, 0.8) 
+                for a, b, c, d in sequence[:3]:
+                    move_legs(a, b, c, d, 0.5)
+                move_legs(70, 40, 35, 50, 0.5)
+                move_legs(70, 40, 50, 50, 0.5)
+                move_legs(50, 50, 50, 50, 0.8)
 
             if servoctl.ARMS_PRESENT:
                 move_legs(50, 50, 50, 50, 0.8)
                 sequence = [
                     (50, 95, 50, 50),
-                    (40, 95, 25, 50),
+                    (50, 95, 25, 50),
+                    (50, 50, 25, 50),
                     (95, 50, 50, 50),
-                    (95, 40, 50, 25),
+                    (95, 50, 50, 25),
+                    (50, 50, 50, 25),
                 ]
                 for _ in range(2):
                     for a, b, c, d in sequence:
                         move_legs(a, b, c, d, 0.9)
-                move_legs(95, 95, 50, 50, 0.8)
-                move_legs(50, 50, 50, 50, 0.8) 
+                for a, b, c, d in sequence[:3]:
+                    move_legs(a, b, c, d, 0.9)
+                move_legs(95, 50, 25, 50, 0.9)
+                move_legs(95, 50, 50, 50, 0.9)
+                move_legs(50, 50, 50, 50, 0.8)
 
 
             time.sleep(0.1)
@@ -141,15 +163,40 @@ def walk_backward():
             if not servoctl.ARMS_PRESENT:
                 move_legs(50, 50, 50, 50, 0.8)
                 sequence = [
-                (50, 65, 50, 50),
-                (50, 65, 50, 35),
-                (65, 50, 50, 50),
-                (65, 50, 35, 50),
+                    (50, 65, 50, 50),
+                    (50, 65, 50, 75),
+                    (50, 50, 50, 75),
+                    (65, 50, 50, 50),
+                    (65, 50, 75, 50),
+                    (50, 50, 75, 50),
                 ]
                 for _ in range(2):
                     for a, b, c, d in sequence:
                         move_legs(a, b, c, d, 0.5)
-                move_legs(50, 50, 50, 50, 0.6)
+                for a, b, c, d in sequence[:3]:
+                    move_legs(a, b, c, d, 0.5)
+                move_legs(65, 50, 50, 75, 0.5)
+                move_legs(65, 50, 50, 50, 0.5)
+                move_legs(50, 50, 50, 50, 0.8)
+
+            if servoctl.ARMS_PRESENT:
+                move_legs(50, 50, 50, 50, 0.8)
+                sequence = [
+                    (95, 40, 50, 50),
+                    (95, 40, 50, 75),
+                    (50, 40, 50, 75),
+                    (40, 95, 50, 50),
+                    (40, 95, 75, 50),
+                    (40, 50, 75, 50),
+                ]
+                for _ in range(2):
+                    for a, b, c, d in sequence:
+                        move_legs(a, b, c, d, 0.9)
+                for a, b, c, d in sequence[:3]:
+                    move_legs(a, b, c, d, 0.9)
+                move_legs(50, 95, 50, 75, 0.9)
+                move_legs(50, 95, 50, 50, 0.9)
+                move_legs(50, 50, 50, 50, 0.8)
 
                 
             time.sleep(0.1)

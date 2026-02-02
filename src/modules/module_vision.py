@@ -1,21 +1,59 @@
 import traceback
-from PIL import Image
-from transformers import BlipProcessor, BlipForConditionalGeneration
-from io import BytesIO
-import requests
-import torch
 import base64
 from datetime import datetime
 from pathlib import Path
-import openai
+from io import BytesIO
+import requests
 
 from modules.module_config import load_config
 from modules.module_messageQue import queue_message
-from UI.module_ui_camera import CameraModule
 
 CONFIG = load_config()
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Conditional imports for heavy dependencies
+Image = None
+BlipProcessor = None
+BlipForConditionalGeneration = None
+torch = None
+openai = None
+CameraModule = None
+
+try:
+    from PIL import Image as _Image
+    Image = _Image
+except ImportError:
+    pass
+
+try:
+    from transformers import BlipProcessor as _BlipProcessor, BlipForConditionalGeneration as _BlipModel
+    BlipProcessor = _BlipProcessor
+    BlipForConditionalGeneration = _BlipModel
+except ImportError:
+    pass
+
+try:
+    import torch as _torch
+    torch = _torch
+except ImportError:
+    pass
+
+try:
+    import openai as _openai
+    openai = _openai
+except ImportError:
+    pass
+
+try:
+    from UI.module_ui_camera import CameraModule as _CameraModule
+    CameraModule = _CameraModule
+except ImportError:
+    pass
+
+# Only set up device/model if torch is available
+DEVICE = None
+if torch:
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 MODEL_NAME = "Salesforce/blip-image-captioning-base"
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "vision"
@@ -25,40 +63,55 @@ PROCESSOR = None
 MODEL = None
 CAMERA = None
 
-try:
-    openai.api_key = CONFIG['TTS']['openai_api_key']
-except (KeyError, TypeError):
+# Set up OpenAI API key if available
+if openai:
     try:
-        openai.api_key = CONFIG['VISION']['openai_api_key']
+        openai.api_key = CONFIG['TTS']['openai_api_key']
     except (KeyError, TypeError):
-        queue_message("WARNING: No OpenAI API key found for vision")
+        try:
+            openai.api_key = CONFIG['VISION']['openai_api_key']
+        except (KeyError, TypeError):
+            pass
 
 def initialize_camera():
     """Initialize camera once and store the reference globally."""
     if not CONFIG['VISION']['enabled']:
-        global CAMERA
-        if CAMERA is None:
-            CAMERA = CameraModule(1920, 1080)
-            queue_message(f"INFO: Camera initialized.")
+        return
+    
+    if CameraModule is None:
+        queue_message("WARNING: Camera module not available")
+        return
+        
+    global CAMERA
+    if CAMERA is None:
+        CAMERA = CameraModule(1920, 1080)
+        queue_message(f"INFO: Camera initialized.")
 
 def initialize_blip():
     """Initialize BLIP model and processor for detailed captions."""
     if not CONFIG['VISION']['enabled']:
-        global PROCESSOR, MODEL
-        if not PROCESSOR or not MODEL:
-            queue_message(f"INFO: Initializing BLIP model...")
+        return
+    
+    if BlipProcessor is None or BlipForConditionalGeneration is None or torch is None:
+        queue_message("WARNING: BLIP dependencies not available (transformers, torch)")
+        return
+        
+    global PROCESSOR, MODEL
+    if not PROCESSOR or not MODEL:
+        queue_message(f"INFO: Initializing BLIP model...")
 
-            PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
-            MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
-            MODEL = torch.quantization.quantize_dynamic(MODEL, {torch.nn.Linear}, dtype=torch.qint8)
+        PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
+        MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
+        MODEL = torch.quantization.quantize_dynamic(MODEL, {torch.nn.Linear}, dtype=torch.qint8)
 
-            queue_message(f"INFO: BLIP model initialized.")
+        queue_message(f"INFO: BLIP model initialized.")
 
 def capture_image() -> str:
     """Capture an image from the camera instance and return the saved image path."""
+    if CameraModule is None:
+        raise RuntimeError("Camera module not available")
+        
     try:
-        from UI.module_ui_camera import CameraModule
-
         camera = CameraModule(1920, 1080)
         image_path = camera.capture_single_image()
         print(f"Image saved: {image_path}")
@@ -70,12 +123,17 @@ def capture_image() -> str:
 
 def describe_camera_view() -> str:
     """Capture an image and process it for captioning."""    
+    if Image is None:
+        return "Error: PIL/Pillow not available"
+        
     try:
         image_path = capture_image()
         print(image_path)
         if CONFIG['VISION']['server_hosted']:
             return send_image_to_server(image_path)
         else:
+            if PROCESSOR is None or MODEL is None:
+                return "Error: BLIP model not initialized"
             image = Image.open(image_path)
             inputs = PROCESSOR(image, return_tensors="pt").to(DEVICE)
             outputs = MODEL.generate(**inputs, max_new_tokens=50, num_beams=2)
@@ -95,6 +153,9 @@ def describe_camera_view_openai(user_prompt) -> str:
     Returns:
         str: Description of what's in the image
     """
+    if openai is None:
+        return "Error: OpenAI module not available"
+        
     try:
         image_path = capture_image()
         if not Path(image_path).exists():
@@ -160,6 +221,9 @@ def get_image_caption_from_base64(base64_str):
     Returns:
     - str: Generated caption.
     """
+    if Image is None or PROCESSOR is None or MODEL is None:
+        raise RuntimeError("Vision dependencies not available")
+        
     try:
         img_bytes = base64.b64decode(base64_str)
         raw_image = Image.open(BytesIO(img_bytes)).convert('RGB')
@@ -182,6 +246,10 @@ def save_captured_image(image_path: str) -> str:
     Returns:
     - str: The new saved image path.
     """
+    if Image is None:
+        queue_message("Error: PIL/Pillow not available")
+        return None
+        
     try:
         output_dir = Path(__file__).resolve().parent.parent / "vision/images"
         output_dir.mkdir(parents=True, exist_ok=True)

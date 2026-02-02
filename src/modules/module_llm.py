@@ -1,22 +1,21 @@
 """
-Module: LLM functions
-Author: Charles-Olivier Dion (Atomikspace)
+Module: LLM
+Author: Charles-Olivier Dion (AtomikSpace)
 Contact: atomikspace.labs@gmail.com
-Copyright (c) 2026
+Copyright (c) 2026 Charles-Olivier Dion
 
-This module was originally created by Charles-Olivier Dion (Atomikspace).
+This file is authored by Charles-Olivier Dion and is dual-licensed.
 
-Permission is granted to use, copy, modify, and redistribute this module,
-in whole or in part, provided that:
+Non-Commercial License:
+This file is licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0).
+You may use, modify, and redistribute this file for NON-COMMERCIAL purposes only, with attribution.
 
-- This notice is retained in the source file(s)
-- The original author (Charles-Olivier Dion / Atomikspace) is clearly credited
-- Any modifications are clearly identified as such
+Commercial License:
+Commercial use (including selling products, paid services, SaaS, subscriptions, Patreon rewards, or derivatives)
+requires a separate written license from Charles-Olivier Dion (AtomikSpace).
 
-This notice applies only to this module and does not extend to the
-entire project or repository in which it may be included.
+This license applies only to this file and does not override licenses of other files in the repository.
 """
-
 import requests
 import threading
 import json
@@ -24,22 +23,33 @@ import re
 import concurrent.futures
 import random
 import asyncio
-from modules.module_config import load_config
+from modules.module_config import load_config, get_capabilities
 from modules.module_prompt import build_prompt
 from modules.module_engine  import execute_movement
-from modules.module_vision import describe_camera_view_openai
 
 from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
+CAPABILITIES = get_capabilities()
 character_manager = None
 memory_manager = None
 
+describe_camera_view_openai = None
+try:
+    from modules.module_vision import describe_camera_view_openai as _dcvo
+    describe_camera_view_openai = _dcvo
+except ImportError:
+    pass
+
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
+classifier = None
 if CONFIG['EMOTION']['enabled']:
-    from transformers import pipeline
-    classifier = pipeline("text-classification", model="SamLowe/roberta-base-go_emotions", top_k=None)
+    try:
+        from transformers import pipeline
+        classifier = pipeline("text-classification", model="SamLowe/roberta-base-go_emotions", top_k=None)
+    except ImportError:
+        pass
 
 def get_completion(user_prompt, istext=True):
 
@@ -168,6 +178,8 @@ def process_completion(prompt):
     return future.result()
 
 def detect_emotion(text):
+    if classifier is None:
+        return
     model_outputs = classifier(text)
     emotindetected = max(model_outputs[0], key=lambda x: x['score'])['label']
     requests.post("http://127.0.0.1:5012/emotion", data=emotindetected, timeout=10)
@@ -235,8 +247,7 @@ def llm_process(user_input, bot_response):
             target=memory_manager.write_longterm_memory,
             args=(user_input, bot_response["reply"])
         ).start()
-        
-        # Save new memories from LLM response (no extra API call needed)
+
         new_memories = bot_response.get("new_memories", [])
         if isinstance(new_memories, list) and len(new_memories) > 0:
             def save_memories():
@@ -245,7 +256,7 @@ def llm_process(user_input, bot_response):
                     memory_manager.update_topic_index_with_ai_response(json.dumps(new_memories))
                 except Exception as e:
                     queue_message(f"MEMORY: Failed to save: {e}")
-            
+
             threading.Thread(target=save_memories).start()
 
     if CONFIG["EMOTION"]["enabled"]:
@@ -254,7 +265,115 @@ def llm_process(user_input, bot_response):
             args=(bot_response["reply"],)
         ).start()
 
-    return bot_response["reply"]
+    return _sanitize_for_tts(bot_response["reply"])
+
+
+def _sanitize_for_tts(text):
+    if not isinstance(text, str):
+        return text
+
+    text = text.replace(' — ', '... ')
+    text = text.replace('— ', '... ')
+    text = text.replace(' —', ' ...')
+    text = text.replace('—', '... ')
+
+    text = text.replace(' – ', '... ')
+    text = text.replace('– ', '... ')
+    text = text.replace(' –', ' ...')
+    text = text.replace('–', '... ')
+
+    text = re.sub(r'(?<=[a-zA-Z]) - (?=[a-zA-Z])', '... ', text)
+
+    text = text.replace('°C', ' degrees')
+    text = text.replace('°F', ' degrees')
+    text = text.replace('°', ' degrees')
+    text = text.replace('km/h', ' kilometers per hour')
+    text = re.sub(r'\bmph\b', 'miles per hour', text)
+    text = text.replace(' & ', ' and ')
+    text = text.replace('e.g.', 'for example')
+    text = text.replace('i.e.', 'that is')
+    text = text.replace('etc.', 'and so on')
+    text = text.replace('w/', 'with ')
+    text = text.replace('b/c', 'because')
+
+    text = re.sub(r'\*+([^*]+)\*+', r'\1', text)
+
+    text = re.sub(r'\s{2,}', ' ', text)
+
+    return text.strip()
+
+def _summarize_search_results(search_results, user_question):
+    try:
+        char_name = character_manager.char_name if character_manager else "TARS"
+
+        summary_prompt = (
+            f"You are {char_name}. The user asked: \"{user_question}\"\n\n"
+            f"Here are web search results:\n{search_results[:800]}\n\n"
+            f"Give a helpful, natural answer based on these results. "
+            f"Be concise (2-4 sentences). Just the answer, no JSON, no markdown."
+        )
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
+        }
+
+        llm_backend = CONFIG['LLM']['llm_backend']
+
+        if llm_backend in ["openai", "grok", "deepinfra"]:
+            model_key = 'grok_model' if llm_backend == 'grok' else 'openai_model'
+            base_url = CONFIG['LLM']['base_url']
+
+            if llm_backend == "deepinfra":
+                url = f"{base_url}/v1/openai/chat/completions"
+            else:
+                url = f"{base_url}/v1/chat/completions"
+
+            data = {
+                "model": CONFIG['LLM'][model_key],
+                "messages": [
+                    {"role": "user", "content": summary_prompt}
+                ],
+                "max_tokens": 250,
+                "temperature": float(CONFIG['LLM'].get('temperature', 0.7))
+            }
+
+        elif llm_backend in ["ooba", "tabby"]:
+            url = f"{CONFIG['LLM']['base_url']}/v1/completions"
+            data = {
+                "prompt": summary_prompt,
+                "max_tokens": 250,
+                "temperature": float(CONFIG['LLM'].get('temperature', 0.7))
+            }
+        else:
+            return None
+
+        response = requests.post(url, headers=headers, json=data, timeout=20)
+        response.raise_for_status()
+
+        result = response.json()
+        if 'choices' in result:
+            if llm_backend in ["openai", "grok", "deepinfra"]:
+                text = result['choices'][0]['message']['content'].strip()
+            else:
+                text = result['choices'][0]['text'].strip()
+
+            if text.startswith('{') and text.endswith('}'):
+                try:
+                    parsed = json.loads(text)
+                    text = parsed.get('reply', parsed.get('response', text))
+                except json.JSONDecodeError:
+                    pass
+
+            if text and len(text) > 10:
+                return text
+
+        return None
+
+    except Exception as e:
+        queue_message(f"WARN: Search summarization failed: {e}")
+        return None
+
 
 def execute_function_call(func_call, bot_response, user_input):
     function_name = func_call.get("function", "")
@@ -267,12 +386,15 @@ def execute_function_call(func_call, bot_response, user_input):
                 execute_movement(movements)
 
         elif function_name == "capture_camera_view":
-            query = parameters.get("query", bot_response.get("question", ""))
-            description = describe_camera_view_openai(query)
-            if description and not description.startswith("Error:"):
-                bot_response["reply"] = description
+            if describe_camera_view_openai is None:
+                bot_response["reply"] = "Vision is not available on this device."
             else:
-                bot_response["reply"] = "I tried to look but couldn't process the image."
+                query = parameters.get("query", bot_response.get("question", ""))
+                description = describe_camera_view_openai(query)
+                if description and not description.startswith("Error:"):
+                    bot_response["reply"] = description
+                else:
+                    bot_response["reply"] = "I tried to look but couldn't process the image."
 
         elif function_name == "web_search":
             from modules.module_websearch import search_google
@@ -280,10 +402,41 @@ def execute_function_call(func_call, bot_response, user_input):
             if query:
                 queue_message(f"Web search: {query}")
                 search_results = search_google(query)
-                if search_results:
-                    bot_response["reply"] = f"Based on my search: {search_results[:500]}"
+
+                is_failure = (
+                    not search_results
+                    or "No results found" in search_results
+                    or "No useful results" in search_results
+                    or "Search failed" in search_results
+                )
+
+                existing_reply = bot_response.get("reply", "").strip().lower()
+                placeholder_phrases = [
+                    "let me search", "let me look", "let me check",
+                    "searching", "looking that up", "checking",
+                    "i'll find", "i'll search", "i'll look",
+                    "one moment", "one sec", "hang on",
+                ]
+                has_real_reply = (
+                    existing_reply
+                    and len(existing_reply) > 15
+                    and not any(p in existing_reply for p in placeholder_phrases)
+                )
+
+                if is_failure:
+                    if not has_real_reply:
+                        bot_response["reply"] = "I searched but couldn't find good results for that. Could you try rephrasing?"
                 else:
-                    bot_response["reply"] = "I couldn't find relevant information for that query."
+                    if has_real_reply:
+                        summary = _summarize_search_results(search_results, user_input)
+                        if summary:
+                            bot_response["reply"] = summary
+                    else:
+                        summary = _summarize_search_results(search_results, user_input)
+                        if summary:
+                            bot_response["reply"] = summary
+                        else:
+                            bot_response["reply"] = f"Here's what I found: {search_results[:500]}"
 
         elif function_name == "adjust_volume":
             from modules.module_volume import get_volume_control
@@ -401,7 +554,7 @@ def execute_function_call(func_call, bot_response, user_input):
                 player.set_callbacks(on_start=close_ui_and_pause_stt, on_end=reopen_ui_and_resume_stt)
 
                 queue_message(f"Opening URL: {url}")
-                success = player.play_video(url)  
+                success = player.play_video(url)
 
                 if success:
                     bot_response["reply"] = f"Opening {description if description else url}"
@@ -431,7 +584,7 @@ def execute_function_call(func_call, bot_response, user_input):
                         if ui_manager and ui_manager.running:
                             queue_message("Closing UI for browser playback...")
                             ui_manager.running = False
-                            ui_manager.join(timeout=5)  
+                            ui_manager.join(timeout=5)
 
                             queue_message("UI closed")
                     except Exception as e:
