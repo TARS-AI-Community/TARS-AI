@@ -60,17 +60,13 @@ Commercial use includes (but is not limited to):
 
 See **COMMERCIAL_LICENSE.md** and file headers for details.
 
-For commercial licensing inquiries:  
-👉 https://buymeacoffee.com/atomikspace  
-👉 atomikspace.labs@gmail.com  
-
 ---
 
 ## 🧾 Attribution
 
 As we continue to build and expand TARS-AI, please review attribution guidelines when sharing or publishing derivative work:
 
-👉 [ATTRIBUTION.md](https://github.com/TARS-AI-Community/TARS-AI/blob/V2/ATTRIBUTION.md)
+👉 [ATTRIBUTION.md](./ATTRIBUTION.md)
 
 ---
 
