@@ -42,22 +42,21 @@
 
 ## 📜 License
 
-### Open Source (Non-Commercial)
-This project is licensed under **Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0)**.  
+### Open Source (Non-Commercial Use)
+This project is licensed under **Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0)**.
+
+You may use, modify, and share this project for personal, educational, and research purposes.
+
+Commercial use is **not permitted without explicit written permission from the author**.
+
 See the [LICENSE](./LICENSE) file for details.
 
+---
+
 ### Commercial Use
-Some files authored or significantly modified by **Charles-Olivier Dion (AtomikSpace)** are **dual-licensed**.
+Some files authored or significantly modified by **Charles-Olivier Dion (AtomikSpace)** are dual-licensed.
 
-- Free for **non-commercial use** under CC-BY-NC 4.0  
-- **Commercial use requires a separate license** from AtomikSpace  
-
-Commercial use includes (but is not limited to):
-- Selling 3D printed parts or kits  
-- Paid services or integrations  
-- Subscription services (Patreon, SaaS, support contracts)  
-- Commercial derivatives  
-
+Commercial use of these files requires a separate license agreement.  
 See **COMMERCIAL_LICENSE.md** and file headers for details.
 
 ---

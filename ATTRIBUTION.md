@@ -22,9 +22,9 @@ As we continue to build and expand the TARS project, below are the guidelines fo
   - Credit Charlie Diaz as the original creator.  
   - Clearly specify your contributions or modifications.  
 
-- **Files authored or significantly modified by Charles-Olivier Dion (AtomikSpace)** are **dual-licensed**:  
-  - Free for **non-commercial use** under CC-BY-NC 4.0.  
-  - **Commercial use requires a separate license** (see `COMMERCIAL_LICENSE.md` and file headers).  
+- Files authored or significantly modified by Charles-Olivier Dion (AtomikSpace) are **dual-licensed**:  
+  - Free for non-commercial use under CC-BY-NC 4.0.  
+  - Commercial use requires a separate license (see `COMMERCIAL_LICENSE.md` and file headers).  
 
 ---
 
@@ -39,7 +39,7 @@ As we continue to build and expand the TARS project, below are the guidelines fo
 - When publishing content (e.g., YouTube videos, blog posts, or repository updates):  
   - Attribute the original film’s production team and Charlie Diaz where applicable.  
   - Include a disclaimer noting that this project is a fan-made initiative.  
-- For AtomikSpace contributions, note if commercial licensing applies.
+  - For AtomikSpace contributions, note if commercial licensing applies.
 
 ---
 
