@@ -8,8 +8,8 @@ As we continue to build and expand the TARS project, below are the guidelines fo
 
 ## General Attribution
 
-- Clearly state that this project is based on the character TARS from the film *Interstellar*.
-- When referencing or sharing the CAD designs:
+- Clearly state that this project is based on the character TARS from the film *Interstellar*.  
+- When referencing or sharing the CAD designs:  
   - Include a statement like:  
     “Based on the mechanical puppet designs by Christopher Nolan, Nathan Crowley, and the production team who originally brought TARS to life—miniaturized CAD by Charlie Diaz, with additional modifications by the TARS-AI Community.”
 
@@ -18,12 +18,13 @@ As we continue to build and expand the TARS project, below are the guidelines fo
 ## Specific Guidelines for CAD, Scripts, and Modules
 
 - The original CAD files and scripts are provided by Charlie Diaz.  
-- If you modify or extend these:
+- If you modify or extend these files:  
   - Credit Charlie Diaz as the original creator.  
   - Clearly specify your contributions or modifications.  
-- **Files authored or significantly modified by Charles-Olivier Dion (AtomikSpace)** are dual-licensed:
-  - Free for non-commercial use under CC-BY-NC 4.0  
-  - **Commercial use requires a separate license** (see `COMMERCIAL_LICENSE.md` and file headers)  
+
+- **Files authored or significantly modified by Charles-Olivier Dion (AtomikSpace)** are **dual-licensed**:  
+  - Free for **non-commercial use** under CC-BY-NC 4.0.  
+  - **Commercial use requires a separate license** (see `COMMERCIAL_LICENSE.md` and file headers).  
 
 ---
 
@@ -35,7 +36,7 @@ As we continue to build and expand the TARS project, below are the guidelines fo
 
 ## Sharing Content Online
 
-- When publishing content (e.g., YouTube videos, blog posts, or repository updates):
+- When publishing content (e.g., YouTube videos, blog posts, or repository updates):  
   - Attribute the original film’s production team and Charlie Diaz where applicable.  
   - Include a disclaimer noting that this project is a fan-made initiative.  
 - For AtomikSpace contributions, note if commercial licensing applies.
@@ -44,9 +45,9 @@ As we continue to build and expand the TARS project, below are the guidelines fo
 
 ## Legal Considerations
 
-- Monetization of non-commercial CC-BY-NC content is prohibited.  
-- AtomikSpace files require a commercial license for paid use (see `COMMERCIAL_LICENSE.md`).  
-- This project includes code/inspiration (module engine and memory functions) from AME by Exploding Cat, licensed under the MIT License.  
+- Non-commercial use is free under CC-BY-NC 4.0.  
+- Commercial use of AtomikSpace contributions **requires a separate license** (see `COMMERCIAL_LICENSE.md`).  
+- This project includes code/inspiration (module engine and memory functions) from AME by Exploding Cat, licensed under the MIT License. The original license and copyright notice are included in the source code.  
 - The remainder of the project is licensed under CC-BY-NC 4.0.
 
 ---
@@ -55,7 +56,7 @@ As we continue to build and expand the TARS project, below are the guidelines fo
 
 - Contributors are encouraged to follow these attribution guidelines when making modifications or additions.  
 - Maintain transparency in crediting the work of all contributors.  
-- Respect the dual-license terms for AtomikSpace contributions.
+- Respect the dual-license terms for AtomikSpace contributions.  
 
 ---
 
