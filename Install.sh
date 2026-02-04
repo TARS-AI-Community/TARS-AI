@@ -174,7 +174,9 @@ _display_profile_summary() {
 }
 
 generate_requirements() {
-    local req_file="requirements_${PI_VERSION}.txt"
+    local req_dir="$HOME/.local/share/tars_a"
+    mkdir -p "$req_dir"
+    local req_file="$req_dir/requirements_${PI_VERSION}.txt"
     
     tars_say "Generating requirements for ${PI_VERSION^^}..." "info"
     
@@ -435,7 +437,7 @@ retry_pip_install() {
     local n=1
     local max=5
     local delay=5
-    local req_file="requirements_${PI_VERSION}.txt"
+    local req_file="$HOME/.local/share/tars_a/requirements_${PI_VERSION}.txt"
 
     tars_say "Initiating Python dependency installation for ${PI_VERSION^^}..." "info"
     
@@ -787,7 +789,7 @@ EOF
     cd src
     
     # Cleanup generated requirements file
-    rm -f "requirements_${PI_VERSION}.txt"
+    rm -f "$HOME/.local/share/tars_a/requirements_${PI_VERSION}.txt"
     
     echo ""    
     echo "*** Set your .env variables (API Keys) before running the program"
