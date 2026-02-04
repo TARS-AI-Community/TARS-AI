@@ -447,7 +447,7 @@ def swing_legs():
             servoctl._notify_movement_end()
 
 
-def pezz_dispenser():
+def left_pezz_dispenser():
     if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
@@ -463,7 +463,7 @@ def pezz_dispenser():
             move_arm(100, 100, 1, None, None, None, 0.9)
             time.sleep(0.2)
             move_arm(100, 100, 100, None, None, None, 0.9)
-            time.sleep(2)
+            time.sleep(5)
             move_arm(100, 100, 1, None, None, None, 0.9)
             time.sleep(0.2)
             move_arm(100, 1, 1, None, None, None, 0.8)
@@ -479,6 +479,7 @@ def pezz_dispenser():
             servoctl._notify_movement_end()
 
 
+def right_pezz_dispenser():
     if not servoctl.MOVING:
         servoctl.MOVING = True
         servoctl._notify_movement_start()
@@ -494,7 +495,7 @@ def pezz_dispenser():
             move_arm(None, None, None, 100, 100, 1, 0.9)
             time.sleep(0.2)
             move_arm(None, None, None, 100, 100, 100, 0.9)
-            time.sleep(2)
+            time.sleep(5)
             move_arm(None, None, None, 100, 100, 1, 0.9)
             time.sleep(0.2)
             move_arm(None, None, None, 100, 1, 1, 0.8)
@@ -567,14 +568,14 @@ def pose():
         servoctl.MOVING = True
         servoctl._notify_movement_start()
         try:
-            move_legs(50, 50, 50, 50, 0.4)
-            move_legs(30, 30, 40, 40, 0.4)
-            move_legs(100, 100, 30, 30, 0.4)
+            move_legs(50, 50, 50, 50, 0.6)
+            move_legs(30, 30, 40, 40, 0.6)
+            move_legs(80, 80, 30, 30, 0.6)
             time.sleep(3)
-            move_legs(100, 100, 30, 30, 0.4)
-            move_legs(30, 30, 30, 30, 0.4)
-            move_legs(30, 30, 40, 40, 0.4)
-            move_legs(50, 50, 50, 50, 0.4)
+            move_legs(80, 80, 30, 30, 0.8)
+            move_legs(30, 30, 30, 30, 0.8)
+            move_legs(30, 30, 40, 40, 0.6)
+            move_legs(50, 50, 50, 50, 0.6)
             disable_all_servos()
         finally:
             servoctl.MOVING = False

@@ -539,10 +539,12 @@ def get_api_key(llm_backend: str) -> str:
         "deepinfra": "DEEPINFRA_API_KEY"
     }
     if llm_backend not in backend_to_env_var:
-        raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Unsupported LLM backend: {llm_backend}")
+        print(f"WARNING: Unsupported LLM backend '{llm_backend}', skipping API key lookup.")
+        return ""
     api_key = os.getenv(backend_to_env_var[llm_backend])
     if not api_key:
-        raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: API key not found for LLM backend: {llm_backend}")
+        print(f"WARNING: No API key found for '{llm_backend}' (env var: {backend_to_env_var[llm_backend]}). LLM features will be unavailable.")
+        return ""
     return api_key
 
 

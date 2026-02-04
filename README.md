@@ -66,7 +66,6 @@ Commercial use includes, but is not limited to:
 
 If you are unsure whether your use case is commercial, assume it is and request permission from the authors.
 
-
 See the [LICENSE](./LICENSE) file for details.
 
 ---

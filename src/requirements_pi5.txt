@@ -1,0 +1,100 @@
+# === COMMON REQUIREMENTS (All Pi versions) ===
+
+# LLM Tools
+openai                          # External LLM API
+tiktoken                        # Token counting for OpenAI models
+
+# Sound Processing Tools
+pydub                           # Audio processing for TTS modifications
+soundfile                       # Read & write sound files
+sounddevice                     # Audio I/O for playing and capturing sound
+
+# Chat UI & Web Frameworks
+flask-cors                      # Cross-Origin Resource Sharing (CORS) for Flask
+flask-socketio                  # WebSockets support for Flask
+eventlet                        # Async support for Flask-SocketIO
+
+# Miscellaneous Utilities
+configobj                       # Maintain comments in config.ini during updates
+python-dotenv                   # Load environment variables from a .env file
+requests                        # HTTP library for API interactions
+joblib                          # Efficient serialization of Python objects
+ddgs                            # web search parsing
+
+# Servo Control
+adafruit-circuitpython-pca9685  # PCA9685 servo controller libraries
+adafruit-blinka
+adafruit-circuitpython-busdevice
+adafruit-circuitpython-servokit # Servo libraries (high-level servo control)
+
+# Battery
+adafruit-circuitpython-ina260   # INA260 sensor
+
+# Discord
+discord.py                      # Discord bot API
+
+# Wake Word (Atomik)
+scipy                           # Signal processing for wake word detection
+
+
+# === GPIO (Pi5 only) ===
+lgpio                           # Required for Raspberry Pi 5 GPIO
+
+
+# === EMBEDDING & MEMORY (Pi4/Pi5) ===
+sentence-transformers           # Sentence embeddings and semantic search
+
+# Memory & Search Tools  
+bm25s                           # BM25 ranking for information retrieval
+pystemmer                       # Stem words for text processing
+hyperdb-python                  # High-performance database library
+scikit-learn                    # Predictive data analysis tools
+flashrank                       # Lightweight re-ranker
+
+
+# === WAKE WORD (All Pi versions) ===
+pvporcupine                     # Wake word detection by Picovoice
+pvrecorder                      # Recorder for Picovoice
+
+
+# === LOCAL STT (Pi3/Pi4/Pi5) ===
+vosk                            # Offline speech recognition
+
+
+# === LOCAL TTS (Pi4/Pi5) ===
+piper-tts                       # Local TTS with voice cloning support
+
+
+# === HEAVY PROCESSING (Pi5 only) ===
+faster-whisper                  # Local STT using Faster Whisper
+silero-vad                      # Voice Activity Detection (VAD) using Silero
+omegaconf                       # Required for silero speech
+fastrtc[vad, stt, tts]          # FastRTC for real-time communication
+librosa                         # Audio analysis and feature extraction
+
+# Emotion Detection (Pi5 only)
+optimum[onnxruntime]            # ONNX model optimization
+
+
+# === UI & CAMERA (Pi4/Pi5) ===
+pygame                          # Game development & multimedia support
+PyOpenGL                        # OpenGL support
+PyOpenGL-accelerate             # OpenGL acceleration
+picamera2                       # PI camera module
+opencv-python                   # Video classes and modifiers
+simplejpeg                      # Camera Requirement
+numpy==2.1                      # Needed for image rotations
+moviepy                         # Video editing and playback support
+evdev                           # Handle Linux input devices
+
+
+# === CLOUD TTS OPTIONS (Pi4/Pi5) ===
+elevenlabs                      # External TTS using 11Labs API
+azure-cognitiveservices-speech  # Azure TTS API
+
+
+
+# === MEDIA (Pi5) ===
+yt-dlp                          # Youtube downloading
+pandas                          # Data analysis
+

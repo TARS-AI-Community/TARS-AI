@@ -68,33 +68,22 @@ tars_say() {
 select_pi_version() {
     local tars_data_dir="$HOME/.local/share/tars_ai"
     local pi_version_file="$tars_data_dir/pi_version"
-    
-    # Check if we already have a saved Pi version
-    if [ -f "$pi_version_file" ]; then
-        local saved_version
-        saved_version=$(cat "$pi_version_file" 2>/dev/null | tr -d '[:space:]')
-        
-        if [[ "$saved_version" =~ ^(pi5|pi4|pi3|pizero2)$ ]]; then
-            PI_VERSION="$saved_version"
-            echo ""
-            echo "+===============================================================+"
-            echo "| SAVED DEVICE PROFILE DETECTED: ${PI_VERSION^^}"
-            echo "+===============================================================+"
-            echo ""
-            
-            read -t 15 -p "Use saved profile ${PI_VERSION^^}? [Y/n]: " -r USE_SAVED
-            echo ""
-            
-            if [[ ! $USE_SAVED =~ ^[Nn]$ ]]; then
-                tars_say "Using saved profile: ${PI_VERSION^^}" "success"
-                _display_profile_summary
-                return
-            fi
-            
-            tars_say "Re-selecting Pi version..." "info"
-        fi
+    local config_file="src/config.ini"
+    local has_device_section=false
+
+    if [ -f "$config_file" ] && grep -q '^\[DEVICE\]' "$config_file"; then
+        has_device_section=true
     fi
-    
+
+    if [ "$has_device_section" = false ]; then
+        PI_VERSION="pi5"
+        tars_say "No [DEVICE] section found, defaulting to PI5" "info"
+        mkdir -p "$tars_data_dir"
+        echo "$PI_VERSION" > "$pi_version_file"
+        _display_profile_summary
+        return
+    fi
+
     echo ""
     echo "+===============================================================+"
     echo "|           RASPBERRY PI VERSION SELECTION                      |"
@@ -109,7 +98,7 @@ select_pi_version() {
     echo "|                                                               |"
     echo "+===============================================================+"
     echo ""
-    
+
     while true; do
         read -p "Enter your choice [1-4]: " choice
         case $choice in
@@ -138,14 +127,12 @@ select_pi_version() {
                 ;;
         esac
     done
-    
-    # Save the selection
+
     mkdir -p "$tars_data_dir"
     echo "$PI_VERSION" > "$pi_version_file"
-    tars_say "Pi version saved to $pi_version_file" "info"
-    
+
     _display_profile_summary
-    
+
     read -p "Continue with this profile? [y/n]: " -r CONFIRM
     if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
         tars_say "Installation cancelled by user." "warning"
