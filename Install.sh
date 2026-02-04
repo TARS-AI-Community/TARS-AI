@@ -2,7 +2,6 @@
 # TARS System Installation Protocol
 # Atomikspace / Pyrater / TeknikL
 
-
 set -e
 
 if [ -n "$SUDO_USER" ]; then
@@ -18,6 +17,7 @@ else
 fi
 
 DELAY=0.02
+PI_VERSION=""
 
 show_tars_boot() {
     clear
@@ -65,6 +65,328 @@ tars_say() {
     echo ""
 }
 
+select_pi_version() {
+    local tars_data_dir="$HOME/.local/share/tars_ai"
+    local pi_version_file="$tars_data_dir/pi_version"
+    local config_file="src/config.ini"
+    local has_device_section=false
+
+    if [ -f "$config_file" ] && grep -q '^\[DEVICE\]' "$config_file"; then
+        has_device_section=true
+    fi
+
+    if [ "$has_device_section" = false ]; then
+        PI_VERSION="pi5"
+        tars_say "No [DEVICE] section found, defaulting to PI5" "info"
+        mkdir -p "$tars_data_dir"
+        echo "$PI_VERSION" > "$pi_version_file"
+        _display_profile_summary
+        return
+    fi
+
+    echo ""
+    echo "+===============================================================+"
+    echo "|           RASPBERRY PI VERSION SELECTION                      |"
+    echo "+===============================================================+"
+    echo "|                                                               |"
+    echo "|  Select your Raspberry Pi model:                              |"
+    echo "|                                                               |"
+    echo "|  1) Raspberry Pi 5      - Full features, all local processing |"
+    echo "|  2) Raspberry Pi 4      - Most features, some cloud fallbacks |"
+    echo "|  3) Raspberry Pi 3      - Lite mode, cloud STT/TTS only       |"
+    echo "|  4) Raspberry Pi Zero 2 - Minimal, cloud-only processing      |"
+    echo "|                                                               |"
+    echo "+===============================================================+"
+    echo ""
+
+    while true; do
+        read -p "Enter your choice [1-4]: " choice
+        case $choice in
+            1)
+                PI_VERSION="pi5"
+                tars_say "Selected: Raspberry Pi 5 (Full Installation)" "success"
+                break
+                ;;
+            2)
+                PI_VERSION="pi4"
+                tars_say "Selected: Raspberry Pi 4 (Standard Installation)" "success"
+                break
+                ;;
+            3)
+                PI_VERSION="pi3"
+                tars_say "Selected: Raspberry Pi 3 (Lite Installation)" "success"
+                break
+                ;;
+            4)
+                PI_VERSION="pizero2"
+                tars_say "Selected: Raspberry Pi Zero 2 (Minimal Installation)" "success"
+                break
+                ;;
+            *)
+                echo "Invalid selection. Please enter 1, 2, 3, or 4."
+                ;;
+        esac
+    done
+
+    mkdir -p "$tars_data_dir"
+    echo "$PI_VERSION" > "$pi_version_file"
+
+    _display_profile_summary
+
+    read -p "Continue with this profile? [y/n]: " -r CONFIRM
+    if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
+        tars_say "Installation cancelled by user." "warning"
+        exit 0
+    fi
+}
+
+_display_profile_summary() {
+    echo ""
+    echo "+===============================================================+"
+    echo "| INSTALLATION PROFILE: ${PI_VERSION^^}"
+    echo "+===============================================================+"
+    
+    case $PI_VERSION in
+        "pi5")
+            echo "| Features: Full local STT, TTS, embeddings, UI, vision"
+            echo "| Memory:   Full embedding-based memory"
+            echo "| Size:     ~2.5GB+ dependencies"
+            ;;
+        "pi4")
+            echo "| Features: Vosk STT, Piper/eSpeak TTS, embeddings, UI"
+            echo "| Memory:   Full embedding-based memory"
+            echo "| Size:     ~1.5GB+ dependencies"
+            ;;
+        "pi3")
+            echo "| Features: Cloud STT/TTS, keyword memory, no UI"
+            echo "| Memory:   Lite keyword-based memory"
+            echo "| Size:     ~500MB dependencies"
+            ;;
+        "pizero2")
+            echo "| Features: OpenAI STT/TTS only, keyword memory, no UI"
+            echo "| Memory:   Lite keyword-based memory"
+            echo "| Size:     ~300MB dependencies"
+            ;;
+    esac
+    
+    echo "+===============================================================+"
+    echo ""
+}
+
+generate_requirements() {
+    local req_dir="$HOME/.local/share/tars_a"
+    mkdir -p "$req_dir"
+    local req_file="$req_dir/requirements_${PI_VERSION}.txt"
+    
+    tars_say "Generating requirements for ${PI_VERSION^^}..." "info"
+    
+    # Common requirements for ALL Pi versions
+    cat > "$req_file" << 'COMMON'
+# === COMMON REQUIREMENTS (All Pi versions) ===
+
+# LLM Tools
+openai                          # External LLM API
+tiktoken                        # Token counting for OpenAI models
+
+# Sound Processing Tools
+pydub                           # Audio processing for TTS modifications
+soundfile                       # Read & write sound files
+sounddevice                     # Audio I/O for playing and capturing sound
+
+# Chat UI & Web Frameworks
+flask-cors                      # Cross-Origin Resource Sharing (CORS) for Flask
+flask-socketio                  # WebSockets support for Flask
+eventlet                        # Async support for Flask-SocketIO
+
+# Miscellaneous Utilities
+configobj                       # Maintain comments in config.ini during updates
+python-dotenv                   # Load environment variables from a .env file
+requests                        # HTTP library for API interactions
+joblib                          # Efficient serialization of Python objects
+ddgs                            # web search parsing
+
+# Servo Control
+adafruit-circuitpython-pca9685  # PCA9685 servo controller libraries
+adafruit-blinka
+adafruit-circuitpython-busdevice
+adafruit-circuitpython-servokit # Servo libraries (high-level servo control)
+
+# Battery
+adafruit-circuitpython-ina260   # INA260 sensor
+
+# Discord
+discord.py                      # Discord bot API
+
+# Wake Word (Atomik)
+scipy                           # Signal processing for wake word detection
+
+COMMON
+
+    # Pi5 only: lgpio for GPIO control
+    if [[ "$PI_VERSION" == "pi5" ]]; then
+        cat >> "$req_file" << 'LGPIO'
+
+# === GPIO (Pi5 only) ===
+lgpio                           # Required for Raspberry Pi 5 GPIO
+
+LGPIO
+    fi
+
+    # Pi5 and Pi4: Add embedding and local processing
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        cat >> "$req_file" << 'EMBEDDINGS'
+
+# === EMBEDDING & MEMORY (Pi4/Pi5) ===
+sentence-transformers           # Sentence embeddings and semantic search
+
+# Memory & Search Tools  
+bm25s                           # BM25 ranking for information retrieval
+pystemmer                       # Stem words for text processing
+hyperdb-python                  # High-performance database library
+scikit-learn                    # Predictive data analysis tools
+flashrank                       # Lightweight re-ranker
+
+EMBEDDINGS
+    fi
+
+    # Pi5, Pi4, Pi3, PiZero2: Picovoice wake word (lightweight, works on all)
+    cat >> "$req_file" << 'PICOVOICE'
+
+# === WAKE WORD (All Pi versions) ===
+pvporcupine                     # Wake word detection by Picovoice
+pvrecorder                      # Recorder for Picovoice
+
+PICOVOICE
+
+    # Pi5, Pi4, Pi3: Add Vosk for local STT
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" || "$PI_VERSION" == "pi3" ]]; then
+        cat >> "$req_file" << 'VOSK'
+
+# === LOCAL STT (Pi3/Pi4/Pi5) ===
+vosk                            # Offline speech recognition
+
+VOSK
+    fi
+
+    # Pi5 and Pi4: Add local TTS options
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        cat >> "$req_file" << 'LOCALTTS'
+
+# === LOCAL TTS (Pi4/Pi5) ===
+piper-tts                       # Local TTS with voice cloning support
+
+LOCALTTS
+    fi
+
+    # Pi5 only: Add heavy processing (faster-whisper, fastrtc, silero)
+    if [[ "$PI_VERSION" == "pi5" ]]; then
+        cat >> "$req_file" << 'HEAVY'
+
+# === HEAVY PROCESSING (Pi5 only) ===
+faster-whisper                  # Local STT using Faster Whisper
+silero-vad                      # Voice Activity Detection (VAD) using Silero
+omegaconf                       # Required for silero speech
+fastrtc[vad, stt, tts]          # FastRTC for real-time communication
+librosa                         # Audio analysis and feature extraction
+
+# Emotion Detection (Pi5 only)
+optimum[onnxruntime]            # ONNX model optimization
+
+HEAVY
+    fi
+
+    # Pi5 and Pi4: Add UI and camera support
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        cat >> "$req_file" << 'UI'
+
+# === UI & CAMERA (Pi4/Pi5) ===
+pygame                          # Game development & multimedia support
+PyOpenGL                        # OpenGL support
+PyOpenGL-accelerate             # OpenGL acceleration
+picamera2                       # PI camera module
+opencv-python                   # Video classes and modifiers
+simplejpeg                      # Camera Requirement
+numpy==2.1                      # Needed for image rotations
+moviepy                         # Video editing and playback support
+evdev                           # Handle Linux input devices
+
+UI
+    fi
+
+    # Pi5 and Pi4: Add cloud TTS options
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        cat >> "$req_file" << 'CLOUDTTS'
+
+# === CLOUD TTS OPTIONS (Pi4/Pi5) ===
+elevenlabs                      # External TTS using 11Labs API
+azure-cognitiveservices-speech  # Azure TTS API
+
+CLOUDTTS
+    fi
+
+    # Pi3 and Zero2: Add minimal cloud TTS
+    if [[ "$PI_VERSION" == "pi3" || "$PI_VERSION" == "pizero2" ]]; then
+        cat >> "$req_file" << 'CLOUDONLY'
+
+# === CLOUD TTS (Pi3/Zero2) ===
+elevenlabs                      # External TTS using 11Labs API
+
+CLOUDONLY
+    fi
+
+    # Pi5 and Pi4: UI and heavy media support
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        cat >> "$req_file" << 'DISCORD'
+
+DISCORD
+    fi
+
+    # Pi5: YouTube support
+    if [[ "$PI_VERSION" == "pi5" ]]; then
+        cat >> "$req_file" << 'YOUTUBE'
+
+# === MEDIA (Pi5) ===
+yt-dlp                          # Youtube downloading
+pandas                          # Data analysis
+
+YOUTUBE
+    fi
+
+    tars_say "Requirements file generated: $req_file" "success"
+    
+    # Show what will be installed
+    echo "+===============================================================+"
+    echo "| PACKAGES TO BE INSTALLED:"
+    echo "+===============================================================+"
+    grep -v "^#" "$req_file" | grep -v "^$" | while read line; do
+        echo "|  - $line"
+    done
+    echo "+===============================================================+"
+    echo ""
+}
+
+update_config_device() {
+    local config_file="config.ini"
+    
+    if [ -f "$config_file" ]; then
+        tars_say "Updating config.ini with device profile..." "info"
+        
+        # Check if [DEVICE] section exists
+        if grep -q "^\[DEVICE\]" "$config_file"; then
+            # Update existing raspberry_version
+            sed -i "s/^raspberry_version\s*=.*/raspberry_version = $PI_VERSION/" "$config_file"
+        else
+            # Add [DEVICE] section at the beginning of the file
+            sed -i "1i\\
+[DEVICE]\\
+raspberry_version = $PI_VERSION\\
+" "$config_file"
+        fi
+        
+        tars_say "Device profile set to: $PI_VERSION" "success"
+    fi
+}
+
 show_system_diagnostic() {
     echo "+===============================================================+"
     echo "|           SYSTEM DIAGNOSTIC INITIATED                         |"
@@ -72,6 +394,7 @@ show_system_diagnostic() {
     echo "| CPU Architecture: $(uname -m)"
     echo "| Kernel Version:   $(uname -r)"
     echo "| Hostname:         $(hostname)"
+    echo "| Pi Version:       ${PI_VERSION^^}"
     echo "+===============================================================+"
     echo ""
 }
@@ -114,15 +437,16 @@ retry_pip_install() {
     local n=1
     local max=5
     local delay=5
+    local req_file="$HOME/.local/share/tars_a/requirements_${PI_VERSION}.txt"
 
-    tars_say "Initiating Python dependency installation protocol..." "info"
+    tars_say "Initiating Python dependency installation for ${PI_VERSION^^}..." "info"
     
     while true; do
         echo "+===============================================================+"
         echo "| Attempt: $n/$max"
         echo "+===============================================================+"
         
-        if pip install -r requirements.txt; then
+        if pip install -r "$req_file"; then
             tars_say "Python dependencies synchronized successfully." "success"
             break
         else
@@ -166,6 +490,12 @@ detect_os_version() {
 }
 
 install_chromium() {
+    # Skip chromium for Pi3 and Zero2 (no UI)
+    if [[ "$PI_VERSION" == "pi3" || "$PI_VERSION" == "pizero2" ]]; then
+        tars_say "Skipping Chromium installation (UI disabled for ${PI_VERSION^^})" "info"
+        return 0
+    fi
+
     tars_say "Initiating chromium installation sequence..." "info"
     
     echo "+===============================================================+"
@@ -218,246 +548,69 @@ install_chromedriver() {
         if ! sudo apt install -y chromium-driver 2>&1 | tee /tmp/chromedriver-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
             tars_say "ChromeDriver installation encountered issues. Check /tmp/chromedriver-install.log" "warning"
         fi
-        
-        if command -v chromedriver &>/dev/null; then
-            tars_say "ChromeDriver installed successfully." "success"
-        else
-            tars_say "ChromeDriver installation verification failed." "error"
-            exit 1
-        fi
     else
-        echo "| Method: Manual Installation (Latest Stable)"
-        echo "+===============================================================+"
-        
-        tars_say "Fetching latest stable ChromeDriver version..." "info"
-        
-        LATEST_STABLE=$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE)
-        
-        if [ -z "$LATEST_STABLE" ]; then
-            tars_say "Unable to determine ChromeDriver version. Manual installation required." "error"
-            exit 1
-        fi
-        
-        echo "| Target Version: $LATEST_STABLE"
-        
-        DRIVER_URL="https://chromedriver.storage.googleapis.com/${LATEST_STABLE}/chromedriver_linux64.zip"
-        TEMP_DIR=$(mktemp -d)
-        
-        echo "| Downloading from: $DRIVER_URL"
-        
-        if ! wget -q "$DRIVER_URL" -O "$TEMP_DIR/chromedriver.zip" 2>&1 | tail -5; then
-            tars_say "ChromeDriver download failed. Check network connection." "error"
-            rm -rf "$TEMP_DIR"
-            exit 1
-        fi
-        
-        if ! unzip -q "$TEMP_DIR/chromedriver.zip" -d "$TEMP_DIR"; then
-            tars_say "ChromeDriver extraction failed." "error"
-            rm -rf "$TEMP_DIR"
-            exit 1
-        fi
-        
-        sudo mv "$TEMP_DIR/chromedriver" /usr/local/bin/
-        sudo chmod +x /usr/local/bin/chromedriver
-        
-        rm -rf "$TEMP_DIR"
-        
-        if command -v chromedriver &>/dev/null; then
-            VERSION=$(chromedriver --version 2>/dev/null | head -1)
-            echo "| Status: Installation Complete"
-            echo "| Version: $VERSION"
-            echo "+===============================================================+"
-            tars_say "ChromeDriver deployed successfully." "success"
-        else
-            tars_say "ChromeDriver verification failed after installation." "error"
-            exit 1
-        fi
-    fi
-}
-
-install_pulseaudio() {
-    tars_say "Initiating PulseAudio installation sequence..." "info"
-    
-    echo "+===============================================================+"
-    echo "| PULSEAUDIO INSTALLATION PROTOCOL"
-    echo "+===============================================================+"
-    
-    # Install PulseAudio
-    if ! sudo apt-get install -y pulseaudio 2>&1 | tee /tmp/pulseaudio-install.log | grep -v "^Setting up\|^Preparing\|^Unpacking" | head -20; then
-        tars_say "PulseAudio installation encountered issues. Check /tmp/pulseaudio-install.log" "warning"
-    else
-        echo "|  [OK] PulseAudio installed successfully"
-    fi
-    
-    # Start PulseAudio
-    echo "+===============================================================+"
-    echo "| Starting PulseAudio service..."
-    echo "+===============================================================+"
-    
-    if pulseaudio --check 2>/dev/null; then
-        echo "|  PulseAudio is already running"
-    else
-        if pulseaudio --start 2>&1 | tee -a /tmp/pulseaudio-install.log; then
-            echo "|  [OK] PulseAudio started successfully"
-        else
-            echo "|  [!] PulseAudio start had issues - it may start automatically later"
-        fi
-    fi
-    
-    echo "+===============================================================+"
-    echo ""
-}
-
-verify_installations() {
-    tars_say "Verifying system dependencies..." "info"
-    
-    echo "+===============================================================+"
-    echo "| DEPENDENCY VERIFICATION"
-    echo "+===============================================================+"
-    
-    local MISSING_DEPS=()
-    
-    for cmd in python3 pip chromium chromedriver sox pulseaudio portaudio19-dev espeak-ng; do
-        if command -v $cmd &>/dev/null || dpkg -l | grep -q $cmd; then
-            echo "|  [OK] $cmd"
-        else
-            echo "|  [X] $cmd - NOT FOUND"
-            MISSING_DEPS+=("$cmd")
-        fi
-    done
-    
-    echo "+===============================================================+"
-    
-    if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
-        tars_say "Critical dependencies missing: ${MISSING_DEPS[*]}" "error"
-        exit 1
-    else
-        tars_say "All dependencies verified and operational." "success"
+        tars_say "ChromeDriver not found in repositories" "warning"
     fi
 }
 
 main() {
     show_tars_boot
+    
+    # === NEW: Select Pi version first ===
+    select_pi_version
+    
     show_system_diagnostic
-    
-    tars_say "Synchronizing package databases with repositories..." "info"
-    echo "+===============================================================+"
-    echo "| APT-GET UPDATE OUTPUT"
-    echo "+===============================================================+"
-    
-    INITIAL_UPDATE_LOG="/tmp/tars-apt-initial-update.log"
-    
-    if ! sudo apt-get update 2>&1 | tee "$INITIAL_UPDATE_LOG"; then
-        echo ""
-        echo "+===============================================================+"
-        echo "| [X] APT-GET UPDATE FAILED"
-        echo "+===============================================================+"
-        echo "| Full error log saved to: $INITIAL_UPDATE_LOG"
-        echo "| "
-        echo "| Troubleshooting steps:"
-        echo "|   1. Check your internet connection"
-        echo "|   2. Run: sudo rm -rf /var/lib/apt/lists/*"
-        echo "|   3. Run: sudo mkdir -p /var/lib/apt/lists/partial"
-        echo "|   4. Run: sudo apt-get update"
-        echo "|   5. Check /etc/apt/sources.list for errors"
-        echo "+===============================================================+"
-        
-        tars_say "Package database synchronization failed. Cannot proceed." "error"
-        exit 1
-    fi
-    
-    echo ""
-    echo "+===============================================================+"
-    echo "| [OK] Package databases synchronized successfully"
-    echo "+===============================================================+"
-    echo ""
-    sleep 2
-    
-    tars_say "Upgrading system packages with apt-get upgrade..." "info"
-    echo "+===============================================================+"
-    echo "| APT-GET UPGRADE OUTPUT"
-    echo "+===============================================================+"
-    echo "| NOTE: This may take several minutes depending on updates..."
-    echo "+===============================================================+"
-    
-    UPGRADE_LOG_FILE="/tmp/tars-apt-upgrade.log"
-    
-    echo ""
-    if ! sudo apt-get upgrade -y 2>&1 | tee "$UPGRADE_LOG_FILE"; then
-        echo ""
-        echo "+===============================================================+"
-        echo "| [!] APT-GET UPGRADE HAD ISSUES"
-        echo "+===============================================================+"
-        echo "| Full log saved to: $UPGRADE_LOG_FILE"
-        echo "| "
-        echo "| The script will continue, but some packages may not be current"
-        echo "+===============================================================+"
-        tars_say "Package upgrade completed with warnings. Continuing..." "warning"
-        sleep 3
-    else
-        echo ""
-        echo "+===============================================================+"
-        echo "| [OK] System packages upgraded successfully"
-        echo "+===============================================================+"
-        echo ""
-        sleep 2
-    fi
-    
-    install_pulseaudio
     detect_os_version
+    
+    tars_say "Executing system update protocol..." "info"
+    echo "+===============================================================+"
+    echo "| SYSTEM UPDATE IN PROGRESS"
+    echo "+===============================================================+"
+    if ! sudo apt update 2>&1 | tail -5; then
+        tars_say "System update had warnings but continuing..." "warning"
+    fi
+    echo ""
+    
     install_chromium
-    verify_installations
     
-    tars_say "Verifying project structure..." "info"
-    if [ ! -d "src" ]; then
-        tars_say "Critical error: 'src' directory not found. Installation cannot proceed." "error"
-        exit 1
-    fi
-    echo "|  [OK] Project directory confirmed: src/"
-    echo ""
+    # Install base packages (reduced for lite profiles)
+    tars_say "Installing system dependencies..." "info"
     
-    tars_say "Setting project permissions..." "info"
-    sudo chattr -R -i . 2>/dev/null || true
-    sudo chown -R $ACTUAL_USER:$ACTUAL_USER .
-    chmod -R 775 .
-    echo "|  [OK] Ownership set to: $ACTUAL_USER"
-    echo "|  [OK] All directories now writable (775)"
-    
-    mkdir -p src/modules src/logs src/data 2>/dev/null || true
-    sudo chown -R $ACTUAL_USER:$ACTUAL_USER src/modules src/logs src/data 2>/dev/null || true
-    chmod -R 775 src/modules src/logs src/data 2>/dev/null || true
-    echo "|  [OK] Critical subdirectories verified"
-    echo ""
-    
-    cd src
-    
-    tars_say "Constructing Python virtual environment..." "info"
-    
-    if ! python3 -m venv .venv --system-site-packages 2>&1 | tee /tmp/venv-creation.log | tail -10; then
-        echo "| [X] Virtual environment creation failed"
-        echo "| See /tmp/venv-creation.log for details"
-        exit 1
-    fi
-    echo ""
-    
-    if [ -f ".venv/bin/activate" ]; then
-        source .venv/bin/activate
-        echo "|  [OK] Virtual environment activated"
-        echo ""
+    if [[ "$PI_VERSION" == "pi5" ]]; then
+        # Pi5: Full system dependencies + swig for lgpio
+        sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng libcap-dev sox libsox-fmt-all git swig 2>&1 | tail -10
+    elif [[ "$PI_VERSION" == "pi4" ]]; then
+        # Pi4: Full system dependencies (no swig needed)
+        sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng libcap-dev sox libsox-fmt-all git 2>&1 | tail -10
     else
-        tars_say "Virtual environment activation failed. Critical system error." "error"
-        exit 1
+        # Minimal system dependencies for Pi3/Zero2
+        sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng git 2>&1 | tail -10
     fi
     
-    tars_say "Configuring virtual environment permissions..." "info"
-    cd ..
-    sudo chown -R $ACTUAL_USER:$ACTUAL_USER src/.venv/
-    chmod -R 775 src/.venv/
-    echo "|  [OK] Virtual environment permissions set (775)"
-    cd src
-    echo ""
+    tars_say "Initializing Python virtual environment..." "info"
     
-    tars_say "Removing conflicting system packages..." "info"
+    cd src
+    
+    if [ -d ".venv" ]; then
+        echo "+===============================================================+"
+        echo "| EXISTING VIRTUAL ENVIRONMENT DETECTED"
+        echo "+===============================================================+"
+        echo "| Keeping existing environment - will install missing packages"
+        echo "+===============================================================+"
+        tars_say "Keeping existing virtual environment." "info"
+    else
+        python3 -m venv .venv
+        tars_say "Virtual environment created." "success"
+    fi
+    
+    source .venv/bin/activate
+    tars_say "Virtual environment activated." "info"
+    
+    # === NEW: Generate requirements based on Pi version ===
+    generate_requirements
+    
+    # Resolve package conflicts
+    tars_say "Resolving potential package conflicts..." "info"
     sudo apt remove -y python3-simplejpeg python3-picamera2 2>&1 | tail -5 || true
     echo "|  [OK] System package conflicts resolved"
     echo ""
@@ -468,14 +621,17 @@ main() {
     fi
     echo ""
     
-    tars_say "Installing critical Python modules..." "info"
-    pip uninstall -y numpy simplejpeg picamera2 2>/dev/null || true
-    
-    if ! pip install --no-cache-dir numpy==2.1 simplejpeg picamera2 2>&1 | tee /tmp/core-deps.log | tail -20; then
-        echo "| [!] Core dependency installation had issues"
-        echo "| See /tmp/core-deps.log for details"
+    # Only install camera dependencies for Pi5/Pi4
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        tars_say "Installing critical Python modules..." "info"
+        pip uninstall -y numpy simplejpeg picamera2 2>/dev/null || true
+        
+        if ! pip install --no-cache-dir numpy==2.1 simplejpeg picamera2 2>&1 | tee /tmp/core-deps.log | tail -20; then
+            echo "| [!] Core dependency installation had issues"
+            echo "| See /tmp/core-deps.log for details"
+        fi
+        echo ""
     fi
-    echo ""
     
     retry_pip_install
     
@@ -487,6 +643,9 @@ main() {
     sudo chown $ACTUAL_USER:$ACTUAL_USER config.ini 2>/dev/null
     chmod 664 config.ini
     echo "|  [OK] config.ini (writable, run: nano config.ini)"
+
+    # === NEW: Update config.ini with device profile ===
+    update_config_device
 
     if [ ! -f "dashboard.ini" ]; then
         cp dashboard.template.ini dashboard.ini
@@ -510,7 +669,6 @@ main() {
     cd src
     echo ""
     
-    # Set DISPLAY only if not already set (preserve existing terminal)
     if [ -z "$DISPLAY" ]; then
         export DISPLAY=:0
         echo "|  Display configuration set: $DISPLAY"
@@ -555,66 +713,34 @@ main() {
     cd src
     
 
-    # Check current directory and config.ini status
     CURRENT_DIR=$(pwd)
-    echo "+===============================================================+"
-    echo "| DEBUG: Current directory: $CURRENT_DIR"
     
     if [ -f "config.ini" ]; then
-        echo "| DEBUG: config.ini FOUND in current directory"
         echo "+===============================================================+"
-        echo ""
+        echo "| CONFIG SYNCHRONIZATION"
         echo "+===============================================================+"
-        echo "| CMS APPLICATION LAUNCHER"
-        echo "+===============================================================+"
-        echo ""
         
-        # Use a more explicit prompt with timeout
-        read -t 30 -p "Would you like to run synchronize the config.ini file (recommended)? [y/n]: " -r REPLY
-        echo ""
+        tars_say "Synchronizing config.ini file..." "info"
         
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            tars_say "Launching CMS application..." "info"
+        if [ -f ".venv/bin/activate" ]; then
+            source .venv/bin/activate
+        fi
+        
+        if [ -f "app_cms.py" ]; then
+            echo "| Executing: python app_cms.py"
+            echo "+===============================================================+"
             echo ""
-            
-            # Ensure we're in the correct directory and virtual environment is active
-            if [ -f ".venv/bin/activate" ]; then
-                source .venv/bin/activate
-                echo "| Virtual environment activated"
-            fi
-            
-            # Check if app_csm.py exists
-            if [ -f "app_cms.py" ]; then
-                echo "| Executing: python app_cms.py"
-                echo "+===============================================================+"
-                echo ""
-                python app_cms.py
-            else
-                tars_say "Error: app_cms.py not found in src directory." "error"
-                echo "| Expected location: $CURRENT_DIR/app_cms.py"
-                echo "| Contents of directory:"
-                ls -la | grep "app_"
-            fi
+            python app_cms.py
+            tars_say "Config synchronization complete." "success"
         else
-            echo ""
-            echo "CMS application launch skipped."
-            echo "You can run it later with:"
-            echo "  cd $(dirname $CURRENT_DIR)/src"
-            echo "  source .venv/bin/activate"
-            echo "  python app_cms.py"
+            tars_say "Warning: app_cms.py not found. Skipping config sync." "warning"
         fi
     else
-        echo "| DEBUG: config.ini NOT FOUND in current directory"
-        echo "| Contents of current directory:"
-        ls -la config* 2>/dev/null || echo "| No config files found"
-        echo "+===============================================================+"
-        echo ""
-        echo "Note: CMS launcher requires config.ini to be present."
+        tars_say "Warning: config.ini not found. Skipping config sync." "warning"
     fi
     
     echo ""
     
-    # Check for wakeword template and offer deletion
     WAKEWORD_DIR="$HOME/.local/share/tars_ai"
     
     if [ -d "$WAKEWORD_DIR" ]; then
@@ -645,14 +771,14 @@ main() {
         echo ""
     fi
 
-    cat << "EOF"
+    cat << EOF
     +==============================================================+
     |                                                              |
     |              [OK] INSTALLATION COMPLETE                      |
     |                                                              |
+    |              Device Profile: ${PI_VERSION^^}
     |              All systems operational.                        |
     |              TARS unit ALMOST ready for deployment.          |
-    |                                                              |
     |                                                              |
     +==============================================================+
 EOF
@@ -662,8 +788,31 @@ EOF
     chmod -R 775 . 2>/dev/null || true
     cd src
     
+    # Cleanup generated requirements file
+    rm -f "$HOME/.local/share/tars_a/requirements_${PI_VERSION}.txt"
+    
     echo ""    
     echo "*** Set your .env variables (API Keys) before running the program"
+    echo ""
+    
+    # Show profile-specific notes
+    case $PI_VERSION in
+        "pi5")
+            echo "*** Pi5: Full features enabled. All STT/TTS options available."
+            ;;
+        "pi4")
+            echo "*** Pi4: Using Vosk STT and Piper TTS. FastRTC/Silero disabled."
+            ;;
+        "pi3")
+            echo "*** Pi3: Lite mode. Using cloud STT/TTS. UI disabled."
+            echo "*** Set ttsoption=openai or elevenlabs in config.ini"
+            ;;
+        "pizero2")
+            echo "*** Zero2: Minimal mode. OpenAI STT/TTS only. UI disabled."
+            echo "*** Requires OPENAI_API_KEY in .env"
+            ;;
+    esac
+    
     echo ""
     echo "*** Run the program in Terminal mode the first times in the App-Start Menu ***"
     echo "IMPORTANT: Run your application as user '$ACTUAL_USER' (without sudo)"    
@@ -671,8 +820,6 @@ EOF
     echo ""
     echo "Enable the virtual environment: source .venv/bin/activate if not using App-Start.py"
     echo ""
-    
-    
 }
 
 main

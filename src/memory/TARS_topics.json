@@ -1,48 +1,18 @@
 {
   "topics": [
     {
-      "topic": "works as a computer engineer",
-      "first_mentioned": "2026-01-19T15:05:53.865991",
-      "last_mentioned": "2026-01-19T15:05:53.866002",
-      "mention_count": 1
-    },
-    {
-      "topic": "trip planned to France next year",
-      "first_mentioned": "2026-01-19T15:21:35.036878",
-      "last_mentioned": "2026-01-19T15:21:35.036890",
-      "mention_count": 1
-    },
-    {
-      "topic": "likes cooking food",
-      "first_mentioned": "2026-01-19T15:48:20.185785",
-      "last_mentioned": "2026-01-19T15:48:20.185802",
-      "mention_count": 1
-    },
-    {
-      "topic": "good at making pasta",
-      "first_mentioned": "2026-01-19T15:48:35.196625",
-      "last_mentioned": "2026-01-19T15:48:35.196636",
-      "mention_count": 1
-    },
-    {
-      "topic": "planning trip to Brazil",
-      "first_mentioned": "2026-01-19T15:56:49.886985",
-      "last_mentioned": "2026-01-19T15:56:49.886998",
+      "topic": "codes as engineer",
+      "first_mentioned": "2026-02-01T16:59:32.155184",
+      "last_mentioned": "2026-02-01T16:59:32.155194",
       "mention_count": 1
     },
     {
       "topic": "has dog named Max",
-      "first_mentioned": "2026-01-20T11:32:32.837025",
-      "last_mentioned": "2026-01-20T11:32:32.837038",
-      "mention_count": 1
-    },
-    {
-      "topic": "User asked about the meaning of life",
-      "first_mentioned": "2026-01-20T16:15:54.727704",
-      "last_mentioned": "2026-01-20T16:15:54.727713",
+      "first_mentioned": "2026-02-01T17:01:49.716019",
+      "last_mentioned": "2026-02-01T17:01:49.716029",
       "mention_count": 1
     }
   ],
-  "last_updated": "2026-01-20T16:15:54.727717",
-  "total_conversations": 7
+  "last_updated": "2026-02-01T17:01:49.716034",
+  "total_conversations": 2
 }

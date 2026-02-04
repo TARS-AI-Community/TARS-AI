@@ -7,66 +7,232 @@ This module reads configuration details from the `config.ini` file and environme
 variables, providing a structured dictionary for easy access throughout the application. 
 """
 
-# === Standard Libraries ===
 import os
 import sys
 import configparser
 from dotenv import load_dotenv
 from datetime import datetime
-from dataclasses import dataclass
-from typing import Optional, Dict, List, Tuple
+from dataclasses import dataclass, field
+from typing import Optional, Dict, List, Tuple, Set
 from enum import Enum
 
 from modules.module_messageQue import queue_message
 
-# === TARS Configuration Management System ===
-# Import TARS CMS components
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app_cms import TarsConfigManager, ConfigAction, ActionType, ConfigSection, ConfigField
 
-# === Initialization ===
-load_dotenv()  # Load environment variables from .env file
+load_dotenv()
 
 character_name = "TARS"
 
+
+class DeviceProfile(Enum):
+    PI5 = "pi5"
+    PI4 = "pi4"
+    PI3 = "pi3"
+    PIZERO2 = "pizero2"
+
+
+@dataclass
+class DeviceCapabilities:
+    profile: DeviceProfile
+    allowed_stt: Set[str]
+    allowed_tts: Set[str]
+    allowed_vad: Set[str]
+    allowed_wake: Set[str]
+    can_use_embeddings: bool
+    can_use_ui: bool
+    can_use_vision: bool
+    can_use_emotion: bool
+    max_context_size: int
+    fallback_stt: str
+    fallback_tts: str
+    fallback_vad: str
+    fallback_wake: str
+
+
+DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
+    DeviceProfile.PI5: DeviceCapabilities(
+        profile=DeviceProfile.PI5,
+        allowed_stt={"vosk", "faster-whisper", "whisper", "fastrtc", "silero", "openai", "external"},
+        allowed_tts={"espeak", "piper", "silero", "alltalk", "elevenlabs", "minimax", "openai", "azure"},
+        allowed_vad={"silero", "rms"},
+        allowed_wake={"picovoice", "fastrtc", "atomik"},
+        can_use_embeddings=True,
+        can_use_ui=True,
+        can_use_vision=True,
+        can_use_emotion=True,
+        max_context_size=16000,
+        fallback_stt="vosk",
+        fallback_tts="espeak",
+        fallback_vad="rms",
+        fallback_wake="picovoice",
+    ),
+    DeviceProfile.PI4: DeviceCapabilities(
+        profile=DeviceProfile.PI4,
+        allowed_stt={"vosk", "openai", "external"},
+        allowed_tts={"espeak", "piper", "alltalk", "elevenlabs", "minimax", "openai", "azure"},
+        allowed_vad={"silero", "rms"},
+        allowed_wake={"picovoice", "atomik"},
+        can_use_embeddings=True,
+        can_use_ui=True,
+        can_use_vision=False,
+        can_use_emotion=False,
+        max_context_size=8000,
+        fallback_stt="vosk",
+        fallback_tts="espeak",
+        fallback_vad="rms",
+        fallback_wake="picovoice",
+    ),
+    DeviceProfile.PI3: DeviceCapabilities(
+        profile=DeviceProfile.PI3,
+        allowed_stt={"openai", "external"},
+        allowed_tts={"espeak", "elevenlabs", "minimax", "openai", "azure"},
+        allowed_vad={"rms"},
+        allowed_wake={"picovoice", "atomik"},
+        can_use_embeddings=False,
+        can_use_ui=False,
+        can_use_vision=False,
+        can_use_emotion=False,
+        max_context_size=4000,
+        fallback_stt="openai",
+        fallback_tts="openai",
+        fallback_vad="rms",
+        fallback_wake="picovoice",
+    ),
+    DeviceProfile.PIZERO2: DeviceCapabilities(
+        profile=DeviceProfile.PIZERO2,
+        allowed_stt={"openai"},
+        allowed_tts={"elevenlabs", "minimax", "openai", "azure"},
+        allowed_vad={"rms"},
+        allowed_wake={"picovoice", "atomik"},
+        can_use_embeddings=False,
+        can_use_ui=False,
+        can_use_vision=False,
+        can_use_emotion=False,
+        max_context_size=2000,
+        fallback_stt="openai",
+        fallback_tts="openai",
+        fallback_vad="rms",
+        fallback_wake="picovoice",
+    ),
+}
+
+CAPABILITIES: Optional[DeviceCapabilities] = None
+_OVERRIDES_APPLIED = False
+
+
+def get_device_profile(version_str: str) -> DeviceProfile:
+    version_map = {
+        "pi5": DeviceProfile.PI5,
+        "pi4": DeviceProfile.PI4,
+        "pi3": DeviceProfile.PI3,
+        "pizero2": DeviceProfile.PIZERO2,
+        "pizero": DeviceProfile.PIZERO2,
+        "zero2": DeviceProfile.PIZERO2,
+        "zero": DeviceProfile.PIZERO2,
+    }
+    return version_map.get(version_str.lower().strip(), DeviceProfile.PI5)
+
+
+def apply_device_overrides(config_dict: dict, capabilities: DeviceCapabilities) -> dict:
+    global CAPABILITIES, _OVERRIDES_APPLIED
+    CAPABILITIES = capabilities
+    
+    show_warnings = not _OVERRIDES_APPLIED
+    _OVERRIDES_APPLIED = True
+    
+    stt_processor = config_dict["STT"]["stt_processor"]
+    if stt_processor not in capabilities.allowed_stt:
+        if show_warnings:
+            queue_message(f"WARNING: STT '{stt_processor}' not supported on {capabilities.profile.value}, using '{capabilities.fallback_stt}'")
+        config_dict["STT"]["stt_processor"] = capabilities.fallback_stt
+    
+    tts_option = config_dict["TTS"].ttsoption if hasattr(config_dict["TTS"], 'ttsoption') else config_dict["TTS"]["ttsoption"]
+    if tts_option not in capabilities.allowed_tts:
+        if show_warnings:
+            queue_message(f"WARNING: TTS '{tts_option}' not supported on {capabilities.profile.value}, using '{capabilities.fallback_tts}'")
+        if hasattr(config_dict["TTS"], 'ttsoption'):
+            config_dict["TTS"].ttsoption = capabilities.fallback_tts
+        else:
+            config_dict["TTS"]["ttsoption"] = capabilities.fallback_tts
+    
+    vad_method = config_dict["STT"]["vad_method"]
+    if vad_method not in capabilities.allowed_vad:
+        if show_warnings:
+            queue_message(f"WARNING: VAD '{vad_method}' not supported on {capabilities.profile.value}, using '{capabilities.fallback_vad}'")
+        config_dict["STT"]["vad_method"] = capabilities.fallback_vad
+    
+    wake_processor = config_dict["STT"]["wake_word_processor"]
+    if wake_processor not in capabilities.allowed_wake:
+        if show_warnings:
+            queue_message(f"WARNING: Wake word '{wake_processor}' not supported on {capabilities.profile.value}, using '{capabilities.fallback_wake}'")
+        config_dict["STT"]["wake_word_processor"] = capabilities.fallback_wake
+    
+    if config_dict["LLM"]["contextsize"] > capabilities.max_context_size:
+        if show_warnings:
+            queue_message(f"WARNING: Context size {config_dict['LLM']['contextsize']} exceeds max {capabilities.max_context_size} for {capabilities.profile.value}")
+        config_dict["LLM"]["contextsize"] = capabilities.max_context_size
+    
+    if not capabilities.can_use_ui and config_dict["UI"]["UI_enabled"]:
+        if show_warnings:
+            queue_message(f"WARNING: UI disabled for {capabilities.profile.value}")
+        config_dict["UI"]["UI_enabled"] = False
+    
+    if not capabilities.can_use_vision and config_dict["VISION"]["enabled"]:
+        if show_warnings:
+            queue_message(f"WARNING: Vision disabled for {capabilities.profile.value}")
+        config_dict["VISION"]["enabled"] = False
+    
+    if not capabilities.can_use_emotion and config_dict["EMOTION"]["enabled"]:
+        if show_warnings:
+            queue_message(f"WARNING: Emotion disabled for {capabilities.profile.value}")
+        config_dict["EMOTION"]["enabled"] = False
+    
+    config_dict["_device"] = {
+        "raspberry_version": capabilities.profile.value,
+        "capabilities": capabilities,
+    }
+    
+    return config_dict
+
+
+def should_use_lite_memory(config: dict) -> bool:
+    device_info = config.get("_device", {})
+    caps = device_info.get("capabilities")
+    if caps is not None:
+        return not caps.can_use_embeddings
+    return False
+
+
+def get_capabilities() -> Optional[DeviceCapabilities]:
+    return CAPABILITIES
+
+
 @dataclass
 class TTSConfig:
-    """Configuration class for Text-to-Speech settings"""
     ttsoption: str
     toggle_charvoice: bool
     tts_voice: Optional[str]
     is_talking_override: bool
     is_talking: bool
     global_timer_paused: bool
-    
-    # Azure specific settings
     azure_api_key: Optional[str] = None
     azure_region: Optional[str] = None
-    
-    # ElevenLabs specific settings
     elevenlabs_api_key: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
     elevenlabs_model: Optional[str] = None
-    
-    # Server specific settings
     ttsurl: Optional[str] = None
-
-    #openai tts
     openai_voice: Optional[str] = None
     openai_api_key: Optional[str] = None
-    
     minimax_api_key: Optional[str] = None
     minimax_voice_id: Optional[str] = None
     minimax_model: Optional[str] = None
 
-
-
     def __getitem__(self, key):
-        """Enable dictionary-like access for backward compatibility"""
         return getattr(self, key)
 
     def validate(self) -> bool:
-        """Validate the configuration based on ttsoption"""
         if self.ttsoption == "azure":
             if not (self.azure_api_key and self.azure_region):
                 queue_message("ERROR: Azure API key and region are required for Azure TTS")
@@ -83,7 +249,6 @@ class TTSConfig:
 
     @classmethod
     def from_config_dict(cls, config_dict: dict) -> 'TTSConfig':
-        """Create TTSConfig instance from configuration dictionary"""
         return cls(
             ttsoption=config_dict['ttsoption'],
             toggle_charvoice=config_dict['toggle_charvoice'],
@@ -104,44 +269,18 @@ class TTSConfig:
             minimax_model=config_dict.get('minimax_model'),
         )
 
+
 def _parse_screensaver_list(value: str) -> List[str]:
-    """
-    Parse the screensaver_list configuration value.
-    
-    Args:
-        value: Configuration string (either "random" or comma-separated list)
-        
-    Returns:
-        List of screensaver names, or ["random"] if random mode is selected
-    """
     value = value.strip()
-    
-    # If "random", return it as a single-item list
     if value.lower() == "random":
         return ["random"]
-    
-    # Otherwise, parse as comma-separated list
-    # Strip whitespace from each item and filter out empty strings
     screensavers = [s.strip() for s in value.split(',') if s.strip()]
-    
-    # If list is empty after parsing, default to random
     if not screensavers:
         return ["random"]
-    
     return screensavers
 
+
 def _format_screensaver_list(value) -> str:
-    """
-    Format the screensaver_list value for saving to config.ini.
-    Converts arrays/lists back to the proper string format.
-    
-    Args:
-        value: Either a string, list, or JSON string representation of a list
-        
-    Returns:
-        String in the format expected by config.ini (either "random" or comma-separated)
-    """
-    # Handle list/array input
     if isinstance(value, list):
         if len(value) == 0:
             return "random"
@@ -149,11 +288,7 @@ def _format_screensaver_list(value) -> str:
             return "random"
         else:
             return ",".join(str(item).strip() for item in value if str(item).strip())
-    
-    # Handle string input
     str_value = str(value).strip()
-    
-    # Check if it's a JSON array string like '["random"]' or '["blackhole","waves"]'
     if str_value.startswith('[') and str_value.endswith(']'):
         try:
             import json
@@ -167,45 +302,33 @@ def _format_screensaver_list(value) -> str:
                     return ",".join(str(item).strip() for item in parsed if str(item).strip())
         except (json.JSONDecodeError, ValueError):
             pass
-    
-    # Return as-is if it's already a proper string format
     return str_value
+
 
 def load_config():
     global character_name
-    """
-    Load configuration settings from 'config.ini' and 'persona.ini' and return them as a dictionary.
-    This function will print an error and exit if any configuration is invalid or missing.
-    
-    Returns:
-    - CONFIG (dict): Dictionary containing configuration settings.
-    """
-    # Set the working directory and adjust the system path
     base_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(base_dir)
     sys.path.insert(0, base_dir)
     sys.path.append(os.getcwd())
 
-    # Parse the main config.ini file
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Ensures it resolves to src/
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     config = configparser.ConfigParser()
-    config_path = os.path.join(base_dir, 'config.ini')  # Ensures it joins "src/config.ini"
-    config.read(config_path)  # Should correctly read "src/config.ini"
+    config_path = os.path.join(base_dir, 'config.ini')
+    config.read(config_path)
 
-    # Parse the persona.ini file
-    character_path = config.get("CHAR", "character_card_path")  # Get full path
-    character_name = os.path.splitext(os.path.basename(character_path))[0]  # Extract filename without extension
+    character_path = config.get("CHAR", "character_card_path")
+    character_name = os.path.splitext(os.path.basename(character_path))[0]
 
     persona_config = configparser.ConfigParser()
     persona_path = os.path.join(base_dir, 'character', character_name, 'persona.ini')
 
     if not os.path.exists(persona_path):
         queue_message(f"ERROR: {persona_path} not found.")
-        sys.exit(1)  # Exit if persona.ini is missing
+        sys.exit(1)
 
     persona_config.read(persona_path)
 
-    # Ensure required sections and keys exist in config.ini
     required_sections = [
         'CONTROLS', 'STT', 'CHAR', 'LLM', 'VISION', 'EMOTION', 'TTS', 'DISCORD', 'SERVO', 'STABLE_DIFFUSION'
     ]
@@ -215,7 +338,6 @@ def load_config():
         queue_message(f"ERROR: Missing sections in config.ini: {', '.join(missing_sections)}")
         sys.exit(1)
 
-    # Extract persona traits
     persona_traits = {}
     if 'PERSONA' in persona_config:
         persona_traits = {key: int(value) for key, value in persona_config['PERSONA'].items()}
@@ -223,8 +345,14 @@ def load_config():
         queue_message("ERROR: [PERSONA] section missing in persona.ini.")
         sys.exit(1)
 
-    # Extract and return combined configurations
-    return {
+    raspberry_version = "pi5"
+    if config.has_section('DEVICE') and config.has_option('DEVICE', 'raspberry_version'):
+        raspberry_version = config.get('DEVICE', 'raspberry_version')
+    
+    device_profile = get_device_profile(raspberry_version)
+    capabilities = DEVICE_PROFILES[device_profile]
+
+    config_dict = {
         "BASE_DIR": base_dir,
         "CONTROLS": {
             "controller_name": config['CONTROLS']['controller_name'],
@@ -255,6 +383,9 @@ def load_config():
             "traits": persona_traits,
             "responses": config['CHAR']['responses'],
             "thinking_responses": config['CHAR']['thinking_responses'],
+            "latitude": config.get('CHAR', 'latitude', fallback=''),
+            "longitude": config.get('CHAR', 'longitude', fallback=''),
+            "location_name": config.get('CHAR', 'location_name', fallback=''),
         },
         "LLM": {
             "llm_backend": config['LLM']['llm_backend'],
@@ -321,7 +452,6 @@ def load_config():
             "enabled": config['DISCORD']['enabled'],
         },
         "SERVO": {
-            # Arm Servos
             "arms_present": config.getboolean('SERVO', 'arms_present'),
             "leftMainMin": config['SERVO']['leftMainMin'],
             "leftForarmMin": config['SERVO']['leftForarmMin'],
@@ -341,18 +471,15 @@ def load_config():
             "rightMainOffset": config['SERVO']['rightMainOffset'],
             "rightForearmOffset": config['SERVO']['rightForearmOffset'],
             "rightHandOffset": config['SERVO']['rightHandOffset'],
-            # Dual Height Servos (Pin 0 = Left, Pin 1 = Right)
             "leftUpHeight": config['SERVO']['leftUpHeight'],
             "leftDownHeight": config['SERVO']['leftDownHeight'],
             "perfectLeftHeightOffset": config['SERVO']['perfectLeftHeightOffset'],
             "rightUpHeight": config['SERVO']['rightUpHeight'],
             "rightDownHeight": config['SERVO']['rightDownHeight'],
             "perfectRightHeightOffset": config['SERVO']['perfectRightHeightOffset'],
-            # Left Leg Servo (Pin 2)
             "forwardLeftLeg": config['SERVO']['forwardLeftLeg'],
             "backLeftLeg": config['SERVO']['backLeftLeg'],
             "perfectLeftLegOffset": config['SERVO']['perfectLeftLegOffset'],
-            # Right Leg Servo (Pin 3)
             "forwardRightLeg": config['SERVO']['forwardRightLeg'],
             "backRightLeg": config['SERVO']['backRightLeg'],
             "perfectRightLegOffset": config['SERVO']['perfectRightLegOffset'],
@@ -398,18 +525,12 @@ def load_config():
         }
     }
 
+    config_dict = apply_device_overrides(config_dict, capabilities)
+    
+    return config_dict
+
 
 def get_api_key(llm_backend: str) -> str:
-    """
-    Retrieves the API key for the specified LLM backend.
-    
-    Parameters:
-    - llm_backend (str): The LLM backend to retrieve the API key for.
-
-    Returns:
-    - api_key (str): The API key for the specified LLM backend.
-    """
-    # Map the backend to the corresponding environment variable
     backend_to_env_var = {
         "openai": "OPENAI_API_KEY",
         "grok": "GROK_API_KEY",
@@ -417,546 +538,161 @@ def get_api_key(llm_backend: str) -> str:
         "tabby": "TABBY_API_KEY",
         "deepinfra": "DEEPINFRA_API_KEY"
     }
-
-    # Check if the backend is supported
     if llm_backend not in backend_to_env_var:
-        raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: Unsupported LLM backend: {llm_backend}")
-
-    # Fetch the API key from the environment
+        print(f"WARNING: Unsupported LLM backend '{llm_backend}', skipping API key lookup.")
+        return ""
     api_key = os.getenv(backend_to_env_var[llm_backend])
     if not api_key:
-        raise ValueError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ERROR: API key not found for LLM backend: {llm_backend}")
-    
+        print(f"WARNING: No API key found for '{llm_backend}' (env var: {backend_to_env_var[llm_backend]}). LLM features will be unavailable.")
+        return ""
     return api_key
 
 
 def reload_persona_settings():
-    """
-    Reload persona settings from persona.ini file.
-    This should be called before each LLM response to ensure fresh settings are used.
-    
-    Returns:
-    - dict: Dictionary of persona traits, or None if failed
-    """
     global character_name
-    
     try:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         persona_path = os.path.join(base_dir, 'character', character_name, 'persona.ini')
-        
         if not os.path.exists(persona_path):
             queue_message(f"WARNING: persona.ini not found at {persona_path}")
             return None
-        
         persona_config = configparser.ConfigParser()
-        persona_config.read(persona_path, encoding='utf-8')
-        
-        if 'PERSONA' not in persona_config:
-            queue_message("WARNING: [PERSONA] section not found in persona.ini")
-            return None
-        
-        # Convert all values to integers
-        persona_traits = {key: int(value) for key, value in persona_config['PERSONA'].items()}
-        
-        return persona_traits
-        
+        persona_config.read(persona_path)
+        if 'PERSONA' in persona_config:
+            return {key: int(value) for key, value in persona_config['PERSONA'].items()}
+        return None
     except Exception as e:
-        queue_message(f"ERROR reloading persona settings: {e}")
+        queue_message(f"ERROR: Failed to reload persona settings: {e}")
         return None
 
-def update_character_setting(setting, value):
+
+def update_character_setting(trait: str, value: int):
     global character_name
-    """
-    Update a specific setting in the [PERSONA] section of persona.ini file.
-
-    Parameters:
-    - setting (str): The setting to update (e.g., 'humor', 'honesty', 'sarcasm').
-    - value (int): The new value for the setting (0-100).
-
-    Returns:
-    - bool: True if the update is successful, False otherwise.
-    """
     try:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        config_path = os.path.join(base_dir, 'character', character_name, 'persona.ini')
-        
-        if not os.path.exists(config_path):
-            queue_message(f"ERROR: persona.ini not found at {config_path}")
+        persona_path = os.path.join(base_dir, 'character', character_name, 'persona.ini')
+        if not os.path.exists(persona_path):
+            queue_message(f"WARNING: persona.ini not found at {persona_path}")
             return False
-        
-        config = configparser.ConfigParser()
-        config.read(config_path, encoding='utf-8')
-
-        if 'PERSONA' not in config:
-            queue_message("ERROR: [PERSONA] section not found")
-            return False
-
-        config['PERSONA'][setting] = str(int(value))
-
-        with open(config_path, 'w', encoding='utf-8') as config_file:
-            config.write(config_file)
-
-        queue_message(f"Updated {setting} to {value} in [PERSONA] section.")
+        persona_config = configparser.ConfigParser()
+        persona_config.read(persona_path)
+        if 'PERSONA' not in persona_config:
+            persona_config['PERSONA'] = {}
+        persona_config['PERSONA'][trait] = str(value)
+        with open(persona_path, 'w') as f:
+            persona_config.write(f)
+        queue_message(f"INFO: Updated {trait} to {value}")
         return True
-
     except Exception as e:
-        queue_message(f"ERROR updating {setting}: {e}")
+        queue_message(f"ERROR: Failed to update character setting: {e}")
         return False
 
 
-# === TARS Configuration Management System Integration ===
-
-class ConfigUpdateResult(Enum):
-    SUCCESS = "SUCCESS"
-    VALIDATION_ERROR = "VALIDATION_ERROR"
-    BACKUP_FAILED = "BACKUP_FAILED"
-    WRITE_ERROR = "WRITE_ERROR"
-    TEMPLATE_MISMATCH = "TEMPLATE_MISMATCH"
-
-@dataclass
-class ConfigUpdateResponse:
-    result: ConfigUpdateResult
-    message: str
-    actions_taken: List[str] = None
-    backup_location: str = None
-    errors: List[str] = None
-    
-    def __post_init__(self):
-        if self.actions_taken is None:
-            self.actions_taken = []
-        if self.errors is None:
-            self.errors = []
-
-class TarsConfigIntegration:
-    """
-    Integration class that provides web-friendly access to TARS Configuration Management System
-    """
-    
-    def __init__(self):
-        self.cms = TarsConfigManager()
-        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
-    def validate_config_data(self, config_data: Dict) -> Tuple[bool, List[str]]:
-        """
-        Validate configuration data against the template structure
-        
-        Args:
-            config_data: Dictionary of configuration sections and fields
-            
-        Returns:
-            Tuple of (is_valid, list_of_errors)
-        """
-        errors = []
-        
-        try:
-            # Load template structure
-            template_sections = self.cms.parse_config_structure(self.cms.template_file)
-            
-            # Validate each section and field
-            for section_name, section_data in config_data.items():
-                if section_name not in template_sections:
-                    errors.append(f"Unknown section: [{section_name}]")
-                    continue
-                    
-                template_section = template_sections[section_name]
-                
-                # Validate fields in this section
-                for field_name, field_value in section_data.items():
-                    if field_name not in template_section.fields:
-                        errors.append(f"Unknown field: [{section_name}] {field_name}")
-                        continue
-                        
-                    # Type validation based on template field
-                    template_field = template_section.fields[field_name]
-                    if not self._validate_field_type(field_name, field_value, template_field.value):
-                        errors.append(f"Invalid value for [{section_name}] {field_name}: '{field_value}' (type: {type(field_value).__name__})")
-                        
-        except Exception as e:
-            errors.append(f"Validation error: {str(e)}")
-            
-        return len(errors) == 0, errors
-    
-    def _validate_field_type(self, field_name: str, value: any, template_value: str) -> bool:
-        """
-        Validate field value type based on template and field name patterns
-        Handles both actual types and string representations from web UI
-        """
-        try:
-            # Convert value to string for consistent checking
-            str_value = str(value).lower().strip()
-            
-            # Boolean fields - accept bool, "true"/"false", "1"/"0"
-            if field_name in ['enabled', 'toggle_charvoice', 'is_talking_override', 
-                            'is_talking', 'global_timer_paused', 'use_indicators', 'server_hosted',
-                            'restore_faces', 'UI_enabled', 'show_mouse', 'use_camera_module',
-                            'fullscreen', 'auto_shutdown']:
-                return (isinstance(value, bool) or 
-                       str_value in ['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'])
-            
-            # Integer fields - accept int, numeric strings
-            elif field_name in ['sensitivity', 'speechdelay', 'contextsize', 'max_tokens',
-                              'seed', 'top_k', 'steps', 'width', 'height', 'font_size',
-                              'target_fps', 'battery_capacity_mAh']:
-                try:
-                    int(float(str_value))  # Allow "8.0" -> 8
-                    return True
-                except (ValueError, TypeError):
-                    return False
-            
-            # Float fields - accept float, numeric strings
-            elif field_name in ['temperature', 'top_p', 'vector_weight', 'denoising_strength',
-                              'cfg_scale', 'battery_initial_voltage', 'battery_cutoff_voltage']:
-                try:
-                    float(str_value)
-                    return True
-                except (ValueError, TypeError):
-                    return False
-            
-            # String fields - accept any value (most fields are strings)
-            else:
-                return True  # Most fields are strings, so accept anything
-                
-        except Exception:
-            return False
-    
-    def update_config_from_web(self, config_data: Dict, create_backup: bool = True) -> ConfigUpdateResponse:
-        """
-        Update configuration from web UI data using TARS CMS
-        
-        Args:
-            config_data: Dictionary of configuration sections and fields
-            create_backup: Whether to create a backup before updating
-            
-        Returns:
-            ConfigUpdateResponse with result and details
-        """
-        actions_taken = []
-        
-        try:
-            # Step 1: Validate the input data
-            is_valid, validation_errors = self.validate_config_data(config_data)
-            if not is_valid:
-                return ConfigUpdateResponse(
-                    result=ConfigUpdateResult.VALIDATION_ERROR,
-                    message="Configuration validation failed",
-                    errors=validation_errors
-                )
-            
-            actions_taken.append("Configuration data validated successfully")
-            
-            # Step 2: Create backup if requested
-            backup_location = None
-            if create_backup:
-                try:
-                    if self.cms.create_backup():
-                        backup_location = self.cms.backup_file
-                        actions_taken.append(f"Backup created at {backup_location}")
-                    else:
-                        return ConfigUpdateResponse(
-                            result=ConfigUpdateResult.BACKUP_FAILED,
-                            message="Failed to create backup",
-                            errors=["Backup creation failed"]
-                        )
-                except Exception as e:
-                    return ConfigUpdateResponse(
-                        result=ConfigUpdateResult.BACKUP_FAILED,
-                        message=f"Backup creation error: {str(e)}",
-                        errors=[str(e)]
-                    )
-            
-            # Step 3: Load current and template configurations
-            template_sections = self.cms.parse_config_structure(self.cms.template_file)
-            existing_sections = self.cms.parse_config_structure(self.cms.config_file)
-            
-            # Step 4: Create updated configuration structure
-            final_sections = {}
-            
-            for section_name, template_section in template_sections.items():
-                # Create final section with template structure
-                final_section = ConfigSection(
-                    name=section_name,
-                    inline_comment=template_section.inline_comment,
-                    description_comments=template_section.description_comments.copy() if template_section.description_comments else []
-                )
-                
-                # Process each field in the template section
-                for field_name, template_field in template_section.fields.items():
-                    # Determine the value to use
-                    if section_name in config_data and field_name in config_data[section_name]:
-                        # Use value from web input
-                        new_value = config_data[section_name][field_name]
-                        
-                        # Special handling for screensaver_list - convert arrays back to config format
-                        if section_name == 'UI' and field_name == 'screensaver_list':
-                            new_value = _format_screensaver_list(new_value)
-                        else:
-                            new_value = str(new_value)
-                        
-                        actions_taken.append(f"Updated [{section_name}] {field_name} = {new_value}")
-                    elif section_name in existing_sections and field_name in existing_sections[section_name].fields:
-                        # Preserve existing value
-                        existing_value = existing_sections[section_name].fields[field_name].value
-                        new_value = existing_value
-                        actions_taken.append(f"Preserved [{section_name}] {field_name} = {existing_value}")
-                    else:
-                        # Use template default
-                        new_value = template_field.value
-                        actions_taken.append(f"Used template default [{section_name}] {field_name} = {new_value}")
-                    
-                    # Create final field with template structure but updated value
-                    final_field = ConfigField(
-                        name=field_name,
-                        value=new_value,
-                        inline_comment=template_field.inline_comment,
-                        description_comments=template_field.description_comments.copy() if template_field.description_comments else []
-                    )
-                    
-                    final_section.fields[field_name] = final_field
-                
-                final_sections[section_name] = final_section
-            
-            # Step 5: Write the updated configuration
-            try:
-                self.cms.write_config_file(final_sections)
-                actions_taken.append("Configuration file written successfully")
-                
-                return ConfigUpdateResponse(
-                    result=ConfigUpdateResult.SUCCESS,
-                    message="Configuration updated successfully using TARS CMS",
-                    actions_taken=actions_taken,
-                    backup_location=backup_location
-                )
-                
-            except Exception as e:
-                return ConfigUpdateResponse(
-                    result=ConfigUpdateResult.WRITE_ERROR,
-                    message=f"Failed to write configuration: {str(e)}",
-                    errors=[str(e)],
-                    backup_location=backup_location
-                )
-                
-        except Exception as e:
-            return ConfigUpdateResponse(
-                result=ConfigUpdateResult.WRITE_ERROR,
-                message=f"Unexpected error during configuration update: {str(e)}",
-                errors=[str(e)],
-                backup_location=backup_location
-            )
-    
-    def get_config_analysis(self) -> Dict:
-        """
-        Get configuration analysis from TARS CMS
-        
-        Returns:
-            Dictionary with analysis results
-        """
-        try:
-            actions = self.cms.analyze_differences()
-            
-            analysis = {
-                "total_actions": len(actions),
-                "sections_to_add": len([a for a in actions if a.action == ActionType.ADD_SECTION]),
-                "fields_to_add": len([a for a in actions if a.action == ActionType.ADD_FIELD]),
-                "comments_to_add": len([a for a in actions if a.action == ActionType.ADD_COMMENT]),
-                "sections_to_remove": len([a for a in actions if a.action == ActionType.REMOVE_SECTION]),
-                "fields_to_remove": len([a for a in actions if a.action == ActionType.REMOVE_FIELD]),
-                "values_to_preserve": len([a for a in actions if a.action == ActionType.PRESERVE_VALUE]),
-                "is_synchronized": len(actions) == 0,
-                "actions": [
-                    {
-                        "action": action.action.value,
-                        "section": action.section,
-                        "field": action.field,
-                        "value": action.value,
-                        "comment": action.comment
-                    } for action in actions
-                ]
-            }
-            
-            return analysis
-            
-        except Exception as e:
-            return {
-                "error": str(e),
-                "is_synchronized": False
-            }
-    
-    def sync_with_template(self, interactive: bool = False) -> ConfigUpdateResponse:
-        """
-        Synchronize current configuration with template using TARS CMS
-        
-        Args:
-            interactive: Whether to use interactive mode for removals
-            
-        Returns:
-            ConfigUpdateResponse with result and details
-        """
-        try:
-            # Analyze differences
-            actions = self.cms.analyze_differences()
-            
-            if not actions:
-                return ConfigUpdateResponse(
-                    result=ConfigUpdateResult.SUCCESS,
-                    message="Configuration is already synchronized with template",
-                    actions_taken=["No changes needed"]
-                )
-            
-            # Handle removals based on interactive setting
-            if interactive:
-                actions = self.cms.confirm_removals(actions)
-            else:
-                # Auto-approve removals for programmatic use
-                actions = [a for a in actions if a.action not in [ActionType.REMOVE_SECTION, ActionType.REMOVE_FIELD]]
-            
-            # Apply changes
-            self.cms.apply_changes(actions)
-            
-            return ConfigUpdateResponse(
-                result=ConfigUpdateResult.SUCCESS,
-                message=f"Synchronized configuration with template ({len(actions)} actions applied)",
-                actions_taken=[f"Applied {len(actions)} configuration changes"]
-            )
-            
-        except Exception as e:
-            return ConfigUpdateResponse(
-                result=ConfigUpdateResult.WRITE_ERROR,
-                message=f"Synchronization failed: {str(e)}",
-                errors=[str(e)]
-            )
-
-# Convenience functions for easy integration
-def update_config_from_web_ui(config_data: Dict, create_backup: bool = True) -> Dict:
-    """
-    Convenience function to update configuration from web UI
-    
-    Args:
-        config_data: Dictionary of configuration sections and fields
-        create_backup: Whether to create a backup before updating
-        
-    Returns:
-        Dictionary with result information suitable for JSON response
-    """
-    integration = TarsConfigIntegration()
-    response = integration.update_config_from_web(config_data, create_backup)
-    
-    return {
-        "success": response.result == ConfigUpdateResult.SUCCESS,
-        "message": response.message,
-        "result": response.result.value,
-        "actions_taken": response.actions_taken,
-        "backup_location": response.backup_location,
-        "errors": response.errors
-    }
-
-def get_config_sync_status() -> Dict:
-    """
-    Get configuration synchronization status
-    
-    Returns:
-        Dictionary with sync status information
-    """
-    integration = TarsConfigIntegration()
-    return integration.get_config_analysis()
-
-
-CONFIG_UI_FIELDS = {
-    'CONTROLS': {
-        '__description__': 'Controller settings',
-        'controller_name': {
-            'description': 'Name of the controller used for interaction'
-        },
-        'enabled': {
-            'description': 'Enable use of controller for interaction'
-        },
-        'voicemovement': {
-            'description': 'Enable or disable movement via voice control'
-        },
-        'swap_turn_directions': {
-            'description': 'Swap left and right turn directions (for mirrored robot orientation)'
+CONFIG_METADATA = {
+    'DEVICE': {
+        '__description__': 'Device profile configuration',
+        'raspberry_version': {
+            'options': ['pi5', 'pi4', 'pi3', 'pizero2'],
+            'description': 'Raspberry Pi model for capability detection'
         },
     },
-
+    'CHAR': {
+        '__description__': 'Character and user settings',
+        'character_card_path': {
+            'description': 'Path to character card file'
+        },
+        'user_name': {
+            'description': 'Your name (how TARS addresses you)'
+        },
+        'user_details': {
+            'description': 'Details about you for context'
+        },
+        'responses': {
+            'description': 'Random idle responses (JSON array)'
+        },
+        'thinking_responses': {
+            'description': 'Thinking filler responses (JSON array)'
+        },
+        'latitude': {
+            'description': 'TARS latitude (e.g. 45.5017)'
+        },
+        'longitude': {
+            'description': 'TARS longitude (e.g. -73.5673)'
+        },
+        'location_name': {
+            'description': 'TARS location name (e.g. Montreal, Quebec, Canada)'
+        },
+    },
+    'CONTROLS': {
+        '__description__': 'Controller settings for physical input devices',
+        'controller_name': {
+            'description': 'Name of the connected controller'
+        },
+        'enabled': {
+            'description': 'Enable controller input'
+        },
+        'voicemovement': {
+            'description': 'Enable voice-controlled movement'
+        },
+        'swap_turn_directions': {
+            'description': 'Swap left/right turn directions'
+        },
+    },
     'STT': {
         '__description__': 'Speech-to-Text configuration',
         'language': {
-            'description': 'Spoken language (if not english, use stt_processor = openai)'
+            'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
+            'description': 'Speech recognition language'
         },
         'wake_word': {
-            'description': 'Wake word for activating the system'
+            'description': 'Phrase to activate listening'
         },
         'wake_word_processor': {
             'options': ['picovoice', 'fastrtc', 'atomik'],
-            'description': 'Wake word detection processor'
+            'description': 'Wake word detection engine'
         },
         'sensitivity': {
-            'description': 'Wake word sensitivity (1=lenient, 10=strict)'
+            'description': 'Wake word sensitivity (1-10)'
         },
         'stt_processor': {
             'options': ['vosk', 'faster-whisper', 'silero', 'fastrtc', 'openai', 'external'],
-            'description': 'Speech-to-text processor'
-        },
-        'use_indicators': {
-            'description': 'Use beeps to indicate when listening'
+            'description': 'Speech-to-text engine'
         },
         'external_url': {
             'description': 'URL for external STT server'
         },
         'whisper_model': {
             'options': ['tiny', 'base', 'small', 'medium', 'large'],
-            'description': 'Whisper model size for onboard transcription'
+            'description': 'Whisper model size'
         },
         'vosk_model': {
-            'description': 'Vosk model name for local STT'
+            'description': 'Vosk model name'
+        },
+        'use_indicators': {
+            'description': 'Play audio indicators for listening state'
         },
         'vad_method': {
             'options': ['silero', 'rms'],
-            'description': 'Voice activity detection method'
+            'description': 'Voice Activity Detection method'
         },
         'speechdelay': {
-            'description': 'Tenths of seconds to wait before sleeping (20 = 2 seconds)'
-        },
-        'picovoice_keyword_path': {
-            'description': 'Path to Porcupine keyword file'
+            'description': 'Silence duration before processing (tenths of seconds)'
         },
     },
-
-    'CHAR': {
-        '__description__': 'Character-specific details',
-        'character_card_path': {
-            'description': 'Path to character JSON file'
-        },
-        'user_name': {
-            'description': 'Name of the user'
-        },
-        'user_details': {
-            'description': 'Additional user details for context'
-        },
-        'responses': {
-            'type': 'array',
-            'description': 'Wake word responses (what TARS says after hearing wake word)'
-        },
-        'thinking_responses': {
-            'type': 'array',
-            'description': 'Thinking responses (what TARS says while processing)'
-        },
-    },
-
     'LLM': {
         '__description__': 'Large Language Model configuration',
         'llm_backend': {
-            'options': ['openai', 'grok', 'tabby', 'ooba'],
+            'options': ['openai', 'grok', 'ooba', 'tabby', 'deepinfra'],
             'description': 'LLM backend service'
         },
         'base_url': {
-            'description': 'API URL (OpenAI: https://api.openai.com, Grok: https://api.x.ai)'
+            'description': 'API base URL'
         },
         'openai_model': {
-            'description': 'OpenAI model (gpt-4o-mini, gpt-4o, etc.)'
+            'description': 'OpenAI model name'
         },
         'grok_model': {
-            'options': ['grok-4-1-fast-non-reasoning', 'grok-4-1-fast-reasoning', 'grok-3-mini'],
-            'description': 'Grok model'
+            'description': 'Grok model name'
         },
         'override_encoding_model': {
             'options': ['cl100k_base', 'p50k_base', 'r50k_base', 'gpt2'],
@@ -981,7 +717,6 @@ CONFIG_UI_FIELDS = {
             'description': 'System prompt defining LLM behavior'
         },
     },
-
     'VISION': {
         '__description__': 'Vision/image recognition configuration',
         'enabled': {
@@ -994,7 +729,6 @@ CONFIG_UI_FIELDS = {
             'description': 'Vision server API URL'
         },
     },
-
     'EMOTION': {
         '__description__': 'Emotion detection for avatars',
         'enabled': {
@@ -1004,7 +738,6 @@ CONFIG_UI_FIELDS = {
             'description': 'HuggingFace model for emotion analysis'
         },
     },
-
     'TTS': {
         '__description__': 'Text-to-Speech configuration',
         'ttsoption': {
@@ -1043,62 +776,6 @@ CONFIG_UI_FIELDS = {
             'description': 'Use character-specific voice settings'
         },
     },
-
-    'STABLE_DIFFUSION': {
-        '__description__': 'Image Generation',
-        'enabled': {
-            'description': 'Enable image generation'
-        },
-        'service': {
-            'options': ['automatic1111', 'openai'],
-            'description': 'Image generation service'
-        },
-        'url': {
-            'description': 'Automatic1111 server URL'
-        },
-        'prompt_prefix': {
-            'description': 'Prefix added to image prompts'
-        },
-        'prompt_postfix': {
-            'description': 'Postfix added to image prompts'
-        },
-        'negative_prompt': {
-            'description': 'Negative prompt (things to avoid)'
-        },
-        'seed': {
-            'description': 'Seed (-1 for random)'
-        },
-        'sampler_name': {
-            'options': ['Euler a', 'Euler', 'DPM++ 2M Karras', 'DPM++ SDE Karras', 'DDIM'],
-            'description': 'Sampler'
-        },
-        'steps': {
-            'description': 'Generation steps'
-        },
-        'cfg_scale': {
-            'description': 'CFG scale (prompt adherence)'
-        },
-        'width': {
-            'description': 'Image width in pixels'
-        },
-        'height': {
-            'description': 'Image height in pixels'
-        },
-        'denoising_strength': {
-            'description': 'Denoising strength'
-        },
-        'restore_faces': {
-            'description': 'Enable face restoration'
-        },
-    },
-
-    'CHATUI': {
-        '__description__': 'Chat UI settings',
-        'enabled': {
-            'description': 'Enable Chat UI (required for avatars)'
-        },
-    },
-
     'UI': {
         '__description__': 'Graphical interface settings',
         'UI_enabled': {
@@ -1140,7 +817,6 @@ CONFIG_UI_FIELDS = {
             'description': 'UI refresh rate (FPS)'
         },
     },
-
     'RAG': {
         '__description__': 'Retrieval Augmented Generation (Memory)',
         'strategy': {
@@ -1161,33 +837,6 @@ CONFIG_UI_FIELDS = {
         },
         'enable_topic_tracking': {
             'description': 'Enable long-term memory'
-        },
-    },
-
-    'HOME_ASSISTANT': {
-        '__description__': 'Home Assistant integration',
-        'enabled': {
-            'description': 'Enable Home Assistant'
-        },
-        'url': {
-            'description': 'Home Assistant URL'
-        },
-    },
-
-    'DISCORD': {
-        '__description__': 'Discord bot integration',
-        'enabled': {
-            'description': 'Enable Discord integration'
-        },
-        'channel_id': {
-            'description': 'Discord channel ID'
-        },
-    },
-
-    'MISC': {
-        '__description__': 'Miscellaneous settings',
-        'ventilate': {
-            'description': 'Auto-ventilate pose for airflow'
         },
     },
 }

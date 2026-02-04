@@ -1,0 +1,6 @@
+Copyright (c) 2026 AtomikSpace - Charles-Olivier Dion
+Contact: atomikspace.labs@gmail.com
+
+The 3D models in the required folder are licensed under CC-BY-NC 4.0 for non-commercial use.
+Commercial use (selling prints, kits, derivatives, services) requires a
+commercial license from AtomikSpace.

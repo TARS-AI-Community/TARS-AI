@@ -17,14 +17,35 @@ import sounddevice as sd
 import soundfile as sf
 
 # === Custom Modules ===
-from modules.module_config import load_config
-from modules.module_discord import *
+from modules.module_config import load_config, get_capabilities
 from modules.module_llm import process_completion
 from modules.module_tts import play_audio_chunks
 from modules.module_messageQue import queue_message
-from modules.module_ui import UIManager
-from modules.module_btcontroller import start_controls
 from modules.module_servoctl import initialize_servos
+
+CONFIG = load_config()
+CAPABILITIES = get_capabilities()
+
+# Conditional imports based on device capabilities
+UIManager = None
+if CAPABILITIES is None or CAPABILITIES.can_use_ui:
+    try:
+        from modules.module_ui import UIManager as _UIManager
+        UIManager = _UIManager
+    except ImportError:
+        pass
+
+# Discord - lightweight, available on all devices
+try:
+    from modules.module_discord import *
+except ImportError:
+    pass
+
+# BT Controller
+try:
+    from modules.module_btcontroller import start_controls
+except ImportError:
+    start_controls = None
 
 # === Constants and Globals ===
 ui_manager = None
@@ -33,8 +54,6 @@ memory_manager = None
 stt_manager = None
 shutdown_event = None
 battery_module = None
-
-CONFIG = load_config()
 
 # Global Variables (if needed)
 stop_event = threading.Event()
@@ -45,6 +64,9 @@ def start_bt_controller_thread():
     """
     Wrapper to start the BT Controller functionality in a thread.
     """
+    if start_controls is None:
+        queue_message("WARNING: BT Controller not available")
+        return
     try:
         queue_message(f"LOAD: Starting BT Controller thread...")
         while not stop_event.is_set():

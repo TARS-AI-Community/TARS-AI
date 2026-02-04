@@ -1,3 +1,22 @@
+"""
+Module : Movement Registry
+Author: Charles-Olivier Dion (AtomikSpace)
+Contact: atomikspace.labs@gmail.com
+Copyright (c) 2026 Charles-Olivier Dion
+
+This file is authored by Charles-Olivier Dion and is dual-licensed.
+
+Non-Commercial License:
+This file is licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0).
+You may use, modify, and redistribute this file for NON-COMMERCIAL purposes only, with attribution.
+
+Commercial License:
+Commercial use (including selling products, paid services, SaaS, subscriptions, Patreon rewards, or derivatives)
+requires a separate written license from Charles-Olivier Dion (AtomikSpace).
+
+This license applies only to this file and does not override licenses of other files in the repository.
+"""
+
 LEGS_ONLY = "legs_only"
 HAS_ARMS = "has_arms"
 
@@ -23,7 +42,8 @@ MOVEMENTS = {
     "swing_legs": {"name": "Swing Legs", "type": LEGS_ONLY},
     "right_hi": {"name": "Right Hi", "type": HAS_ARMS},
     "left_hi": {"name": "Left Hi", "type": HAS_ARMS},
-    "pezz_dispenser": {"name": "Pezz Dispenser", "type": HAS_ARMS},
+    "left_pezz_dispenser": {"name": "Left Pezz Dispenser", "type": HAS_ARMS},
+    "right_pezz_dispenser": {"name": "Right Pezz Dispenser", "type": HAS_ARMS},
     "monster": {"name": "Monster", "type": HAS_ARMS},
     "left_point": {"name": "Left Point", "type": HAS_ARMS},
     "right_point": {"name": "Right Point", "type": HAS_ARMS},

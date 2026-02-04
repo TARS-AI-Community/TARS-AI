@@ -16,27 +16,65 @@
     <a href="https://github.com/TARS-AI-Community/TARS-AI/wiki/Home">
         <img src="https://img.shields.io/badge/Docs-grey?style=flat-square&logo=readthedocs&logoColor=white" alt="Documentation" align="center" />
     </a>
-
 </p>
 
-<p align="center"><a href="https://github.com/TARS-AI-Community/TARS-AI"><img width=90% alt="" src="https://github.com/TARS-AI-Community/TARS-AI/blob/V2/media/tars-banner.png" /></a></p>
+<p align="center">
+  <a href="https://github.com/TARS-AI-Community/TARS-AI">
+    <img width=90% alt="" src="https://github.com/TARS-AI-Community/TARS-AI/blob/V2/media/tars-banner.png" />
+  </a>
+</p>
 
-<p align="center">A recreation of the robot TARS from Interstellar, featuring AI capabilities.</p>
+<p align="center">
+  A recreation of the robot TARS from <i>Interstellar</i>, featuring AI capabilities.
+</p>
 
-## To start building TARS-AI
-- See our documentation for more information: [TARS-AI Wiki](https://github.com/TARS-AI-Community/TARS-AI/wiki/Home)
+---
 
-## To start contributing to TARS-AI
-- Join our Discord server: [discord.gg/AmE2Gv9EUt](https://discord.gg/AmE2Gv9EUt)
+## 🚀 Getting Started
 
-## License
+- See the documentation:  
+  👉 https://github.com/TARS-AI-Community/TARS-AI/wiki/Home
 
-TARS-AI is licensed under the [CC-BY-NC License](./LICENSE). See the [License Page](https://github.com/pyrater/TARS-AI/blob/main/LICENSE) for more details.
+---
 
-## Attribution 
+## 🤝 Contributing
 
-As we continue to build and expand upon the TARS project, please review the guidelines for attribution and best practices when sharing or publishing work related to the TARS project [Attribution Page](https://github.com/TARS-AI-Community/TARS-AI/blob/V2/ATTRIBUTION.md)
+- Join the community on Discord:  
+  👉 https://discord.gg/AmE2Gv9EUt
 
+---
 
+## 📜 License
 
+This project is licensed under **Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0)**.
+
+You may:
+- Build and modify your own TARS robot
+- Share improvements and derivatives
+- Use the project for personal, educational, and research purposes
+
+You may **not** use this project for commercial purposes without explicit permission from the authors.
+Commercial use includes, but is not limited to:
+
+- Selling 3D printed parts, kits, or complete robots  
+- Selling or distributing STL / CAD files for money  
+- Offering paid assembly, customization, or installation services  
+- Monetized YouTube, Social Media, Patreon, or subscription content that distributes project files or derivatives  
+- Using this project in paid products, commercial research, or corporate projects  
+- Integrating this project into commercial software or hardware products  
+- Selling derivatives or modified versions of the hardware or software  
+
+If you are unsure whether your use case is commercial, assume it is and request permission from the authors.
+
+See the [LICENSE](./LICENSE) file for details.
+
+---
+
+## 🧾 Attribution
+
+Please follow the attribution guidelines when sharing or publishing derivative work:
+
+👉 [ATTRIBUTION.md](./ATTRIBUTION.md)
+
+---
 

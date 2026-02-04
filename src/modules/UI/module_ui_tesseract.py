@@ -1,22 +1,21 @@
 """
 Module: Tesserac
-Author: Charles-Olivier Dion (Atomikspace)
+Author: Charles-Olivier Dion (AtomikSpace)
 Contact: atomikspace.labs@gmail.com
-Copyright (c) 2026
+Copyright (c) 2026 Charles-Olivier Dion
 
-This module was originally created by Charles-Olivier Dion (Atomikspace).
+This file is authored by Charles-Olivier Dion and is dual-licensed.
 
-Permission is granted to use, copy, modify, and redistribute this module,
-in whole or in part, provided that:
+Non-Commercial License:
+This file is licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0).
+You may use, modify, and redistribute this file for NON-COMMERCIAL purposes only, with attribution.
 
-- This notice is retained in the source file(s)
-- The original author (Charles-Olivier Dion / Atomikspace) is clearly credited
-- Any modifications are clearly identified as such
+Commercial License:
+Commercial use (including selling products, paid services, SaaS, subscriptions, Patreon rewards, or derivatives)
+requires a separate written license from Charles-Olivier Dion (AtomikSpace).
 
-This notice applies only to this module and does not extend to the
-entire project or repository in which it may be included.
+This license applies only to this file and does not override licenses of other files in the repository.
 """
-
 import pygame
 import math
 import time

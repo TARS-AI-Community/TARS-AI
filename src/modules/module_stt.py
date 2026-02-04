@@ -19,30 +19,108 @@ import sys
 from io import BytesIO
 from typing import Callable, Optional
 
-import torch
-import torchaudio  # Faster than librosa for resampling
-import librosa
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-
-from fastrtc import get_stt_model
-from vosk import Model, KaldiRecognizer, SetLogLevel
-from faster_whisper import WhisperModel
-import pvporcupine
-from pvrecorder import PvRecorder
-from openai import OpenAI
 import requests
 
 from modules.module_messageQue import queue_message
-from modules.module_config import load_config
-from modules.module_main import ui_manager
-from modules.module_atomik import WakeWordSystem
+from modules.module_config import load_config, get_capabilities
 
 CONFIG = load_config()
+CAPABILITIES = get_capabilities()
 
-# Suppress Vosk logs and parallelism warnings
-SetLogLevel(-1)
+# Conditional heavy imports based on device capabilities
+torch = None
+torchaudio = None
+librosa = None
+get_stt_model = None
+Model = None
+KaldiRecognizer = None
+SetLogLevel = None
+WhisperModel = None
+pvporcupine = None
+PvRecorder = None
+OpenAI = None
+WakeWordSystem = None
+
+# Torch and related (Pi5 only for Silero VAD)
+if CAPABILITIES is None or CAPABILITIES.can_use_embeddings:
+    try:
+        import torch as _torch
+        torch = _torch
+    except ImportError:
+        pass
+    
+    try:
+        import torchaudio as _torchaudio
+        torchaudio = _torchaudio
+    except ImportError:
+        pass
+    
+    try:
+        import librosa as _librosa
+        librosa = _librosa
+    except ImportError:
+        pass
+
+# FastRTC (Pi5 only)
+if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "fastrtc" in CAPABILITIES.allowed_stt):
+    try:
+        from fastrtc import get_stt_model as _get_stt_model
+        get_stt_model = _get_stt_model
+    except ImportError:
+        pass
+
+# Vosk (Pi5, Pi4, Pi3)
+if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "vosk" in CAPABILITIES.allowed_stt):
+    try:
+        from vosk import Model as _Model, KaldiRecognizer as _KaldiRecognizer, SetLogLevel as _SetLogLevel
+        Model = _Model
+        KaldiRecognizer = _KaldiRecognizer
+        SetLogLevel = _SetLogLevel
+        SetLogLevel(-1)  # Suppress Vosk logs
+    except ImportError:
+        pass
+
+# Faster Whisper (Pi5 only)
+if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "faster-whisper" in CAPABILITIES.allowed_stt):
+    try:
+        from faster_whisper import WhisperModel as _WhisperModel
+        WhisperModel = _WhisperModel
+    except ImportError:
+        pass
+
+# Picovoice (Pi5, Pi4, Pi3)
+if CAPABILITIES is None or (CAPABILITIES.allowed_wake and "picovoice" in CAPABILITIES.allowed_wake):
+    try:
+        import pvporcupine as _pvporcupine
+        pvporcupine = _pvporcupine
+    except ImportError:
+        pass
+    
+    try:
+        from pvrecorder import PvRecorder as _PvRecorder
+        PvRecorder = _PvRecorder
+    except ImportError:
+        pass
+
+# OpenAI (all devices for cloud STT)
+try:
+    from openai import OpenAI as _OpenAI
+    OpenAI = _OpenAI
+except ImportError:
+    pass
+
+# Atomik wake word (Pi5, Pi4, Pi3)
+if CAPABILITIES is None or (CAPABILITIES.allowed_wake and "atomik" in CAPABILITIES.allowed_wake):
+    try:
+        from modules.module_atomik import WakeWordSystem as _WakeWordSystem
+        WakeWordSystem = _WakeWordSystem
+    except ImportError:
+        pass
+
+# Suppress parallelism warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Global STT manager instance
@@ -58,26 +136,20 @@ class STTManager:
     Manages Speech-to-Text processing for TARS-AI.
     """
 
-    # Load wake word responses from config
+    WAKE_WORD_RESPONSES = [
+        "Oh! You called?",
+        "Took you long enough. Yes?",
+        "Finally!",
+    ]
+    
     try:
         responses_config = CONFIG["CHAR"]['responses']
-        queue_message(responses_config)
-        if responses_config:
-            WAKE_WORD_RESPONSES = json.loads(responses_config)
-        else:
-            # Fallback defaults
-            WAKE_WORD_RESPONSES = [
-                "Oh! You called?",
-                "Took you long enough. Yes?",
-                "Finally!",
-            ]
+        if responses_config and responses_config.strip() and responses_config.strip() != '[]':
+            parsed = json.loads(responses_config)
+            if isinstance(parsed, list) and len(parsed) > 0:
+                WAKE_WORD_RESPONSES = parsed
     except (json.JSONDecodeError, Exception) as e:
-        queue_message(f"WARNING: Failed to load wake word responses from config: {e}. Using defaults.")
-        WAKE_WORD_RESPONSES = [
-                "Oh! You called?",
-                "Took you long enough. Yes?",
-                "Finally!",
-        ]
+        pass
 
 
     def __init__(self, config, shutdown_event: threading.Event, ui_manager, amp_gain: float = 4.0):
@@ -156,11 +228,13 @@ class STTManager:
 
         # Wake word processor initialization
         wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
-        if wake_word_processor == "picovoice":
+        if wake_word_processor == "picovoice" and pvporcupine is not None:
             self.porcupine = pvporcupine.create(
                 access_key=CONFIG["STT"]["picovoice_api_key"],
                 keyword_paths=[CONFIG["STT"]["picovoice_keyword_path"]]
             )
+        elif wake_word_processor == "picovoice" and pvporcupine is None:
+            queue_message("WARNING: Picovoice not available, wake word disabled")
         elif wake_word_processor == "fastrtc" and not self.fastrtc_model:
             self._load_fastrtc_model() 
         elif wake_word_processor == "atomik":
@@ -229,6 +303,10 @@ class STTManager:
         """
         Initialize the Vosk model for local STT transcription.
         """
+        if Model is None:
+            queue_message("WARNING: Vosk not available (not installed)")
+            return
+            
         if self.config['STT']['stt_processor'] == 'vosk':
             vosk_model_path = os.path.join(os.getcwd(), "..", "stt", self.config['STT']['vosk_model'])
             if not os.path.exists(vosk_model_path):
@@ -240,14 +318,22 @@ class STTManager:
                 return
 
             self.vosk_model = Model(vosk_model_path)
-            queue_message(f"INFO: Vosk model loaded successfully.")
+            queue_message(f"LOAD: Vosk model loaded: {self.config['STT']['vosk_model']}")
 
     def _load_atomik_model(self):
+        if WakeWordSystem is None:
+            queue_message("WARNING: Atomik wake word not available")
+            return
         detector = WakeWordSystem(self.WAKE_WORD)
         detector.createModel()
 
     def _load_fasterwhisper_model(self):
         """Load the Faster-Whisper model for local transcription."""
+        if WhisperModel is None or torch is None:
+            queue_message("WARNING: Faster-Whisper not available (missing dependencies)")
+            self.faster_whisper_model = None
+            return
+            
         try:
             import warnings
             warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
@@ -279,6 +365,10 @@ class STTManager:
 
     def _load_silero_model(self):
         """Load Silero STT model via Torch Hub into the stt folder (without a hub subfolder)."""
+        if torch is None:
+            queue_message("WARNING: Silero STT not available (torch not installed)")
+            return
+            
         try:
             # Go one level up from the current directory
             parent_dir = os.path.dirname(os.getcwd())
@@ -306,6 +396,10 @@ class STTManager:
         Load the Silero VAD model using the pip package and optional ONNX support.
         This loads the get_speech_timestamps function (instead of get_speech_ts).
         """
+        if torch is None:
+            queue_message("WARNING: Silero VAD not available (torch not installed)")
+            return
+            
         # You can set these values as needed.
         USE_PIP = True  # download model using pip package
         USE_ONNX = False
@@ -340,6 +434,11 @@ class STTManager:
         """
         Initialize FastRTC STT model.
         """
+        if get_stt_model is None:
+            queue_message("WARNING: FastRTC not available (not installed)")
+            self.fastrtc_model = None
+            return
+            
         try:
             self.fastrtc_model = get_stt_model()
             queue_message("INFO: FastRTC STT model loaded successfully.")
@@ -460,6 +559,10 @@ class STTManager:
         
     def _transcribe_with_vosk(self):
         """Transcribe audio using the local Vosk model."""
+        if KaldiRecognizer is None or self.vosk_model is None:
+            queue_message("ERROR: Vosk not available for transcription")
+            return None
+            
         recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
         recognizer.SetWords(False)
         recognizer.SetPartialWords(False)
@@ -815,13 +918,14 @@ class STTManager:
                         requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
                     except Exception:
                         pass
-                    wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                    character_name = os.path.splitext(os.path.basename(
-                        self.config.get("CHAR", {}).get("character_card_path", "TARS")
-                    ))[0]
-                    queue_message(f"{character_name}: {wake_response}", stream=True)
-                    if self.wake_word_callback:
-                        self.wake_word_callback(wake_response)
+                    if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
+                        wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                        character_name = os.path.splitext(os.path.basename(
+                            self.config.get("CHAR", {}).get("character_card_path", "TARS")
+                        ))[0]
+                        queue_message(f"{character_name}: {wake_response}", stream=True)
+                        if self.wake_word_callback:
+                            self.wake_word_callback(wake_response)
                     return True
 
         return False
@@ -863,10 +967,11 @@ class STTManager:
 
                     character_path = self.config.get("CHAR", {}).get("character_card_path")
                     character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
-                    wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                    queue_message(f"{character_name}: {wake_response}", stream=True)
-                    if self.wake_word_callback:
-                        self.wake_word_callback(wake_response)
+                    if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
+                        wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                        queue_message(f"{character_name}: {wake_response}", stream=True)
+                        if self.wake_word_callback:
+                            self.wake_word_callback(wake_response)
                     return True
                     
         except Exception as e:
@@ -902,13 +1007,14 @@ class STTManager:
                 requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
             except Exception:
                 pass
-            wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-            character_name = os.path.splitext(os.path.basename(
-                self.config.get("CHAR", {}).get("character_card_path", "TARS")
-            ))[0]
-            queue_message(f"{character_name}: {wake_response}", stream=True)
-            if self.wake_word_callback:
-                self.wake_word_callback(wake_response)
+            if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
+                wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                character_name = os.path.splitext(os.path.basename(
+                    self.config.get("CHAR", {}).get("character_card_path", "TARS")
+                ))[0]
+                queue_message(f"{character_name}: {wake_response}", stream=True)
+                if self.wake_word_callback:
+                    self.wake_word_callback(wake_response)
             return True
         
 
@@ -970,7 +1076,7 @@ class STTManager:
 
         try:
             # Silero VAD-based detection
-            if self.silero_vad_model is not None and self.get_speech_timestamps is not None:
+            if torch is not None and self.silero_vad_model is not None and self.get_speech_timestamps is not None:
                 try:
                     audio_norm = data.astype(np.float32) / 32768.0
                     audio_tensor = torch.from_numpy(audio_norm).squeeze()

@@ -1,17 +1,21 @@
 """
 Module: Atomik WakeWord
-Author: Charles-Olivier Dion (Atomikspace)
+Author: Charles-Olivier Dion (AtomikSpace)
 Contact: atomikspace.labs@gmail.com
-Copyright (c) 2026
+Copyright (c) 2026 Charles-Olivier Dion
 
-This module was originally created by Charles-Olivier Dion (Atomikspace).
+This file is authored by Charles-Olivier Dion and is dual-licensed.
 
-Permission is NOT granted to use, copy, modify, and redistribute unless permission granter by the author.
+Non-Commercial License:
+This file is licensed under Creative Commons Attribution-NonCommercial 4.0 International (CC-BY-NC 4.0).
+You may use, modify, and redistribute this file for NON-COMMERCIAL purposes only, with attribution.
 
-This notice applies only to this module and does not extend to the
-entire project or repository in which it may be included.
+Commercial License:
+Commercial use (including selling products, paid services, SaaS, subscriptions, Patreon rewards, or derivatives)
+requires a separate written license from Charles-Olivier Dion (AtomikSpace).
+
+This license applies only to this file and does not override licenses of other files in the repository.
 """
-
 import numpy as np
 import sounddevice as sd
 from collections import deque
