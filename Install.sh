@@ -587,6 +587,18 @@ main() {
         sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng git 2>&1 | tail -10
     fi
     
+    # Trixie ships liblgpio.so.1 but not the dev symlink liblgpio.so,
+    # which causes "cannot find -llgpio" when pip builds the lgpio wheel.
+    if [[ "$PI_VERSION" == "pi5" ]]; then
+        local multiarch_lib="/usr/lib/aarch64-linux-gnu"
+        if [ -f "$multiarch_lib/liblgpio.so.1" ] && [ ! -f "$multiarch_lib/liblgpio.so" ]; then
+            tars_say "Creating lgpio dev symlink (Trixie fix)..." "info"
+            sudo ln -sf "$multiarch_lib/liblgpio.so.1" "$multiarch_lib/liblgpio.so"
+            sudo ldconfig
+            tars_say "lgpio dev symlink created." "success"
+        fi
+    fi
+
     tars_say "Initializing Python virtual environment..." "info"
     
     cd src
