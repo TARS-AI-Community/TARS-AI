@@ -32,14 +32,14 @@ if CAPABILITIES is None or CAPABILITIES.can_use_ui:
     try:
         from modules.module_ui import UIManager as _UIManager
         UIManager = _UIManager
-    except ImportError:
-        pass
+    except ImportError as e:
+        print(f"WARNING: UIManager not available: {e}")
 
 # Discord - lightweight, available on all devices
 try:
     from modules.module_discord import *
-except ImportError:
-    pass
+except ImportError as e:
+    print(f"WARNING: Discord module not available: {e}")
 
 # BT Controller
 try:
@@ -238,6 +238,6 @@ def startup_initialization():
             set_ventilate_callback(ventilate_on)
             start_thermal_monitoring()
         except Exception as e:
-            pass
+            print(f"WARNING: Thermal monitoring not available: {e}")
     except Exception as e:
         queue_message(f"ERROR: Servo initialization failed - {e}")

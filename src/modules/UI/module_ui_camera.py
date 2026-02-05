@@ -42,6 +42,7 @@ class CameraModule:
             try:
                 self.picam2 = Picamera2()
                 sensor_name = self.picam2.camera_controls.get("SensorName", "")
+                print(f"Camera sensor detected: {sensor_name}")
                 if "ov5647" in sensor_name.lower():
                     self.apply_corrections = True
                 else:
@@ -55,6 +56,7 @@ class CameraModule:
                 self.thread = None
                 self.start_camera()
             except Exception as e:
+                print(f"ERROR: Camera initialization failed: {e}")
                 self.picam2 = None
 
     def apply_color_corrections(self, frame):
@@ -116,7 +118,7 @@ class CameraModule:
             self.picam2.configure(self.camera_config)
             self.start_camera()
         except Exception as e:
-            pass
+            print(f"ERROR: Camera update_size failed: {e}")
 
     def capture_frames(self, target_fps=target_fps):
         frame_delay = 1.0 / target_fps
@@ -147,7 +149,9 @@ class CameraModule:
                         self.save_next_frame = False
 
             except Exception as e:
+                print(f"ERROR: Frame capture failed: {e}")
                 self.restart_camera()
+                time.sleep(2)  # Prevent rapid restart loop
 
             elapsed_time = time.time() - start_time
             sleep_time = max(0, frame_delay - elapsed_time)

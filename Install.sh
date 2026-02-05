@@ -577,11 +577,11 @@ main() {
     tars_say "Installing system dependencies..." "info"
     
     if [[ "$PI_VERSION" == "pi5" ]]; then
-        # Pi5: Full system dependencies + swig for lgpio
-        sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng libcap-dev sox libsox-fmt-all git swig 2>&1 | tail -10
+        # Pi5: Full system dependencies + swig for lgpio + libcamera for picamera2
+        sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng libcap-dev sox libsox-fmt-all git swig python3-libcamera python3-kms++ 2>&1 | tail -10
     elif [[ "$PI_VERSION" == "pi4" ]]; then
-        # Pi4: Full system dependencies (no swig needed)
-        sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng libcap-dev sox libsox-fmt-all git 2>&1 | tail -10
+        # Pi4: Full system dependencies + libcamera for picamera2 (no swig needed)
+        sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng libcap-dev sox libsox-fmt-all git python3-libcamera python3-kms++ 2>&1 | tail -10
     else
         # Minimal system dependencies for Pi3/Zero2
         sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng git 2>&1 | tail -10
@@ -610,9 +610,16 @@ main() {
         echo "| Keeping existing environment - will install missing packages"
         echo "+===============================================================+"
         tars_say "Keeping existing virtual environment." "info"
+        # Ensure system-site-packages is enabled (needed for libcamera)
+        if [ -f ".venv/pyvenv.cfg" ]; then
+            if grep -q "include-system-site-packages = false" .venv/pyvenv.cfg; then
+                sed -i 's/include-system-site-packages = false/include-system-site-packages = true/' .venv/pyvenv.cfg
+                tars_say "Enabled system-site-packages in existing venv (needed for libcamera)." "info"
+            fi
+        fi
     else
-        python3 -m venv .venv
-        tars_say "Virtual environment created." "success"
+        python3 -m venv --system-site-packages .venv
+        tars_say "Virtual environment created (with system-site-packages for libcamera)." "success"
     fi
     
     source .venv/bin/activate

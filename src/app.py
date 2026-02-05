@@ -20,6 +20,8 @@ import sys
 import threading
 import time
 from datetime import datetime
+import warnings
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
 
 # === Set up paths first ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

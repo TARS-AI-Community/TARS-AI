@@ -133,12 +133,15 @@ class UIManager(threading.Thread):
             cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
             self.face_detector = cv2.CascadeClassifier(cascade_path)
             if self.face_detector.empty():
+                print("WARNING: Face detector cascade file is empty")
                 self.face_detector = None
         except Exception as e:
+            print(f"WARNING: Face detector init failed: {e}")
             self.face_detector = None
 
         if self.use_camera_module:
             try:
+                print("LOAD: Initializing camera module...")
                 self.camera_module = CameraModule(
                     self.logical_width,
                     self.logical_height,
@@ -148,8 +151,18 @@ class UIManager(threading.Thread):
                 if not self.camera_module.running and self.camera_module.picam2 is not None:
                     self.camera_module.start_camera()
 
+                if self.camera_module.running:
+                    print("LOAD: Camera module started successfully")
+                elif self.camera_module.picam2 is None:
+                    print("WARNING: Camera module created but picam2 is None (camera not detected?)")
+                else:
+                    print("WARNING: Camera module created but not running")
+
             except Exception as e:
+                print(f"ERROR: Camera module initialization failed in UIManager: {e}")
                 self.camera_module = None
+        else:
+            print("LOAD: Camera module disabled in config (use_camera_module=False)")
 
     def _load_ui_settings(self):
         try:
@@ -166,7 +179,7 @@ class UIManager(threading.Thread):
                     self.spectrum_style = settings.get('spectrum_style', 'bars')
 
         except Exception as e:
-            pass
+            print(f"WARNING: Failed to load UI settings: {e}")
 
     def _save_ui_settings(self):
         try:
@@ -182,7 +195,7 @@ class UIManager(threading.Thread):
                 json.dump(settings, f, indent=2)
 
         except Exception as e:
-            pass
+            print(f"WARNING: Failed to save UI settings: {e}")
 
     def cycle_background(self):
         self.current_background_index = (self.current_background_index + 1) % len(self.background_types)
@@ -234,7 +247,7 @@ class UIManager(threading.Thread):
             subprocess.Popen(['sudo', 'shutdown', 'now'])  
 
         except Exception as e:
-            pass
+            print(f"ERROR: Shutdown command failed: {e}")
         os._exit(0)  
 
     def silence(self, progress):
@@ -784,6 +797,9 @@ class UIManager(threading.Thread):
                 clock.tick(self.target_fps)
 
         except Exception as e:
+            print(f"ERROR: UI run loop failed: {e}")
+            import traceback
+            traceback.print_exc()
             self.running = False
 
         finally:
