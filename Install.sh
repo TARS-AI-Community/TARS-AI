@@ -19,6 +19,7 @@ fi
 DELAY=0.02
 PI_VERSION=""
 INSTALL_RETROPIE=false
+INSTALL_RASPOTIFY=false
 HAS_DEVICE_SECTION=false
 
 show_tars_boot() {
@@ -205,22 +206,31 @@ select_thirdparty_apps() {
     echo "|                                                               |"
     echo "|  Select applications to install (toggle with number):         |"
     echo "|                                                               |"
-    echo "|  1) RetroPie  - Retro gaming emulation platform               |"
+    echo "|  1) RetroPie   - Retro gaming emulation platform              |"
     echo "|     [!] WARNING: Installation takes approximately 60 minutes  |"
     echo "|         depending on your Pi model and network speed.         |"
+    echo "|                                                               |"
+    echo "|  2) Raspotify  - Spotify Connect client for Raspberry Pi      |"
+    echo "|     Turns your Pi into a Spotify speaker (requires Premium)   |"
     echo "|                                                               |"
     echo "+===============================================================+"
     echo ""
 
     local retropie_selected=false
+    local raspotify_selected=false
 
     while true; do
         local retropie_mark="[ ]"
+        local raspotify_mark="[ ]"
         if [ "$retropie_selected" = true ]; then
             retropie_mark="[X]"
         fi
+        if [ "$raspotify_selected" = true ]; then
+            raspotify_mark="[X]"
+        fi
 
         echo "  ${retropie_mark} 1) RetroPie (~60 min install)"
+        echo "  ${raspotify_mark} 2) Raspotify (~2 min install)"
         echo ""
         echo "  Enter a number to toggle, or 'done' to confirm: "
 
@@ -234,29 +244,44 @@ select_thirdparty_apps() {
                     retropie_selected=true
                 fi
                 ;;
+            2)
+                if [ "$raspotify_selected" = true ]; then
+                    raspotify_selected=false
+                else
+                    raspotify_selected=true
+                fi
+                ;;
             done|DONE|Done|d|D)
                 break
                 ;;
             *)
-                echo "  Invalid selection. Enter 1 to toggle or 'done' to confirm."
+                echo "  Invalid selection. Enter 1-2 to toggle or 'done' to confirm."
                 ;;
         esac
         echo ""
     done
 
+    local selected_apps=""
     if [ "$retropie_selected" = true ]; then
         INSTALL_RETROPIE=true
+        selected_apps="${selected_apps}    - RetroPie (estimated ~60 minutes)\n"
+    fi
+    if [ "$raspotify_selected" = true ]; then
+        INSTALL_RASPOTIFY=true
+        selected_apps="${selected_apps}    - Raspotify (estimated ~2 minutes)\n"
+    fi
 
+    if [ -n "$selected_apps" ]; then
         echo ""
         echo "+===============================================================+"
         echo "|           PLEASE CONFIRM                                      |"
         echo "+===============================================================+"
         echo "|                                                               |"
         echo "|  You have selected:                                           |"
-        echo "|    - RetroPie (estimated ~60 minutes)                         |"
+        echo -e "|  ${selected_apps}|"
         echo "|                                                               |"
-        echo "|  This is a lengthy process. Make sure you have a stable       |"
-        echo "|  power supply and network connection before proceeding.       |"
+        echo "|  Make sure you have a stable power supply and network         |"
+        echo "|  connection before proceeding.                                |"
         echo "|                                                               |"
         echo "|  You can always skip this and run the installer again later.  |"
         echo "|                                                               |"
@@ -268,20 +293,15 @@ select_thirdparty_apps() {
 
         if [[ ! $CONFIRM1 =~ ^[Yy]$ ]]; then
             INSTALL_RETROPIE=false
+            INSTALL_RASPOTIFY=false
             tars_say "3rd party installation cancelled. Run this installer again when ready." "info"
             return
         fi
 
-        read -p "Final confirmation - begin 3rd party installation now? [y/n]: " -r CONFIRM2
-        echo ""
-
-        if [[ ! $CONFIRM2 =~ ^[Yy]$ ]]; then
-            INSTALL_RETROPIE=false
-            tars_say "3rd party installation cancelled. Run this installer again when ready." "info"
-            return
-        fi
-
-        tars_say "Queued for installation: RetroPie" "success"
+        local queued=""
+        [ "$INSTALL_RETROPIE" = true ] && queued="${queued} RetroPie"
+        [ "$INSTALL_RASPOTIFY" = true ] && queued="${queued} Raspotify"
+        tars_say "Queued for installation:${queued}" "success"
     else
         tars_say "No 3rd party applications selected." "info"
     fi
@@ -414,6 +434,82 @@ install_retropie() {
         echo "+===============================================================+"
     fi
 
+    echo ""
+}
+
+install_raspotify() {
+    if [ "$INSTALL_RASPOTIFY" != true ]; then
+        return 0
+    fi
+
+    echo ""
+    echo "+===============================================================+"
+    echo "|           RASPOTIFY INSTALLATION                              |"
+    echo "+===============================================================+"
+    echo "| Spotify Connect client for Raspberry Pi                       |"
+    echo "| Target device: ${PI_VERSION^^}"
+    echo "+===============================================================+"
+    echo ""
+
+    tars_say "Installing Raspotify (Spotify Connect)..." "info"
+
+    if ! command -v curl &> /dev/null; then
+        sudo apt-get -y install curl 2>&1 | tail -5
+    fi
+
+    if curl -sL https://dtcooper.github.io/raspotify/install.sh | sh; then
+        tars_say "Raspotify installed successfully!" "success"
+
+        tars_say "Configuring device name as 'SpotiTars'..." "info"
+        local raspotify_conf="/etc/raspotify/conf"
+        if [ -f "$raspotify_conf" ]; then
+            sudo sed -i 's/^#\?DEVICE_NAME=.*/DEVICE_NAME="SpotiTars"/' "$raspotify_conf"
+            sudo sed -i 's/^#\?LIBRESPOT_BACKEND=.*/LIBRESPOT_BACKEND=alsa/' "$raspotify_conf"
+            if ! grep -q '^LIBRESPOT_BACKEND=' "$raspotify_conf"; then
+                echo 'LIBRESPOT_BACKEND=alsa' | sudo tee -a "$raspotify_conf" > /dev/null
+            fi
+            if grep -q '^#\?LIBRESPOT_DEVICE=' "$raspotify_conf"; then
+                sudo sed -i 's/^#\?LIBRESPOT_DEVICE=.*/LIBRESPOT_DEVICE=hw:2,0/' "$raspotify_conf"
+            else
+                echo 'LIBRESPOT_DEVICE=hw:2,0' | sudo tee -a "$raspotify_conf" > /dev/null
+            fi
+            sudo systemctl restart raspotify
+            tars_say "Device name set to 'SpotiTars'." "success"
+            tars_say "Audio output set to USB PnP Audio Device (hw:2,0)." "success"
+        else
+            tars_say "Config file not found. Set name manually in /etc/raspotify/conf" "warning"
+        fi
+    else
+        tars_say "Raspotify installation failed. You can try manually later:" "error"
+        echo "|  curl -sL https://dtcooper.github.io/raspotify/install.sh | sh"
+        echo "+===============================================================+"
+        echo ""
+        return 1
+    fi
+
+    echo ""
+    echo "+===============================================================+"
+    echo "| RASPOTIFY SETUP COMPLETE                                      |"
+    echo "+===============================================================+"
+    echo "|                                                               |"
+    echo "|  Raspotify is now running as a system service.                |"
+    echo "|                                                               |"
+    echo "|  Your Pi will appear as 'SpotiTars' in Spotify Connect.        |"
+    echo "|  Open Spotify on your phone/computer and look for it          |"
+    echo "|  in the 'Connect to a device' menu.                           |"
+    echo "|                                                               |"
+    echo "|  NOTE: A Spotify Premium account is required.                 |"
+    echo "|                                                               |"
+    echo "|  To customize settings (device name, bitrate, etc):           |"
+    echo "|    sudo nano /etc/raspotify/conf                              |"
+    echo "|    sudo systemctl restart raspotify                           |"
+    echo "|                                                               |"
+    echo "|  Useful commands:                                             |"
+    echo "|    sudo systemctl status raspotify   - Check status           |"
+    echo "|    sudo systemctl restart raspotify  - Restart service        |"
+    echo "|    sudo systemctl stop raspotify     - Stop service           |"
+    echo "|                                                               |"
+    echo "+===============================================================+"
     echo ""
 }
 
@@ -1099,6 +1195,7 @@ EOF
     create_desktop_shortcut
     select_thirdparty_apps
     install_retropie
+    install_raspotify
 }
 
 main
