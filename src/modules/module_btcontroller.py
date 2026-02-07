@@ -29,6 +29,7 @@ import modules.module_movements as movements
 
 config = load_config()
 controller_name = config["CONTROLS"]["controller_name"]
+invert_y = config["CONTROLS"].get("invert_y", False)
 gamepad_path = None
 
 l2_held = False
@@ -111,11 +112,11 @@ def start_controls():
             if event.type == evdev.ecodes.EV_KEY:
                 #queue_message(f"DEBUG KEY: code={event.code} value={event.value}")
                 
-                if event.code == 312:
+                if event.code in (312, 310):
                     l2_held = (event.value == 1)
                 elif event.code == 311:
                     r1_held = (event.value == 1)
-                elif event.code == 313:
+                elif event.code in (313, 314):
                     r2_held = (event.value == 1)
                 
                 if event.value == 1:
@@ -165,6 +166,8 @@ def start_controls():
                         new_state = 0
                 
                 if event.code in [evdev.ecodes.ABS_HAT0Y, evdev.ecodes.ABS_Y]:
+                    if invert_y:
+                        new_state = -new_state
                     if new_state != dpad_state["y"]:
                         dpad_state["y"] = new_state
                         last_dpad_time = current_time

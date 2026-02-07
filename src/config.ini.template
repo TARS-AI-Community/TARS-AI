@@ -7,6 +7,8 @@ voicemovement = True
 # Enable or disable movement via voice control
 swap_turn_directions = False
 # Change the turn direction (left or right)
+invert_y = False
+# Invert D-Pad Y axis
 
 [STT] # Speech-to-Text configuration
 language = english
