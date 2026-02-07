@@ -18,6 +18,8 @@ fi
 
 DELAY=0.02
 PI_VERSION=""
+INSTALL_RETROPIE=false
+HAS_DEVICE_SECTION=false
 
 show_tars_boot() {
     clear
@@ -73,10 +75,12 @@ select_pi_version() {
 
     if [ -f "$config_file" ] && grep -q '^\[DEVICE\]' "$config_file"; then
         has_device_section=true
+        HAS_DEVICE_SECTION=true
     fi
 
     if [ "$has_device_section" = false ]; then
         PI_VERSION="pi5"
+        HAS_DEVICE_SECTION=false
         tars_say "No [DEVICE] section found, defaulting to PI5" "info"
         mkdir -p "$tars_data_dir"
         echo "$PI_VERSION" > "$pi_version_file"
@@ -93,8 +97,8 @@ select_pi_version() {
     echo "|                                                               |"
     echo "|  1) Raspberry Pi 5      - Full features, all local processing |"
     echo "|  2) Raspberry Pi 4      - Most features, some cloud fallbacks |"
-    echo "|  3) Raspberry Pi 3      - Lite mode, cloud STT/TTS only       |"
-    echo "|  4) Raspberry Pi Zero 2 - Minimal, cloud-only processing      |"
+    echo "|  3) Raspberry Pi 3      - Lite mode, Piper TTS, cloud STT       |"
+    echo "|  4) Raspberry Pi Zero 2 - Minimal, Piper TTS, cloud STT        |"
     echo "|                                                               |"
     echo "+===============================================================+"
     echo ""
@@ -158,18 +162,258 @@ _display_profile_summary() {
             echo "| Size:     ~1.5GB+ dependencies"
             ;;
         "pi3")
-            echo "| Features: Cloud STT/TTS, keyword memory, no UI"
+            echo "| Features: Cloud STT, Piper/eSpeak TTS, keyword memory, no UI"
             echo "| Memory:   Lite keyword-based memory"
             echo "| Size:     ~500MB dependencies"
             ;;
         "pizero2")
-            echo "| Features: OpenAI STT/TTS only, keyword memory, no UI"
+            echo "| Features: OpenAI STT, Piper/eSpeak TTS, keyword memory, no UI"
             echo "| Memory:   Lite keyword-based memory"
             echo "| Size:     ~300MB dependencies"
             ;;
     esac
     
     echo "+===============================================================+"
+    echo ""
+}
+
+select_thirdparty_apps() {
+    echo ""
+    echo "+===============================================================+"
+    echo "|           3RD PARTY APPLICATIONS                              |"
+    echo "+===============================================================+"
+    echo "|                                                               |"
+    echo "|  Would you like to install optional 3rd party applications?   |"
+    echo "|                                                               |"
+    echo "|  NOTE: You can skip this now and run the installer again      |"
+    echo "|  later once you are satisfied with the main installation.     |"
+    echo "|                                                               |"
+    echo "+===============================================================+"
+    echo ""
+
+    read -p "Install 3rd party applications? [y/n]: " -r THIRDPARTY_REPLY
+    echo ""
+
+    if [[ ! $THIRDPARTY_REPLY =~ ^[Yy]$ ]]; then
+        tars_say "Skipping 3rd party applications. Run this installer again when ready." "info"
+        return
+    fi
+
+    echo "+===============================================================+"
+    echo "|           3RD PARTY APPLICATION SELECTION                     |"
+    echo "+===============================================================+"
+    echo "|                                                               |"
+    echo "|  Select applications to install (toggle with number):         |"
+    echo "|                                                               |"
+    echo "|  1) RetroPie  - Retro gaming emulation platform               |"
+    echo "|     [!] WARNING: Installation takes approximately 60 minutes  |"
+    echo "|         depending on your Pi model and network speed.         |"
+    echo "|                                                               |"
+    echo "+===============================================================+"
+    echo ""
+
+    local retropie_selected=false
+
+    while true; do
+        local retropie_mark="[ ]"
+        if [ "$retropie_selected" = true ]; then
+            retropie_mark="[X]"
+        fi
+
+        echo "  ${retropie_mark} 1) RetroPie (~60 min install)"
+        echo ""
+        echo "  Enter a number to toggle, or 'done' to confirm: "
+
+        read -p "  > " toggle_choice
+
+        case $toggle_choice in
+            1)
+                if [ "$retropie_selected" = true ]; then
+                    retropie_selected=false
+                else
+                    retropie_selected=true
+                fi
+                ;;
+            done|DONE|Done|d|D)
+                break
+                ;;
+            *)
+                echo "  Invalid selection. Enter 1 to toggle or 'done' to confirm."
+                ;;
+        esac
+        echo ""
+    done
+
+    if [ "$retropie_selected" = true ]; then
+        INSTALL_RETROPIE=true
+
+        echo ""
+        echo "+===============================================================+"
+        echo "|           PLEASE CONFIRM                                      |"
+        echo "+===============================================================+"
+        echo "|                                                               |"
+        echo "|  You have selected:                                           |"
+        echo "|    - RetroPie (estimated ~60 minutes)                         |"
+        echo "|                                                               |"
+        echo "|  This is a lengthy process. Make sure you have a stable       |"
+        echo "|  power supply and network connection before proceeding.       |"
+        echo "|                                                               |"
+        echo "|  You can always skip this and run the installer again later.  |"
+        echo "|                                                               |"
+        echo "+===============================================================+"
+        echo ""
+
+        read -p "Are you sure you want to proceed? [y/n]: " -r CONFIRM1
+        echo ""
+
+        if [[ ! $CONFIRM1 =~ ^[Yy]$ ]]; then
+            INSTALL_RETROPIE=false
+            tars_say "3rd party installation cancelled. Run this installer again when ready." "info"
+            return
+        fi
+
+        read -p "Final confirmation - begin 3rd party installation now? [y/n]: " -r CONFIRM2
+        echo ""
+
+        if [[ ! $CONFIRM2 =~ ^[Yy]$ ]]; then
+            INSTALL_RETROPIE=false
+            tars_say "3rd party installation cancelled. Run this installer again when ready." "info"
+            return
+        fi
+
+        tars_say "Queued for installation: RetroPie" "success"
+    else
+        tars_say "No 3rd party applications selected." "info"
+    fi
+}
+
+install_retropie() {
+    if [ "$INSTALL_RETROPIE" != true ]; then
+        return 0
+    fi
+
+    echo ""
+    echo "+===============================================================+"
+    echo "|           RETROPIE INSTALLATION                               |"
+    echo "+===============================================================+"
+    echo "| Target device: ${PI_VERSION^^}"
+    echo "+===============================================================+"
+    echo ""
+
+    tars_say "Installing RetroPie dependencies..." "info"
+    sudo apt install -y git dialog xmlstarlet lsb-release 2>&1 | tail -10
+
+    local retropie_dir="$HOME/RetroPie-Setup"
+
+    if [ -d "$retropie_dir" ]; then
+        echo "+===============================================================+"
+        echo "| EXISTING RETROPIE-SETUP DETECTED"
+        echo "+===============================================================+"
+        echo "| Location: $retropie_dir"
+        echo "+===============================================================+"
+        echo ""
+
+        read -p "Re-clone RetroPie-Setup? (overwrites existing) [y/n]: " -r RECLONE_REPLY
+        echo ""
+
+        if [[ $RECLONE_REPLY =~ ^[Yy]$ ]]; then
+            tars_say "Removing existing RetroPie-Setup..." "info"
+            sudo rm -rf "$retropie_dir"
+        else
+            tars_say "Keeping existing RetroPie-Setup directory." "info"
+        fi
+    fi
+
+    if [ ! -d "$retropie_dir" ]; then
+        tars_say "Cloning RetroPie-Setup repository..." "info"
+        git clone --depth=1 https://github.com/RetroPie/RetroPie-Setup.git "$retropie_dir"
+        tars_say "RetroPie-Setup cloned successfully." "success"
+    fi
+
+    sudo chown -R $ACTUAL_USER:$ACTUAL_USER "$retropie_dir"
+
+    echo ""
+    echo "+===============================================================+"
+    echo "| RETROPIE SETUP READY"
+    echo "+===============================================================+"
+    echo "|                                                               |"
+    echo "|  RetroPie-Setup has been downloaded to:                       |"
+    echo "|  $retropie_dir"
+    echo "|                                                               |"
+
+    case $PI_VERSION in
+        "pi5")
+            echo "|  NOTE (Pi5): No official prebuilt image exists yet.           |"
+            echo "|  RetroPie will be installed on top of your current Pi OS.     |"
+            echo "|  The Pi 5 can handle Dreamcast, Saturn, PSP and more.         |"
+            ;;
+        "pi4")
+            echo "|  NOTE (Pi4): Full RetroPie support. Most emulators will       |"
+            echo "|  run smoothly including N64, PSX, and Dreamcast.              |"
+            ;;
+        "pi3")
+            echo "|  NOTE (Pi3): RetroPie Lite. Best for 8/16-bit consoles        |"
+            echo "|  (NES, SNES, Genesis, Game Boy). N64/PSX may struggle.        |"
+            ;;
+        "pizero2")
+            echo "|  NOTE (Zero2): Minimal RetroPie. Works well for 8/16-bit      |"
+            echo "|  consoles. Heavier emulators will likely not perform well.     |"
+            ;;
+    esac
+
+    echo "|                                                               |"
+    echo "+===============================================================+"
+    echo ""
+
+    read -p "Run RetroPie basic install now? (this can take a while) [y/n]: " -r RUN_SETUP_REPLY
+    echo ""
+
+    if [[ $RUN_SETUP_REPLY =~ ^[Yy]$ ]]; then
+        tars_say "Running RetroPie basic install (non-interactive)..." "info"
+        tars_say "This may take 30-60+ minutes depending on your Pi and network." "warning"
+        echo ""
+
+        cd "$retropie_dir"
+        sudo ./retropie_packages.sh setup basic_install
+        cd - > /dev/null
+
+        tars_say "RetroPie basic install complete!" "success"
+
+        tars_say "Configuring RetroPie for manual launch only..." "info"
+
+        local autostart_file="/opt/retropie/configs/all/autostart.sh"
+        if [ -f "$autostart_file" ]; then
+            echo "# disabled - use launch_retropie.sh to start" | sudo tee "$autostart_file" > /dev/null
+            tars_say "EmulationStation autostart disabled." "success"
+        fi
+
+        sudo systemctl stop asplashscreen 2>/dev/null
+        sudo systemctl disable asplashscreen 2>/dev/null
+        sudo systemctl mask asplashscreen 2>/dev/null
+        tars_say "RetroPie splash screen disabled." "success"
+
+        sudo systemctl set-default graphical.target 2>/dev/null
+        sudo systemctl enable display-manager 2>/dev/null
+        tars_say "Desktop boot target preserved." "success"
+
+        echo ""
+        echo "+===============================================================+"
+        echo "| RetroPie is installed but will NOT start on boot.            |"
+        echo "| To play, run: ./launch_retropie.sh                          |"
+        echo "|                                                               |"
+        echo "| To configure further or install optional packages, run:       |"
+        echo "|   cd $retropie_dir"
+        echo "|   sudo ./retropie_setup.sh                                    |"
+        echo "+===============================================================+"
+    else
+        tars_say "RetroPie setup skipped. You can run it later with:" "info"
+        echo "|  cd $retropie_dir"
+        echo "|  sudo ./retropie_setup.sh"
+        echo "|"
+        echo "|  Then select 'Basic Install' from the menu."
+        echo "+===============================================================+"
+    fi
+
     echo ""
 }
 
@@ -180,7 +424,6 @@ generate_requirements() {
     
     tars_say "Generating requirements for ${PI_VERSION^^}..." "info"
     
-    # Common requirements for ALL Pi versions
     cat > "$req_file" << 'COMMON'
 # === COMMON REQUIREMENTS (All Pi versions) ===
 
@@ -222,7 +465,6 @@ scipy                           # Signal processing for wake word detection
 
 COMMON
 
-    # Pi5 only: lgpio for GPIO control
     if [[ "$PI_VERSION" == "pi5" ]]; then
         cat >> "$req_file" << 'LGPIO'
 
@@ -232,7 +474,6 @@ lgpio                           # Required for Raspberry Pi 5 GPIO
 LGPIO
     fi
 
-    # Pi5 and Pi4: Add embedding and local processing
     if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
         cat >> "$req_file" << 'EMBEDDINGS'
 
@@ -249,7 +490,6 @@ flashrank                       # Lightweight re-ranker
 EMBEDDINGS
     fi
 
-    # Pi5, Pi4, Pi3, PiZero2: Picovoice wake word (lightweight, works on all)
     cat >> "$req_file" << 'PICOVOICE'
 
 # === WAKE WORD (All Pi versions) ===
@@ -258,7 +498,6 @@ pvrecorder                      # Recorder for Picovoice
 
 PICOVOICE
 
-    # Pi5, Pi4, Pi3: Add Vosk for local STT
     if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" || "$PI_VERSION" == "pi3" ]]; then
         cat >> "$req_file" << 'VOSK'
 
@@ -268,17 +507,13 @@ vosk                            # Offline speech recognition
 VOSK
     fi
 
-    # Pi5 and Pi4: Add local TTS options
-    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
-        cat >> "$req_file" << 'LOCALTTS'
+    cat >> "$req_file" << 'LOCALTTS'
 
-# === LOCAL TTS (Pi4/Pi5) ===
+# === LOCAL TTS (All Pi versions) ===
 piper-tts                       # Local TTS with voice cloning support
 
 LOCALTTS
-    fi
 
-    # Pi5 only: Add heavy processing (faster-whisper, fastrtc, silero)
     if [[ "$PI_VERSION" == "pi5" ]]; then
         cat >> "$req_file" << 'HEAVY'
 
@@ -295,7 +530,6 @@ optimum[onnxruntime]            # ONNX model optimization
 HEAVY
     fi
 
-    # Pi5 and Pi4: Add UI and camera support
     if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
         cat >> "$req_file" << 'UI'
 
@@ -313,7 +547,6 @@ evdev                           # Handle Linux input devices
 UI
     fi
 
-    # Pi5 and Pi4: Add cloud TTS options
     if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
         cat >> "$req_file" << 'CLOUDTTS'
 
@@ -324,7 +557,6 @@ azure-cognitiveservices-speech  # Azure TTS API
 CLOUDTTS
     fi
 
-    # Pi3 and Zero2: Add minimal cloud TTS
     if [[ "$PI_VERSION" == "pi3" || "$PI_VERSION" == "pizero2" ]]; then
         cat >> "$req_file" << 'CLOUDONLY'
 
@@ -334,14 +566,12 @@ elevenlabs                      # External TTS using 11Labs API
 CLOUDONLY
     fi
 
-    # Pi5 and Pi4: UI and heavy media support
     if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
         cat >> "$req_file" << 'DISCORD'
 
 DISCORD
     fi
 
-    # Pi5: YouTube support
     if [[ "$PI_VERSION" == "pi5" ]]; then
         cat >> "$req_file" << 'YOUTUBE'
 
@@ -354,7 +584,6 @@ YOUTUBE
 
     tars_say "Requirements file generated: $req_file" "success"
     
-    # Show what will be installed
     echo "+===============================================================+"
     echo "| PACKAGES TO BE INSTALLED:"
     echo "+===============================================================+"
@@ -366,17 +595,19 @@ YOUTUBE
 }
 
 update_config_device() {
+    if [ "$HAS_DEVICE_SECTION" = false ]; then
+        tars_say "No [DEVICE] section in config — skipping device profile update." "info"
+        return 0
+    fi
+
     local config_file="config.ini"
     
     if [ -f "$config_file" ]; then
         tars_say "Updating config.ini with device profile..." "info"
         
-        # Check if [DEVICE] section exists
         if grep -q "^\[DEVICE\]" "$config_file"; then
-            # Update existing raspberry_version
             sed -i "s/^raspberry_version\s*=.*/raspberry_version = $PI_VERSION/" "$config_file"
         else
-            # Add [DEVICE] section at the beginning of the file
             sed -i "1i\\
 [DEVICE]\\
 raspberry_version = $PI_VERSION\\
@@ -490,7 +721,6 @@ detect_os_version() {
 }
 
 install_chromium() {
-    # Skip chromium for Pi3 and Zero2 (no UI)
     if [[ "$PI_VERSION" == "pi3" || "$PI_VERSION" == "pizero2" ]]; then
         tars_say "Skipping Chromium installation (UI disabled for ${PI_VERSION^^})" "info"
         return 0
@@ -553,10 +783,49 @@ install_chromedriver() {
     fi
 }
 
+create_desktop_shortcut() {
+    if [[ "$PI_VERSION" == "pi3" || "$PI_VERSION" == "pizero2" ]]; then
+        tars_say "Skipping desktop shortcut (no UI for ${PI_VERSION^^})" "info"
+        return 0
+    fi
+
+    tars_say "Creating desktop shortcut..." "info"
+
+    local install_dir
+    install_dir="$(cd .. && pwd)"
+
+    local desktop_dir
+    if [ -n "$SUDO_USER" ]; then
+        desktop_dir="$(eval echo ~$SUDO_USER)/Desktop"
+    else
+        desktop_dir="$HOME/Desktop"
+    fi
+
+    mkdir -p "$desktop_dir"
+
+    local desktop_file="${desktop_dir}/TARS"
+    cat > "$desktop_file" << LAUNCHER
+#!/bin/bash
+echo "=== TARS Launcher ==="
+echo ""
+cd "${install_dir}" || { echo "ERROR: Could not cd to ${install_dir}"; read -p "Press Enter to close..."; exit 1; }
+source src/.venv/bin/activate || { echo "ERROR: Could not activate venv"; read -p "Press Enter to close..."; exit 1; }
+python App-Start.py
+echo ""
+read -p "Press Enter to close..."
+LAUNCHER
+
+    chmod +x "$desktop_file"
+    sudo chown $ACTUAL_USER:$ACTUAL_USER "$desktop_file" 2>/dev/null
+
+    tars_say "Desktop shortcut created: $desktop_file" "success"
+    echo "|  Double-click the TARS icon and select 'Execute in Terminal' to launch."
+    echo ""
+}
+
 main() {
     show_tars_boot
     
-    # === NEW: Select Pi version first ===
     select_pi_version
     
     show_system_diagnostic
@@ -573,22 +842,16 @@ main() {
     
     install_chromium
     
-    # Install base packages (reduced for lite profiles)
     tars_say "Installing system dependencies..." "info"
     
     if [[ "$PI_VERSION" == "pi5" ]]; then
-        # Pi5: Full system dependencies + swig for lgpio + libcamera for picamera2
         sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng libcap-dev sox libsox-fmt-all git swig python3-libcamera python3-kms++ 2>&1 | tail -10
     elif [[ "$PI_VERSION" == "pi4" ]]; then
-        # Pi4: Full system dependencies + libcamera for picamera2 (no swig needed)
         sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng libcap-dev sox libsox-fmt-all git python3-libcamera python3-kms++ 2>&1 | tail -10
     else
-        # Minimal system dependencies for Pi3/Zero2
         sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng git 2>&1 | tail -10
     fi
     
-    # Trixie ships liblgpio.so.1 but not the dev symlink liblgpio.so,
-    # which causes "cannot find -llgpio" when pip builds the lgpio wheel.
     if [[ "$PI_VERSION" == "pi5" ]]; then
         local multiarch_lib="/usr/lib/aarch64-linux-gnu"
         if [ -f "$multiarch_lib/liblgpio.so.1" ] && [ ! -f "$multiarch_lib/liblgpio.so" ]; then
@@ -610,7 +873,6 @@ main() {
         echo "| Keeping existing environment - will install missing packages"
         echo "+===============================================================+"
         tars_say "Keeping existing virtual environment." "info"
-        # Ensure system-site-packages is enabled (needed for libcamera)
         if [ -f ".venv/pyvenv.cfg" ]; then
             if grep -q "include-system-site-packages = false" .venv/pyvenv.cfg; then
                 sed -i 's/include-system-site-packages = false/include-system-site-packages = true/' .venv/pyvenv.cfg
@@ -625,10 +887,8 @@ main() {
     source .venv/bin/activate
     tars_say "Virtual environment activated." "info"
     
-    # === NEW: Generate requirements based on Pi version ===
     generate_requirements
     
-    # Resolve package conflicts
     tars_say "Resolving potential package conflicts..." "info"
     sudo apt remove -y python3-simplejpeg python3-picamera2 2>&1 | tail -5 || true
     echo "|  [OK] System package conflicts resolved"
@@ -640,7 +900,6 @@ main() {
     fi
     echo ""
     
-    # Only install camera dependencies for Pi5/Pi4
     if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
         tars_say "Installing critical Python modules..." "info"
         pip uninstall -y numpy simplejpeg picamera2 2>/dev/null || true
@@ -663,7 +922,6 @@ main() {
     chmod 664 config.ini
     echo "|  [OK] config.ini (writable, run: nano config.ini)"
 
-    # === NEW: Update config.ini with device profile ===
     update_config_device
 
     if [ ! -f "dashboard.ini" ]; then
@@ -807,14 +1065,12 @@ EOF
     chmod -R 775 . 2>/dev/null || true
     cd src
     
-    # Cleanup generated requirements file
     rm -f "$HOME/.local/share/tars_a/requirements_${PI_VERSION}.txt"
     
     echo ""    
     echo "*** Set your .env variables (API Keys) before running the program"
     echo ""
     
-    # Show profile-specific notes
     case $PI_VERSION in
         "pi5")
             echo "*** Pi5: Full features enabled. All STT/TTS options available."
@@ -823,12 +1079,12 @@ EOF
             echo "*** Pi4: Using Vosk STT and Piper TTS. FastRTC/Silero disabled."
             ;;
         "pi3")
-            echo "*** Pi3: Lite mode. Using cloud STT/TTS. UI disabled."
-            echo "*** Set ttsoption=openai or elevenlabs in config.ini"
+            echo "*** Pi3: Lite mode. Using cloud STT. Piper TTS available locally."
+            echo "*** Set ttsoption=piper, openai, or elevenlabs in config.ini"
             ;;
         "pizero2")
-            echo "*** Zero2: Minimal mode. OpenAI STT/TTS only. UI disabled."
-            echo "*** Requires OPENAI_API_KEY in .env"
+            echo "*** Zero2: Minimal mode. OpenAI STT. Piper TTS available locally."
+            echo "*** Set ttsoption=piper for local TTS or openai for cloud TTS"
             ;;
     esac
     
@@ -839,6 +1095,10 @@ EOF
     echo ""
     echo "Enable the virtual environment: source .venv/bin/activate if not using App-Start.py"
     echo ""
+    
+    create_desktop_shortcut
+    select_thirdparty_apps
+    install_retropie
 }
 
 main

@@ -150,7 +150,7 @@ output.wav
 
 # Memory files
 *.pickle.gz
-src/memory/TARS_topics.json
+/src/memory/TARS_topics.json
 TARS.wav
 /memory/initial_memory.json
 /memory/initial_memory.loaded
@@ -161,6 +161,7 @@ initial_memory.loaded
 src/memory/initial_memory.loaded
 src/memory/initial_memory.json
 initial_memory.json
+TARS_topics.json
 
 # Character Data
 character/persona.ini

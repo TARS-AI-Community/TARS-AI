@@ -12,7 +12,6 @@ from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
 
-# All function imports - try each one, set to None if unavailable
 search_google = None
 search_google_news = None
 try:
@@ -49,7 +48,7 @@ walk_backward = None
 turn_right_slow = None
 turn_left_slow = None
 try:
-    from modules.module_servoctl import walk_forward, walk_backward, turn_right_slow, turn_left_slow
+    from modules.module_servoctl import walk_forward, walk_backward, turn_right_slow, turn_left_slow, step_forward
 except ImportError:
     pass
 
@@ -67,7 +66,7 @@ def execute_movement(movements):
     def movement_task():
             
         action_map = {
-            "forward": walk_forward,
+            "forward": step_forward,
             "backward": walk_backward,
             "left": turn_left_slow,
             "right": turn_right_slow
@@ -110,11 +109,28 @@ def call_function(module_name, *args, **kwargs):
         queue_message(f"[DEBUG] Error while executing {module_name}: {e}")
 
  
+def launch_retropie():
+    """Launch RetroPie/EmulationStation."""
+    import subprocess
+    import os
+    script = os.path.expanduser("~/TARS-AI/launch_retropie.sh")
+    es_bin = "/opt/retropie/supplementary/emulationstation/emulationstation"
+    if os.path.isfile(script) and os.access(script, os.X_OK):
+        subprocess.Popen([script])
+        return "RetroPie launched."
+    elif os.path.isfile(es_bin):
+        subprocess.Popen([es_bin])
+        return "EmulationStation launched."
+    else:
+        return "RetroPie is not installed."
+
+
 FUNCTION_REGISTRY = {
-    "Weather": search_google, 
+    "Weather": search_google,
     "News": search_google_news,
     "Vision": describe_camera_view,
     "Search": search_google,
     "SDmodule-Generate": generate_image,
-    "Home_Assistant": send_prompt_to_homeassistant
+    "Home_Assistant": send_prompt_to_homeassistant,
+    "RetroPie": launch_retropie
 }
