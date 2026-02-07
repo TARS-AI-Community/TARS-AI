@@ -641,6 +641,99 @@ def execute_function_call(func_call, bot_response, user_input):
             else:
                 bot_response["reply"] = "Please specify what video you'd like to watch."
 
+        elif function_name == "launch_retropie":
+            import subprocess
+            import os
+
+            retropie_script = os.path.expanduser("~/TARS-AI/launch_retropie.sh")
+
+            if not os.path.isfile(retropie_script) or not os.access(retropie_script, os.X_OK):
+                bot_response["reply"] = "RetroPie doesn't seem to be installed. You can install it by running the installer again."
+                return
+
+            bot_response["reply"] = "Launching RetroPie. Have fun gaming!"
+
+            def launch_after_tts():
+                import time
+                # Give TTS time to speak the reply
+                time.sleep(5)
+
+                # Launch in a real terminal — ES and runcommand.sh need a TTY
+                queue_message("Launching RetroPie script...")
+                if os.path.isfile("/usr/bin/lxterminal"):
+                    os.system(f"setsid lxterminal --title='RetroPie' -e {retropie_script} &")
+                elif os.path.isfile("/usr/bin/xfce4-terminal"):
+                    os.system(f"setsid xfce4-terminal --title='RetroPie' -e {retropie_script} &")
+                else:
+                    os.system(f"setsid x-terminal-emulator -e {retropie_script} &")
+
+                # Trigger clean shutdown (UI pygame.quit, camera stop, audio stop, etc.)
+                try:
+                    from modules.module_main import shutdown_event, stop_event
+                    if stop_event:
+                        stop_event.set()  # Unblocks BT controller wrapper loop
+                    if shutdown_event:
+                        queue_message("Setting shutdown event for clean exit...")
+                        shutdown_event.set()
+                except Exception as e:
+                    queue_message(f"Could not set shutdown event: {e}")
+
+            threading.Thread(target=launch_after_tts, daemon=False).start()
+
+        elif function_name == "system_control":
+            action = parameters.get("action", "")
+            if action == "exit":
+                bot_response["reply"] = bot_response.get("reply", "Shutting down the program. See you later!")
+                queue_message("[SYSTEM] Exit requested via voice command")
+
+                def exit_after_tts():
+                    import time
+                    time.sleep(5)
+                    try:
+                        from modules.module_main import ui_manager
+                        if ui_manager and hasattr(ui_manager, 'exit_program'):
+                            ui_manager.exit_program()
+                        else:
+                            from modules.module_main import shutdown_event
+                            if shutdown_event:
+                                shutdown_event.set()
+                            import os
+                            os._exit(0)
+                    except Exception as e:
+                        queue_message(f"Exit failed: {e}")
+                        import os
+                        os._exit(0)
+
+                threading.Thread(target=exit_after_tts, daemon=False).start()
+
+            elif action == "shutdown":
+                bot_response["reply"] = bot_response.get("reply", "Powering off now. Goodbye!")
+                queue_message("[SYSTEM] Shutdown requested via voice command")
+
+                def shutdown_after_tts():
+                    import time
+                    time.sleep(5)
+                    try:
+                        from modules.module_main import ui_manager
+                        if ui_manager and hasattr(ui_manager, 'initiate_shutdown'):
+                            ui_manager.initiate_shutdown()
+                        else:
+                            import subprocess
+                            subprocess.Popen(['sudo', 'shutdown', 'now'])
+                            import os
+                            os._exit(0)
+                    except Exception as e:
+                        queue_message(f"Shutdown failed: {e}")
+                        import subprocess
+                        subprocess.Popen(['sudo', 'shutdown', 'now'])
+                        import os
+                        os._exit(0)
+
+                threading.Thread(target=shutdown_after_tts, daemon=False).start()
+
+            else:
+                bot_response["reply"] = "I didn't understand that system command."
+
         else:
             queue_message(f"Unknown function: {function_name}")
 

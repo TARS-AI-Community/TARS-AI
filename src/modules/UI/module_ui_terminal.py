@@ -561,15 +561,23 @@ class TerminalSystem:
                 text_rect = text_surface.get_rect(center=(center_x, text_y))
                 surface.blit(text_surface, text_rect)
                 
-                bolt_y = center_y + 6
+                bolt_h = max(6, (body_height - 4) // 2 - 2)
+                bolt_w = max(4, bolt_h * 2 // 3)
+                bolt_cx = center_x
+                bolt_cy = body_y + body_height - bolt_h + 1
                 bolt_points = [
-                    (center_x + 4, bolt_y - 10),
-                    (center_x - 4, bolt_y - 1),
-                    (center_x, bolt_y - 1),
-                    (center_x - 4, bolt_y + 10),
-                    (center_x + 4, bolt_y + 1),
-                    (center_x, bolt_y + 1),
+                    (bolt_cx + bolt_w // 4, bolt_cy - bolt_h // 2),
+                    (bolt_cx - bolt_w // 2, bolt_cy),
+                    (bolt_cx - bolt_w // 8, bolt_cy),
+                    (bolt_cx - bolt_w // 4, bolt_cy + bolt_h // 2),
+                    (bolt_cx + bolt_w // 2, bolt_cy),
+                    (bolt_cx + bolt_w // 8, bolt_cy),
                 ]
+                for ox in range(-1, 2):
+                    for oy in range(-1, 2):
+                        if ox != 0 or oy != 0:
+                            offset_points = [(px + ox, py + oy) for px, py in bolt_points]
+                            pygame.draw.polygon(surface, (255, 255, 255), offset_points)
                 pygame.draw.polygon(surface, (0, 0, 0), bolt_points)
             else:
                 for offset_x in [-1, 0, 1]:
