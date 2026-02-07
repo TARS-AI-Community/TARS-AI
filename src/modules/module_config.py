@@ -359,6 +359,7 @@ def load_config():
             "enabled": config['CONTROLS']['enabled'],
             "voicemovement": config['CONTROLS']['voicemovement'],
             "swap_turn_directions": config.getboolean('CONTROLS', 'swap_turn_directions', fallback=False),
+            "invert_y": config.getboolean('CONTROLS', 'invert_y', fallback=False),
         },
         "STT": {
             "language" : config['STT']['language'],
@@ -636,6 +637,9 @@ CONFIG_METADATA = {
         },
         'swap_turn_directions': {
             'description': 'Swap left/right turn directions'
+        },
+        'invert_y': {
+            'description': 'Invert Y-axis for D-pad/joystick (fix for controllers that report up as positive)'
         },
     },
     'STT': {
