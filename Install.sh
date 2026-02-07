@@ -533,9 +533,11 @@ soundfile                       # Read & write sound files
 sounddevice                     # Audio I/O for playing and capturing sound
 
 # Chat UI & Web Frameworks
+flask                           # Web framework for ChatUI
 flask-cors                      # Cross-Origin Resource Sharing (CORS) for Flask
 flask-socketio                  # WebSockets support for Flask
 eventlet                        # Async support for Flask-SocketIO
+Pillow                          # Image processing for ChatUI face animation
 
 # Miscellaneous Utilities
 configobj                       # Maintain comments in config.ini during updates

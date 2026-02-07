@@ -51,14 +51,22 @@ from PIL import Image, UnidentifiedImageError
 
 # === Custom Modules ===
 from modules.module_config import load_config
-from modules.module_config import CONFIG_UI_FIELDS
+from modules.module_config import CONFIG_METADATA as CONFIG_UI_FIELDS
 from modules.module_llm import get_completion
-from modules.module_vision import get_image_caption_from_base64
 from modules.module_tts import generate_tts_audio
 from modules.module_llm import detect_emotion
 from modules.module_messageQue import queue_message
 from modules.module_servoctl import *
 from modules.module_movement_registry import get_names, get_names_by_type, LEGS_ONLY, HAS_ARMS, MOVEMENTS
+
+# Vision is optional — only available if enabled and dependencies are installed
+try:
+    from modules.module_vision import get_image_caption_from_base64
+    VISION_AVAILABLE = True
+except ImportError:
+    VISION_AVAILABLE = False
+    get_image_caption_from_base64 = None
+    queue_message("ChatUI: Vision module not available — image captioning disabled")
 
 # Suppress Flask logs
 log = logging.getLogger('werkzeug')
@@ -367,7 +375,10 @@ def receive_user_message():
 
         try:
             raw_image = Image.open(buffer).convert('RGB')
-            caption = get_image_caption_from_base64(base64_image)
+            if VISION_AVAILABLE:
+                caption = get_image_caption_from_base64(base64_image)
+            else:
+                caption = "Image uploaded (vision module not available)"
         except UnidentifiedImageError as e:
             queue_message(f"Failed to open the image: {e}")
             caption = "Failed to process image"
@@ -416,7 +427,10 @@ def upload():
             caption = "Failed to process image"
 
 
-        caption = get_image_caption_from_base64(base64_image)
+        if VISION_AVAILABLE:
+            caption = get_image_caption_from_base64(base64_image)
+        else:
+            caption = "Image uploaded (vision module not available)"
         cmessage = f"*Sends {CONFIG['CHAR']['user_name']} a picture of: {caption}*"
 
         reply = get_completion(cmessage)

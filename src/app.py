@@ -100,8 +100,8 @@ if CONFIG['CHATUI']['enabled'] == "True":
     try:
         import modules.module_chatui
         CHATUI_AVAILABLE = True
-    except ImportError:
-        queue_message("WARNING: ChatUI module not available")
+    except ImportError as e:
+        queue_message(f"WARNING: ChatUI module not available: {e}")
 
 # === Always Load These ===
 from modules.module_battery import BatteryModule
