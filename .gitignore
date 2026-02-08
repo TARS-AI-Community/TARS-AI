@@ -222,3 +222,5 @@ dashboard.ini
 ._LICENSE
 
 .DS_Store
+
+src/modules/
