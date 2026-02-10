@@ -36,6 +36,7 @@ from UI.module_screensaver_dashboard import DashboardAnimation
 from UI.module_screensaver_defrag import DefragAnimation
 from UI.module_screensaver_bounce import BounceAnimation
 from UI.module_screensaver_endurance import EnduranceAnimation
+from UI.module_screensaver_toasters import FlyingToastersAnimation
 
 try:
     from OpenGL.GL import *
@@ -63,9 +64,10 @@ AVAILABLE_ANIMATIONS = {
     "defrag": {"class": DefragAnimation, "type": "pygame"},
     "bounce": {"class": BounceAnimation, "type": "opengl"},
     "endurance": {"class": EnduranceAnimation, "type": "opengl"},
+    "toasters": {"class": FlyingToastersAnimation, "type": "pygame"},
 }
 
-FALLBACK_ANIMATIONS = ["starfield", "matrix", "hyperspace", "pacman", "terminal", "face"]
+FALLBACK_ANIMATIONS = ["starfield", "matrix", "hyperspace", "pacman", "terminal", "face", "toasters"]
 
 
 def _class_accepts_param(cls, param_name):
