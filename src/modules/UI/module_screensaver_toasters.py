@@ -101,6 +101,7 @@ class FlyingToastersAnimation:
         self.sw = self.toaster_frames[0].get_width()
         self.sh = self.toaster_frames[0].get_height()
 
+        # Lane geometry
         self.cell_size = max(self.sw, self.sh) + 6
         self.lane_step = self.cell_size * 0.71
 
@@ -198,6 +199,8 @@ class FlyingToastersAnimation:
                 self._spawn('toast', initial=True)
 
     def _resolve_all_overlaps(self):
+        """After movement, check every pair. Only toasters ever move.
+        Toast never changes lane — toasters always get out of the way."""
         for i, a in enumerate(self.objects):
             for j, b in enumerate(self.objects):
                 if j <= i:
@@ -245,6 +248,7 @@ class FlyingToastersAnimation:
 
         self._resolve_all_overlaps()
 
+        slide_speed = 0.12
         for obj in self.objects:
             diff = obj['target_lane'] - obj['visual_lane']
             if abs(diff) > 0.02:
@@ -256,6 +260,7 @@ class FlyingToastersAnimation:
         for obj in self.objects[:]:
             if obj['type'] == 'toaster':
                 toaster_count += 1
+
                 obj['speed_timer'] -= 0.016
                 if obj['speed_timer'] <= 0:
                     obj['speed_timer'] = random.uniform(2.0, 6.0)
@@ -267,6 +272,7 @@ class FlyingToastersAnimation:
                         new_speed = random.uniform(1.0, 3.0) * self.scale
                         obj['base_speed'] = new_speed
                         obj['speed'] = new_speed
+
                 flap_speed = 0.06 + (obj['speed'] / self.scale) * 0.07
                 obj['frame_timer'] += flap_speed
                 if obj['frame_timer'] >= 1.0:
