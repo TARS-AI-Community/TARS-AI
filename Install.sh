@@ -561,6 +561,9 @@ discord.py                      # Discord bot API
 # Wake Word (Atomik)
 scipy                           # Signal processing for wake word detection
 
+# Multimedia
+pygame                          # Game development & multimedia support
+
 COMMON
 
     if [[ "$PI_VERSION" == "pi5" ]]; then
@@ -632,7 +635,6 @@ HEAVY
         cat >> "$req_file" << 'UI'
 
 # === UI & CAMERA (Pi4/Pi5) ===
-pygame                          # Game development & multimedia support
 PyOpenGL                        # OpenGL support
 PyOpenGL-accelerate             # OpenGL acceleration
 picamera2                       # PI camera module
