@@ -542,11 +542,11 @@ class STTManager:
         audio_buffer = BytesIO()
         detected_speech = False
         silent_frames = 0
-        speech_frames = 0
+        conversation_started = False
         pre_roll_buffer = []
         PRE_ROLL_FRAMES = 10
-        MIN_SPEECH_FRAMES = 5
-        MAX_SILENT_FRAMES = 20
+        MAX_SILENT_FRAMES = 30
+        speech_paused_frames = 0
 
         with (
             sd.InputStream(
@@ -558,7 +558,7 @@ class STTManager:
             wf.setsampwidth(2)
             wf.setframerate(self.SAMPLE_RATE)
 
-            for frame_idx in range(self.MAX_RECORDING_FRAMES):
+            while speech_paused_frames < MAX_SILENT_FRAMES:
                 data, _ = stream.read(4000)
 
                 is_silence, detected_speech, silent_frames = (
@@ -566,37 +566,23 @@ class STTManager:
                         data, detected_speech, silent_frames
                     )
                 )
-                silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
-
-                # Add the same early exit check as other functions
-                if is_silence:
-                    if not detected_speech:
-                        return None  # Exit early if silence detected before any speech
-                    # If speech was detected, check if we should stop recording
-                    if (
-                        speech_frames >= MIN_SPEECH_FRAMES
-                        and silent_frames >= MAX_SILENT_FRAMES
-                    ):
-                        print()
-                        break
 
                 if not detected_speech:
+                    speech_paused_frames += 1
                     pre_roll_buffer.append(data.tobytes())
                     if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
                         pre_roll_buffer.pop(0)
                 else:
-                    if speech_frames == 0:
+                    if not conversation_started:
                         for pre_roll_data in pre_roll_buffer:
                             wf.writeframes(pre_roll_data)
                         pre_roll_buffer = []
+                        conversation_started = True
 
                     wf.writeframes(data.tobytes())
 
                     if not is_silence:
-                        speech_frames += 1
-
-            if speech_frames < MIN_SPEECH_FRAMES:
-                return None
+                        speech_paused_frames = 0
 
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
@@ -1291,7 +1277,7 @@ class STTManager:
                 clear_bar()
             else:
                 silent_frames += 1
-
+                detected_speech = False
                 if self.DEBUG:
                     queue_message(
                         f"SILENT: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}"

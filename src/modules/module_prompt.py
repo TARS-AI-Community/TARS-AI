@@ -170,9 +170,11 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
     longitude = config["CHAR"].get("longitude", "")
     location_name = config["CHAR"].get("location_name", "")
     if GEOLOCATION.get("lat") and GEOLOCATION.get("lon"):
+        latitude = GEOLOCATION.get("lat")
+        longitude = GEOLOCATION.get("lon")
         resolved = _resolve_location_name(
-            GEOLOCATION.get("lat"),
-            GEOLOCATION.get("lon"),
+            latitude,
+            longitude,
         )
         if resolved:
             location_line = (
