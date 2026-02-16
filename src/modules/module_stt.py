@@ -937,7 +937,7 @@ class STTManager:
                             formatted_result = {"text": conversation_text}
                             self.interactions += 1
                             if self.utterance_callback:
-                                self.utterance_callback(json.dumps(formatted_result))
+                                self.utterance_callback(json.dumps(formatted_result),self.interactions)
                                 return formatted_result
                     except Exception as e:
                         queue_message(f"WARNING: Chunk transcription failed: {e}")
