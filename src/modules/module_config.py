@@ -443,6 +443,9 @@ def load_config():
             "use_indicators": config.getboolean("STT", "use_indicators"),
             "vad_method": config["STT"]["vad_method"],
             "speechdelay": int(config["STT"]["speechdelay"]),
+            "standby_timer": int(
+                config.get("STT","standby_timer", fallback=30),
+            ),
             "picovoice_keyword_path": config["STT"]["picovoice_keyword_path"],
             "wake_word_processor": config["STT"]["wake_word_processor"],
             "picovoice_api_key": os.getenv("PICOVOICE_API_KEY"),

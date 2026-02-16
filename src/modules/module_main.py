@@ -134,7 +134,7 @@ def wake_word_callback(wake_response):
     asyncio.run(play_audio_chunks(wake_response, CONFIG["TTS"]["ttsoption"], True))
 
 
-def utterance_callback(message, interactions):
+def utterance_callback(message, interactions=0):
     """
     Process the recognized message from STTManager and stream audio response to speakers.
 
