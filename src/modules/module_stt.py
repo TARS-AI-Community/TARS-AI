@@ -199,7 +199,7 @@ class STTManager:
         self.config = config
         self.shutdown_event = shutdown_event
         self.running = False
-
+        self.interactions = 0
         # Pause/resume functionality for video playback
         self.paused = False
         self.pause_lock = threading.Lock()
@@ -224,8 +224,8 @@ class STTManager:
 
         # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None
-        self.utterance_callback: Optional[Callable[[str], None]] = None
-        self.post_utterance_callback: Optional[Callable[[], None]] = None
+        self.utterance_callback: Optional[Callable[[str, int], None]] = None
+        self.post_utterance_callback: Optional[Callable[[int], None]] = None
 
         # Wake word and model settings
         self.WAKE_WORD = config.get("STT", {}).get("wake_word", "hey tar").lower()
@@ -612,10 +612,12 @@ class STTManager:
 
         transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
 
+        self.interactions += 1
+
         if transcript:
             formatted_result = {"text": transcript}
             if self.utterance_callback:
-                self.utterance_callback(json.dumps(formatted_result))
+                self.utterance_callback(json.dumps(formatted_result), self.interactions)
             return formatted_result
         else:
             return None
@@ -952,7 +954,9 @@ class STTManager:
             if character_path
             else "TARS"
         )
-        queue_message(f"{character_name}: Listening...")
+        queue_message(f"{character_name}: [Standby Mode]")
+
+        self.interactions = 0
 
         wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
         if wake_word_processor == "fastrtc":
@@ -1406,7 +1410,7 @@ class STTManager:
     def set_wake_word_callback(self, callback: Callable[[str], None]):
         self.wake_word_callback = callback
 
-    def set_utterance_callback(self, callback: Callable[[str], None]):
+    def set_utterance_callback(self, callback: Callable[[str, int], None]):
         self.utterance_callback = callback
 
     def set_post_utterance_callback(self, callback: Callable[[], None]):

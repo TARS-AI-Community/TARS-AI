@@ -4,6 +4,7 @@ module_main.py
 Core logic module for the TARS-AI application.
 
 """
+
 # === Standard Libraries ===
 import os
 import threading
@@ -31,6 +32,7 @@ UIManager = None
 if CAPABILITIES is None or CAPABILITIES.can_use_ui:
     try:
         from modules.module_ui import UIManager as _UIManager
+
         UIManager = _UIManager
     except ImportError as e:
         print(f"WARNING: UIManager not available: {e}")
@@ -59,6 +61,7 @@ battery_module = None
 stop_event = threading.Event()
 executor = concurrent.futures.ProcessPoolExecutor(max_workers=4)
 
+
 # === Threads ===
 def start_bt_controller_thread():
     """
@@ -74,6 +77,7 @@ def start_bt_controller_thread():
     except Exception as e:
         queue_message(f"ERROR: {e}")
 
+
 # === Callback Functions ===
 def process_discord_message_callback(user_message):
     """
@@ -87,27 +91,30 @@ def process_discord_message_callback(user_message):
     """
     try:
         # Parse the user message
-        #queue_message(user_message)
+        # queue_message(user_message)
 
         match = re.match(r"<@(\d+)> ?(.*)", user_message)
 
         if match:
             mentioned_user_id = match.group(1)  # Extracted user ID
-            message_content = match.group(2).strip()  # Extracted message content (trim leading/trailing spaces)
+            message_content = match.group(
+                2
+            ).strip()  # Extracted message content (trim leading/trailing spaces)
 
-        #stream_text_nonblocking(f"{mentioned_user_id}: {message_content}")
-        #queue_message(message_content)
+        # stream_text_nonblocking(f"{mentioned_user_id}: {message_content}")
+        # queue_message(message_content)
 
         # Process the message using process_completion
         reply = process_completion(message_content)  # Process the message
 
-        #queue_message(f"TARS: {reply}")
-        #stream_text_nonblocking(f"TARS: {reply}")
-        
+        # queue_message(f"TARS: {reply}")
+        # stream_text_nonblocking(f"TARS: {reply}")
+
     except Exception as e:
         queue_message(f"ERROR: {e}")
 
     return reply
+
 
 def wake_word_callback(wake_response):
     """
@@ -115,18 +122,19 @@ def wake_word_callback(wake_response):
 
     Parameters:
     - wake_response (str): The response to the wake word.
-    """ 
+    """
 
     # Deactivate screensaver when wake word is detected
     if ui_manager:
         ui_manager.deactivate_screensaver()
 
-    character_name = CONFIG['CHAR']['character_name']
+    character_name = CONFIG["CHAR"]["character_name"]
     ui_manager.update_data(character_name, wake_response, character_name)
-    
-    asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption'], True))
 
-def utterance_callback(message):
+    asyncio.run(play_audio_chunks(wake_response, CONFIG["TTS"]["ttsoption"], True))
+
+
+def utterance_callback(message, interactions):
     """
     Process the recognized message from STTManager and stream audio response to speakers.
 
@@ -137,35 +145,35 @@ def utterance_callback(message):
         # Deactivate screensaver when user speaks
         if ui_manager:
             ui_manager.deactivate_screensaver()
-        
+
         # Parse the user message
         message_dict = json.loads(message)
-        if not message_dict.get('text'):  # Handles cases where text is "" or missing
-            #queue_message(f"TARS: Going Idle...")
+        if not message_dict.get("text"):  # Handles cases where text is "" or missing
+            # queue_message(f"TARS: Going Idle...")
             return
-        
+
         # Strip any special characters/control characters from user text
-        user_text = message_dict['text'].strip()
-        
-        #Print or stream the response
-        #queue_message(f"USER: {user_text}")
+        user_text = message_dict["text"].strip()
+
+        # Print or stream the response
+        # queue_message(f"USER: {user_text}")
         ui_manager.update_data("USER", user_text, "USER")
-        queue_message(f"USER: {user_text}", stream=False) 
+        queue_message(f"USER: {user_text}", stream=False)
 
         # Check for shutdown command
         if "shutdown pc" in user_text.lower():
             queue_message(f"SHUTDOWN: Shutting down the PC...")
-            os.system('shutdown /s /t 0')
+            os.system("shutdown /s /t 0")
             return  # Exit function after issuing shutdown command
-        
+
         # Process the message using process_completion
-        reply = process_completion(user_text)  # Process the message
+        reply = process_completion(user_text, interactions)  # Process the message
 
         # Extract the <think> block if present
         try:
             match = re.search(r"<think>(.*?)</think>", reply, re.DOTALL)
             thoughts = match.group(1).strip() if match else ""
-            
+
             # Remove the <think> block and clean up trailing whitespace/newlines
             reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
         except Exception:
@@ -173,24 +181,25 @@ def utterance_callback(message):
 
         # Debug output for thoughts
         if thoughts:
-            #queue_message(f"DEBUG: Thoughts\n{thoughts}")
+            # queue_message(f"DEBUG: Thoughts\n{thoughts}")
             pass
 
         # Stream the AI's reply
-        character_name = CONFIG['CHAR']['character_name']
+        character_name = CONFIG["CHAR"]["character_name"]
         ui_manager.update_data(character_name, reply, "TARS")
-        queue_message(f"{character_name}: {reply}", stream=False) 
+        queue_message(f"{character_name}: {reply}", stream=False)
 
         # Strip special chars so he doesnt say them
-        reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
-        
+        reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', "", reply)
+
         # Stream TTS audio to speakers
-        asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
+        asyncio.run(play_audio_chunks(reply, CONFIG["TTS"]["ttsoption"]))
 
     except json.JSONDecodeError:
         queue_message("ERROR: Invalid JSON format. Could not process user message.")
     except Exception as e:
         queue_message(f"ERROR: {e}")
+
 
 def post_utterance_callback():
     """
@@ -199,11 +208,14 @@ def post_utterance_callback():
     global stt_manager
     stt_manager._transcribe_utterance()
 
+
 # === Initialization ===
-def initialize_managers(mem_manager, char_manager, stt_mgr, ui_mgr, shutdown_evt=None, battery_mod=None):
+def initialize_managers(
+    mem_manager, char_manager, stt_mgr, ui_mgr, shutdown_evt=None, battery_mod=None
+):
     """
     Pass in the shared instances for MemoryManager, CharacterManager, STTManager, and other components.
-    
+
     Parameters:
     - mem_manager: The MemoryManager instance from app.py.
     - char_manager: The CharacterManager instance from app.py.
@@ -212,13 +224,20 @@ def initialize_managers(mem_manager, char_manager, stt_mgr, ui_mgr, shutdown_evt
     - shutdown_evt: The shutdown event from app.py.
     - battery_mod: The BatteryModule instance from app.py.
     """
-    global memory_manager, character_manager, stt_manager, ui_manager, shutdown_event, battery_module
+    global \
+        memory_manager, \
+        character_manager, \
+        stt_manager, \
+        ui_manager, \
+        shutdown_event, \
+        battery_module
     memory_manager = mem_manager
     character_manager = char_manager
     stt_manager = stt_mgr
     ui_manager = ui_mgr
     shutdown_event = shutdown_evt
     battery_module = battery_mod
+
 
 def startup_initialization():
     try:
@@ -228,11 +247,12 @@ def startup_initialization():
         try:
             from modules.module_cputemp import (
                 CPUTempModule,
-                set_cpu_temp_instance, 
-                set_ventilate_callback, 
-                start_thermal_monitoring
+                set_cpu_temp_instance,
+                set_ventilate_callback,
+                start_thermal_monitoring,
             )
             from modules.module_servoctl import ventilate_on
+
             cpu_temp_module = CPUTempModule()
             set_cpu_temp_instance(cpu_temp_module)
             set_ventilate_callback(ventilate_on)

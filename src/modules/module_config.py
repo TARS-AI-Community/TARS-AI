@@ -613,6 +613,9 @@ def load_config():
             "show_silence_progressbar": config.getboolean(
                 "DEBUG", "show_silence_progressbar", fallback=True
             ),
+            "show_bot_response": config.getboolean(
+                "DEBUG", "show_bot_response", fallback=True
+            ),
         },
     }
 

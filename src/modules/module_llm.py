@@ -34,7 +34,7 @@ CONFIG = load_config()
 CAPABILITIES = get_capabilities()
 character_manager = None
 memory_manager = None
-show_bot_response = CONFIG["DEBUG"].get("show_bot_response", True)
+show_bot_response = CONFIG["DEBUG"]["show_bot_response"]
 describe_camera_view_openai = None
 try:
     from modules.module_vision import describe_camera_view_openai as _dcvo
@@ -57,7 +57,7 @@ if CONFIG["EMOTION"]["enabled"]:
         pass
 
 
-def get_completion(user_prompt, istext=True):
+def get_completion(user_prompt, interactions, istext=True):
 
     if memory_manager is None or character_manager is None:
         raise ValueError(
@@ -73,7 +73,7 @@ def get_completion(user_prompt, istext=True):
         if not isinstance(thinking_responses, list):
             thinking_responses = []
 
-        if thinking_responses and len(thinking_responses) > 0:
+        if thinking_responses and len(thinking_responses) > 0 and interactions <= 1:
             thinking_text = random.choice(thinking_responses)
             if (
                 thinking_text
@@ -199,8 +199,8 @@ def _extract_text(response_json, istext):
         return f"Text extraction failed: {str(error)}"
 
 
-def process_completion(prompt):
-    future = executor.submit(get_completion, prompt, istext=True)
+def process_completion(prompt, interactions):
+    future = executor.submit(get_completion, prompt, interactions, istext=True)
     return future.result()
 
 

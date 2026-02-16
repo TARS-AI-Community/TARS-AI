@@ -31,7 +31,7 @@ vosk_model = vosk-model-small-en-us-0.15
 # Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15 or vosk-model-en-us-0.22)
 vad_method = rms
 # Enable silero, rms
-speechdelay = 200
+speechdelay = 300
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 # Relative path to the Porcupine keyword file
@@ -44,9 +44,9 @@ user_name = Joe
 # Name of the user interacting with the character
 user_details = Species: Human. Gender: Male.
 # Additional user details for context
-responses = ["Hi", "Yes?", "hey!", "What's up?", "Can I help you?", "What do you need?", "I'm here.", "You rang?", "Yea?", "Hey There.", "You again?", "Affirmative.", "Ready.", "Standing by.", "Go ahead.", "Listening.", "How can I assist?", "At your service.", "Waiting.", "What do you require?", "I hear you.", "Acknowledged.", "State your request.", "What's on your mind?", "I'm all ears. Figuratively.", "That's me.", "Present.", "Right here.", "Still here.", "Something wrong?", "Need me?"]
+responses = ["Hi", "Yes?", "hey!", "What's up?", "Can I help you?", "What do you need?", "I'm here.", "Yea?", "Hey There.", "You again?", "Affirmative.", "Ready.", "Standing by.", "Go ahead.", "Listening.", "How can I assist?", "At your service.", "Waiting.", "What do you require?", "I hear you.", "Acknowledged.", "State your request.", "What's on your mind?", "I'm all ears. Figuratively.", "That's me.", "Present.", "Right here.", "Still here.", "Something wrong?", "Need me?", "Hey mission control. All systems go!", "Houston...do we have a problem?"]
 # what tars say before sending the call to llm (you can change these and add or remove new ones or use [] for none)
-thinking_responses = ["Let me think...", "soooo.....", "soo....", "Let's seeee...", "Let me seeee...", "Let's see.....", "One Moment...", "One Moment", "hum", "humm", "Analyzing...", "Checking...", "One moment...", "Let me calculate...", "Working on it...", "Just a moment...", "Uh...",  "Uh", "Give me a second...", "Hold on..."]
+thinking_responses = ["Let me think...", "soooo.....", "soo....", "Let's seeee...", "Let me seeee...", "Let's see.....", "One Moment...", "One Moment", "hum", "humm", "Analyzing...", "Checking...", "One moment...", "Working on it...", "Just a moment...", "Uh...",  "Uh", "Give me a second...", "Hold on..."]
 # what tars replies after detecting the wakeword (you can change these and add or remove new ones or use [] for none)
 latitude = 45.5017
 longitude = -73.5673
