@@ -21,7 +21,7 @@ sensitivity = 7
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for Atomik wake word detection. 
 stt_processor = fastrtc
 #vosk, faster-whisper, silero, fastrtc, openai (for other languages than english) or external
-use_indicators = True
+use_indicators = False
 # Use beeps to indicate when listening
 external_url = http://192.168.2.57:5678
 # URL for the STT server (if enabled)
@@ -31,14 +31,14 @@ vosk_model = vosk-model-small-en-us-0.15
 # Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15 or vosk-model-en-us-0.22)
 vad_method = rms
 # Enable silero, rms
-speechdelay = 100
+speechdelay = 200
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 # Relative path to the Porcupine keyword file
 
 
 [CHAR] # Character-specific details
-character_card_path = character/TARS/TARS.json
+character_card_path = character/PLEX/PLEX.json
 # Path to the JSON file describing the character
 user_name = Joe
 # Name of the user interacting with the character
