@@ -206,3 +206,20 @@ character/
 
 /src/modules/UI/pictures/*
 dashboard.ini
+._.vscode
+
+._DUAL-LICENSE.md
+
+._.DS_Store
+
+._.env.template
+
+._.git
+
+._App-Start.py
+
+._App-Stop.py
+
+._LICENSE
+
+.DS_Store
