@@ -284,3 +284,5 @@ ventilate = False
 [DEBUG]
 show_silence_progressbar = False
 # Enable to show silence progress bar
+show_bot_response = False
+# Enable to show response from LLM bot

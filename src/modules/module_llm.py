@@ -16,6 +16,7 @@ requires a separate written license from Charles-Olivier Dion (AtomikSpace).
 
 This license applies only to this file and does not override licenses of other files in the repository.
 """
+
 import requests
 import threading
 import json
@@ -25,7 +26,7 @@ import random
 import asyncio
 from modules.module_config import load_config, get_capabilities
 from modules.module_prompt import build_prompt
-from modules.module_engine  import execute_movement
+from modules.module_engine import execute_movement
 
 from modules.module_messageQue import queue_message
 
@@ -33,10 +34,11 @@ CONFIG = load_config()
 CAPABILITIES = get_capabilities()
 character_manager = None
 memory_manager = None
-
+show_bot_response = CONFIG["DEBUG"].get("show_bot_response", True)
 describe_camera_view_openai = None
 try:
     from modules.module_vision import describe_camera_view_openai as _dcvo
+
     describe_camera_view_openai = _dcvo
 except ImportError:
     pass
@@ -44,20 +46,26 @@ except ImportError:
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 classifier = None
-if CONFIG['EMOTION']['enabled']:
+if CONFIG["EMOTION"]["enabled"]:
     try:
         from transformers import pipeline
-        classifier = pipeline("text-classification", model="SamLowe/roberta-base-go_emotions", top_k=None)
+
+        classifier = pipeline(
+            "text-classification", model="SamLowe/roberta-base-go_emotions", top_k=None
+        )
     except ImportError:
         pass
+
 
 def get_completion(user_prompt, istext=True):
 
     if memory_manager is None or character_manager is None:
-        raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
+        raise ValueError(
+            "MemoryManager and CharacterManager must be initialized before generating completions."
+        )
 
     try:
-        thinking_responses_raw = CONFIG["CHAR"].get('thinking_responses', '[]')
+        thinking_responses_raw = CONFIG["CHAR"].get("thinking_responses", "[]")
         try:
             thinking_responses = json.loads(thinking_responses_raw)
         except (json.JSONDecodeError, TypeError):
@@ -67,28 +75,43 @@ def get_completion(user_prompt, istext=True):
 
         if thinking_responses and len(thinking_responses) > 0:
             thinking_text = random.choice(thinking_responses)
-            if thinking_text and isinstance(thinking_text, str) and thinking_text.strip():
+            if (
+                thinking_text
+                and isinstance(thinking_text, str)
+                and thinking_text.strip()
+            ):
                 queue_message(f"{thinking_text}")
+
                 def play_thinking():
                     try:
                         from modules.module_tts import play_audio_chunks
-                        asyncio.run(play_audio_chunks(thinking_text, CONFIG['TTS']['ttsoption'], is_wakeword=True))
+
+                        asyncio.run(
+                            play_audio_chunks(
+                                thinking_text,
+                                CONFIG["TTS"]["ttsoption"],
+                                is_wakeword=True,
+                            )
+                        )
                     except Exception as e:
                         queue_message(f"ERROR: Failed to play thinking response: {e}")
 
                 thinking_thread = threading.Thread(target=play_thinking, daemon=True)
                 thinking_thread.start()
                 import time
+
                 time.sleep(0.1)
     except Exception as e:
         pass
 
-    prompt = build_prompt(user_prompt, character_manager, memory_manager, CONFIG, debug=False)
+    prompt = build_prompt(
+        user_prompt, character_manager, memory_manager, CONFIG, debug=False
+    )
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
+        "Authorization": f"Bearer {CONFIG['LLM']['api_key']}",
     }
-    llm_backend = CONFIG['LLM']['llm_backend']
+    llm_backend = CONFIG["LLM"]["llm_backend"]
     url, data = _prepare_request_data(llm_backend, prompt)
 
     try:
@@ -103,109 +126,117 @@ def get_completion(user_prompt, istext=True):
         queue_message(f"ERROR: LLM request failed: {e}")
         return None
 
+
 def _prepare_request_data(llm_backend, prompt):
 
     if llm_backend == "openai":
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
         data = {
-            "model": CONFIG['LLM']['openai_model'],
+            "model": CONFIG["LLM"]["openai_model"],
             "messages": [
-                {"role": "system", "content": CONFIG['LLM']['systemprompt']},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": CONFIG["LLM"]["systemprompt"]},
+                {"role": "user", "content": prompt},
             ],
-            "max_tokens": CONFIG['LLM']['max_tokens'],
-            "temperature": CONFIG['LLM']['temperature'],
-            "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"}
+            "max_tokens": CONFIG["LLM"]["max_tokens"],
+            "temperature": CONFIG["LLM"]["temperature"],
+            "top_p": CONFIG["LLM"]["top_p"],
+            "response_format": {"type": "json_object"},
         }
     elif llm_backend == "grok":
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
         data = {
-            "model": CONFIG['LLM']['grok_model'],
+            "model": CONFIG["LLM"]["grok_model"],
             "messages": [
-                {"role": "system", "content": CONFIG['LLM']['systemprompt']},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": CONFIG["LLM"]["systemprompt"]},
+                {"role": "user", "content": prompt},
             ],
-            "max_tokens": CONFIG['LLM']['max_tokens'],
-            "temperature": CONFIG['LLM']['temperature'],
-            "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"}
+            "max_tokens": CONFIG["LLM"]["max_tokens"],
+            "temperature": CONFIG["LLM"]["temperature"],
+            "top_p": CONFIG["LLM"]["top_p"],
+            "response_format": {"type": "json_object"},
         }
     elif llm_backend == "deepinfra":
         url = f"{CONFIG['LLM']['base_url']}/v1/openai/chat/completions"
         data = {
-            "model": CONFIG['LLM']['openai_model'],
+            "model": CONFIG["LLM"]["openai_model"],
             "messages": [
-                {"role": "system", "content": CONFIG['LLM']['systemprompt']},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": CONFIG["LLM"]["systemprompt"]},
+                {"role": "user", "content": prompt},
             ],
-            "max_tokens": CONFIG['LLM']['max_tokens'],
-            "temperature": CONFIG['LLM']['temperature'],
-            "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"}
+            "max_tokens": CONFIG["LLM"]["max_tokens"],
+            "temperature": CONFIG["LLM"]["temperature"],
+            "top_p": CONFIG["LLM"]["top_p"],
+            "response_format": {"type": "json_object"},
         }
     elif llm_backend in ["ooba", "tabby"]:
         url = f"{CONFIG['LLM']['base_url']}/v1/completions"
         data = {
             "prompt": prompt,
-            "max_tokens": CONFIG['LLM']['max_tokens'],
-            "temperature": CONFIG['LLM']['temperature'],
-            "top_p": CONFIG['LLM']['top_p']
+            "max_tokens": CONFIG["LLM"]["max_tokens"],
+            "temperature": CONFIG["LLM"]["temperature"],
+            "top_p": CONFIG["LLM"]["top_p"],
         }
         if llm_backend == "ooba":
-            data["seed"] = CONFIG['LLM']['seed']
+            data["seed"] = CONFIG["LLM"]["seed"]
     else:
         raise ValueError(f"Unsupported LLM backend: {llm_backend}")
 
     return url, data
 
+
 def _extract_text(response_json, istext):
     try:
-        llm_backend = CONFIG['LLM']['llm_backend']
-        if 'choices' in response_json:
+        llm_backend = CONFIG["LLM"]["llm_backend"]
+        if "choices" in response_json:
             return (
-                response_json['choices'][0]['message']['content']
+                response_json["choices"][0]["message"]["content"]
                 if llm_backend in ["openai", "grok", "deepinfra"]
-                else response_json['choices'][0]['text']
+                else response_json["choices"][0]["text"]
             ).strip()
         else:
             raise KeyError("Invalid response format: 'choices' key not found.")
     except (KeyError, IndexError, TypeError) as error:
         return f"Text extraction failed: {str(error)}"
 
+
 def process_completion(prompt):
     future = executor.submit(get_completion, prompt, istext=True)
     return future.result()
+
 
 def detect_emotion(text):
     if classifier is None:
         return
     model_outputs = classifier(text)
-    emotindetected = max(model_outputs[0], key=lambda x: x['score'])['label']
+    emotindetected = max(model_outputs[0], key=lambda x: x["score"])["label"]
     requests.post("http://127.0.0.1:5012/emotion", data=emotindetected, timeout=10)
     return
+
 
 def llm_process(user_input, bot_response):
     global memory_manager
     if isinstance(bot_response, str):
         try:
-
             bot_response = bot_response.strip()
 
-            bot_response = re.sub(r'^```json\s*', '', bot_response)
-            bot_response = re.sub(r'^```\s*', '', bot_response)
-            bot_response = re.sub(r'\s*```$', '', bot_response)
+            bot_response = re.sub(r"^```json\s*", "", bot_response)
+            bot_response = re.sub(r"^```\s*", "", bot_response)
+            bot_response = re.sub(r"\s*```$", "", bot_response)
 
-            bot_response = re.sub(r'`+$', '', bot_response)
+            bot_response = re.sub(r"`+$", "", bot_response)
             bot_response = bot_response.strip()
 
-            bot_response = bot_response.replace("True", "true").replace("False", "false")
+            bot_response = bot_response.replace("True", "true").replace(
+                "False", "false"
+            )
 
-            json_match = re.search(r'\{.*\}', bot_response, re.DOTALL)
+            json_match = re.search(r"\{.*\}", bot_response, re.DOTALL)
             if json_match:
                 bot_response = json_match.group(0)
 
-            while bot_response.endswith('}}') and bot_response.count('{') < bot_response.count('}'):
+            while bot_response.endswith("}}") and bot_response.count(
+                "{"
+            ) < bot_response.count("}"):
                 bot_response = bot_response[:-1]
 
             bot_response = json.loads(bot_response)
@@ -236,7 +267,8 @@ def llm_process(user_input, bot_response):
     bot_response["function_calls"] = bot_response.get("function_calls", [])
     bot_response["new_memories"] = bot_response.get("new_memories", [])
 
-    print(f"Data: {bot_response}")
+    if show_bot_response:
+        print(f"Data: {bot_response}")
 
     if bot_response["function_calls"]:
         for func_call in bot_response["function_calls"]:
@@ -245,25 +277,26 @@ def llm_process(user_input, bot_response):
     if memory_manager:
         threading.Thread(
             target=memory_manager.write_longterm_memory,
-            args=(user_input, bot_response["reply"])
+            args=(user_input, bot_response["reply"]),
         ).start()
 
         new_memories = bot_response.get("new_memories", [])
         if isinstance(new_memories, list) and len(new_memories) > 0:
+
             def save_memories():
                 try:
                     import json
-                    memory_manager.update_topic_index_with_ai_response(json.dumps(new_memories))
+
+                    memory_manager.update_topic_index_with_ai_response(
+                        json.dumps(new_memories)
+                    )
                 except Exception as e:
                     queue_message(f"MEMORY: Failed to save: {e}")
 
             threading.Thread(target=save_memories).start()
 
     if CONFIG["EMOTION"]["enabled"]:
-        threading.Thread(
-            target=detect_emotion,
-            args=(bot_response["reply"],)
-        ).start()
+        threading.Thread(target=detect_emotion, args=(bot_response["reply"],)).start()
 
     return _sanitize_for_tts(bot_response["reply"])
 
@@ -272,42 +305,43 @@ def _sanitize_for_tts(text):
     if not isinstance(text, str):
         return text
 
-    text = text.replace(' — ', '... ')
-    text = text.replace('— ', '... ')
-    text = text.replace(' —', ' ...')
-    text = text.replace('—', '... ')
+    text = text.replace(" — ", "... ")
+    text = text.replace("— ", "... ")
+    text = text.replace(" —", " ...")
+    text = text.replace("—", "... ")
 
-    text = text.replace(' – ', '... ')
-    text = text.replace('– ', '... ')
-    text = text.replace(' –', ' ...')
-    text = text.replace('–', '... ')
+    text = text.replace(" – ", "... ")
+    text = text.replace("– ", "... ")
+    text = text.replace(" –", " ...")
+    text = text.replace("–", "... ")
 
-    text = re.sub(r'(?<=[a-zA-Z]) - (?=[a-zA-Z])', '... ', text)
+    text = re.sub(r"(?<=[a-zA-Z]) - (?=[a-zA-Z])", "... ", text)
 
-    text = text.replace('°C', ' degrees')
-    text = text.replace('°F', ' degrees')
-    text = text.replace('°', ' degrees')
-    text = text.replace('km/h', ' kilometers per hour')
-    text = re.sub(r'\bmph\b', 'miles per hour', text)
-    text = text.replace(' & ', ' and ')
-    text = text.replace('e.g.', 'for example')
-    text = text.replace('i.e.', 'that is')
-    text = text.replace('etc.', 'and so on')
-    text = text.replace('w/', 'with ')
-    text = text.replace('b/c', 'because')
+    text = text.replace("°C", " degrees")
+    text = text.replace("°F", " degrees")
+    text = text.replace("°", " degrees")
+    text = text.replace("km/h", " kilometers per hour")
+    text = re.sub(r"\bmph\b", "miles per hour", text)
+    text = text.replace(" & ", " and ")
+    text = text.replace("e.g.", "for example")
+    text = text.replace("i.e.", "that is")
+    text = text.replace("etc.", "and so on")
+    text = text.replace("w/", "with ")
+    text = text.replace("b/c", "because")
 
-    text = re.sub(r'\*+([^*]+)\*+', r'\1', text)
+    text = re.sub(r"\*+([^*]+)\*+", r"\1", text)
 
-    text = re.sub(r'\s{2,}', ' ', text)
+    text = re.sub(r"\s{2,}", " ", text)
 
     return text.strip()
+
 
 def _summarize_search_results(search_results, user_question):
     try:
         char_name = character_manager.char_name if character_manager else "TARS"
 
         summary_prompt = (
-            f"You are {char_name}. The user asked: \"{user_question}\"\n\n"
+            f'You are {char_name}. The user asked: "{user_question}"\n\n'
             f"Here are web search results:\n{search_results[:800]}\n\n"
             f"Give a helpful, natural answer based on these results. "
             f"Be concise (2-4 sentences). Just the answer, no JSON, no markdown."
@@ -315,14 +349,14 @@ def _summarize_search_results(search_results, user_question):
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
+            "Authorization": f"Bearer {CONFIG['LLM']['api_key']}",
         }
 
-        llm_backend = CONFIG['LLM']['llm_backend']
+        llm_backend = CONFIG["LLM"]["llm_backend"]
 
         if llm_backend in ["openai", "grok", "deepinfra"]:
-            model_key = 'grok_model' if llm_backend == 'grok' else 'openai_model'
-            base_url = CONFIG['LLM']['base_url']
+            model_key = "grok_model" if llm_backend == "grok" else "openai_model"
+            base_url = CONFIG["LLM"]["base_url"]
 
             if llm_backend == "deepinfra":
                 url = f"{base_url}/v1/openai/chat/completions"
@@ -330,12 +364,10 @@ def _summarize_search_results(search_results, user_question):
                 url = f"{base_url}/v1/chat/completions"
 
             data = {
-                "model": CONFIG['LLM'][model_key],
-                "messages": [
-                    {"role": "user", "content": summary_prompt}
-                ],
+                "model": CONFIG["LLM"][model_key],
+                "messages": [{"role": "user", "content": summary_prompt}],
                 "max_tokens": 250,
-                "temperature": float(CONFIG['LLM'].get('temperature', 0.7))
+                "temperature": float(CONFIG["LLM"].get("temperature", 0.7)),
             }
 
         elif llm_backend in ["ooba", "tabby"]:
@@ -343,7 +375,7 @@ def _summarize_search_results(search_results, user_question):
             data = {
                 "prompt": summary_prompt,
                 "max_tokens": 250,
-                "temperature": float(CONFIG['LLM'].get('temperature', 0.7))
+                "temperature": float(CONFIG["LLM"].get("temperature", 0.7)),
             }
         else:
             return None
@@ -352,16 +384,16 @@ def _summarize_search_results(search_results, user_question):
         response.raise_for_status()
 
         result = response.json()
-        if 'choices' in result:
+        if "choices" in result:
             if llm_backend in ["openai", "grok", "deepinfra"]:
-                text = result['choices'][0]['message']['content'].strip()
+                text = result["choices"][0]["message"]["content"].strip()
             else:
-                text = result['choices'][0]['text'].strip()
+                text = result["choices"][0]["text"].strip()
 
-            if text.startswith('{') and text.endswith('}'):
+            if text.startswith("{") and text.endswith("}"):
                 try:
                     parsed = json.loads(text)
-                    text = parsed.get('reply', parsed.get('response', text))
+                    text = parsed.get("reply", parsed.get("response", text))
                 except json.JSONDecodeError:
                     pass
 
@@ -394,10 +426,13 @@ def execute_function_call(func_call, bot_response, user_input):
                 if description and not description.startswith("Error:"):
                     bot_response["reply"] = description
                 else:
-                    bot_response["reply"] = "I tried to look but couldn't process the image."
+                    bot_response["reply"] = (
+                        "I tried to look but couldn't process the image."
+                    )
 
         elif function_name == "web_search":
             from modules.module_websearch import search_google
+
             query = parameters.get("query", "")
             if query:
                 queue_message(f"Web search: {query}")
@@ -412,10 +447,18 @@ def execute_function_call(func_call, bot_response, user_input):
 
                 existing_reply = bot_response.get("reply", "").strip().lower()
                 placeholder_phrases = [
-                    "let me search", "let me look", "let me check",
-                    "searching", "looking that up", "checking",
-                    "i'll find", "i'll search", "i'll look",
-                    "one moment", "one sec", "hang on",
+                    "let me search",
+                    "let me look",
+                    "let me check",
+                    "searching",
+                    "looking that up",
+                    "checking",
+                    "i'll find",
+                    "i'll search",
+                    "i'll look",
+                    "one moment",
+                    "one sec",
+                    "hang on",
                 ]
                 has_real_reply = (
                     existing_reply
@@ -425,7 +468,9 @@ def execute_function_call(func_call, bot_response, user_input):
 
                 if is_failure:
                     if not has_real_reply:
-                        bot_response["reply"] = "I searched but couldn't find good results for that. Could you try rephrasing?"
+                        bot_response["reply"] = (
+                            "I searched but couldn't find good results for that. Could you try rephrasing?"
+                        )
                 else:
                     if has_real_reply:
                         summary = _summarize_search_results(search_results, user_input)
@@ -436,10 +481,13 @@ def execute_function_call(func_call, bot_response, user_input):
                         if summary:
                             bot_response["reply"] = summary
                         else:
-                            bot_response["reply"] = f"Here's what I found: {search_results[:500]}"
+                            bot_response["reply"] = (
+                                f"Here's what I found: {search_results[:500]}"
+                            )
 
         elif function_name == "adjust_volume":
             from modules.module_volume import get_volume_control
+
             vc = get_volume_control()
 
             action = parameters.get("action", "set")
@@ -455,18 +503,23 @@ def execute_function_call(func_call, bot_response, user_input):
             elif action == "increase":
                 if vc.adjust_volume(value):
                     new_vol = vc.get_volume()
-                    bot_response["reply"] = f"Volume increased by {value}%. Now at {new_vol}%."
+                    bot_response["reply"] = (
+                        f"Volume increased by {value}%. Now at {new_vol}%."
+                    )
                 else:
                     bot_response["reply"] = "Failed to increase volume."
             elif action == "decrease":
                 if vc.adjust_volume(-value):
                     new_vol = vc.get_volume()
-                    bot_response["reply"] = f"Volume decreased by {value}%. Now at {new_vol}%."
+                    bot_response["reply"] = (
+                        f"Volume decreased by {value}%. Now at {new_vol}%."
+                    )
                 else:
                     bot_response["reply"] = "Failed to decrease volume."
 
         elif function_name == "get_volume":
             from modules.module_volume import get_volume_control
+
             vc = get_volume_control()
             current = vc.get_volume()
             if current is not None:
@@ -476,6 +529,7 @@ def execute_function_call(func_call, bot_response, user_input):
 
         elif function_name == "adjust_persona":
             from modules.module_config import update_character_setting
+
             trait = parameters.get("trait", "")
             value = parameters.get("value", 0)
             if trait and isinstance(value, (int, float)):
@@ -494,6 +548,7 @@ def execute_function_call(func_call, bot_response, user_input):
                 def close_ui_and_pause_stt():
                     try:
                         from modules.module_stt import get_stt_manager
+
                         stt = get_stt_manager()
                         if stt:
                             stt.pause()
@@ -503,6 +558,7 @@ def execute_function_call(func_call, bot_response, user_input):
 
                     try:
                         from modules.module_main import ui_manager
+
                         if ui_manager and ui_manager.running:
                             queue_message("Closing UI for browser...")
                             ui_manager.running = False
@@ -513,7 +569,12 @@ def execute_function_call(func_call, bot_response, user_input):
 
                 def reopen_ui_and_resume_stt():
                     try:
-                        from modules.module_main import ui_manager, shutdown_event, battery_module, stt_manager
+                        from modules.module_main import (
+                            ui_manager,
+                            shutdown_event,
+                            battery_module,
+                            stt_manager,
+                        )
                         import modules.module_main as main_module
                         from modules.module_ui import UIManager
 
@@ -521,10 +582,15 @@ def execute_function_call(func_call, bot_response, user_input):
                             queue_message("Reopening UI...")
 
                             if shutdown_event is None or battery_module is None:
-                                queue_message("ERROR: Missing shutdown_event or battery_module - cannot reopen UI")
+                                queue_message(
+                                    "ERROR: Missing shutdown_event or battery_module - cannot reopen UI"
+                                )
                                 return
 
-                            new_ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery_module)
+                            new_ui_manager = UIManager(
+                                shutdown_event=shutdown_event,
+                                battery_module=battery_module,
+                            )
                             new_ui_manager.start()
                             main_module.ui_manager = new_ui_manager
 
@@ -532,6 +598,7 @@ def execute_function_call(func_call, bot_response, user_input):
                                 stt_manager.ui_manager = new_ui_manager
 
                             from modules.module_main import memory_manager
+
                             if memory_manager:
                                 memory_manager.ui_manager = new_ui_manager
 
@@ -539,10 +606,12 @@ def execute_function_call(func_call, bot_response, user_input):
                     except Exception as e:
                         queue_message(f"Could not reopen UI: {e}")
                         import traceback
+
                         traceback.print_exc()
 
                     try:
                         from modules.module_stt import get_stt_manager
+
                         stt = get_stt_manager()
                         if stt:
                             stt.resume()
@@ -551,26 +620,31 @@ def execute_function_call(func_call, bot_response, user_input):
                         queue_message(f"Could not resume STT: {e}")
 
                 player = get_browser_player()
-                player.set_callbacks(on_start=close_ui_and_pause_stt, on_end=reopen_ui_and_resume_stt)
+                player.set_callbacks(
+                    on_start=close_ui_and_pause_stt, on_end=reopen_ui_and_resume_stt
+                )
 
                 queue_message(f"Opening URL: {url}")
                 success = player.play_video(url)
 
                 if success:
-                    bot_response["reply"] = f"Opening {description if description else url}"
+                    bot_response["reply"] = (
+                        f"Opening {description if description else url}"
+                    )
                 else:
                     bot_response["reply"] = "Failed to open the website"
 
         elif function_name == "play_youtube":
             from modules.module_browser import search_and_play
+
             query = parameters.get("query", "")
 
             if query:
 
                 def close_ui_and_pause_stt():
                     try:
-
                         from modules.module_stt import get_stt_manager
+
                         stt = get_stt_manager()
                         if stt:
                             stt.pause()
@@ -579,8 +653,8 @@ def execute_function_call(func_call, bot_response, user_input):
                         queue_message(f"Could not pause STT: {e}")
 
                     try:
-
                         from modules.module_main import ui_manager
+
                         if ui_manager and ui_manager.running:
                             queue_message("Closing UI for browser playback...")
                             ui_manager.running = False
@@ -592,8 +666,12 @@ def execute_function_call(func_call, bot_response, user_input):
 
                 def reopen_ui_and_resume_stt():
                     try:
-
-                        from modules.module_main import ui_manager, shutdown_event, battery_module, stt_manager
+                        from modules.module_main import (
+                            ui_manager,
+                            shutdown_event,
+                            battery_module,
+                            stt_manager,
+                        )
                         import modules.module_main as main_module
                         from modules.module_ui import UIManager
 
@@ -601,10 +679,15 @@ def execute_function_call(func_call, bot_response, user_input):
                             queue_message("Reopening UI...")
 
                             if shutdown_event is None or battery_module is None:
-                                queue_message("ERROR: Missing shutdown_event or battery_module - cannot reopen UI")
+                                queue_message(
+                                    "ERROR: Missing shutdown_event or battery_module - cannot reopen UI"
+                                )
                                 return
 
-                            new_ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery_module)
+                            new_ui_manager = UIManager(
+                                shutdown_event=shutdown_event,
+                                battery_module=battery_module,
+                            )
                             new_ui_manager.start()
 
                             main_module.ui_manager = new_ui_manager
@@ -613,6 +696,7 @@ def execute_function_call(func_call, bot_response, user_input):
                                 stt_manager.ui_manager = new_ui_manager
 
                             from modules.module_main import memory_manager
+
                             if memory_manager:
                                 memory_manager.ui_manager = new_ui_manager
 
@@ -620,11 +704,12 @@ def execute_function_call(func_call, bot_response, user_input):
                     except Exception as e:
                         queue_message(f"Could not reopen UI: {e}")
                         import traceback
+
                         traceback.print_exc()
 
                     try:
-
                         from modules.module_stt import get_stt_manager
+
                         stt = get_stt_manager()
                         if stt:
                             stt.resume()
@@ -632,12 +717,18 @@ def execute_function_call(func_call, bot_response, user_input):
                     except Exception as e:
                         queue_message(f"Could not resume STT: {e}")
 
-                result = search_and_play(query, on_start=close_ui_and_pause_stt, on_end=reopen_ui_and_resume_stt)
-                if result['success']:
-                    video_info = result.get('video', {})
-                    bot_response["reply"] = f"{result['message']} by {video_info.get('channel', 'Unknown')}."
+                result = search_and_play(
+                    query,
+                    on_start=close_ui_and_pause_stt,
+                    on_end=reopen_ui_and_resume_stt,
+                )
+                if result["success"]:
+                    video_info = result.get("video", {})
+                    bot_response["reply"] = (
+                        f"{result['message']} by {video_info.get('channel', 'Unknown')}."
+                    )
                 else:
-                    bot_response["reply"] = result['message']
+                    bot_response["reply"] = result["message"]
             else:
                 bot_response["reply"] = "Please specify what video you'd like to watch."
 
@@ -647,29 +738,39 @@ def execute_function_call(func_call, bot_response, user_input):
 
             retropie_script = os.path.expanduser("~/TARS-AI/launch_retropie.sh")
 
-            if not os.path.isfile(retropie_script) or not os.access(retropie_script, os.X_OK):
-                bot_response["reply"] = "RetroPie doesn't seem to be installed. You can install it by running the installer again."
+            if not os.path.isfile(retropie_script) or not os.access(
+                retropie_script, os.X_OK
+            ):
+                bot_response["reply"] = (
+                    "RetroPie doesn't seem to be installed. You can install it by running the installer again."
+                )
                 return
 
             bot_response["reply"] = "Launching RetroPie. Have fun gaming!"
 
             def launch_after_tts():
                 import time
+
                 # Give TTS time to speak the reply
                 time.sleep(5)
 
                 # Launch in a real terminal — ES and runcommand.sh need a TTY
                 queue_message("Launching RetroPie script...")
                 if os.path.isfile("/usr/bin/lxterminal"):
-                    os.system(f"setsid lxterminal --title='RetroPie' -e {retropie_script} &")
+                    os.system(
+                        f"setsid lxterminal --title='RetroPie' -e {retropie_script} &"
+                    )
                 elif os.path.isfile("/usr/bin/xfce4-terminal"):
-                    os.system(f"setsid xfce4-terminal --title='RetroPie' -e {retropie_script} &")
+                    os.system(
+                        f"setsid xfce4-terminal --title='RetroPie' -e {retropie_script} &"
+                    )
                 else:
                     os.system(f"setsid x-terminal-emulator -e {retropie_script} &")
 
                 # Trigger clean shutdown (UI pygame.quit, camera stop, audio stop, etc.)
                 try:
                     from modules.module_main import shutdown_event, stop_event
+
                     if stop_event:
                         stop_event.set()  # Unblocks BT controller wrapper loop
                     if shutdown_event:
@@ -683,50 +784,65 @@ def execute_function_call(func_call, bot_response, user_input):
         elif function_name == "system_control":
             action = parameters.get("action", "")
             if action == "exit":
-                bot_response["reply"] = bot_response.get("reply", "Shutting down the program. See you later!")
+                bot_response["reply"] = bot_response.get(
+                    "reply", "Shutting down the program. See you later!"
+                )
                 queue_message("[SYSTEM] Exit requested via voice command")
 
                 def exit_after_tts():
                     import time
+
                     time.sleep(5)
                     try:
                         from modules.module_main import ui_manager
-                        if ui_manager and hasattr(ui_manager, 'exit_program'):
+
+                        if ui_manager and hasattr(ui_manager, "exit_program"):
                             ui_manager.exit_program()
                         else:
                             from modules.module_main import shutdown_event
+
                             if shutdown_event:
                                 shutdown_event.set()
                             import os
+
                             os._exit(0)
                     except Exception as e:
                         queue_message(f"Exit failed: {e}")
                         import os
+
                         os._exit(0)
 
                 threading.Thread(target=exit_after_tts, daemon=False).start()
 
             elif action == "shutdown":
-                bot_response["reply"] = bot_response.get("reply", "Powering off now. Goodbye!")
+                bot_response["reply"] = bot_response.get(
+                    "reply", "Powering off now. Goodbye!"
+                )
                 queue_message("[SYSTEM] Shutdown requested via voice command")
 
                 def shutdown_after_tts():
                     import time
+
                     time.sleep(5)
                     try:
                         from modules.module_main import ui_manager
-                        if ui_manager and hasattr(ui_manager, 'initiate_shutdown'):
+
+                        if ui_manager and hasattr(ui_manager, "initiate_shutdown"):
                             ui_manager.initiate_shutdown()
                         else:
                             import subprocess
-                            subprocess.Popen(['sudo', 'shutdown', 'now'])
+
+                            subprocess.Popen(["sudo", "shutdown", "now"])
                             import os
+
                             os._exit(0)
                     except Exception as e:
                         queue_message(f"Shutdown failed: {e}")
                         import subprocess
-                        subprocess.Popen(['sudo', 'shutdown', 'now'])
+
+                        subprocess.Popen(["sudo", "shutdown", "now"])
                         import os
+
                         os._exit(0)
 
                 threading.Thread(target=shutdown_after_tts, daemon=False).start()
@@ -740,12 +856,13 @@ def execute_function_call(func_call, bot_response, user_input):
     except Exception as e:
         queue_message(f"Function execution failed for {function_name}: {e}")
 
+
 def raw_complete_llm(user_prompt, istext=True):
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
+        "Authorization": f"Bearer {CONFIG['LLM']['api_key']}",
     }
-    llm_backend = CONFIG['LLM']['llm_backend']
+    llm_backend = CONFIG["LLM"]["llm_backend"]
     url, data = _prepare_request_data(llm_backend, user_prompt)
 
     try:
@@ -757,6 +874,7 @@ def raw_complete_llm(user_prompt, istext=True):
     except requests.RequestException as e:
         queue_message(f"ERROR: LLM request failed: {e}")
         return None
+
 
 def initialize_manager_llm(mem_manager, char_manager):
     global memory_manager, character_manager

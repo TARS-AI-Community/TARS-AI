@@ -952,7 +952,7 @@ class STTManager:
             if character_path
             else "TARS"
         )
-        queue_message(f"{character_name}: Sleeping...")
+        queue_message(f"{character_name}: Listening...")
 
         wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
         if wake_word_processor == "fastrtc":
