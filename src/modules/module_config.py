@@ -609,6 +609,9 @@ def load_config():
         "MISC": {
             "ventilate": config.getboolean("MISC", "ventilate", fallback=False),
         },
+        "GEO_SERVICES": {
+            "ipinfo_api_key": os.getenv("IPINFO_API_KEY"),
+        },
         "DEBUG": {
             "show_silence_progressbar": config.getboolean(
                 "DEBUG", "show_silence_progressbar", fallback=True

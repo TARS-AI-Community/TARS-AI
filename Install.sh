@@ -673,11 +673,21 @@ DISCORD
     fi
 
     if [[ "$PI_VERSION" == "pi5" ]]; then
-        cat >> "$req_file" << 'YOUTUBE'
+        cat >> "$req_file" << 'LOCATION'
 
 # === MEDIA (Pi5) ===
 yt-dlp                          # Youtube downloading
 pandas                          # Data analysis
+
+LOCATION
+    fi
+
+    if [[ "$PI_VERSION" == "pi5" ]]; then
+        cat >> "$req_file" << 'YOUTUBE'
+
+# === LOCATION (LAT/LONG) ===
+geocoder                        # location service for lattitude and longitude
+ipinfo                          # IP address based geolocation
 
 YOUTUBE
     fi

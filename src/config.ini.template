@@ -36,7 +36,6 @@ speechdelay = 300
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 # Relative path to the Porcupine keyword file
 
-
 [CHAR] # Character-specific details
 character_card_path = character/PLEX/PLEX.json
 # Path to the JSON file describing the character

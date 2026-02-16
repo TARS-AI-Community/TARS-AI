@@ -257,3 +257,5 @@ src/memory/._PLEX_topics.json
 src/memory/PLEX_topics.json
 
 src/modules/._.lgd-nfy0
+
+src/modules/._module_main.py

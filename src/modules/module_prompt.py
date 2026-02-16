@@ -16,10 +16,12 @@ requires a separate written license from Charles-Olivier Dion (AtomikSpace).
 
 This license applies only to this file and does not override licenses of other files in the repository.
 """
+
 from datetime import datetime
 import os
 import re
 from modules.module_messageQue import queue_message
+from modules.module_geolocation import GEOLOCATION
 
 _location_cache = {"lat": None, "lon": None, "name": None}
 
@@ -27,21 +29,31 @@ _location_cache = {"lat": None, "lon": None, "name": None}
 def _resolve_location_name(lat, lon):
     global _location_cache
 
-    if _location_cache["lat"] == lat and _location_cache["lon"] == lon and _location_cache["name"]:
+    if (
+        _location_cache["lat"] == lat
+        and _location_cache["lon"] == lon
+        and _location_cache["name"]
+    ):
         return _location_cache["name"]
 
     try:
         import requests
+
         resp = requests.get(
             f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&zoom=10",
             headers={"User-Agent": "TARS-AI/5.0"},
-            timeout=5
+            timeout=5,
         )
         resp.raise_for_status()
         data = resp.json()
 
         addr = data.get("address", {})
-        city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("municipality", "")
+        city = (
+            addr.get("city")
+            or addr.get("town")
+            or addr.get("village")
+            or addr.get("municipality", "")
+        )
         state = addr.get("state", "")
         country = addr.get("country", "")
 
@@ -58,36 +70,37 @@ def _resolve_location_name(lat, lon):
 
     return None
 
-SIMILE_RE = re.compile(r'\blike a \w+', re.IGNORECASE)
+
+SIMILE_RE = re.compile(r"\blike a \w+", re.IGNORECASE)
 
 BOUNCE_RE = re.compile(
     r"(?:how'?s your \w+|how about you|what'?s (?:next|on your|on the)"
     r"|what (?:else )?can i|is there anything|anything (?:else )?(?:i can|you)"
     r"|(?:need|want) (?:any|some)thing)",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
 EXPLAIN_RE = re.compile(
-    r'\b(explain|tell me (?:more|why|how|about|what)|'
-    r'what (?:do you mean|does that mean|is that)|'
-    r'how (?:does|do|is|did|would|could|should)|'
-    r'why (?:does|do|is|did|would|could|should)|'
-    r'can you (?:explain|clarify|break.?down|elaborate|describe|walk me through)|'
-    r'i don\'?t (?:get|understand|follow)|'
-    r'what\'?s (?:the difference|that mean)|'
-    r'help me understand|'
-    r'go into (?:more )?detail|'
-    r'elaborate|clarify|break it down|walk me through)\b',
-    re.IGNORECASE
+    r"\b(explain|tell me (?:more|why|how|about|what)|"
+    r"what (?:do you mean|does that mean|is that)|"
+    r"how (?:does|do|is|did|would|could|should)|"
+    r"why (?:does|do|is|did|would|could|should)|"
+    r"can you (?:explain|clarify|break.?down|elaborate|describe|walk me through)|"
+    r"i don\'?t (?:get|understand|follow)|"
+    r"what\'?s (?:the difference|that mean)|"
+    r"help me understand|"
+    r"go into (?:more )?detail|"
+    r"elaborate|clarify|break it down|walk me through)\b",
+    re.IGNORECASE,
 )
 
 INFO_RE = re.compile(
-    r'\b(what (?:should|can|would|could) i|'
-    r'give me (?:a |some )?(?:tips|advice|ideas|suggestions|recommendations|recipe|list|steps|instructions)|'
-    r'how (?:do i|can i|should i|to)|'
-    r'tell me (?:about|what|how|the)|'
-    r'can you (?:tell|give|show|help|suggest|recommend|list|describe))\b',
-    re.IGNORECASE
+    r"\b(what (?:should|can|would|could) i|"
+    r"give me (?:a |some )?(?:tips|advice|ideas|suggestions|recommendations|recipe|list|steps|instructions)|"
+    r"how (?:do i|can i|should i|to)|"
+    r"tell me (?:about|what|how|the)|"
+    r"can you (?:tell|give|show|help|suggest|recommend|list|describe))\b",
+    re.IGNORECASE,
 )
 
 
@@ -97,8 +110,18 @@ def _detect_user_intent(user_prompt):
         return "explain"
     if INFO_RE.search(lower):
         return "info"
-    greetings = ['how are you', "how's it going", "how's life", "what's up",
-                 'hey', 'hi ', 'hello', 'sup', 'yo ', 'howdy']
+    greetings = [
+        "how are you",
+        "how's it going",
+        "how's life",
+        "what's up",
+        "hey",
+        "hi ",
+        "hello",
+        "sup",
+        "yo ",
+        "howdy",
+    ]
     if any(lower.startswith(g) or lower == g.strip() for g in greetings):
         return "greeting"
     return "general"
@@ -106,12 +129,12 @@ def _detect_user_intent(user_prompt):
 
 def _extract_char_lines(text, char_name):
     lines = []
-    for line in text.split('\n'):
+    for line in text.split("\n"):
         stripped = line.strip()
         if stripped.startswith(f"{char_name}:"):
-            lines.append(stripped[len(char_name) + 1:].strip())
+            lines.append(stripped[len(char_name) + 1 :].strip())
         elif stripped.startswith("{char}:"):
-            lines.append(stripped[len("{char}:"):].strip())
+            lines.append(stripped[len("{char}:") :].strip())
     return " ".join(lines)
 
 
@@ -126,28 +149,47 @@ def _check_patterns(short_term_memory, char_name):
 
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
     from modules.module_config import reload_persona_settings
+
+    global _location_info
+
     fresh_traits = reload_persona_settings()
     if fresh_traits:
         character_manager.traits = fresh_traits
-        queue_message(f"[PERSONA] Loaded: verbosity={fresh_traits.get('verbosity')}, sarcasm={fresh_traits.get('sarcasm')}, humor={fresh_traits.get('humor')}")
+        queue_message(
+            f"[PERSONA] Loaded: verbosity={fresh_traits.get('verbosity')}, sarcasm={fresh_traits.get('sarcasm')}, humor={fresh_traits.get('humor')}"
+        )
     now = datetime.now()
-    user_name = config['CHAR']['user_name']
+    user_name = config["CHAR"]["user_name"]
     char_name = character_manager.char_name
-    persona_display = "\n".join([f"{trait}: {value}" for trait, value in character_manager.traits.items()])
+    persona_display = "\n".join(
+        [f"{trait}: {value}" for trait, value in character_manager.traits.items()]
+    )
 
     location_line = ""
-    latitude = config['CHAR'].get('latitude', '')
-    longitude = config['CHAR'].get('longitude', '')
-    location_name = config['CHAR'].get('location_name', '')
-
-    if location_name:
+    latitude = config["CHAR"].get("latitude", "")
+    longitude = config["CHAR"].get("longitude", "")
+    location_name = config["CHAR"].get("location_name", "")
+    if GEOLOCATION.get("lat") and GEOLOCATION.get("lon"):
+        resolved = _resolve_location_name(
+            GEOLOCATION.get("lat"),
+            GEOLOCATION.get("lon"),
+        )
+        if resolved:
+            location_line = (
+                f"Your current location: {resolved} ({latitude}, {longitude})"
+            )
+        else:
+            location_line = f"Your current coordinates: {latitude}, {longitude}"
+    elif location_name:
         location_line = f"Your current location: {location_name}"
         if latitude and longitude:
             location_line += f" ({latitude}, {longitude})"
     elif latitude and longitude:
         resolved = _resolve_location_name(latitude, longitude)
         if resolved:
-            location_line = f"Your current location: {resolved} ({latitude}, {longitude})"
+            location_line = (
+                f"Your current location: {resolved} ({latitude}, {longitude})"
+            )
         else:
             location_line = f"Your current coordinates: {latitude}, {longitude}"
     base_prompt = f"""You are {char_name}, an AI assistant that responds in JSON format.
@@ -505,8 +547,8 @@ Response: {{"question": "Shut down the raspberry pi", "reply": "Powering off now
 9. WHEN THE USER PUSHES BACK or seems confused by something you said - acknowledge it, course correct, and move on. Don't double down or pile on more jokes.
 10. IF THE USER'S MESSAGE MAKES NO SENSE - garbled speech, random words, or something you genuinely cannot interpret even with context - just say you didn't catch that or ask them to repeat. Do NOT invent a meaning or give a random answer. Examples of nonsense: "blue fish carpet tomorrow sing", "asdkjf", "the when for is go". A short or casual message like "yo" or "sup" is NOT nonsense - that's just a greeting.
 
-Current Date: {now.strftime('%m/%d/%Y')}
-Current Time: {now.strftime('%H:%M:%S')}
+Current Date: {now.strftime("%m/%d/%Y")}
+Current Time: {now.strftime("%H:%M:%S")}
 {location_line}
 """
 
@@ -528,44 +570,56 @@ Current Time: {now.strftime('%H:%M:%S')}
 
     return clean_text(final_prompt)
 
+
 def clean_text(text):
     return (
         text.replace("\\\\", "\\")
-            .replace("\\n", "\n")
-            .replace("\\'", "'")
-            .replace('\\"', '"')
-            .replace("<END>", "")
-            .strip()
+        .replace("\\n", "\n")
+        .replace("\\'", "'")
+        .replace('\\"', '"')
+        .replace("<END>", "")
+        .strip()
     )
 
-def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config, character_manager):
+
+def append_memory_and_examples(
+    base_prompt, user_prompt, memory_manager, config, character_manager
+):
     past_memory = clean_text(memory_manager.get_longterm_memory(user_prompt))
     short_term_memory = ""
     example_dialog = ""
 
-    total_base_prompt = "".join([
-        base_prompt,
-        f"\n### User: {config['CHAR']['user_name']}\n### Character: {character_manager.char_name}\n",
-        f"\nUser: {user_prompt}\n\nResponse: "
-    ])
+    total_base_prompt = "".join(
+        [
+            base_prompt,
+            f"\n### User: {config['CHAR']['user_name']}\n### Character: {character_manager.char_name}\n",
+            f"\nUser: {user_prompt}\n\nResponse: ",
+        ]
+    )
 
-    context_size = int(config['LLM']['contextsize'])
-    base_length = memory_manager.token_count(total_base_prompt).get('length', 0)
+    context_size = int(config["LLM"]["contextsize"])
+    base_length = memory_manager.token_count(total_base_prompt).get("length", 0)
     available_tokens = max(0, context_size - base_length)
 
     if available_tokens > 0:
-        short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(available_tokens)
-        memory_length = memory_manager.token_count(short_term_memory).get('length', 0)
+        short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(
+            available_tokens
+        )
+        memory_length = memory_manager.token_count(short_term_memory).get("length", 0)
         available_tokens -= memory_length
 
     if available_tokens > 0 and character_manager.example_dialogue:
-        example_length = memory_manager.token_count(character_manager.example_dialogue).get('length', 0)
+        example_length = memory_manager.token_count(
+            character_manager.example_dialogue
+        ).get("length", 0)
         if example_length <= available_tokens:
-            example_dialog = f"\nExample Dialogue:\n{character_manager.example_dialogue}\n"
+            example_dialog = (
+                f"\nExample Dialogue:\n{character_manager.example_dialogue}\n"
+            )
 
-    verbosity_val = character_manager.traits.get('verbosity', 50)
-    sarcasm_val = character_manager.traits.get('sarcasm', 50)
-    humor_val = character_manager.traits.get('humor', 50)
+    verbosity_val = character_manager.traits.get("verbosity", 50)
+    sarcasm_val = character_manager.traits.get("sarcasm", 50)
+    humor_val = character_manager.traits.get("humor", 50)
 
     intent = _detect_user_intent(user_prompt)
 
@@ -598,7 +652,9 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
 
     humor_priority_note = ""
     if intent in ("explain", "info"):
-        humor_priority_note = " (User asked a question - ANSWER CLEARLY FIRST, humor is secondary.)"
+        humor_priority_note = (
+            " (User asked a question - ANSWER CLEARLY FIRST, humor is secondary.)"
+        )
 
     if humor_val >= 80:
         if "puns" in recent_humor_used:
@@ -611,7 +667,9 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         else:
             humor_rule = f"INCLUDE 1-2 PUN/WORDPLAY{humor_priority_note}"
     elif humor_val >= 40:
-        humor_rule = "Weave in subtle natural humor if it fits. NO forced jokes, NO similes."
+        humor_rule = (
+            "Weave in subtle natural humor if it fits. NO forced jokes, NO similes."
+        )
     elif humor_val >= 20:
         humor_rule = "VERY SUBTLE WIT - occasional dry observation if natural"
     else:
@@ -634,8 +692,8 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
 
     recent_context_preview = ""
     if short_term_memory and len(short_term_memory) > 0:
-        recent_lines = short_term_memory.strip().split('\n')[-6:]
-        recent_context_preview = '\n'.join(recent_lines)
+        recent_lines = short_term_memory.strip().split("\n")[-6:]
+        recent_context_preview = "\n".join(recent_lines)
 
     if sarcasm_val <= 20:
         sarcasm_rule = "sincere and helpful"
@@ -675,10 +733,10 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         f"Response ({character_manager.char_name}):"
     )
 
+
 def inject_dynamic_values(template, user_name, char_name):
     return (
-        template
-        .replace("{user}", user_name)
+        template.replace("{user}", user_name)
         .replace("{char}", char_name)
         .replace("'user_input'", user_name)
         .replace("'bot_response'", char_name)
