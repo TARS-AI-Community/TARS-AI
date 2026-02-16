@@ -79,7 +79,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
             "openai",
             "azure",
         },
-        allowed_vad={"silero", "rms"},
+        allowed_vad={"silero", "rms", "fastrtc"},
         allowed_wake={"picovoice", "fastrtc", "atomik"},
         can_use_embeddings=True,
         can_use_ui=True,
@@ -446,6 +446,10 @@ def load_config():
             "picovoice_keyword_path": config["STT"]["picovoice_keyword_path"],
             "wake_word_processor": config["STT"]["wake_word_processor"],
             "picovoice_api_key": os.getenv("PICOVOICE_API_KEY"),
+            "fastrtc_standby_timer": int(config["STT"]["fastrtc_standby_timer"]),
+            "fastrtc_conversation_timeout": int(
+                config["STT"]["fastrtc_conversation_timeout"]
+            ),
         },
         "CHAR": {
             "character_name": character_name,

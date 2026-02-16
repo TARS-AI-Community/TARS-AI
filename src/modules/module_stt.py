@@ -277,6 +277,7 @@ class STTManager:
     def start(self):
         """Start the STT processing loop in a separate thread."""
         self.running = True
+        self.play_wav("../stt/beep_on.wav")
         self.thread = threading.Thread(
             target=self._stt_processing_loop, name="STTThread", daemon=True
         )
@@ -537,76 +538,100 @@ class STTManager:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
 
+    def check_conversation_timeout(self, speech_paused_count, conversation_started):
+        """Check if the conversation should be considered ended based on silence."""
+        if (
+            conversation_started
+            and speech_paused_count < self.config["STT"]["fastrtc_conversation_timeout"]
+        ):
+            return False
+        if (
+            not conversation_started
+            and speech_paused_count < self.config["STT"]["fastrtc_standby_timer"]
+        ):
+            return False
+
+        return True
+
     def _transcribe_with_fastrtc(self):
         """Transcribe audio using FastRTC STT with improved speech detection."""
-        audio_buffer = BytesIO()
-        detected_speech = False
-        silent_frames = 0
-        conversation_started = False
-        pre_roll_buffer = []
-        PRE_ROLL_FRAMES = 10
-        MAX_SILENT_FRAMES = 30
-        speech_paused_frames = 0
+        transcript = None
+        formatted_result = None
+        while not transcript:
+            audio_buffer = BytesIO()
+            detected_speech = False
+            silent_frames = 0
+            conversation_started = False
+            pre_roll_buffer = []
+            PRE_ROLL_FRAMES = 10
+            speech_paused_frames = 0
 
-        with (
-            sd.InputStream(
-                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-            ) as stream,
-            wave.open(audio_buffer, "wb") as wf,
-        ):
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(self.SAMPLE_RATE)
+            with (
+                sd.InputStream(
+                    samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+                ) as stream,
+                wave.open(audio_buffer, "wb") as wf,
+            ):
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(self.SAMPLE_RATE)
 
-            while speech_paused_frames < MAX_SILENT_FRAMES:
-                data, _ = stream.read(4000)
+                while not self.check_conversation_timeout(
+                    speech_paused_frames, conversation_started
+                ):
+                    data, _ = stream.read(4000)
 
-                is_silence, detected_speech, silent_frames = (
-                    self.voice_activity_detection_main(
-                        data, detected_speech, silent_frames
+                    is_silence, detected_speech, silent_frames = (
+                        self.voice_activity_detection_main(
+                            data, detected_speech, silent_frames
+                        )
                     )
-                )
 
-                if not detected_speech:
-                    speech_paused_frames += 1
-                    pre_roll_buffer.append(data.tobytes())
-                    if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
-                        pre_roll_buffer.pop(0)
-                else:
-                    if not conversation_started:
-                        for pre_roll_data in pre_roll_buffer:
-                            wf.writeframes(pre_roll_data)
-                        pre_roll_buffer = []
-                        conversation_started = True
+                    if not detected_speech:
+                        speech_paused_frames += 1
+                        pre_roll_buffer.append(data.tobytes())
+                        if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
+                            pre_roll_buffer.pop(0)
+                    else:
+                        if not conversation_started:
+                            for pre_roll_data in pre_roll_buffer:
+                                wf.writeframes(pre_roll_data)
+                            pre_roll_buffer = []
+                            conversation_started = True
 
-                    wf.writeframes(data.tobytes())
+                        wf.writeframes(data.tobytes())
 
-                    if not is_silence:
-                        speech_paused_frames = 0
+                        if not is_silence:
+                            speech_paused_frames = 0
 
-        audio_buffer.seek(0)
-        if audio_buffer.getbuffer().nbytes == 0:
-            return None
+            if not conversation_started:
+                return None
 
-        audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
+            audio_buffer.seek(0)
+            if audio_buffer.getbuffer().nbytes == 0:
+                return None
 
-        audio_max = np.abs(audio_data).max()
-        if audio_max < 0.1:
-            audio_data = audio_data * (0.3 / max(audio_max, 0.001))
+            audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
 
-        audio_data = np.clip(audio_data, -1.0, 1.0)
+            audio_max = np.abs(audio_data).max()
+            if audio_max < 0.1:
+                audio_data = audio_data * (0.3 / max(audio_max, 0.001))
 
-        transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
+            audio_data = np.clip(audio_data, -1.0, 1.0)
 
-        self.interactions += 1
+            transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
 
-        if transcript:
-            formatted_result = {"text": transcript}
-            if self.utterance_callback:
-                self.utterance_callback(json.dumps(formatted_result), self.interactions)
-            return formatted_result
-        else:
-            return None
+            if transcript:
+                self.interactions += 1
+                formatted_result = {"text": transcript}
+                if self.utterance_callback:
+                    self.utterance_callback(
+                        json.dumps(formatted_result), self.interactions
+                    )
+                break
+
+            # print("DEBUG: No transcript obtained, restarting capture...")
+        return formatted_result
 
     def _transcribe_with_vosk(self):
         """Transcribe audio using the local Vosk model."""
@@ -1181,6 +1206,10 @@ class STTManager:
             )
         elif self.vadmethod == "rms":
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+        elif self.vadmethod == "fastrtc":
+            return self._is_silence_detected_fastrtc(
+                data, detected_speech, silent_frames
+            )
         else:
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
 
@@ -1287,6 +1316,41 @@ class STTManager:
 
                 if silent_frames > self.MAX_SILENT_FRAMES:
                     clear_bar()
+                    return True, detected_speech, silent_frames
+
+            return False, detected_speech, silent_frames
+
+        except Exception as e:
+            queue_message(f"ERROR: RMS silence detection failed: {e}")
+            # Return safe default values
+            return False, detected_speech, silent_frames
+
+    def _is_silence_detected_fastrtc(self, data, detected_speech, silent_frames):
+        try:
+            update_bar, clear_bar = self._init_progress_bar()
+            self.DEBUG = False
+            rms = self.prepare_audio_data(self.amplify_audio(data))
+            self.silence_threshold_margin = self.silence_threshold * self.silence_margin
+
+            if rms is None:
+                # Even if RMS calculation fails, return proper tuple
+                return False, detected_speech, silent_frames
+
+            if rms > self.silence_threshold_margin:
+                detected_speech = True
+                silent_frames = 0
+                if self.DEBUG:
+                    queue_message(
+                        f"AUDIO: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}"
+                    )
+            else:
+                silent_frames += 1
+                detected_speech = False
+                if self.DEBUG:
+                    queue_message(
+                        f"SILENT: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}"
+                    )
+                if silent_frames > self.config["STT"]["fastrtc_conversation_timeout"]:
                     return True, detected_speech, silent_frames
 
             return False, detected_speech, silent_frames
