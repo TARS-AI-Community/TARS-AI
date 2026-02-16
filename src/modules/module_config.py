@@ -843,4 +843,57 @@ CONFIG_METADATA = {
             'description': 'Enable long-term memory'
         },
     },
+    'BATTERY': {
+        '__description__': 'Battery monitoring configuration',
+        'battery_capacity_mAh': {
+            'description': 'Battery capacity (mAh)'
+        },
+        'battery_initial_voltage': {
+            'description': 'Fully charged voltage (e.g. 12.6)'
+        },
+        'battery_cutoff_voltage': {
+            'description': 'Minimum safe voltage (e.g. 10.0)'
+        },
+        'auto_shutdown': {
+            'description': 'Shutdown system when battery is critical'
+        },
+    },
+    'MISC': {
+        '__description__': 'Miscellaneous settings',
+        'ventilate': {
+            'description': 'Enable fan/ventilation control'
+        },
+    }
 }
+
+
+def update_config_from_web_ui(data: dict, create_backup: bool = True) -> dict:
+    """
+    Update configuration using TARS CMS (Programmatic Access)
+    """
+    try:
+        cms = TarsConfigManager()
+        success, message, actions_taken = cms.update_config_programmatically(data, create_backup)
+        return {
+            "success": success,
+            "message": message,
+            "actions_taken": actions_taken,
+            "backup_location": cms.backup_file if create_backup else None
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": str(e),
+            "errors": [str(e)]
+        }
+
+
+def get_config_sync_status() -> dict:
+    """
+    Get TARS CMS sync status programmatically
+    """
+    try:
+        cms = TarsConfigManager()
+        return cms.get_config_sync_status()
+    except Exception as e:
+        return {"error": str(e), "is_synchronized": False}
