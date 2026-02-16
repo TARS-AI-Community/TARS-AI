@@ -629,54 +629,61 @@ class STTManager:
         audio_buffer = BytesIO()
         detected_speech = False
         silent_frames = 0
-        conversation_started = False
+        speech_frames = 0
         pre_roll_buffer = []
         PRE_ROLL_FRAMES = 10
-        speech_paused_frames = 0
+        MIN_SPEECH_FRAMES = 5
+        MAX_SILENT_FRAMES = 20
 
-            with (
-                sd.InputStream(
-                    samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-                ) as stream,
-                wave.open(audio_buffer, "wb") as wf,
-            ):
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(self.SAMPLE_RATE)
+        with (
+            sd.InputStream(
+                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+            ) as stream,
+            wave.open(audio_buffer, "wb") as wf,
+        ):
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(self.SAMPLE_RATE)
 
-            while not self.check_conversation_timeout(
-                speech_paused_frames, conversation_started
-            ):
+            for frame_idx in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
 
-                    is_silence, detected_speech, silent_frames = (
-                        self.voice_activity_detection_main(
-                            data, detected_speech, silent_frames
-                        )
+                is_silence, detected_speech, silent_frames = (
+                    self.voice_activity_detection_main(
+                        data, detected_speech, silent_frames
                     )
+                )
+                silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
 
+                # Add the same early exit check as other functions
+                if is_silence:
                     if not detected_speech:
-                        speech_paused_frames += 1
-                        pre_roll_buffer.append(data.tobytes())
-                        if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
-                            pre_roll_buffer.pop(0)
-                    else:
-                        if not conversation_started:
-                            for pre_roll_data in pre_roll_buffer:
-                                wf.writeframes(pre_roll_data)
-                            pre_roll_buffer = []
-                            conversation_started = True
+                        return None  # Exit early if silence detected before any speech
+                    # If speech was detected, check if we should stop recording
+                    if (
+                        speech_frames >= MIN_SPEECH_FRAMES
+                        and silent_frames >= MAX_SILENT_FRAMES
+                    ):
+                        print()
+                        break
 
-                        wf.writeframes(data.tobytes())
+                if not detected_speech:
+                    pre_roll_buffer.append(data.tobytes())
+                    if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
+                        pre_roll_buffer.pop(0)
+                else:
+                    if speech_frames == 0:
+                        for pre_roll_data in pre_roll_buffer:
+                            wf.writeframes(pre_roll_data)
+                        pre_roll_buffer = []
 
-                        if not is_silence:
-                            speech_paused_frames = 0
+                    wf.writeframes(data.tobytes())
 
-            if not conversation_started:
+                    if not is_silence:
+                        speech_frames += 1
+
+            if speech_frames < MIN_SPEECH_FRAMES:
                 return None
-
-        if not conversation_started:
-            return None
 
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
@@ -684,21 +691,18 @@ class STTManager:
 
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
 
-            audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
+        audio_max = np.abs(audio_data).max()
+        if audio_max < 0.1:
+            audio_data = audio_data * (0.3 / max(audio_max, 0.001))
 
-            audio_max = np.abs(audio_data).max()
-            if audio_max < 0.1:
-                audio_data = audio_data * (0.3 / max(audio_max, 0.001))
+        audio_data = np.clip(audio_data, -1.0, 1.0)
 
-            audio_data = np.clip(audio_data, -1.0, 1.0)
-
-            transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
+        transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
 
         if transcript:
-            self.interactions += 1
             formatted_result = {"text": transcript}
             if self.utterance_callback:
-                self.utterance_callback(json.dumps(formatted_result), self.interactions)
+                self.utterance_callback(json.dumps(formatted_result))
             return formatted_result
         else:
             return None

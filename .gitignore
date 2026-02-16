@@ -263,3 +263,6 @@ src/modules/._module_main.py
 src/modules/._module_websearch.py
 
 ._lp.sh
+src/modules/._module_geolocation.py
+._.gitignore
+TARS-AI.code-workspace
