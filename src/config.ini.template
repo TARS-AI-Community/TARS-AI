@@ -31,7 +31,7 @@ vosk_model = vosk-model-small-en-us-0.15
 # Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15 or vosk-model-en-us-0.22)
 vad_method = rms
 # Enable silero, rms
-speechdelay = 20
+speechdelay = 100
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 # Relative path to the Porcupine keyword file
