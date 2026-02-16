@@ -48,34 +48,47 @@ WakeWordSystem = None
 if CAPABILITIES is None or CAPABILITIES.can_use_embeddings:
     try:
         import torch as _torch
+
         torch = _torch
     except ImportError:
         pass
-    
+
     try:
         import torchaudio as _torchaudio
+
         torchaudio = _torchaudio
     except ImportError:
         pass
-    
+
     try:
         import librosa as _librosa
+
         librosa = _librosa
     except ImportError:
         pass
 
 # FastRTC (Pi5 only)
-if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "fastrtc" in CAPABILITIES.allowed_stt):
+if CAPABILITIES is None or (
+    CAPABILITIES.allowed_stt and "fastrtc" in CAPABILITIES.allowed_stt
+):
     try:
         from fastrtc import get_stt_model as _get_stt_model
+
         get_stt_model = _get_stt_model
     except ImportError:
         pass
 
 # Vosk (Pi5, Pi4, Pi3)
-if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "vosk" in CAPABILITIES.allowed_stt):
+if CAPABILITIES is None or (
+    CAPABILITIES.allowed_stt and "vosk" in CAPABILITIES.allowed_stt
+):
     try:
-        from vosk import Model as _Model, KaldiRecognizer as _KaldiRecognizer, SetLogLevel as _SetLogLevel
+        from vosk import (
+            Model as _Model,
+            KaldiRecognizer as _KaldiRecognizer,
+            SetLogLevel as _SetLogLevel,
+        )
+
         Model = _Model
         KaldiRecognizer = _KaldiRecognizer
         SetLogLevel = _SetLogLevel
@@ -84,23 +97,30 @@ if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "vosk" in CAPABILITIES.
         pass
 
 # Faster Whisper (Pi5 only)
-if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "faster-whisper" in CAPABILITIES.allowed_stt):
+if CAPABILITIES is None or (
+    CAPABILITIES.allowed_stt and "faster-whisper" in CAPABILITIES.allowed_stt
+):
     try:
         from faster_whisper import WhisperModel as _WhisperModel
+
         WhisperModel = _WhisperModel
     except ImportError:
         pass
 
 # Picovoice (Pi5, Pi4, Pi3)
-if CAPABILITIES is None or (CAPABILITIES.allowed_wake and "picovoice" in CAPABILITIES.allowed_wake):
+if CAPABILITIES is None or (
+    CAPABILITIES.allowed_wake and "picovoice" in CAPABILITIES.allowed_wake
+):
     try:
         import pvporcupine as _pvporcupine
+
         pvporcupine = _pvporcupine
     except ImportError:
         pass
-    
+
     try:
         from pvrecorder import PvRecorder as _PvRecorder
+
         PvRecorder = _PvRecorder
     except ImportError:
         pass
@@ -108,14 +128,18 @@ if CAPABILITIES is None or (CAPABILITIES.allowed_wake and "picovoice" in CAPABIL
 # OpenAI (all devices for cloud STT)
 try:
     from openai import OpenAI as _OpenAI
+
     OpenAI = _OpenAI
 except ImportError:
     pass
 
 # Atomik wake word (Pi5, Pi4, Pi3)
-if CAPABILITIES is None or (CAPABILITIES.allowed_wake and "atomik" in CAPABILITIES.allowed_wake):
+if CAPABILITIES is None or (
+    CAPABILITIES.allowed_wake and "atomik" in CAPABILITIES.allowed_wake
+):
     try:
         from modules.module_atomik import WakeWordSystem as _WakeWordSystem
+
         WakeWordSystem = _WakeWordSystem
     except ImportError:
         pass
@@ -126,10 +150,12 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # Global STT manager instance
 _stt_manager_instance = None
 
+
 def get_stt_manager():
     """Get the global STT manager instance."""
     global _stt_manager_instance
     return _stt_manager_instance
+
 
 class STTManager:
     """
@@ -141,18 +167,23 @@ class STTManager:
         "Took you long enough. Yes?",
         "Finally!",
     ]
-    
+
     try:
-        responses_config = CONFIG["CHAR"]['responses']
-        if responses_config and responses_config.strip() and responses_config.strip() != '[]':
+        responses_config = CONFIG["CHAR"]["responses"]
+        if (
+            responses_config
+            and responses_config.strip()
+            and responses_config.strip() != "[]"
+        ):
             parsed = json.loads(responses_config)
             if isinstance(parsed, list) and len(parsed) > 0:
                 WAKE_WORD_RESPONSES = parsed
     except (json.JSONDecodeError, Exception) as e:
         pass
 
-
-    def __init__(self, config, shutdown_event: threading.Event, ui_manager, amp_gain: float = 4.0):
+    def __init__(
+        self, config, shutdown_event: threading.Event, ui_manager, amp_gain: float = 4.0
+    ):
         """
         Initialize the STTManager.
 
@@ -163,12 +194,12 @@ class STTManager:
         """
         global _stt_manager_instance
         _stt_manager_instance = self  # Set global instance
-        
+
         self.ui_manager = ui_manager
         self.config = config
         self.shutdown_event = shutdown_event
         self.running = False
-        
+
         # Pause/resume functionality for video playback
         self.paused = False
         self.pause_lock = threading.Lock()
@@ -188,9 +219,9 @@ class STTManager:
         self.silence_margin = 3.5  # Noise floor multiplier
         self.wake_silence_threshold = None
         self.silence_threshold = None  # Updated after measuring background noise
-        self.MAX_RECORDING_FRAMES = 100   # ~12.5 seconds
-        self.MAX_SILENT_FRAMES = CONFIG['STT']['speechdelay']
-        
+        self.MAX_RECORDING_FRAMES = 100  # ~12.5 seconds
+        self.MAX_SILENT_FRAMES = CONFIG["STT"]["speechdelay"]
+
         # Callbacks
         self.wake_word_callback: Optional[Callable[[str], None]] = None
         self.utterance_callback: Optional[Callable[[str], None]] = None
@@ -206,7 +237,7 @@ class STTManager:
         self.get_speech_timestamps = None
 
         self._initialize_models()
-        self.vadmethod = CONFIG['STT']['vad_method']
+        self.vadmethod = CONFIG["STT"]["vad_method"]
         self.DEBUG = False
 
     def _initialize_models(self):
@@ -231,18 +262,18 @@ class STTManager:
         if wake_word_processor == "picovoice" and pvporcupine is not None:
             self.porcupine = pvporcupine.create(
                 access_key=CONFIG["STT"]["picovoice_api_key"],
-                keyword_paths=[CONFIG["STT"]["picovoice_keyword_path"]]
+                keyword_paths=[CONFIG["STT"]["picovoice_keyword_path"]],
             )
         elif wake_word_processor == "picovoice" and pvporcupine is None:
             queue_message("WARNING: Picovoice not available, wake word disabled")
         elif wake_word_processor == "fastrtc" and not self.fastrtc_model:
-            self._load_fastrtc_model() 
+            self._load_fastrtc_model()
         elif wake_word_processor == "atomik":
-            self._load_atomik_model() 
+            self._load_atomik_model()
 
         if self.config["STT"].get("vad_enabled", False):
             self._load_silero_vad()
-        
+
     def start(self):
         """Start the STT processing loop in a separate thread."""
         self.running = True
@@ -256,17 +287,17 @@ class STTManager:
         self.running = False
         self.shutdown_event.set()
         self.thread.join()
-    
+
     def pause(self):
         """Pause STT processing (e.g., during video playback)."""
         with self.pause_lock:
             self.paused = True
-    
+
     def resume(self):
         """Resume STT processing."""
         with self.pause_lock:
             self.paused = False
-    
+
     def is_paused(self):
         """Check if STT is currently paused."""
         with self.pause_lock:
@@ -283,7 +314,7 @@ class STTManager:
         response = requests.get(url, stream=True)
         response.raise_for_status()
 
-        total_size = int(response.headers.get('content-length', 0))
+        total_size = int(response.headers.get("content-length", 0))
         downloaded_size = 0
 
         with open(dest_path, "wb") as file:
@@ -293,7 +324,8 @@ class STTManager:
         queue_message(f"INFO: Download complete. Extracting...")
         if file_name.endswith(".zip"):
             import zipfile
-            with zipfile.ZipFile(dest_path, 'r') as zip_ref:
+
+            with zipfile.ZipFile(dest_path, "r") as zip_ref:
                 zip_ref.extractall(dest_folder)
             os.remove(dest_path)
             queue_message(f"INFO: Zip file deleted.")
@@ -306,19 +338,25 @@ class STTManager:
         if Model is None:
             queue_message("WARNING: Vosk not available (not installed)")
             return
-            
-        if self.config['STT']['stt_processor'] == 'vosk':
-            vosk_model_path = os.path.join(os.getcwd(), "..", "stt", self.config['STT']['vosk_model'])
+
+        if self.config["STT"]["stt_processor"] == "vosk":
+            vosk_model_path = os.path.join(
+                os.getcwd(), "..", "stt", self.config["STT"]["vosk_model"]
+            )
             if not os.path.exists(vosk_model_path):
                 queue_message(f"ERROR: Vosk model not found. Downloading...")
                 download_url = f"https://alphacephei.com/vosk/models/{self.config['STT']['vosk_model']}.zip"
-                self._download_vosk_model(download_url, os.path.join(os.getcwd(), "..", "stt"))
+                self._download_vosk_model(
+                    download_url, os.path.join(os.getcwd(), "..", "stt")
+                )
                 queue_message(f"INFO: Restarting model loading...")
                 self._load_vosk_model()
                 return
 
             self.vosk_model = Model(vosk_model_path)
-            queue_message(f"LOAD: Vosk model loaded: {self.config['STT']['vosk_model']}")
+            queue_message(
+                f"LOAD: Vosk model loaded: {self.config['STT']['vosk_model']}"
+            )
 
     def _load_atomik_model(self):
         if WakeWordSystem is None:
@@ -330,22 +368,29 @@ class STTManager:
     def _load_fasterwhisper_model(self):
         """Load the Faster-Whisper model for local transcription."""
         if WhisperModel is None or torch is None:
-            queue_message("WARNING: Faster-Whisper not available (missing dependencies)")
+            queue_message(
+                "WARNING: Faster-Whisper not available (missing dependencies)"
+            )
             self.faster_whisper_model = None
             return
-            
+
         try:
             import warnings
+
             warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
             original_torch_load = torch.load
 
             def patched_torch_load(fp, map_location, *args, **kwargs):
-                return original_torch_load(fp, map_location=map_location, weights_only=True, *args, **kwargs)
+                return original_torch_load(
+                    fp, map_location=map_location, weights_only=True, *args, **kwargs
+                )
 
             torch.load = patched_torch_load
 
             model_size = self.config["STT"].get("whisper_model", "tiny")
-            queue_message(f"INFO: Preparing to load Faster-Whisper model '{model_size}'...")
+            queue_message(
+                f"INFO: Preparing to load Faster-Whisper model '{model_size}'..."
+            )
 
             # Set up a folder for Whisper models inside the stt directory via environment variable.
             whisper_folder = os.path.join(os.getcwd(), "..", "stt", "whisper")
@@ -368,7 +413,7 @@ class STTManager:
         if torch is None:
             queue_message("WARNING: Silero STT not available (torch not installed)")
             return
-            
+
         try:
             # Go one level up from the current directory
             parent_dir = os.path.dirname(os.getcwd())
@@ -376,10 +421,14 @@ class STTManager:
             os.makedirs(stt_folder, exist_ok=True)
             # Override torch.hub.get_dir to return stt_folder directly.
             import torch.hub
+
             torch.hub.get_dir = lambda: stt_folder
 
             self.silero_model, self.decoder, self.utils = torch.hub.load(
-                "snakers4/silero-models", model="silero_stt", language="en", device="cpu"
+                "snakers4/silero-models",
+                model="silero_stt",
+                language="en",
+                device="cpu",
             )
             (
                 self.read_batch,
@@ -399,7 +448,7 @@ class STTManager:
         if torch is None:
             queue_message("WARNING: Silero VAD not available (torch not installed)")
             return
-            
+
         # You can set these values as needed.
         USE_PIP = True  # download model using pip package
         USE_ONNX = False
@@ -407,6 +456,7 @@ class STTManager:
         if USE_PIP:
             try:
                 from silero_vad import load_silero_vad, get_speech_timestamps
+
                 self.silero_vad_model = load_silero_vad(onnx=USE_ONNX)
                 self.get_speech_timestamps = get_speech_timestamps
                 queue_message("INFO: Silero VAD loaded successfully using pip package.")
@@ -415,16 +465,18 @@ class STTManager:
         else:
             try:
                 self.silero_vad_model, utils = torch.hub.load(
-                    repo_or_dir='snakers4/silero-vad',
-                    model='silero_vad',
+                    repo_or_dir="snakers4/silero-vad",
+                    model="silero_vad",
                     force_reload=True,
-                    onnx=USE_ONNX
+                    onnx=USE_ONNX,
                 )
-                (get_speech_timestamps,
-                 save_audio,
-                 read_audio,
-                 VADIterator,
-                 collect_chunks) = utils
+                (
+                    get_speech_timestamps,
+                    save_audio,
+                    read_audio,
+                    VADIterator,
+                    collect_chunks,
+                ) = utils
                 self.get_speech_timestamps = get_speech_timestamps
                 queue_message("INFO: Silero VAD loaded successfully using torch.hub.")
             except Exception as e:
@@ -438,14 +490,14 @@ class STTManager:
             queue_message("WARNING: FastRTC not available (not installed)")
             self.fastrtc_model = None
             return
-            
+
         try:
             self.fastrtc_model = get_stt_model()
             queue_message("INFO: FastRTC STT model loaded successfully.")
         except Exception as e:
             queue_message(f"ERROR: Failed to load FastRTC STT model: {e}")
             self.fastrtc_model = None
-    
+
     # === Transcription Methods ===
 
     def _transcribe_utterance(self):
@@ -454,9 +506,11 @@ class STTManager:
             # Skip if paused
             if self.is_paused():
                 return None
-            
-            processor = self.config["STT"].get("stt_processor", "fastrtc")  # Default to fastrtc
-            #queue_message(f"DEBUG: Selected STT processor: {processor}")
+
+            processor = self.config["STT"].get(
+                "stt_processor", "fastrtc"
+            )  # Default to fastrtc
+            # queue_message(f"DEBUG: Selected STT processor: {processor}")
 
             if processor == "fastrtc":
                 result = self._transcribe_with_fastrtc()
@@ -471,7 +525,9 @@ class STTManager:
             elif processor == "openai":
                 result = self._transcribe_with_openAi()
             else:
-                queue_message(f"WARNING: Unknown STT processor '{processor}', falling back to FastRTC")
+                queue_message(
+                    f"WARNING: Unknown STT processor '{processor}', falling back to FastRTC"
+                )
                 result = self._transcribe_with_fastrtc()
 
             if self.post_utterance_callback and result:
@@ -492,30 +548,38 @@ class STTManager:
         MIN_SPEECH_FRAMES = 5
         MAX_SILENT_FRAMES = 20
 
-        with sd.InputStream(
-            samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-        ) as stream, wave.open(audio_buffer, "wb") as wf:
+        with (
+            sd.InputStream(
+                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+            ) as stream,
+            wave.open(audio_buffer, "wb") as wf,
+        ):
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(self.SAMPLE_RATE)
 
             for frame_idx in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
-                
-                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(
-                    data, detected_speech, silent_frames
+
+                is_silence, detected_speech, silent_frames = (
+                    self.voice_activity_detection_main(
+                        data, detected_speech, silent_frames
+                    )
                 )
                 silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
-                
+
                 # Add the same early exit check as other functions
                 if is_silence:
                     if not detected_speech:
                         return None  # Exit early if silence detected before any speech
                     # If speech was detected, check if we should stop recording
-                    if speech_frames >= MIN_SPEECH_FRAMES and silent_frames >= MAX_SILENT_FRAMES:
+                    if (
+                        speech_frames >= MIN_SPEECH_FRAMES
+                        and silent_frames >= MAX_SILENT_FRAMES
+                    ):
                         print()
                         break
-                
+
                 if not detected_speech:
                     pre_roll_buffer.append(data.tobytes())
                     if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
@@ -527,10 +591,10 @@ class STTManager:
                         pre_roll_buffer = []
 
                     wf.writeframes(data.tobytes())
-                    
+
                     if not is_silence:
                         speech_frames += 1
-            
+
             if speech_frames < MIN_SPEECH_FRAMES:
                 return None
 
@@ -539,11 +603,11 @@ class STTManager:
             return None
 
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
-        
+
         audio_max = np.abs(audio_data).max()
         if audio_max < 0.1:
             audio_data = audio_data * (0.3 / max(audio_max, 0.001))
-        
+
         audio_data = np.clip(audio_data, -1.0, 1.0)
 
         transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
@@ -555,14 +619,13 @@ class STTManager:
             return formatted_result
         else:
             return None
-        
-        
+
     def _transcribe_with_vosk(self):
         """Transcribe audio using the local Vosk model."""
         if KaldiRecognizer is None or self.vosk_model is None:
             queue_message("ERROR: Vosk not available for transcription")
             return None
-            
+
         recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
         recognizer.SetWords(False)
         recognizer.SetPartialWords(False)
@@ -570,21 +633,28 @@ class STTManager:
         detected_speech = False
         silent_frames = 0
 
-        with sd.InputStream(samplerate=self.SAMPLE_RATE,
-                            channels=1, dtype="int16",
-                            blocksize=4000, latency='high') as stream:
-            for _ in range(self.MAX_RECORDING_FRAMES):  # Limit recording duration (~12.5 seconds)
+        with sd.InputStream(
+            samplerate=self.SAMPLE_RATE,
+            channels=1,
+            dtype="int16",
+            blocksize=4000,
+            latency="high",
+        ) as stream:
+            for _ in range(
+                self.MAX_RECORDING_FRAMES
+            ):  # Limit recording duration (~12.5 seconds)
                 data, _ = stream.read(4000)
-                
-                is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(data, detected_speech, silent_frames) #force RMS as VAD doesnt like vosk
+
+                is_silence, detected_speech, silent_frames = (
+                    self._is_silence_detected_rms(data, detected_speech, silent_frames)
+                )  # force RMS as VAD doesnt like vosk
                 if is_silence:
                     if not detected_speech:
                         return None
                     break
-                
-                #write the audio data
-                data = self.amplify_audio(data) #amp the sound
 
+                # write the audio data
+                data = self.amplify_audio(data)  # amp the sound
 
                 if recognizer.AcceptWaveform(data.tobytes()):
                     result = recognizer.Result()
@@ -592,83 +662,89 @@ class STTManager:
                         self.utterance_callback(result)
                     return result
         return None
-    
+
     def _transcribe_with_openAi(self):
         """Transcribe and translate audio using OpenAI's Whisper API."""
-        
-        language = CONFIG['STT']['language']
+
+        language = CONFIG["STT"]["language"]
         client = OpenAI(api_key=CONFIG["TTS"]["openai_api_key"])
-        
+
         detected_speech = False
         silent_frames = 0
         audio_buffer = []  # Store audio chunks
 
-        with sd.InputStream(samplerate=self.SAMPLE_RATE,
-                            channels=1, dtype="int16",
-                            blocksize=4000, latency='high') as stream:
+        with sd.InputStream(
+            samplerate=self.SAMPLE_RATE,
+            channels=1,
+            dtype="int16",
+            blocksize=4000,
+            latency="high",
+        ) as stream:
             for _ in range(self.MAX_RECORDING_FRAMES):  # Limit recording duration
                 data, _ = stream.read(4000)
-                
-                is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(
-                    data, detected_speech, silent_frames
+
+                is_silence, detected_speech, silent_frames = (
+                    self._is_silence_detected_rms(data, detected_speech, silent_frames)
                 )
-                
+
                 if is_silence:
                     if not detected_speech:
                         return None
                     break
-                
+
                 # Amplify and store audio data
                 data = self.amplify_audio(data)
                 audio_buffer.append(data)
-        
+
         if not audio_buffer:
             return None
-        
+
         # Combine all audio chunks
         audio_data = np.concatenate(audio_buffer)
-        
+
         # Save to temporary WAV file (OpenAI requires a file)
         import tempfile
+
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
-            with wave.open(temp_audio.name, 'wb') as wf:
+            with wave.open(temp_audio.name, "wb") as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)  # 16-bit
                 wf.setframerate(self.SAMPLE_RATE)
                 wf.writeframes(audio_data.tobytes())
-            
+
             # Transcribe with OpenAI Whisper
             try:
-                with open(temp_audio.name, 'rb') as audio_file:
+                with open(temp_audio.name, "rb") as audio_file:
                     transcription = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        response_format="text"
+                        model="whisper-1", file=audio_file, response_format="text"
                     )
             finally:
                 # Clean up temp file
                 os.unlink(temp_audio.name)
-        
+
         # Translate to target language if not English
         if language and language.lower() not in ["english", "anglais"]:
             translation = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": f"Translate the following text to {language}. Only provide the translation, nothing else."},
-                    {"role": "user", "content": transcription}
-                ]
+                    {
+                        "role": "system",
+                        "content": f"Translate the following text to {language}. Only provide the translation, nothing else.",
+                    },
+                    {"role": "user", "content": transcription},
+                ],
             )
             result_text = translation.choices[0].message.content
         else:
             result_text = transcription
-        
+
         # Format result to match your existing format
         formatted_result = {"text": result_text}
-        
+
         # Call utterance callback if it exists
         if self.utterance_callback:
             self.utterance_callback(json.dumps(formatted_result))
-        
+
         return formatted_result
 
     def _transcribe_with_faster_whisper(self):
@@ -678,16 +754,23 @@ class STTManager:
         silent_frames = 0
         max_silent_frames = self.MAX_SILENT_FRAMES
 
-        with sd.InputStream(
-            samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-        ) as stream, wave.open(audio_buffer, "wb") as wf:
+        with (
+            sd.InputStream(
+                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+            ) as stream,
+            wave.open(audio_buffer, "wb") as wf,
+        ):
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(self.SAMPLE_RATE)
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
 
-                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
+                is_silence, detected_speech, silent_frames = (
+                    self.voice_activity_detection_main(
+                        data, detected_speech, silent_frames
+                    )
+                )
                 if is_silence:
                     if not detected_speech:
                         return None
@@ -703,7 +786,9 @@ class STTManager:
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
         audio_data = np.clip(audio_data, -1.0, 1.0)
         if sample_rate != self.DEFAULT_SAMPLE_RATE:
-            audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=self.DEFAULT_SAMPLE_RATE)
+            audio_data = librosa.resample(
+                audio_data, orig_sr=sample_rate, target_sr=self.DEFAULT_SAMPLE_RATE
+            )
 
         segments, _ = self.faster_whisper_model.transcribe(
             audio_data, temperature=0.0, beam_size=1, language="en"
@@ -715,7 +800,7 @@ class STTManager:
                 self.utterance_callback(json.dumps(formatted_result))
             return formatted_result
         else:
-            #queue_message("ERROR: No transcription from Faster-Whisper.")
+            # queue_message("ERROR: No transcription from Faster-Whisper.")
             return None
 
     def _transcribe_silero(self):
@@ -724,26 +809,32 @@ class STTManager:
         detected_speech = False
         silent_frames = 0
 
-        with sd.InputStream(
-            samplerate=self.SAMPLE_RATE, channels=1, dtype="int16", blocksize=4000
-        ) as stream, wave.open(audio_buffer, "wb") as wf:
+        with (
+            sd.InputStream(
+                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16", blocksize=4000
+            ) as stream,
+            wave.open(audio_buffer, "wb") as wf,
+        ):
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(self.SAMPLE_RATE)
 
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
-                
 
-                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
+                is_silence, detected_speech, silent_frames = (
+                    self.voice_activity_detection_main(
+                        data, detected_speech, silent_frames
+                    )
+                )
                 if is_silence:
                     if not detected_speech:
                         return None
                     break
-                
-                #write the audio data
+
+                # write the audio data
                 wf.writeframes(data.tobytes())
-    
+
         audio_buffer.seek(0)
         if audio_buffer.getbuffer().nbytes == 0:
             queue_message("ERROR: No audio recorded.")
@@ -752,8 +843,10 @@ class STTManager:
         # Convert recorded audio for STT model
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
         if sample_rate != self.DEFAULT_SAMPLE_RATE:
-            audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=self.DEFAULT_SAMPLE_RATE)
-            #queue_message("INFO: Resampled Audio.")
+            audio_data = librosa.resample(
+                audio_data, orig_sr=sample_rate, target_sr=self.DEFAULT_SAMPLE_RATE
+            )
+            # queue_message("INFO: Resampled Audio.")
 
         # Run STT Model
         input_audio = self.prepare_model_input([torch.tensor(audio_data)], device="cpu")
@@ -774,17 +867,23 @@ class STTManager:
             silent_frames = 0
             detected_speech = False
 
-            with sd.InputStream(
-                samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-            ) as stream, wave.open(audio_buffer, "wb") as wf:
+            with (
+                sd.InputStream(
+                    samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+                ) as stream,
+                wave.open(audio_buffer, "wb") as wf,
+            ):
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
                 wf.setframerate(self.SAMPLE_RATE)
                 for _ in range(self.MAX_RECORDING_FRAMES):
                     data, _ = stream.read(4000)
 
-
-                    is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
+                    is_silence, detected_speech, silent_frames = (
+                        self.voice_activity_detection_main(
+                            data, detected_speech, silent_frames
+                        )
+                    )
                     if is_silence:
                         if not detected_speech:
                             return None
@@ -800,7 +899,8 @@ class STTManager:
             files = {"audio": ("audio.wav", audio_buffer, "audio/wav")}
             response = requests.post(
                 f"{self.config['STT'].get('external_url')}/save_audio",
-                files=files, timeout=10
+                files=files,
+                timeout=10,
             )
             if response.status_code == 200:
                 transcription = response.json().get("transcription", [])
@@ -835,7 +935,7 @@ class STTManager:
             if self.is_paused():
                 time.sleep(0.1)  # Sleep while paused to avoid busy waiting
                 continue
-            
+
             if self._detect_wake_word():
                 # Check again if paused before transcribing
                 if not self.is_paused():
@@ -847,7 +947,11 @@ class STTManager:
             self.play_wav("../stt/beep_off.wav")
 
         character_path = self.config.get("CHAR", {}).get("character_card_path")
-        character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
+        character_name = (
+            os.path.splitext(os.path.basename(character_path))[0]
+            if character_path
+            else "TARS"
+        )
         queue_message(f"{character_name}: Sleeping...")
 
         wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
@@ -876,7 +980,9 @@ class STTManager:
         silent_frames = 0
         max_iterations = 100  # Prevent infinite loops
 
-        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+        with sd.InputStream(
+            samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+        ) as stream:
             for iteration in range(max_iterations):
                 if not self.running or self.shutdown_event.is_set():
                     break
@@ -886,11 +992,15 @@ class STTManager:
                 data = self.amplify_audio(data)  # Apply amplification
 
                 # Check for silence
-                is_silence, _, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
+                is_silence, _, silent_frames = self.voice_activity_detection_main(
+                    data, False, silent_frames
+                )
                 if is_silence:
                     silent_frames += 1
                     if silent_frames > self.MAX_SILENT_FRAMES:
-                        queue_message("DEBUG: Silence timeout reached in FastRTC wake word detection.")
+                        queue_message(
+                            "DEBUG: Silence timeout reached in FastRTC wake word detection."
+                        )
                         break
                     continue
                 else:
@@ -900,16 +1010,22 @@ class STTManager:
                 audio_data = data.astype(np.float32) / 32768.0
                 # Ensure 1D array: flatten from (44100,) to [44100]
                 audio_data = audio_data.flatten()
-                #queue_message(f"DEBUG: audio_data shape: {audio_data.shape}, sample_rate: {self.SAMPLE_RATE}")
+                # queue_message(f"DEBUG: audio_data shape: {audio_data.shape}, sample_rate: {self.SAMPLE_RATE}")
 
                 try:
-                    transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip().lower()
+                    transcript = (
+                        self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data))
+                        .strip()
+                        .lower()
+                    )
                 except Exception as e:
                     queue_message(f"ERROR: FastRTC STT failed: {e}")
                     continue
 
                 if self.DEBUG:
-                    queue_message(f"DEBUG: FastRTC Wake Word Transcript: '{transcript}'")
+                    queue_message(
+                        f"DEBUG: FastRTC Wake Word Transcript: '{transcript}'"
+                    )
 
                 if self.WAKE_WORD in transcript:
                     if self.config["STT"].get("use_indicators"):
@@ -920,16 +1036,19 @@ class STTManager:
                         pass
                     if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
                         wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                        character_name = os.path.splitext(os.path.basename(
-                            self.config.get("CHAR", {}).get("character_card_path", "TARS")
-                        ))[0]
+                        character_name = os.path.splitext(
+                            os.path.basename(
+                                self.config.get("CHAR", {}).get(
+                                    "character_card_path", "TARS"
+                                )
+                            )
+                        )[0]
                         queue_message(f"{character_name}: {wake_response}", stream=True)
                         if self.wake_word_callback:
                             self.wake_word_callback(wake_response)
                     return True
 
         return False
-    
 
     def _detect_wake_word_picovoice(self) -> bool:
         """
@@ -965,15 +1084,21 @@ class STTManager:
                     except Exception:
                         pass
 
-                    character_path = self.config.get("CHAR", {}).get("character_card_path")
-                    character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
+                    character_path = self.config.get("CHAR", {}).get(
+                        "character_card_path"
+                    )
+                    character_name = (
+                        os.path.splitext(os.path.basename(character_path))[0]
+                        if character_path
+                        else "TARS"
+                    )
                     if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
                         wake_response = random.choice(self.WAKE_WORD_RESPONSES)
                         queue_message(f"{character_name}: {wake_response}", stream=True)
                         if self.wake_word_callback:
                             self.wake_word_callback(wake_response)
                     return True
-                    
+
         except Exception as e:
             queue_message(f"ERROR: Wake word detection failed: {e}")
             return False
@@ -989,15 +1114,14 @@ class STTManager:
         #         pass
 
         return False
-    
 
     def _detect_wake_word_atomik(self) -> bool:
-        sensitivity = float(CONFIG["STT"]["sensitivity"]) 
+        sensitivity = float(CONFIG["STT"]["sensitivity"])
         norm = (sensitivity - 1) / 9
-        curve = norm ** 1.6
+        curve = norm**1.6
         threshold = 0.2 + curve * (0.7 - 0.2)
         threshold = round(max(0.2, min(threshold, 0.7)), 2)
-        #print("Atomik sensitivity:", threshold)
+        # print("Atomik sensitivity:", threshold)
         detector = WakeWordSystem(self.WAKE_WORD, 16000, threshold)
         detector.createModel()
         if detector.listenForWakeWord():
@@ -1009,19 +1133,20 @@ class STTManager:
                 pass
             if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
                 wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                character_name = os.path.splitext(os.path.basename(
-                    self.config.get("CHAR", {}).get("character_card_path", "TARS")
-                ))[0]
+                character_name = os.path.splitext(
+                    os.path.basename(
+                        self.config.get("CHAR", {}).get("character_card_path", "TARS")
+                    )
+                )[0]
                 queue_message(f"{character_name}: {wake_response}", stream=True)
                 if self.wake_word_callback:
                     self.wake_word_callback(wake_response)
             return True
-        
 
     def _init_progress_bar(self):
         """Initialize progress bar settings and functions"""
-        bar_length = 10  
-        show_progress = True
+        bar_length = 10
+        show_progress = CONFIG["DEBUG"]["show_silence_progressbar"]
 
         def flush_all():
             """Ensure all buffers are completely flushed"""
@@ -1034,7 +1159,7 @@ class STTManager:
                 progress = int((frames / max_frames) * bar_length)
                 filled = "#" * progress
                 empty = "-" * (bar_length - progress)
-                
+
                 self.ui_manager.silence(frames)
                 bar = f"\r[SILENCE: {filled}{empty}] {frames}/{max_frames}"
                 sys.stdout.write(bar)
@@ -1047,8 +1172,9 @@ class STTManager:
                 sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
                 sys.stdout.flush()
                 flush_all()  # 🔹 Ensure everything is flushed immediately
+
         return update_progress_bar, clear_progress_bar
-    
+
     # === VAD Methods ===
 
     def voice_activity_detection_main(self, data, detected_speech, silent_frames=0):
@@ -1057,10 +1183,12 @@ class STTManager:
         Returns a tuple: (is_silence, detected_speech, silent_frames)
         """
         # Get the vad_method from the configuration, defaulting to "rms" if not set.
-        #print(self.vadmethod)
-    
+        # print(self.vadmethod)
+
         if self.vadmethod == "silero":
-            return self._is_silence_detected_silero(data, detected_speech, silent_frames)
+            return self._is_silence_detected_silero(
+                data, detected_speech, silent_frames
+            )
         elif self.vadmethod == "rms":
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
         else:
@@ -1076,32 +1204,37 @@ class STTManager:
 
         try:
             # Silero VAD-based detection
-            if torch is not None and self.silero_vad_model is not None and self.get_speech_timestamps is not None:
+            if (
+                torch is not None
+                and self.silero_vad_model is not None
+                and self.get_speech_timestamps is not None
+            ):
                 try:
                     audio_norm = data.astype(np.float32) / 32768.0
                     audio_tensor = torch.from_numpy(audio_norm).squeeze()
-                    
-                    if hasattr(self.silero_vad_model, 'reset_states'):
+
+                    if hasattr(self.silero_vad_model, "reset_states"):
                         self.silero_vad_model.reset_states()
-                    
+
                     # Get VAD configuration with defaults
 
-                    noise_gate = 0.01 * self.silence_threshold #adjust for bgnoise
+                    noise_gate = 0.01 * self.silence_threshold  # adjust for bgnoise
 
-                    # Skip very low amplitude signals 
-                    #if np.max(np.abs(audio_norm)) < noise_gate:
-                        #return True, detected_speech, silent_frames
+                    # Skip very low amplitude signals
+                    # if np.max(np.abs(audio_norm)) < noise_gate:
+                    # return True, detected_speech, silent_frames
 
-                    speech_ts = self.get_speech_timestamps(
-                        audio_tensor, 
-                        self.silero_vad_model,
-                        sampling_rate=self.SAMPLE_RATE,
-                        threshold=0.3,
-                        min_speech_duration_ms=100,
-                        return_seconds=True
-                    ) or []
-                    
-             
+                    speech_ts = (
+                        self.get_speech_timestamps(
+                            audio_tensor,
+                            self.silero_vad_model,
+                            sampling_rate=self.SAMPLE_RATE,
+                            threshold=0.3,
+                            min_speech_duration_ms=100,
+                            return_seconds=True,
+                        )
+                        or []
+                    )
 
                     if len(speech_ts) > 0:
                         detected_speech = True
@@ -1114,16 +1247,17 @@ class STTManager:
                     if silent_frames > self.MAX_SILENT_FRAMES:
                         clear_bar()
                         return True, detected_speech, silent_frames
-                    
+
                     return False, detected_speech, silent_frames
-                        
+
                 except Exception as e:
                     queue_message(f"WARNING: VAD error, falling back to RMS: {e}")
-                    return self._is_silence_detected_rms(data, detected_speech, silent_frames)
-            
+                    return self._is_silence_detected_rms(
+                        data, detected_speech, silent_frames
+                    )
+
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
-            
-        
+
         except Exception as e:
             queue_message(f"ERROR: Silence detection failed: {e}")
             # Return safe default values
@@ -1144,33 +1278,36 @@ class STTManager:
             if rms > self.silence_threshold_margin:
                 detected_speech = True
                 silent_frames = 0
-                
+
                 if self.DEBUG:
-                    queue_message(f"AUDIO: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}")
-                
+                    queue_message(
+                        f"AUDIO: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}"
+                    )
+
                 clear_bar()
             else:
                 silent_frames += 1
-                
+
                 if self.DEBUG:
-                    queue_message(f"SILENT: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}")
-                
+                    queue_message(
+                        f"SILENT: {rms:.2f}/{self.silence_threshold:.2f}/{self.silence_threshold_margin:.2f}"
+                    )
+
                 update_bar(silent_frames, self.MAX_SILENT_FRAMES)
 
                 if silent_frames > self.MAX_SILENT_FRAMES:
                     clear_bar()
                     return True, detected_speech, silent_frames
 
-            
             return False, detected_speech, silent_frames
-        
+
         except Exception as e:
             queue_message(f"ERROR: RMS silence detection failed: {e}")
             # Return safe default values
             return False, detected_speech, silent_frames
-  
+
     # === Audio adjustments ===
-    
+
     def _measure_background_noise(self):
         """Measure background noise and set the silence threshold."""
         queue_message("INFO: Measuring background noise...")
@@ -1197,14 +1334,20 @@ class STTManager:
             iqr = q3 - q1
             lower_bound = q1 - 1.5 * iqr
             upper_bound = q3 + 1.5 * iqr
-            filtered = background_rms[(background_rms >= lower_bound) & (background_rms <= upper_bound)]
+            filtered = background_rms[
+                (background_rms >= lower_bound) & (background_rms <= upper_bound)
+            ]
             self.wake_silence_threshold = np.max(filtered)
             self.silence_threshold = self.wake_silence_threshold * self.silence_margin
 
             db = 20 * np.log10(self.silence_threshold)
-            queue_message(f"INFO: Silence threshold: {db:.2f} dB and {self.silence_threshold}")
+            queue_message(
+                f"INFO: Silence threshold: {db:.2f} dB and {self.silence_threshold}"
+            )
         else:
-            queue_message("WARNING: Background noise measurement failed; using default threshold.")
+            queue_message(
+                "WARNING: Background noise measurement failed; using default threshold."
+            )
 
     def prepare_audio_data(self, data: np.ndarray) -> Optional[float]:
         """
@@ -1249,7 +1392,6 @@ class STTManager:
             queue_message(f"ERROR: {e}")
             return self.DEFAULT_SAMPLE_RATE
 
-
     def play_wav(self, filename):
         try:
             data, sample_rate = sf.read(filename)
@@ -1258,8 +1400,6 @@ class STTManager:
             sd.wait()
         except Exception as e:
             print(f"Error playing sound file: {e}")
-
-
 
     # === Callback Setters ===
 

@@ -249,3 +249,7 @@ src/modules/._module_prompt.py
 src/modules/.lgd-nfy0
 
 src/modules/UI/._module_ui_terminal.py
+
+src/modules/._module_stt.py
+
+src/memory/._PLEX_topics.json

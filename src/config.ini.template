@@ -280,3 +280,7 @@ auto_shutdown = True
 [MISC]
 ventilate = False
 # Enable to have the robot automatically take a pose that allows for better airflow
+
+[DEBUG]
+show_silence_progressbar = False
+# Enable to show silence progress bar
