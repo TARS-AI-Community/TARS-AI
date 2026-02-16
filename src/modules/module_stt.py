@@ -348,7 +348,6 @@ class STTManager:
     def start(self):
         """Start the STT processing loop in a separate thread."""
         self.running = True
-        self.play_wav("../stt/beep_on.wav")
         self.thread = threading.Thread(
             target=self._stt_processing_loop, name="STTThread", daemon=True
         )
