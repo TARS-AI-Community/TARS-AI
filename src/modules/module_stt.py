@@ -935,6 +935,7 @@ class STTManager:
                         # queue_message(f"### TRANSCRIBED ###: '{conversation_text}' at {time.strftime('%Y-%m-%d %H:%M:%S')}  with probability  %{_info.language_probability}")
                         if conversation_text:
                             formatted_result = {"text": conversation_text}
+                            self.interactions += 1
                             if self.utterance_callback:
                                 self.utterance_callback(json.dumps(formatted_result))
                                 return formatted_result
