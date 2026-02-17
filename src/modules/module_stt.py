@@ -608,21 +608,6 @@ class STTManager:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
 
-    def check_conversation_timeout(self, speech_paused_count, conversation_started):
-        """Check if the conversation should be considered ended based on silence."""
-        if (
-            conversation_started
-            and speech_paused_count < self.config["STT"]["fastrtc_conversation_timeout"]
-        ):
-            return False
-        if (
-            not conversation_started
-            and speech_paused_count < self.config["STT"]["fastrtc_standby_timer"]
-        ):
-            return False
-
-        return True
-
     def _transcribe_with_fastrtc(self):
         """Transcribe audio using FastRTC STT with improved speech detection."""
         audio_buffer = BytesIO()
@@ -937,7 +922,9 @@ class STTManager:
                             formatted_result = {"text": conversation_text}
                             self.interactions += 1
                             if self.utterance_callback:
-                                self.utterance_callback(json.dumps(formatted_result),self.interactions)
+                                self.utterance_callback(
+                                    json.dumps(formatted_result), self.interactions
+                                )
                                 return formatted_result
                     except Exception as e:
                         queue_message(f"WARNING: Chunk transcription failed: {e}")
