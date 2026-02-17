@@ -15,7 +15,7 @@ language = english
 # spoken language, if not using english, use stt_processor = openai
 wake_word = hey tars
 # Wake word for activating the system
-wake_word_processor = atomik
+wake_word_processor = picovoice
 # Options: picovoice, fastrtc, atomik
 sensitivity = 7
 # Lower threshold (e.g., 1) is lenient; higher (e.g., 10) is strict for Atomik wake word detection. 
@@ -37,10 +37,6 @@ standby_timer = 30
 # timer until TARS enters standby mode (seconds)
 picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 # Relative path to the Porcupine keyword file
-fastrtc_standby_timer = 320
-# Time in seconds before the fastrtc wake word processor goes into standby mode (default: 320 around 30 seconds)
-fastrtc_conversation_timeout = 20
-# Time in seconds to wait for a response before timing out to process the the conversation (default: 20 around 2.5 seconds)
 
 [CHAR] # Character-specific details
 character_card_path = character/PLEX/PLEX.json
