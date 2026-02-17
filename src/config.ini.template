@@ -25,13 +25,13 @@ use_indicators = False
 # Use beeps to indicate when listening
 external_url = http://192.168.2.57:5678
 # URL for the STT server (if enabled)
-whisper_model = base
+whisper_model = tiny
 # Which whisper model to use for onboard whisper transcription tiny, base, small, medium, large
 vosk_model = vosk-model-small-en-us-0.15
 # Model to use for local / onboard tts from https://alphacephei.com/vosk/models (Recommended: vosk-model-small-en-us-0.15 or vosk-model-en-us-0.22)
 vad_method = silero
 # Enable silero, rms
-speechdelay = 3
+speechdelay = 5
 # Tenths of seconds to wait before goint to sleep (20 = 2 seconds)
 standby_timer = 30
 # timer until TARS enters standby mode (seconds)

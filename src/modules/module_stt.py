@@ -931,7 +931,7 @@ class STTManager:
                         ).strip()
 
                         # queue_message(
-                        #    f"### TRANSCRIBED ###: {conversation_text} at {time.strftime('%Y-%m-%d %H:%M:%S')}"
+                        #     f"### TRANSCRIBED ###: {conversation_text} at {time.strftime('%Y-%m-%d %H:%M:%S')}"
                         # )
 
                         # queue_message(f"### TRANSCRIBED ###: '{conversation_text}' at {time.strftime('%Y-%m-%d %H:%M:%S')}  with probability  %{_info.language_probability}")
