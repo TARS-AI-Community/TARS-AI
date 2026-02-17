@@ -238,7 +238,7 @@ class STTManager:
         self.silero_vad_model = None
         self.get_speech_timestamps = None
         # Threaded audio reader for streaming-based STT processors
-        self.audio_queue: "queue.Queue" = queue.Queue(maxsize=5000)
+        self.audio_queue: "queue.Queue" = queue.Queue()
         self._stream_thread: Optional[threading.Thread] = None
         self._stream_stop_event: threading.Event = threading.Event()
         self._stream_obj = None
@@ -878,6 +878,7 @@ class STTManager:
         data_buffer = []
         silent_frames = 0
         detected_speech = False
+        conversation_started = False
         try:
             self._start_stream_reader(blocksize=4000)
             target_time = time.time() + self.STANDBY_TIMER
@@ -893,41 +894,65 @@ class STTManager:
                     )
                 )
 
-                # queue_message(f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}")
+                # queue_message(
+                #    f"DEBUG: voice_activity_detection_main end: conversation_stopped={conversation_stopped}, detected_speech={detected_speech}, silent_frames={silent_frames}"
+                # )
                 if detected_speech:
                     target_time = time.time() + self.STANDBY_TIMER
+                    if not conversation_started:
+                        conversation_started = True
 
-                data_buffer.append(data)
+                if conversation_started:
+                    data_buffer.append(data)
 
-                if conversation_stopped and len(data_buffer) > 0:
+                if (
+                    conversation_started
+                    and conversation_stopped
+                    and len(data_buffer) > 0
+                ):
                     data_arr = np.concatenate(data_buffer)
                     audio_np = np.frombuffer(data_arr, dtype=np.int16)
                     audio_float = audio_np.astype(np.float32) / 32768.0
 
                     try:
+                        # queue_message(
+                        #    f"### TRANSCRIBED START ### at {time.strftime('%Y-%m-%d %H:%M:%S')}"
+                        # )
+
                         segments, _info = self.faster_whisper_model.transcribe(
                             audio_float,
                             temperature=0.0,
                             beam_size=5,
                             language="en",
-                            vad_filter=True,
                         )
 
                         conversation_text = " ".join(
                             segment.text for segment in segments
                         ).strip()
 
+                        # queue_message(
+                        #    f"### TRANSCRIBED ###: {conversation_text} at {time.strftime('%Y-%m-%d %H:%M:%S')}"
+                        # )
+
                         # queue_message(f"### TRANSCRIBED ###: '{conversation_text}' at {time.strftime('%Y-%m-%d %H:%M:%S')}  with probability  %{_info.language_probability}")
                         if conversation_text:
                             formatted_result = {"text": conversation_text}
                             self.interactions += 1
+
                             if self.utterance_callback:
                                 self.utterance_callback(
                                     json.dumps(formatted_result), self.interactions
                                 )
                                 return formatted_result
+
                     except Exception as e:
                         queue_message(f"WARNING: Chunk transcription failed: {e}")
+                    finally:
+                        data_buffer = []
+                        conversation_stopped = False
+                        conversation_started = False
+                        silent_frames = 0
+                        detected_speech = False
 
         except Exception as e:
             queue_message(f"ERROR: Faster-Whisper recording failed: {e}")
@@ -1368,6 +1393,7 @@ class STTManager:
                             threshold=0.5,
                             min_speech_duration_ms=100,
                             return_seconds=True,
+                            # speech_pad_ms=30,
                         )
                         or []
                     )
