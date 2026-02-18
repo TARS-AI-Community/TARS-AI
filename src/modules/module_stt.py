@@ -858,33 +858,27 @@ class STTManager:
                             )
 
                         try:
-                            #  queue_message(
-                            #      f"### TRANSCRIBED START ### at {time.strftime('%Y-%m-%d %H:%M:%S')}"
-                            #  )
-
                             segments, _ = self.faster_whisper_model.transcribe(
                                 audio_data,
                                 temperature=0.0,
                                 beam_size=5,
                                 language="en",
                             )
-
-                            conversation_text = " ".join(
-                                segment.text for segment in segments
-                            ).strip()
-
                             # queue_message(
-                            #     f"### TRANSCRIBED FINISHED ###: at {time.strftime('%Y-%m-%d %H:%M:%S')}"
+                            #    f"### TRANSCRIBED FINISHED ###: at {time.strftime('%Y-%m-%d %H:%M:%S')}"
                             # )
-
+                            segments = list(segments)
+                            conversation_text = " ".join(s.text for s in segments)
+                            # queue_message(
+                            #    f"### FINISHED BUILDING CONVERSATION TEXT ###: at {time.strftime('%Y-%m-%d %H:%M:%S')}"
+                            # )
                             if conversation_text:
                                 formatted_result = {"text": conversation_text}
                                 self.interactions += 1
 
                                 if self.utterance_callback:
-                                    self.utterance_callback(
-                                        json.dumps(formatted_result), self.interactions
-                                    )
+                                    dump = json.dumps(formatted_result)
+                                    self.utterance_callback(dump, self.interactions)
                                     return formatted_result
 
                         except Exception as e:
@@ -899,6 +893,8 @@ class STTManager:
         except Exception as e:
             queue_message(f"ERROR: Faster-Whisper recording failed: {e}")
             return None
+        finally:
+            self.play_wav("../stt/beep_off.wav")
 
     def _transcribe_silero(self):
         """Transcribe audio using Silero STT."""
@@ -1038,6 +1034,7 @@ class STTManager:
                 # Check again if paused before transcribing
                 if not self.is_paused():
                     self._transcribe_utterance()
+
         queue_message("INFO: STT Manager stopped.")
 
     def _detect_wake_word(self) -> bool:
