@@ -38,13 +38,11 @@ def get_cache_filename(text):
     return os.path.join(CACHE_DIR, f"openai_{text_hash}.mp3")
 
 async def text_to_speech_with_pipelining_openai(text, is_wakeword):
-    #print(f"is_wakeword: {is_wakeword}")
 
     if is_wakeword:
         cache_file = get_cache_filename(text)
 
         if os.path.exists(cache_file):
-            #queue_message(f"Loading wakeword from cache: {cache_file}")
             try:
                 with open(cache_file, 'rb') as f:
                     audio_bytes = f.read()
@@ -55,7 +53,6 @@ async def text_to_speech_with_pipelining_openai(text, is_wakeword):
             except Exception as e:
                 queue_message(f"ERROR: Failed to load cache file: {e}")
         
-        #queue_message(f"Generating and caching wakeword: {text}")
         try:
             response = openai.audio.speech.create(
                 model="tts-1",
@@ -68,7 +65,6 @@ async def text_to_speech_with_pipelining_openai(text, is_wakeword):
             try:
                 with open(cache_file, 'wb') as f:
                     f.write(audio_bytes)
-                #queue_message(f"Cached wakeword to: {cache_file}")
             except Exception as e:
                 queue_message(f"ERROR: Failed to cache audio: {e}")
             

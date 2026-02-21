@@ -23,14 +23,14 @@ import numpy as np
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import pygame
-from UI.module_screensaver_overlay import TimeOverlay
+from UI.screensavers.module_screensaver_overlay import TimeOverlay
 
 class BlackHoleAnimation:
     def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
         self.width = width
         self.height = height
-        self.is_portrait = height > width  # Detect portrait mode
+        self.is_portrait = height > width
         self.time = 0.0
         self.rotation_y = 0
         self.rotation_x = 0
@@ -475,7 +475,6 @@ class BlackHoleAnimation:
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
         if self.is_portrait:
-            # Portrait mode: use swapped aspect and add rotation
             aspect_ratio = self.height / max(1, self.width)
             glRotatef(90, 0, 0, 1)
             gluPerspective(45, aspect_ratio, 0.1, 50.0)

@@ -1584,46 +1584,84 @@ const tabButtons = document.querySelectorAll('.custom-tab');
     });
   });
 
-// Fetch the talking head base URL from the backend
+// === Client-side avatar animation ===
+let avatarIsTalking = false;
+let avatarIsBlinking = false;
+let avatarNextBlink = Date.now() + 3000 + Math.random() * 1000;
+let avatarBlinkEnd = 0;
+let avatarSprites = {};  // { nottalking_open, nottalking_closed, talking_open, talking_closed }
+let avatarImages = {};   // preloaded Image objects
+
+function preloadAvatarSprites(spriteUrls) {
+    avatarSprites = spriteUrls;
+    avatarImages = {};
+    for (const [key, url] of Object.entries(spriteUrls)) {
+        const img = new window.Image();
+        img.src = url;
+        avatarImages[key] = img;
+    }
+}
+
+function updateAvatarFrame() {
+    const now = Date.now();
+    // Blink logic
+    if (!avatarIsBlinking && now >= avatarNextBlink) {
+        avatarIsBlinking = true;
+        avatarBlinkEnd = now + 400;
+    }
+    if (avatarIsBlinking && now >= avatarBlinkEnd) {
+        avatarIsBlinking = false;
+        avatarNextBlink = now + 3000 + Math.random() * 1000;
+    }
+    // Pick sprite
+    let key;
+    if (avatarIsTalking) {
+        if (avatarIsBlinking) {
+            key = 'talking_closed';
+        } else {
+            key = Math.random() < 0.7 ? 'talking_open' : 'nottalking_open';
+        }
+    } else {
+        key = avatarIsBlinking ? 'nottalking_closed' : 'nottalking_open';
+    }
+    const el = document.getElementById('backgroundImage');
+    if (el && avatarSprites[key]) {
+        el.src = avatarSprites[key];
+    }
+}
+
+// Run avatar animation at ~10 fps
+setInterval(updateAvatarFrame, 100);
+
+// Fetch sprite URLs and talkinghead base URL
 fetch('/get_ip')
     .then(response => response.json())
     .then(data => {
-        // Store the base URL in the global variable
         talkingheadBaseUrl = data.talkinghead_base_url;
-
-        // Update the image source or do other initial actions
-        const fullUrl = talkingheadBaseUrl + "/stream";
-        document.getElementById('backgroundImage').src = fullUrl;
     })
     .catch(error => console.error('Error fetching talking head URL:', error));
 
-const talkinghead_url = "{{ talkinghead_base_url }}";
-const parser = new DOMParser();
-let decodedUrl = parser.parseFromString(`<!doctype html><body>{{ talkinghead_base_url }}`, 'text/html').body.textContent;
-decodedUrl = decodedUrl.replace(/^"|"$/g, '');
-console.log(decodedUrl);
+fetch('/avatar_sprites')
+    .then(response => response.json())
+    .then(data => {
+        preloadAvatarSprites(data);
+        // Set initial image
+        if (data.nottalking_open) {
+            document.getElementById('backgroundImage').src = data.nottalking_open;
+        }
+    })
+    .catch(error => console.error('Error fetching avatar sprites:', error));
+
 let isMuted = false;
 
 function start_talking() {
-if (!isMuted) {
-fetch(talkingheadBaseUrl + "/start_talking")
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-            })
-            .catch(error => console.error('Fetch error:', error));
-}
+    if (!isMuted) {
+        avatarIsTalking = true;
+    }
 }
 
 function stop_talking() {
-fetch(talkingheadBaseUrl + "/stop_talking")
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-        })
-        .catch(error => console.error('Fetch error:', error));
+    avatarIsTalking = false;
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -1669,17 +1707,7 @@ var audioPlayer = document.getElementById('audioPlayer');
 
 // Function to handle the 'ended' event
 function handleAudioEnd() {
-// Call the /talking_stop endpoint right after the audio stops if not muted
-if (!audioPlayer.muted) {
-  fetch(talkingheadBaseUrl + "/stop_talking")
-      .then(response => {
-          if (!response.ok) {
-              throw new Error('Network response was not ok');
-          }
-          // Handle the response if necessary
-      })
-      .catch(error => console.error('Fetch error:', error));
-}
+    stop_talking();
 }
 
 // Add event listener for 'ended' event
@@ -2312,9 +2340,14 @@ var socket = io.connect('http://' + document.domain + ':' + location.port);
         }, 5000); // Attempt to reconnect after 5 seconds
     });
 
-    socket.on('heartbeat', function(msg) {
-        //console.log('Heartbeat received from server');
-        socket.emit('heartbeat', {status: 'alive'});
+    // Server-driven talking state (for voice mode — audio plays on Pi speakers)
+    socket.on('talking_state', function(data) {
+        avatarIsTalking = data.talking;
+    });
+
+    // Emotion changed — reload sprite images
+    socket.on('emotion_change', function(data) {
+        preloadAvatarSprites(data);
     });
 
 

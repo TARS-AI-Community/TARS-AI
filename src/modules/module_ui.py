@@ -41,12 +41,14 @@ from UI.module_ui_terminal import TerminalSystem
 from UI.module_ui_spectrum import SpectrumSystem
 from UI.module_ui_video import VideoSystem
 from UI.module_ui_camera import CameraModule
-from UI.module_ui_screensaver import ScreensaverManager  
+from UI.module_ui_detections import DetectionManager
+from UI.module_ui_screensaver import ScreensaverManager
+from UI.module_ui_apps import AppManager
 
 CONFIG = load_config()
-screenWidth = CONFIG['UI'].get('screen_width', 0)  # 0 = auto-detect
-screenHeight = CONFIG['UI'].get('screen_height', 0)  # 0 = auto-detect
-rotation = CONFIG['UI'].get('rotation', 0)  # 0 = auto-detect
+screenWidth = CONFIG['UI'].get('screen_width', 0)
+screenHeight = CONFIG['UI'].get('screen_height', 0)
+rotation = CONFIG['UI'].get('rotation', 0)
 show_mouse = CONFIG['UI']['show_mouse']
 use_camera_module = CONFIG['UI']['use_camera_module']
 fullscreen = CONFIG['UI']['fullscreen']
@@ -78,9 +80,9 @@ class UIManager(threading.Thread):
         self.width = width
         self.height = height
         self.rotate = rotation_value
-        self.effective_rotate = rotation_value  # May be adjusted in run() based on OS rotation
-        self.actual_display_width = width  # May be adjusted in run() based on OS rotation
-        self.actual_display_height = height  # May be adjusted in run() based on OS rotation
+        self.effective_rotate = rotation_value
+        self.actual_display_width = width
+        self.actual_display_height = height
         self.font_size = font_size
         self.silence_progress = 0
         self.speechdelay = speechdelay
@@ -98,19 +100,14 @@ class UIManager(threading.Thread):
 
         self._load_ui_settings()  
 
-        # Set initial logical dimensions based on config (will be updated in run() based on actual screen)
-        # Assume portrait mode as default for initialization
         if self.width > 0 and self.height > 0:
             if self.width > self.height:
-                # Config is landscape, assume we want portrait
                 self.logical_width = self.height
                 self.logical_height = self.width
             else:
-                # Config is portrait
                 self.logical_width = self.width
                 self.logical_height = self.height
         else:
-            # Defaults
             self.logical_width = 600
             self.logical_height = 1024
 
@@ -125,19 +122,14 @@ class UIManager(threading.Thread):
 
         self.screensaver_manager = None
 
+        self.app_manager = None
+        self.show_app = False
+        self.app_switch_time = 0
+
         self.camera_module = None
         self.show_camera = False
 
-        self.face_detector = None
-        try:
-            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            self.face_detector = cv2.CascadeClassifier(cascade_path)
-            if self.face_detector.empty():
-                print("WARNING: Face detector cascade file is empty")
-                self.face_detector = None
-        except Exception as e:
-            print(f"WARNING: Face detector init failed: {e}")
-            self.face_detector = None
+        self.detection_manager = DetectionManager()
 
         if self.use_camera_module:
             try:
@@ -205,13 +197,10 @@ class UIManager(threading.Thread):
     def toggle_camera(self):
         self.show_camera = not self.show_camera
 
-        # Deactivate screensaver when camera is toggled (especially when turning on)
         if self.screensaver_manager:
             if self.show_camera:
-                # Force deactivate if camera is being turned on
                 self.screensaver_manager.deactivate()
             else:
-                # Just reset timer if camera is being turned off
                 self.screensaver_manager.reset_timer()
 
         if self.show_camera:
@@ -220,6 +209,29 @@ class UIManager(threading.Thread):
         else:
             if self.terminal_system:
                 self.terminal_system.set_camera_active(False)
+
+    def launch_app(self, app_name):
+        if self.show_camera:
+            self.toggle_camera()
+
+        if self.screensaver_manager:
+            self.screensaver_manager.deactivate()
+
+        if self.app_manager and self.app_manager.launch(app_name):
+            self.show_app = True
+            self.app_switch_time = pygame.time.get_ticks()
+            if self.terminal_system:
+                self.terminal_system.set_app_active(True)
+
+    def exit_app(self):
+        if self.app_manager:
+            self.app_manager.deactivate()
+        self.show_app = False
+        self.app_switch_time = pygame.time.get_ticks()
+        if self.terminal_system:
+            self.terminal_system.set_app_active(False)
+        if self.screensaver_manager:
+            self.screensaver_manager.reset_timer()
 
     def pause(self):
         self.paused = True
@@ -283,6 +295,10 @@ class UIManager(threading.Thread):
         elif self.background_type == 'tesseract' and self.tesseract_system is not None:
             self.tesseract_system.think()
 
+    def set_tars_status(self, status):
+        if self.terminal_system is not None:
+            self.terminal_system.set_tars_status(status)
+
     def update_data(self, key: str, value: str, msg_type: str = 'INFO') -> None:
         self.new_data_added = True
         if self.terminal_system is not None:
@@ -299,7 +315,6 @@ class UIManager(threading.Thread):
     def _transform_mouse_pos(self, screen_pos, display_width, display_height):
         x, y = screen_pos
 
-        # Use effective_rotate (actual rotation being applied) not config rotate
         if self.effective_rotate == 0:
             return (x, y)
 
@@ -325,7 +340,6 @@ class UIManager(threading.Thread):
             logical_y = self.logical_height - 1 - y
 
         elif self.effective_rotate == 270:
-            # Original working formula
             logical_x = y
             logical_y = self.logical_height - 1 - x
         else:
@@ -398,7 +412,6 @@ class UIManager(threading.Thread):
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface.get_width(), surface.get_height(), 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, texture_data)
         
-        # Use actual display dimensions (may be swapped for 90/270 rotation)
         disp_w = self.actual_display_width if hasattr(self, 'actual_display_width') else self.width
         disp_h = self.actual_display_height if hasattr(self, 'actual_display_height') else self.height
         
@@ -408,6 +421,53 @@ class UIManager(threading.Thread):
         glTexCoord2f(1, 0); glVertex2f(disp_w, disp_h)
         glTexCoord2f(0, 0); glVertex2f(0, disp_h)
         glEnd()
+
+    def _draw_gl_back_button(self):
+        btn_surface = pygame.Surface((self.logical_width, self.logical_height), pygame.SRCALPHA)
+        btn_surface.fill((0, 0, 0, 0))
+        self.terminal_system.draw_back_button(btn_surface)
+
+        if self.effective_rotate != 0:
+            btn_surface = pygame.transform.rotate(btn_surface, self.effective_rotate)
+
+        tex_data = pygame.image.tostring(btn_surface, "RGBA", True)
+        tex_w, tex_h = btn_surface.get_size()
+
+        if not hasattr(self, '_back_btn_tex_id') or self._back_btn_tex_id is None:
+            self._back_btn_tex_id = glGenTextures(1)
+
+        glEnable(GL_TEXTURE_2D)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        dw = self.actual_display_width
+        dh = self.actual_display_height
+        glOrtho(0, dw, 0, dh, -1, 1)
+
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+
+        glBindTexture(GL_TEXTURE_2D, self._back_btn_tex_id)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_w, tex_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, tex_data)
+
+        glColor4f(1.0, 1.0, 1.0, 1.0)
+        glBegin(GL_QUADS)
+        glTexCoord2f(0, 0); glVertex2f(0, 0)
+        glTexCoord2f(1, 0); glVertex2f(dw, 0)
+        glTexCoord2f(1, 1); glVertex2f(dw, dh)
+        glTexCoord2f(0, 1); glVertex2f(0, dh)
+        glEnd()
+
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
 
     def _draw_camera(self, surface):
         if not self.camera_module:
@@ -438,35 +498,7 @@ class UIManager(threading.Thread):
         camera_x = (self.logical_width - camera_w) // 2
         camera_y = (self.logical_height - camera_h) // 2
 
-        detected_frame = frame
-        if self.face_detector is not None:
-
-            frame_array = pygame.surfarray.array3d(frame)
-            frame_array = np.transpose(frame_array, (1, 0, 2))
-            frame_array = np.ascontiguousarray(frame_array)
-
-            frame_bgr = cv2.cvtColor(frame_array, cv2.COLOR_RGB2BGR)
-
-            gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-            faces = self.face_detector.detectMultiScale(
-                gray,
-                scaleFactor=1.1,
-                minNeighbors=5,
-                minSize=(30, 30)
-            )
-
-            for (x, y, w_box, h_box) in faces:
-
-                cv2.rectangle(frame_bgr, (x, y), (x+w_box, y+h_box), (0, 255, 255), 2)
-                label = "FACE"
-                label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
-                cv2.rectangle(frame_bgr, (x, y-20), (x+label_size[0]+6, y), (0, 255, 255), -1)
-                cv2.putText(frame_bgr, label, (x+3, y-6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
-
-            frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-
-            frame_rgb = np.transpose(frame_rgb, (1, 0, 2))
-            detected_frame = pygame.surfarray.make_surface(frame_rgb)
+        detected_frame = self.detection_manager.process_frame(frame)
 
         scaled_frame = pygame.transform.scale(detected_frame, (camera_w, camera_h))
 
@@ -474,6 +506,8 @@ class UIManager(threading.Thread):
         pygame.draw.rect(surface, (0, 255, 255), border_rect, 2)
 
         surface.blit(scaled_frame, (camera_x, camera_y))
+
+        self.detection_manager.draw_buttons(surface, camera_x, camera_y, camera_w)
 
     def run(self) -> None:
         try:
@@ -486,16 +520,13 @@ class UIManager(threading.Thread):
             if fullscreen:
                 display_flags |= pygame.FULLSCREEN
 
-            # Auto-detect screen dimensions from OS
             display_info = pygame.display.Info()
             os_width = display_info.current_w
             os_height = display_info.current_h
             
-            # Create display - use (0,0) to auto-detect, or config values for windowed
             if fullscreen:
                 screen = pygame.display.set_mode((0, 0), display_flags)
             else:
-                # Windowed mode: use config dimensions if valid, else use OS dimensions
                 win_w = self.width if self.width > 0 else os_width
                 win_h = self.height if self.height > 0 else os_height
                 screen = pygame.display.set_mode((win_w, win_h), display_flags)
@@ -504,22 +535,17 @@ class UIManager(threading.Thread):
             display_width = actual_size[0]
             display_height = actual_size[1]
             
-            # Determine if display is portrait
             actual_is_portrait = display_height > display_width
             
-            # UI is designed for portrait mode - determine if we need rotation
             if actual_is_portrait:
-                # OS is portrait, no rotation needed
                 self.logical_width = display_width
                 self.logical_height = display_height
                 self.effective_rotate = 0
             else:
-                # OS is landscape, need software rotation to portrait
                 self.logical_width = display_height
                 self.logical_height = display_width
                 self.effective_rotate = 270
             
-            # Store for use in _render_surface_to_opengl
             self.actual_display_width = display_width
             self.actual_display_height = display_height
             
@@ -527,7 +553,6 @@ class UIManager(threading.Thread):
 
             pygame.display.set_caption("UI Manager")
             
-            # Setup OpenGL
             glMatrixMode(GL_PROJECTION)
             glLoadIdentity()
             gluOrtho2D(0, display_width, display_height, 0)
@@ -555,15 +580,16 @@ class UIManager(threading.Thread):
                     self.logical_width,
                     self.logical_height,
                     bg_alpha=13,
-                    battery_module=self.battery_module,  
+                    battery_module=self.battery_module,
                     cpu_temp_module=self.cpu_temp_module,
                     show_cpu_temp=show_cpu_temp,
                     on_background_change=self.cycle_background,
                     on_shutdown=self.initiate_shutdown,
                     on_spectrum_change=self.cycle_spectrum_style,
-                    on_camera_toggle=self.toggle_camera,  
-                    on_exit=self.exit_program  
-
+                    on_camera_toggle=self.toggle_camera,
+                    on_exit=self.exit_program,
+                    on_app_select=self.launch_app,
+                    on_app_back=self.exit_app
                 )
 
                 self.screensaver_manager = ScreensaverManager(
@@ -576,6 +602,22 @@ class UIManager(threading.Thread):
                     display_height=display_height,
                     rotation=self.effective_rotate
                 )
+
+                self.app_manager = AppManager(
+                    original_surface,
+                    self.logical_width,
+                    self.logical_height,
+                    display_width=display_width,
+                    display_height=display_height,
+                    rotation=self.effective_rotate
+                )
+
+                if self.terminal_system and self.app_manager:
+                    self.terminal_system.set_available_apps(self.app_manager.get_available_apps())
+
+                startup_app = CONFIG['UI'].get('app', 'terminal')
+                if startup_app and startup_app.lower() != 'terminal':
+                    self.launch_app(startup_app.lower())
 
             except Exception as e:
                 import traceback
@@ -609,58 +651,86 @@ class UIManager(threading.Thread):
                     if event.type == pygame.QUIT:
                         self.running = False
                     elif event.type == pygame.KEYDOWN:
-                        # Reset screensaver on any key press
-                        if self.screensaver_manager:
-                            self.screensaver_manager.reset_timer()
-                        
+                        if not self.show_app:
+                            if self.screensaver_manager:
+                                self.screensaver_manager.reset_timer()
+
+                        # Route key events to detection manager for name input
+                        if self.show_camera and self.detection_manager.handle_key_event(event):
+                            continue
+
                         if event.key == pygame.K_ESCAPE:
-                            self.running = False
-                        elif event.key == pygame.K_s:  # Press 'S' to cycle spectrum styles
-                            self.cycle_spectrum_style()
-                        elif event.key == pygame.K_c:  # Press 'C' to toggle camera
-                            self.toggle_camera()
+                            if self.show_app:
+                                self.exit_app()
+                            else:
+                                self.running = False
+                        elif not self.show_app:
+                            if event.key == pygame.K_s:
+                                self.cycle_spectrum_style()
+                            elif event.key == pygame.K_c:
+                                self.toggle_camera()
                     elif event.type == pygame.MOUSEBUTTONDOWN:
-                        # Reset screensaver on mouse click
-                        if self.screensaver_manager:
-                            self.screensaver_manager.reset_timer()
-                        
-                        if self.terminal_system:
+                        if self.show_app:
+                            if self.terminal_system:
+                                logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
+                                self.terminal_system.handle_app_click(logical_pos)
+                        else:
+                            if self.screensaver_manager:
+                                self.screensaver_manager.reset_timer()
+
                             logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
-                            self.terminal_system.handle_mouse_down(logical_pos)
-                            self.terminal_system.handle_click(logical_pos)
+
+                            if self.show_camera and self.detection_manager.handle_click(logical_pos):
+                                pass
+                            elif self.terminal_system:
+                                self.terminal_system.handle_mouse_down(logical_pos)
+                                self.terminal_system.handle_click(logical_pos)
                     elif event.type == pygame.MOUSEBUTTONUP:
-                        if self.terminal_system:
-                            logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
-                            self.terminal_system.handle_mouse_up(logical_pos)
+                        if not self.show_app and self.terminal_system:
+                            self.terminal_system.handle_mouse_up()
                     elif event.type == pygame.MOUSEMOTION:
-                        # Reset screensaver on mouse movement
-                        if self.screensaver_manager:
-                            self.screensaver_manager.reset_timer()
-                        
-                        if self.terminal_system:
-                            logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
-                            self.terminal_system.handle_mouse_motion(logical_pos)
+                        if not self.show_app:
+                            if self.screensaver_manager:
+                                self.screensaver_manager.reset_timer()
                     elif event.type == pygame.MOUSEWHEEL:
-                        if self.terminal_system:
+                        if not self.show_app and self.terminal_system:
                             self.terminal_system.handle_scroll_wheel(event.y)
 
-                # Check if screensaver should activate (but not if camera is showing or if disabled)
+                if self.terminal_system and not self.show_app:
+                    self.terminal_system.handle_scroll_hold()
+
                 if self.screensaver_manager:
-                    if self.show_camera:
-                        # Force deactivate screensaver if camera is active
+                    if self.show_app or self.show_camera:
                         if self.screensaver_manager.is_active():
                             self.screensaver_manager.deactivate()
-                        # Keep resetting the timer while camera is active
                         self.screensaver_manager.reset_timer()
                     elif screensaver_timer > 0:
-                        # Only check timeout when camera is not showing and screensaver is enabled
                         self.screensaver_manager.check_timeout()
-                
-                # If screensaver is active, render only screensaver and skip all updates
+
+                if self.app_manager and self.app_manager.is_active():
+                    needs_flip = self.app_manager.render()
+
+                    if needs_flip:
+                        if self.terminal_system:
+                            self.terminal_system.draw_back_button(original_surface)
+
+                        if self.effective_rotate != 0:
+                            rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
+                            self._render_surface_to_opengl(rotated_surface, texture_id)
+                        else:
+                            self._render_surface_to_opengl(original_surface, texture_id)
+                        pygame.display.flip()
+                    else:
+                        if self.terminal_system:
+                            self._draw_gl_back_button()
+                        pygame.display.flip()
+
+                    clock.tick(self.target_fps)
+                    continue
+
                 if self.screensaver_manager and self.screensaver_manager.is_active():
                     needs_flip = self.screensaver_manager.render()
                     
-                    # For pygame screensavers, we need to upload the surface to OpenGL and flip
                     if needs_flip:
                         if self.effective_rotate != 0:
                             rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
@@ -668,37 +738,29 @@ class UIManager(threading.Thread):
                         else:
                             self._render_surface_to_opengl(original_surface, texture_id)
                         pygame.display.flip()
-                    # OpenGL screensavers handle their own display.flip() and projection setup
                     
                     clock.tick(self.target_fps)
-                    continue  # Skip all background updates and normal rendering
+                    continue
                 
-                # Reset OpenGL to 2D mode for normal UI rendering
                 glViewport(0, 0, display_width, display_height)
                 
-                # Reset projection matrix
                 glMatrixMode(GL_PROJECTION)
                 glLoadIdentity()
                 gluOrtho2D(0, display_width, display_height, 0)
                 
-                # Reset modelview matrix
                 glMatrixMode(GL_MODELVIEW)
                 glLoadIdentity()
                 
-                # Reset OpenGL state for 2D UI rendering
                 glDisable(GL_DEPTH_TEST)
                 glEnable(GL_TEXTURE_2D)
                 glEnable(GL_BLEND)
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
                 
-                # CRITICAL: Reset color to white (screensaver sets various colors)
                 glColor4f(1.0, 1.0, 1.0, 1.0)
                 
-                # Clear any residual OpenGL errors
                 while glGetError() != GL_NO_ERROR:
                     pass
 
-                # Note: screen.fill() doesn't work in OpenGL mode, glClear handles it
 
                 if self.background_type == 'particles' and self.particle_system is not None:
 
@@ -803,6 +865,9 @@ class UIManager(threading.Thread):
             self.running = False
 
         finally:
+
+            if self.app_manager:
+                self.app_manager.deactivate()
 
             if self.spectrum_system:
                 self.spectrum_system.stop_audio_stream()

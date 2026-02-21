@@ -515,7 +515,7 @@ def execute_function_call(func_call, bot_response, user_input):
                     try:
                         from modules.module_main import ui_manager, shutdown_event, battery_module, stt_manager
                         import modules.module_main as main_module
-                        from modules.module_ui import UIManager
+                        from modules.module_main import UIManager
 
                         if ui_manager and not ui_manager.running:
                             queue_message("Reopening UI...")
@@ -595,7 +595,7 @@ def execute_function_call(func_call, bot_response, user_input):
 
                         from modules.module_main import ui_manager, shutdown_event, battery_module, stt_manager
                         import modules.module_main as main_module
-                        from modules.module_ui import UIManager
+                        from modules.module_main import UIManager
 
                         if ui_manager and not ui_manager.running:
                             queue_message("Reopening UI...")
@@ -655,10 +655,8 @@ def execute_function_call(func_call, bot_response, user_input):
 
             def launch_after_tts():
                 import time
-                # Give TTS time to speak the reply
                 time.sleep(5)
 
-                # Launch in a real terminal — ES and runcommand.sh need a TTY
                 queue_message("Launching RetroPie script...")
                 if os.path.isfile("/usr/bin/lxterminal"):
                     os.system(f"setsid lxterminal --title='RetroPie' -e {retropie_script} &")
@@ -667,11 +665,10 @@ def execute_function_call(func_call, bot_response, user_input):
                 else:
                     os.system(f"setsid x-terminal-emulator -e {retropie_script} &")
 
-                # Trigger clean shutdown (UI pygame.quit, camera stop, audio stop, etc.)
                 try:
                     from modules.module_main import shutdown_event, stop_event
                     if stop_event:
-                        stop_event.set()  # Unblocks BT controller wrapper loop
+                        stop_event.set()
                     if shutdown_event:
                         queue_message("Setting shutdown event for clean exit...")
                         shutdown_event.set()

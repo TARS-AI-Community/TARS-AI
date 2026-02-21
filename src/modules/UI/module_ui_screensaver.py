@@ -21,22 +21,22 @@ import random
 import inspect
 import pygame
 from modules.module_config import load_config
-from UI.module_screensaver_face import FaceAnimation
-from UI.module_screensaver_terminal import TerminalAnimation
-from UI.module_screensaver_matrix import MatrixAnimation
-from UI.module_screensaver_hyperspace import HyperspaceAnimation
-from UI.module_screensaver_starfield import StarfieldAnimation
-from UI.module_screensaver_nebula import NebulaAnimation
-from UI.module_screensaver_blackhole import BlackHoleAnimation
-from UI.module_screensaver_fractal import FractalAnimation
-from UI.module_screensaver_pacman import PacmanAnimation
-from UI.module_screensaver_waves import WavesAnimation
-from UI.module_screensaver_pictures import PicturesAnimation
-from UI.module_screensaver_dashboard import DashboardAnimation
-from UI.module_screensaver_defrag import DefragAnimation
-from UI.module_screensaver_bounce import BounceAnimation
-from UI.module_screensaver_endurance import EnduranceAnimation
-from UI.module_screensaver_toasters import FlyingToastersAnimation
+from UI.screensavers.module_screensaver_face import FaceAnimation
+from UI.screensavers.module_screensaver_terminal import TerminalAnimation
+from UI.screensavers.module_screensaver_matrix import MatrixAnimation
+from UI.screensavers.module_screensaver_hyperspace import HyperspaceAnimation
+from UI.screensavers.module_screensaver_starfield import StarfieldAnimation
+from UI.screensavers.module_screensaver_nebula import NebulaAnimation
+from UI.screensavers.module_screensaver_blackhole import BlackHoleAnimation
+from UI.screensavers.module_screensaver_fractal import FractalAnimation
+from UI.screensavers.module_screensaver_pacman import PacmanAnimation
+from UI.screensavers.module_screensaver_waves import WavesAnimation
+from UI.screensavers.module_screensaver_pictures import PicturesAnimation
+from UI.screensavers.module_screensaver_dashboard import DashboardAnimation
+from UI.screensavers.module_screensaver_defrag import DefragAnimation
+from UI.screensavers.module_screensaver_bounce import BounceAnimation
+from UI.screensavers.module_screensaver_endurance import EnduranceAnimation
+from UI.screensavers.module_screensaver_toasters import FlyingToastersAnimation
 
 try:
     from OpenGL.GL import *
@@ -80,16 +80,17 @@ def _class_accepts_param(cls, param_name):
 
 
 class ScreensaverManager:
-    def __init__(self, screen, width, height, timeout=5.0, screensaver_list=None, 
-                 display_width=None, display_height=None, rotation=0):
+    def __init__(self, screen, width, height, timeout=5.0, screensaver_list=None,
+                 display_width=None, display_height=None, rotation=0, can_use_opengl=True):
         self.screen = screen
         self.width = width
         self.height = height
-        self.rotation = rotation  # NEW: Store rotation value
-        
+        self.rotation = rotation
+        self.can_use_opengl = can_use_opengl
+
         self.display_width = display_width if display_width else width
         self.display_height = display_height if display_height else height
-        
+
         self.active = False
         self.last_activity = time.time()
         self.timeout = float(timeout)
@@ -99,7 +100,7 @@ class ScreensaverManager:
         self.last_switch_time = None
         self.switch_interval = CONFIG['UI']['screensaver_cycle_interval']
         self.failed_animations = set()
-        
+
         self.show_time = CONFIG['UI']['show_time']
         self.gl_mode_active = False
         try:
@@ -111,23 +112,34 @@ class ScreensaverManager:
 
         self.offscreen_surface = None
         self.gl_texture_id = None
-        
+
         if screensaver_list is None or not screensaver_list:
             self.screensaver_list = ["random"]
         else:
             self.screensaver_list = screensaver_list
-        
+
         self.is_random_mode = len(self.screensaver_list) == 1 and self.screensaver_list[0].lower() == "random"
-        
+
         if self.is_random_mode:
             self.enabled_animations = list(AVAILABLE_ANIMATIONS.keys())
         else:
             self.enabled_animations = [
-                anim for anim in self.screensaver_list 
+                anim for anim in self.screensaver_list
                 if anim in AVAILABLE_ANIMATIONS
             ]
             if not self.enabled_animations:
                 self.enabled_animations = list(AVAILABLE_ANIMATIONS.keys())
+
+        if not self.can_use_opengl:
+            self.enabled_animations = [
+                anim for anim in self.enabled_animations
+                if AVAILABLE_ANIMATIONS.get(anim, {}).get("type") != "opengl"
+            ]
+            if not self.enabled_animations:
+                self.enabled_animations = [
+                    anim for anim in FALLBACK_ANIMATIONS
+                    if anim in AVAILABLE_ANIMATIONS
+                ]
 
     def _ensure_offscreen_surface(self):
         if self.offscreen_surface is None:
@@ -138,13 +150,11 @@ class ScreensaverManager:
         if not HAS_OPENGL:
             return
 
-        # Determine if we need to rotate for portrait output on landscape display
         is_portrait_output = self.height > self.width
         is_landscape_display = self.display_width > self.display_height
         need_rotation = is_portrait_output and is_landscape_display
 
         if need_rotation:
-            # Rotate 270 degrees for landscape display
             surface = pygame.transform.rotate(surface, 270)
 
         texture_data = pygame.image.tostring(surface, "RGBA", True)
@@ -178,7 +188,6 @@ class ScreensaverManager:
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glColor4f(1.0, 1.0, 1.0, 1.0)
         
-        # Normal texture mapping - pygame rotation already handled orientation
         glBegin(GL_QUADS)
         glTexCoord2f(0, 0); glVertex2f(0, 0)
         glTexCoord2f(1, 0); glVertex2f(self.display_width, 0)
@@ -227,7 +236,6 @@ class ScreensaverManager:
             animation_type = animation_info["type"]
             
             if animation_type == "opengl":
-                # Check if screensaver supports rotation parameter
                 if _class_accepts_param(animation_class, 'rotation'):
                     self.current_animation = animation_class(
                         self.screen, 

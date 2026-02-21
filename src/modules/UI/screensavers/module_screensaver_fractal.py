@@ -23,18 +23,17 @@ import numpy as np
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import pygame
-from UI.module_screensaver_overlay import TimeOverlay
+from UI.screensavers.module_screensaver_overlay import TimeOverlay
 
 class FractalAnimation:
     def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
         self.width = width
         self.height = height
-        self.is_portrait = height > width  # Detect portrait mode
+        self.is_portrait = height > width
         self.time = 0.0
         self.initialized = False
         
-        # Time overlay
         self.show_time = show_time
         self.time_overlay = TimeOverlay(width, height) if show_time else None
 
@@ -188,7 +187,7 @@ class FractalAnimation:
             r = np.minimum(255, t * 382.5).astype(np.uint8)
             g = (t * 191.25).astype(np.uint8)
             b = (t * 127.5).astype(np.uint8)
-        else:  # sunset
+        else:
             r = (204 + 51 * np.sin(t * 9.42)).astype(np.uint8)
             g = (76.5 + t * 102).astype(np.uint8)
             b = (t * 127.5).astype(np.uint8)
@@ -363,7 +362,6 @@ class FractalAnimation:
             glVertex2f(0, self.height)
             glEnd()
 
-            # Use additive blending for next texture
             glBlendFunc(GL_SRC_ALPHA, GL_ONE)
             glBindTexture(GL_TEXTURE_2D, self.texture_next)
             glColor4f(1.0, 1.0, 1.0, self.fade_progress)
@@ -397,7 +395,6 @@ class FractalAnimation:
 
         glDisable(GL_TEXTURE_2D)
 
-        # Render time overlay if enabled
         if self.show_time and self.time_overlay:
             self.time_overlay.render_gl()
 

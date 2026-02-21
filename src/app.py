@@ -35,7 +35,7 @@ from modules.module_messageQue import queue_message
 
 # === Load Configuration ===
 CONFIG = load_config()
-VERSION = "5.0"
+VERSION = "6.0"
 
 # Get device info
 DEVICE_INFO = CONFIG.get("_device", {})
@@ -61,10 +61,8 @@ from modules.module_main import (
 # === Conditional Memory Manager Import ===
 if USE_LITE_MEMORY:
     from modules.module_memory_lite import MemoryManagerLite as MemoryManager
-    queue_message("LOAD: Using lite memory manager (keyword-based)")
 else:
     from modules.module_memory import MemoryManager
-    queue_message("LOAD: Using full memory manager (embeddings)")
 
 # === Conditional Discord Import ===
 if CONFIG['DISCORD']['enabled'] == 'True':
@@ -84,15 +82,23 @@ if CONFIG['VISION']['enabled'] == "True":
 
 # === Conditional UI Import ===
 UI_AVAILABLE = False
+_use_lite_ui = False
 if CONFIG["UI"]["UI_enabled"]:
     caps = DEVICE_INFO.get("capabilities")
     if caps is None or caps.can_use_ui:
+        _use_lite_ui = caps is not None and not caps.can_use_opengl
         try:
-            from modules.module_ui import UIManager
+            if _use_lite_ui:
+                from modules.module_ui_lite import UIManagerLite as UIManager
+                queue_message("LOAD: Lite UI module enabled")
+            else:
+                from modules.module_ui import UIManager
+                queue_message("LOAD: Full UI module enabled")
             UI_AVAILABLE = True
-            queue_message("LOAD: UI module available")
-        except ImportError as e:
-            queue_message(f"WARNING: UI module not available: {e}")
+        except Exception as e:
+            import traceback
+            queue_message(f"WARNING: UI module not available: {type(e).__name__}: {e}")
+            traceback.print_exc()
 
 # === Conditional ChatUI Import ===
 CHATUI_AVAILABLE = False
@@ -162,7 +168,7 @@ def pause_ui_and_stt():
     if ui_manager:
         ui_manager.pause()
     if stt_manager:
-        stt_manager.pause()
+        stt_manager.cancel()  # Pause STT and flag in-flight LLM/TTS to be discarded
 
 
 def resume_ui_and_stt():
@@ -237,7 +243,7 @@ if __name__ == "__main__":
             cpu_temp_module=cpu_temp
         )
         ui_manager.start()
-        queue_message("LOAD: Full UI manager started")
+        queue_message(f"LOAD: {'Lite' if _use_lite_ui else 'Full'} UI manager started")
     else:
         ui_manager = UIManagerStub(
             shutdown_event=shutdown_event,
@@ -313,11 +319,11 @@ if __name__ == "__main__":
 
     # === Main Loop ===
     try:
-        lite_indicator = " [LITE]" if USE_LITE_MEMORY else ""
-        queue_message(f"LOAD: TARS-AI v{VERSION} running on {RASPBERRY_VERSION.upper()}{lite_indicator}")
+        queue_message(f"LOAD: TARS-AI v{VERSION} running on {RASPBERRY_VERSION.upper()}")
         ui_manager.update_data("System", f"TARS-AI v{VERSION} running", "SYSTEM")
 
         stt_manager.start()
+        ui_manager.set_tars_status("STANDBY")
 
         while not shutdown_event.is_set():
             time.sleep(0.1)
@@ -331,5 +337,6 @@ if __name__ == "__main__":
         stt_manager.stop()
         battery.stop()
         if bt_controller_thread:
-            bt_controller_thread.join()
-        queue_message("INFO: All threads stopped gracefully.")
+            bt_controller_thread.join(timeout=2)
+        queue_message("INFO: Shutdown complete.")
+        os._exit(0)

@@ -134,10 +134,8 @@ class BatteryModule:
         
         if self.last_printed_state != self.charging_state:
             if self.charging_state == "CHARGING":
-                #print("Battery is charging")
                 pass
             elif self.charging_state == "DISCHARGING":
-                #print("Battery is discharging")
                 pass
             self.last_printed_state = self.charging_state
 

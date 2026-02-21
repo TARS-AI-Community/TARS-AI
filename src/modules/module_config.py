@@ -44,6 +44,8 @@ class DeviceCapabilities:
     can_use_ui: bool
     can_use_vision: bool
     can_use_emotion: bool
+    can_use_opengl: bool
+    can_use_cv2: bool
     max_context_size: int
     fallback_stt: str
     fallback_tts: str
@@ -62,6 +64,8 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         can_use_ui=True,
         can_use_vision=True,
         can_use_emotion=True,
+        can_use_opengl=True,
+        can_use_cv2=True,
         max_context_size=16000,
         fallback_stt="vosk",
         fallback_tts="espeak",
@@ -78,6 +82,8 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         can_use_ui=True,
         can_use_vision=False,
         can_use_emotion=False,
+        can_use_opengl=True,
+        can_use_cv2=False,
         max_context_size=8000,
         fallback_stt="vosk",
         fallback_tts="espeak",
@@ -91,9 +97,11 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         allowed_vad={"rms"},
         allowed_wake={"picovoice", "atomik"},
         can_use_embeddings=False,
-        can_use_ui=False,
+        can_use_ui=True,
         can_use_vision=False,
         can_use_emotion=False,
+        can_use_opengl=False,
+        can_use_cv2=False,
         max_context_size=4000,
         fallback_stt="openai",
         fallback_tts="openai",
@@ -107,9 +115,11 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         allowed_vad={"rms"},
         allowed_wake={"picovoice", "atomik"},
         can_use_embeddings=False,
-        can_use_ui=False,
+        can_use_ui=True,
         can_use_vision=False,
         can_use_emotion=False,
+        can_use_opengl=False,
+        can_use_cv2=False,
         max_context_size=2000,
         fallback_stt="openai",
         fallback_tts="openai",
@@ -170,8 +180,6 @@ def apply_device_overrides(config_dict: dict, capabilities: DeviceCapabilities) 
         config_dict["STT"]["wake_word_processor"] = capabilities.fallback_wake
     
     if config_dict["LLM"]["contextsize"] > capabilities.max_context_size:
-        if show_warnings:
-            queue_message(f"WARNING: Context size {config_dict['LLM']['contextsize']} exceeds max {capabilities.max_context_size} for {capabilities.profile.value}")
         config_dict["LLM"]["contextsize"] = capabilities.max_context_size
     
     if not capabilities.can_use_ui and config_dict["UI"]["UI_enabled"]:
@@ -180,8 +188,6 @@ def apply_device_overrides(config_dict: dict, capabilities: DeviceCapabilities) 
         config_dict["UI"]["UI_enabled"] = False
     
     if not capabilities.can_use_vision and config_dict["VISION"]["enabled"]:
-        if show_warnings:
-            queue_message(f"WARNING: Vision disabled for {capabilities.profile.value}")
         config_dict["VISION"]["enabled"] = False
     
     if not capabilities.can_use_emotion and config_dict["EMOTION"]["enabled"]:
@@ -513,7 +519,8 @@ def load_config():
             "screensaver_list": _parse_screensaver_list(config.get('UI', 'screensaver_list', fallback='random')),
             "show_time": config.getboolean('UI', 'show_time', fallback=True),
             "ampm_format": config.getboolean('UI', 'ampm_format', fallback=True),
-            "screensaver_cycle_interval": config.getint('UI', 'screensaver_cycle_interval', fallback=300), 
+            "screensaver_cycle_interval": config.getint('UI', 'screensaver_cycle_interval', fallback=300),
+            "app": config.get('UI', 'app', fallback='terminal'),
         },
         "BATTERY": {
             "battery_capacity_mAh":  int(config['BATTERY']['battery_capacity_mAh']),
@@ -819,6 +826,10 @@ CONFIG_METADATA = {
         },
         'target_fps': {
             'description': 'UI refresh rate (FPS)'
+        },
+        'app': {
+            'options': ['terminal', 'dashboard', 'clock'],
+            'description': 'Default app on startup'
         },
     },
     'RAG': {

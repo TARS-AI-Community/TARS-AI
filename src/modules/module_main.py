@@ -9,12 +9,9 @@ import os
 import threading
 import json
 import re
-import concurrent.futures
 import sys
 import time
 import asyncio
-import sounddevice as sd
-import soundfile as sf
 
 # === Custom Modules ===
 from modules.module_config import load_config, get_capabilities
@@ -29,8 +26,12 @@ CAPABILITIES = get_capabilities()
 # Conditional imports based on device capabilities
 UIManager = None
 if CAPABILITIES is None or CAPABILITIES.can_use_ui:
+    _use_lite_ui = CAPABILITIES is not None and not CAPABILITIES.can_use_opengl
     try:
-        from modules.module_ui import UIManager as _UIManager
+        if _use_lite_ui:
+            from modules.module_ui_lite import UIManagerLite as _UIManager
+        else:
+            from modules.module_ui import UIManager as _UIManager
         UIManager = _UIManager
     except ImportError as e:
         print(f"WARNING: UIManager not available: {e}")
@@ -57,7 +58,6 @@ battery_module = None
 
 # Global Variables (if needed)
 stop_event = threading.Event()
-executor = concurrent.futures.ProcessPoolExecutor(max_workers=4)
 
 # === Threads ===
 def start_bt_controller_thread():
@@ -123,8 +123,10 @@ def wake_word_callback(wake_response):
 
     character_name = CONFIG['CHAR']['character_name']
     ui_manager.update_data(character_name, wake_response, character_name)
-    
+
+    ui_manager.set_tars_status("TALKING")
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption'], True))
+    ui_manager.set_tars_status("LISTENING")
 
 def utterance_callback(message):
     """
@@ -150,22 +152,26 @@ def utterance_callback(message):
         #Print or stream the response
         #queue_message(f"USER: {user_text}")
         ui_manager.update_data("USER", user_text, "USER")
-        queue_message(f"USER: {user_text}", stream=False) 
+        queue_message(f"USER: {user_text}", stream=False)
 
-        # Check for shutdown command
         if "shutdown pc" in user_text.lower():
             queue_message(f"SHUTDOWN: Shutting down the PC...")
             os.system('shutdown /s /t 0')
-            return  # Exit function after issuing shutdown command
-        
-        # Process the message using process_completion
-        reply = process_completion(user_text)  # Process the message
+            return
 
-        # Extract the <think> block if present
+        ui_manager.set_tars_status("THINKING")
+        reply = process_completion(user_text)
+
+        # If a movement happened during the LLM call, discard the result
+        if stt_manager and stt_manager.is_cancelled():
+            queue_message("INFO: LLM response discarded (movement interrupted)")
+            ui_manager.set_tars_status("STANDBY")
+            return
+
         try:
             match = re.search(r"<think>(.*?)</think>", reply, re.DOTALL)
             thoughts = match.group(1).strip() if match else ""
-            
+
             # Remove the <think> block and clean up trailing whitespace/newlines
             reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
         except Exception:
@@ -176,20 +182,26 @@ def utterance_callback(message):
             #queue_message(f"DEBUG: Thoughts\n{thoughts}")
             pass
 
-        # Stream the AI's reply
+        # Check again before TTS — movement could have started during post-processing
+        if stt_manager and stt_manager.is_cancelled():
+            queue_message("INFO: LLM response discarded (movement interrupted)")
+            ui_manager.set_tars_status("STANDBY")
+            return
+
         character_name = CONFIG['CHAR']['character_name']
         ui_manager.update_data(character_name, reply, "TARS")
-        queue_message(f"{character_name}: {reply}", stream=False) 
+        queue_message(f"{character_name}: {reply}", stream=False)
 
-        # Strip special chars so he doesnt say them
         reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
-        
-        # Stream TTS audio to speakers
+
+        ui_manager.set_tars_status("TALKING")
         asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
+        ui_manager.set_tars_status("STANDBY")
 
     except json.JSONDecodeError:
         queue_message("ERROR: Invalid JSON format. Could not process user message.")
     except Exception as e:
+        ui_manager.set_tars_status("STANDBY")
         queue_message(f"ERROR: {e}")
 
 def post_utterance_callback():

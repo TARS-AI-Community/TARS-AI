@@ -24,7 +24,7 @@ import random
 import os
 import time
 import re
-from UI.module_screensaver_overlay import TimeOverlay
+from UI.screensavers.module_screensaver_overlay import TimeOverlay
 
 class PicturesAnimation:
     def __init__(self, screen, width, height, pictures_folder=None, show_time=False):

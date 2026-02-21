@@ -176,7 +176,7 @@ if not servo_positions:
     servo_positions[8] = rightForarmMin
     servo_positions[9] = rightHandMin
 else:
-    print(f"[SERVO] Loaded saved positions")
+    print("[SERVO] Loaded saved positions", flush=True)
 
 _on_movement_start = None
 _on_movement_end = None
