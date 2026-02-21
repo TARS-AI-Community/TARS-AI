@@ -1,3 +1,59 @@
+# =============================================================================
+# DEVICE PROFILE SECTION
+# =============================================================================
+# This setting determines which features are available based on your
+# Raspberry Pi model. The system will automatically adjust settings
+# that are incompatible with your hardware.
+
+[DEVICE]
+# Options: pi5, pi4, pi3, pizero2
+#
+# pi5     - Full features, all local processing enabled
+# pi4     - Most features, no FastRTC, no vision
+# pi3     - Limited local processing, cloud STT/TTS recommended
+# pizero2 - Cloud-only mode (STT: OpenAI, TTS: cloud, no UI, lite memory)
+#
+raspberry_version = pi5
+
+# =============================================================================
+# WHAT EACH PROFILE CHANGES
+# =============================================================================
+#
+# pi5 (default - no changes):
+#   - All STT options available (vosk, faster-whisper, fastrtc, openai, etc.)
+#   - All TTS options available (espeak, piper, silero, cloud options)
+#   - Full memory with embeddings (sentence-transformers)
+#   - UI enabled
+#   - Vision/Camera Inference enabled
+#
+# pi4:
+#   - STT: vosk, openai, external (no faster-whisper, no fastrtc)
+#   - TTS: all options except silero
+#   - Full memory with embeddings
+#   - UI enabled 
+#   - Vision Enabled
+#
+# pi3:
+#   - STT: openai, external only (no local STT)
+#   - TTS: espeak + cloud options (no piper/silero)
+#   - Lite memory (keyword-based, no embeddings)
+#   - UI disabled
+#   - Vision Enabled
+#
+# pizero2:
+#   - STT: OpenAI only (cloud-based)
+#   - TTS: Cloud only (openai, elevenlabs, minimax, azure)
+#   - VAD: RMS only (no silero)
+#   - Wake word: Picovoice only
+#   - Lite memory (keyword-based, no embeddings)
+#   - UI disabled
+#   - Vision/Camera disabled
+#   - Context size: max 2000 tokens
+#
+# =============================================================================
+
+
+
 [CONTROLS] # Controller settings
 controller_name = 8BitDo
 # Name of the controller used for interaction
@@ -194,6 +250,8 @@ show_cpu_temp = False
 # Display the CPU temperature in the UI
 target_fps = 30
 # UI Refresh max FPS speed
+app = terminal
+# Default app on startup. Options: terminal, dashboard, clock
 
 [RAG]
 # RAG (Retrieval Augmented Generation) settings

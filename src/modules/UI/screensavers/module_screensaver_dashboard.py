@@ -917,7 +917,7 @@ class DashboardAnimation:
         self.screen = screen
         self.width = width
         self.height = height
-        self.is_portrait = height > width  # Detect portrait mode
+        self.is_portrait = height > width
         self.time = 0.0
         self.initialized = False
         self.clock = pygame.time.Clock()
@@ -975,7 +975,6 @@ class DashboardAnimation:
         if self.initialized:
             return
         
-        # For portrait mode, use dimensions directly; for landscape, swap for rotation
         if self.is_portrait:
             self.layout_width = self.width
             self.layout_height = self.height
@@ -1039,7 +1038,7 @@ class DashboardAnimation:
         
         news_top = y_pos
         news_bottom = self.layout_height - margin - quote_height - 15
-        news_height = max(1, news_bottom - news_top)  # Ensure at least 1 pixel
+        news_height = max(1, news_bottom - news_top)
         self.panels['news'] = {'x': margin, 'y': news_top, 'w': panel_width, 'h': news_height}
         
         self.feed_surface_width = max(1, int(panel_width))
@@ -1249,7 +1248,6 @@ class DashboardAnimation:
             glEnd()
     
     def _create_feed_surface(self, width, height):
-        # Ensure minimum dimensions for pygame Surface
         width = max(1, int(width))
         height = max(1, int(height))
         surface = pygame.Surface((width, height), pygame.SRCALPHA)
@@ -2053,7 +2051,6 @@ class DashboardAnimation:
         glClear(GL_COLOR_BUFFER_BIT)
         glLoadIdentity()
         
-        # Only apply rotation when in landscape mode (OS doesn't handle rotation)
         if not self.is_portrait:
             glTranslatef(self.width, 0, 0)
             glRotatef(90, 0, 0, 1)

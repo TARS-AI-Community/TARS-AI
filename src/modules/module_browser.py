@@ -31,7 +31,7 @@ class BrowserPlayer:
         self.is_playing = False
         self.on_playback_start = None
         self.on_playback_end = None
-        self.temp_profile_dir = None  # Track temporary Chrome profile
+        self.temp_profile_dir = None
 
     def set_callbacks(self, on_start=None, on_end=None):
         self.on_playback_start = on_start
@@ -76,7 +76,6 @@ class BrowserPlayer:
 
             queue_message(f"Opening video in maximized browser: {url}")
 
-            # Add YouTube-specific parameters
             is_youtube = 'youtube.com' in url or 'youtu.be' in url
             if is_youtube:
                 if '?' in url:
@@ -84,14 +83,11 @@ class BrowserPlayer:
                 else:
                     url += '?autoplay=1'
 
-            # Create temporary profile directory for isolated Chrome instance
             self.temp_profile_dir = tempfile.mkdtemp(prefix='tars_browser_')
             queue_message(f"Created temp profile: {self.temp_profile_dir}")
 
-            # Tablet user agent (iPad Pro)
             tablet_ua = 'Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
 
-            # Simplified browser commands - fewer flags to avoid issues
             browsers = [
                 ['chromium-browser', '--start-maximized', f'--user-data-dir={self.temp_profile_dir}', f'--user-agent={tablet_ua}', '--disable-pinch'],
                 ['chromium', '--start-maximized', f'--user-data-dir={self.temp_profile_dir}', f'--user-agent={tablet_ua}', '--disable-pinch'],
@@ -104,7 +100,6 @@ class BrowserPlayer:
                 try:
                     check = subprocess.run(['which', browser_cmd[0]], capture_output=True, timeout=1)
                     if check.returncode == 0:
-                        # Command construction - append URL directly
                         cmd = browser_cmd + [url]
                         
                         queue_message(f"Launching: {' '.join(cmd)}")
@@ -132,7 +127,6 @@ class BrowserPlayer:
                             self.is_playing = False
                             queue_message("Browser closed")
 
-                            # Clean up temporary profile directory
                             if self.temp_profile_dir and os.path.exists(self.temp_profile_dir):
                                 try:
                                     shutil.rmtree(self.temp_profile_dir)
@@ -177,7 +171,6 @@ class BrowserPlayer:
                 self.current_process = None
                 self.is_playing = False
         
-        # Clean up temp profile directory if it exists
         if self.temp_profile_dir and os.path.exists(self.temp_profile_dir):
             try:
                 shutil.rmtree(self.temp_profile_dir)

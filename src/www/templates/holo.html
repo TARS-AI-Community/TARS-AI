@@ -60,22 +60,69 @@
     </div>
   </div>
   <div id="dimOverlay"></div>
+  <script src="/static/js/socket.io.js"></script>
   <script>
-    // Declare a global variable to store the base URL
+    // === Client-side avatar animation ===
+    let avatarIsTalking = false;
+    let avatarIsBlinking = false;
+    let avatarNextBlink = Date.now() + 3000 + Math.random() * 1000;
+    let avatarBlinkEnd = 0;
+    let avatarSprites = {};
     let talkingheadBaseUrl = '';
 
-    // Fetch the talking head base URL from the backend
-    fetch('/get_talkinghead_url')
+    function preloadAvatarSprites(spriteUrls) {
+        avatarSprites = spriteUrls;
+        for (const [key, url] of Object.entries(spriteUrls)) {
+            const img = new window.Image();
+            img.src = url;
+        }
+    }
+
+    function updateAvatarFrame() {
+        const now = Date.now();
+        if (!avatarIsBlinking && now >= avatarNextBlink) {
+            avatarIsBlinking = true;
+            avatarBlinkEnd = now + 400;
+        }
+        if (avatarIsBlinking && now >= avatarBlinkEnd) {
+            avatarIsBlinking = false;
+            avatarNextBlink = now + 3000 + Math.random() * 1000;
+        }
+        let key;
+        if (avatarIsTalking) {
+            key = avatarIsBlinking ? 'talking_closed' : (Math.random() < 0.7 ? 'talking_open' : 'nottalking_open');
+        } else {
+            key = avatarIsBlinking ? 'nottalking_closed' : 'nottalking_open';
+        }
+        const el = document.getElementById('backgroundImage');
+        if (el && avatarSprites[key]) {
+            el.src = avatarSprites[key];
+        }
+    }
+
+    setInterval(updateAvatarFrame, 100);
+
+    // Fetch sprite URLs
+    fetch('/avatar_sprites')
         .then(response => response.json())
         .then(data => {
-            // Store the base URL in the global variable
-            talkingheadBaseUrl = data.talkinghead_base_url;
-
-            // Update the image source or do other initial actions
-            const fullUrl = talkingheadBaseUrl + "/stream";
-            document.getElementById('backgroundImage').src = fullUrl;
+            preloadAvatarSprites(data);
+            if (data.nottalking_open) {
+                document.getElementById('backgroundImage').src = data.nottalking_open;
+            }
         })
-        .catch(error => console.error('Error fetching talking head URL:', error));
+        .catch(error => console.error('Error fetching avatar sprites:', error));
+
+    // SocketIO for talking state and emotion changes
+    var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+    socket.on('talking_state', function(data) {
+        avatarIsTalking = data.talking;
+    });
+
+    socket.on('emotion_change', function(data) {
+        preloadAvatarSprites(data);
+    });
   </script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -113,17 +160,10 @@
       backgroundImage.style.objectPosition = 'bottom';
   }
 
-
   if (dimParam) {
         // Set the opacity of the dim overlay based on the dim parameter
         dimOverlay.style.background = `rgba(0, 0, 0, ${parseFloat(dimParam)})`;
       }
-
-      function refreshImage() {
-        backgroundImage.src = talkingheadBaseUrl + "/stream?" + new Date().getTime();
-      }
-
-      setInterval(refreshImage, 2000);
 
       document.body.addEventListener('click', () => {
         const elem = document.documentElement;

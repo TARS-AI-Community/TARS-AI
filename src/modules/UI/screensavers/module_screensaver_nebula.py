@@ -23,7 +23,7 @@ import numpy as np
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import pygame
-from UI.module_screensaver_overlay import TimeOverlay
+from UI.screensavers.module_screensaver_overlay import TimeOverlay
 
 
 class NebulaAnimation:
@@ -31,7 +31,7 @@ class NebulaAnimation:
         self.screen = screen
         self.width = width
         self.height = height
-        self.is_portrait = height > width  # Detect portrait mode
+        self.is_portrait = height > width
         self.time = 0.0
         self.initialized = False
         self.show_time = show_time
@@ -352,19 +352,14 @@ class NebulaAnimation:
             
             star_type = random.random()
             if star_type < 0.70:
-                # White stars
                 color = (brightness, brightness, brightness)
             elif star_type < 0.82:
-                # Blue-white stars
                 color = (brightness * 0.8, brightness * 0.9, brightness)
             elif star_type < 0.90:
-                # Yellow stars
                 color = (brightness, brightness * 0.95, brightness * 0.7)
             elif star_type < 0.96:
-                # Orange stars
                 color = (brightness, brightness * 0.7, brightness * 0.4)
             else:
-                # Red stars
                 color = (brightness, brightness * 0.5, brightness * 0.4)
             star = {
                 'pos': [x, y, z],
@@ -1314,7 +1309,7 @@ class NebulaAnimation:
         glHint(GL_POINT_SMOOTH_HINT, GL_NICEST)
 
         for star in self.stars:
-            if star.get('spike_length') is None:  # Regular stars only
+            if star.get('spike_length') is None:
                 glPointSize(star['size'])
                 glColor3f(*star['color'])
                 glBegin(GL_POINTS)

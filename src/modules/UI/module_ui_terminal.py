@@ -36,7 +36,9 @@ class TerminalSystem:
                  on_shutdown: Optional[Callable] = None,
                  on_spectrum_change: Optional[Callable] = None,
                  on_camera_toggle: Optional[Callable] = None,
-                 on_exit: Optional[Callable] = None):
+                 on_exit: Optional[Callable] = None,
+                 on_app_select: Optional[Callable] = None,
+                 on_app_back: Optional[Callable] = None):
         self.width = width
         self.height = height
         self.bg_color = bg_color
@@ -56,6 +58,8 @@ class TerminalSystem:
         self.on_spectrum_change = on_spectrum_change
         self.on_camera_toggle = on_camera_toggle
         self.on_exit = on_exit
+        self.on_app_select = on_app_select
+        self.on_app_back = on_app_back
 
         self.primary_color = (0, 255, 255)  
         self.secondary_color = (0, 180, 200)  
@@ -106,12 +110,11 @@ class TerminalSystem:
         self.wrapped_cache = []
         self.cache_dirty = True
 
-        self.dragging = False
+        self.last_click_time = 0
+        self.click_cooldown = 400
 
-        self.last_drag_y = 0
-        self.drag_positions = []
-        self.max_drag_buffer = 3
-        self.accumulated_scroll = 0.0  
+        self.scroll_up_rect = None
+        self.scroll_down_rect = None
 
         self.log_dir = Path.home() / ".local" / "share" / "tars_ai"
         self.log_file = self.log_dir / "terminal_log.json"
@@ -128,6 +131,7 @@ class TerminalSystem:
         ]
 
         self.bottom_buttons = [
+            {"label": "APP", "code": "APP-01", "rect": None, "active": False, "color": None, "position": "left"},
             {"label": "CAM", "code": "CAM-01", "rect": None, "active": False, "color": None, "position": "left"},
         ]
 
@@ -140,10 +144,18 @@ class TerminalSystem:
         self.scan_line = 0
         self.status_blink = 0
 
+        self.tars_status = "STANDBY"
+
         self.show_power_menu = False
         self.power_menu_buttons = []
 
         self.camera_active = False
+        self.app_active = False
+        self.show_app_menu = False
+        self.app_menu_buttons = []
+        self.app_list = []
+        self.app_menu_rect = None
+        self.back_button_rect = None
 
         self.overlay_surface = pygame.Surface((width, height), pygame.SRCALPHA)
 
@@ -214,6 +226,8 @@ class TerminalSystem:
 
             button["rect"] = pygame.Rect(x, start_y_bottom, button_width, button_height_bottom)
 
+        self._init_scroll_buttons()
+
     def _update_wrapped_cache(self):
         if not self.cache_dirty:
             return
@@ -271,56 +285,65 @@ class TerminalSystem:
         elif wheel_y < 0:
             self.scroll_up(3)
 
-    def handle_mouse_down(self, pos: Tuple[int, int]):
-        terminal_y_start = self.toolbar_height
-        terminal_y_end = self.toolbar_height + self.terminal_height
+    def _init_scroll_buttons(self):
+        btn_width = 60
+        btn_height = 50
+        margin = 10
+        x = self.width - btn_width - margin
+        top_y = self.toolbar_height + 50
+        bottom_y = self.toolbar_height + self.terminal_height - btn_height - margin
+        self.scroll_up_rect = pygame.Rect(x, top_y, btn_width, btn_height)
+        self.scroll_down_rect = pygame.Rect(x, bottom_y, btn_width, btn_height)
+        self.scroll_held = None
+        self.scroll_hold_start = 0
+        self.scroll_hold_last = 0
 
-        if terminal_y_start <= pos[1] <= terminal_y_end:
-            self.dragging = True
-            self.last_drag_y = pos[1]
-            self.drag_positions = [pos[1]]
-            self.accumulated_scroll = 0.0  
+    def handle_scroll_hold(self):
+        if not self.scroll_held:
+            return
+        now = pygame.time.get_ticks()
+        if now - self.scroll_hold_start < 300:
+            return
+        if now - self.scroll_hold_last < 60:
+            return
+        self.scroll_hold_last = now
+        if self.scroll_held == "up":
+            self.scroll_down(2)
+        else:
+            self.scroll_up(2)
 
-    def handle_mouse_up(self, pos: Tuple[int, int]):
-        self.dragging = False
-        self.drag_positions = []
-        self.accumulated_scroll = 0.0  
+    def handle_mouse_down(self, pos):
+        if self.scroll_up_rect and self.scroll_up_rect.collidepoint(pos):
+            self.scroll_held = "up"
+            self.scroll_hold_start = pygame.time.get_ticks()
+            self.scroll_hold_last = self.scroll_hold_start
+            return
+        if self.scroll_down_rect and self.scroll_down_rect.collidepoint(pos):
+            self.scroll_held = "down"
+            self.scroll_hold_start = pygame.time.get_ticks()
+            self.scroll_hold_last = self.scroll_hold_start
+            return
 
-    def handle_mouse_motion(self, pos: Tuple[int, int]):
-        if self.dragging:
-            current_y = pos[1]
+    def handle_mouse_up(self):
+        self.scroll_held = None
 
-            self.drag_positions.append(current_y)
-            if len(self.drag_positions) > self.max_drag_buffer:
-                self.drag_positions.pop(0)
+    def _draw_scroll_buttons(self, surface):
+        if not self.scroll_up_rect or not self.scroll_down_rect:
+            self._init_scroll_buttons()
 
-            smoothed_y = sum(self.drag_positions) / len(self.drag_positions)
+        for rect, direction in [(self.scroll_up_rect, "up"), (self.scroll_down_rect, "down")]:
+            is_held = self.scroll_held == direction
+            bg = (*self.accent_color, 200) if is_held else (*self.bg_panel, 180)
+            pygame.draw.rect(surface, bg, rect)
+            pygame.draw.rect(surface, (*self.border_color, 150), rect, 2)
 
-            pixel_delta = self.last_drag_y - smoothed_y
-
-            self.last_drag_y = smoothed_y
-
-            self.accumulated_scroll += pixel_delta / self.line_height
-
-            lines_to_scroll = int(self.accumulated_scroll)
-
-            if lines_to_scroll != 0:
-
-                self.scroll_offset += lines_to_scroll
-
-                self.accumulated_scroll -= lines_to_scroll
-
-                self._update_wrapped_cache()
-                total_lines = sum(len(wrapped_lines) for _, _, _, wrapped_lines in self.wrapped_cache)
-                scroll_padding = int(self.max_visible_lines * 0.75)
-                max_scroll = max(0, total_lines - self.max_visible_lines) + scroll_padding
-
-                self.scroll_offset = max(-scroll_padding, min(self.scroll_offset, max_scroll))
-
-                if self.scroll_offset > 0:
-                    self.auto_scroll = False
-                elif self.scroll_offset == 0:
-                    self.auto_scroll = True
+            cx, cy = rect.centerx, rect.centery
+            arrow_size = 12
+            if direction == "up":
+                points = [(cx, cy - arrow_size), (cx - arrow_size, cy + arrow_size), (cx + arrow_size, cy + arrow_size)]
+            else:
+                points = [(cx, cy + arrow_size), (cx - arrow_size, cy - arrow_size), (cx + arrow_size, cy - arrow_size)]
+            pygame.draw.polygon(surface, self.primary_color, points)
 
     def _wrap_text(self, text: str, max_width: int) -> List[str]:
         words = text.split(' ')
@@ -343,6 +366,148 @@ class TerminalSystem:
 
     def set_camera_active(self, active: bool):
         self.camera_active = active
+
+    def set_app_active(self, active: bool):
+        self.app_active = active
+
+    def set_available_apps(self, app_list):
+        self.app_list = app_list
+
+    def _init_app_menu(self):
+        button_width = 200
+        button_height = 50
+        button_spacing = 12
+        num_apps = len(self.app_list)
+        if num_apps == 0:
+            return
+
+        total_height = num_apps * button_height + (num_apps - 1) * button_spacing
+        modal_width = button_width + 60
+        modal_height = total_height + 100
+        modal_x = self.width // 2 - modal_width // 2
+        modal_y = self.height // 2 - modal_height // 2
+        self.app_menu_rect = pygame.Rect(modal_x, modal_y, modal_width, modal_height)
+
+        self.app_menu_buttons = []
+        start_y = modal_y + 70
+        for i, app_info in enumerate(self.app_list):
+            rect = pygame.Rect(
+                self.width // 2 - button_width // 2,
+                start_y + i * (button_height + button_spacing),
+                button_width,
+                button_height
+            )
+            self.app_menu_buttons.append({
+                "label": app_info["label"].upper(),
+                "name": app_info["name"],
+                "rect": rect
+            })
+
+    def _draw_app_menu(self, surface):
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surface.blit(overlay, (0, 0))
+
+        if not self.app_menu_rect:
+            return
+
+        pygame.draw.rect(surface, (*self.bg_panel, 250), self.app_menu_rect)
+        pygame.draw.rect(surface, self.border_color, self.app_menu_rect, 3)
+
+        inner_rect = self.app_menu_rect.inflate(-6, -6)
+        pygame.draw.rect(surface, (*self.accent_color, 100), inner_rect, 1)
+
+        title = "SELECT APP"
+        title_surface = self.title_font.render(title, True, self.primary_color)
+        title_rect = title_surface.get_rect(
+            center=(self.app_menu_rect.centerx, self.app_menu_rect.top + 35)
+        )
+        surface.blit(title_surface, title_rect)
+
+        line_y = self.app_menu_rect.top + 60
+        pygame.draw.line(surface, self.border_color,
+                        (self.app_menu_rect.left + 20, line_y),
+                        (self.app_menu_rect.right - 20, line_y), 2)
+
+        for button in self.app_menu_buttons:
+            rect = button["rect"]
+            bg_color = (20, 60, 80, 220)
+            border_color = self.primary_color
+            text_color = self.primary_color
+
+            pygame.draw.rect(surface, bg_color, rect)
+            pygame.draw.rect(surface, border_color, rect, 2)
+
+            corner_size = 8
+            pygame.draw.line(surface, border_color, rect.topleft,
+                           (rect.left + corner_size, rect.top), 3)
+            pygame.draw.line(surface, border_color, rect.topleft,
+                           (rect.left, rect.top + corner_size), 3)
+            pygame.draw.line(surface, border_color,
+                           (rect.right - 1, rect.top), (rect.right - corner_size - 1, rect.top), 3)
+            pygame.draw.line(surface, border_color,
+                           (rect.right - 1, rect.top), (rect.right - 1, rect.top + corner_size), 3)
+
+            text_surface = self.toolbar_font.render(button["label"], True, text_color)
+            text_rect = text_surface.get_rect(center=rect.center)
+            surface.blit(text_surface, text_rect)
+
+    def draw_back_button(self, surface):
+        bar_y = self.height - self.bottom_toolbar_height
+        button_width = 90
+        button_height = self.bottom_toolbar_height - 10
+        x = 10
+        y = bar_y + 5
+        self.back_button_rect = pygame.Rect(x, y, button_width, button_height)
+
+        bottom_bar_bg = pygame.Surface((self.width, self.bottom_toolbar_height), pygame.SRCALPHA)
+        bottom_bar_bg.fill((*self.bg_terminal, self.bg_alpha + 20))
+        surface.blit(bottom_bar_bg, (0, bar_y))
+
+        pygame.draw.line(surface, (*self.border_color, 200),
+                        (0, bar_y), (self.width, bar_y), 2)
+
+        self._draw_tech_button(surface, self.back_button_rect, "BACK", "BCK-01", active=True)
+
+        status_colors = {
+            "STANDBY": self.dim_text_color,
+            "LISTENING": (0, 200, 255),
+            "THINKING": (255, 180, 0),
+            "TALKING": (0, 255, 100),
+        }
+        status_color = status_colors.get(self.tars_status, self.dim_text_color)
+        status_text = self.tars_status
+        status_surface = self.toolbar_font.render(status_text, True, status_color)
+        status_x = x + button_width + 15
+        status_rect = status_surface.get_rect(midleft=(status_x, bar_y + self.bottom_toolbar_height // 2))
+        surface.blit(status_surface, status_rect)
+
+        right_x = self.width - 10
+
+        if self.cpu_temp_module and self.show_cpu_temp:
+            cpu_width = 80
+            cpu_height = button_height
+            right_x -= cpu_width
+            self._draw_cpu_temp_indicator(surface, right_x, y, cpu_width, cpu_height)
+            right_x -= 8
+
+        if self.battery_module:
+            battery_width = 60
+            battery_height = button_height
+            right_x -= battery_width
+            self._draw_battery_indicator(surface, right_x, y, battery_width, battery_height)
+
+    def handle_app_click(self, pos: Tuple[int, int]) -> bool:
+        now = pygame.time.get_ticks()
+        if now - self.last_click_time < self.click_cooldown:
+            return False
+        self.last_click_time = now
+
+        if self.back_button_rect and self.back_button_rect.collidepoint(pos):
+            if self.on_app_back:
+                self.on_app_back()
+            return True
+        return False
 
     def _init_power_menu(self):
         modal_center_x = self.width // 2
@@ -375,6 +540,29 @@ class TerminalSystem:
         ]
 
     def handle_click(self, pos: Tuple[int, int]):
+        if self.scroll_up_rect and self.scroll_up_rect.collidepoint(pos):
+            self.scroll_down(5)
+            return
+        if self.scroll_down_rect and self.scroll_down_rect.collidepoint(pos):
+            self.scroll_up(5)
+            return
+
+        now = pygame.time.get_ticks()
+        if now - self.last_click_time < self.click_cooldown:
+            return
+        self.last_click_time = now
+
+        if self.show_app_menu:
+            for button in self.app_menu_buttons:
+                if button["rect"].collidepoint(pos):
+                    if self.on_app_select:
+                        self.on_app_select(button["name"])
+                    self.show_app_menu = False
+                    return
+
+            if self.app_menu_rect and not self.app_menu_rect.collidepoint(pos):
+                self.show_app_menu = False
+            return
 
         if self.show_power_menu:
             for button in self.power_menu_buttons:
@@ -412,6 +600,10 @@ class TerminalSystem:
                 if button["label"] == "CAM":
                     if self.on_camera_toggle:
                         self.on_camera_toggle()
+                elif button["label"] == "APP":
+                    if self.app_list:
+                        self.show_app_menu = True
+                        self._init_app_menu()
 
     def think(self):
         self.thinking = True
@@ -419,6 +611,9 @@ class TerminalSystem:
 
     def stop_thinking(self):
         self.thinking = False
+
+    def set_tars_status(self, status):
+        self.tars_status = status
 
     def add_memory(self):
         self.memory_pulse = 1.0
@@ -912,8 +1107,13 @@ class TerminalSystem:
 
         for button in self.bottom_buttons:
             if button["rect"]:
-                is_active = button["label"] == "CAM" and self.camera_active
-                self._draw_tech_button(self.overlay_surface, button["rect"], 
+                if button["label"] == "CAM":
+                    is_active = self.camera_active
+                elif button["label"] == "APP":
+                    is_active = self.app_active
+                else:
+                    is_active = False
+                self._draw_tech_button(self.overlay_surface, button["rect"],
                                        button["label"], button["code"],
                                        is_active,
                                        button.get("color"))
@@ -926,7 +1126,13 @@ class TerminalSystem:
             self._draw_cpu_temp_indicator(self.overlay_surface, cpu_x, cpu_y,
                                           cpu_width, cpu_height)
 
+        if not self.camera_active:
+            self._draw_scroll_buttons(self.overlay_surface)
+
         surface.blit(self.overlay_surface, (0, 0))
 
         if self.show_power_menu:
             self._draw_power_menu(surface)
+
+        if self.show_app_menu:
+            self._draw_app_menu(surface)

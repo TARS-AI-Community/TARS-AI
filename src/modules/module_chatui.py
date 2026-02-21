@@ -1,35 +1,23 @@
 #!/usr/bin/env python3
 """
-Face Animator with Flask Streaming (No Kivy) – Breathing, Blinking, Talking, and Sway Control
+ChatUI — Flask web interface for TARS-AI.
 
-This script uses Pillow to simulate face animation with:
-  - Blinking at random intervals.
-  - Talking mode: when active, the image is chosen to mimic mouth movement.
-  - A breathing effect that scales the chest (lower region) of the image.
-  - Horizontal sway whose strength is controlled by a variable 'swayamount' (1 = off, 10 = maximum).
-
-The current frame is updated in a background thread and streamed via Flask.
-  
-Flask endpoints:
-  - /stream         → streams the current frame as a multipart HTTP response.
-  - /start_talking  → sets talking mode.
-  - /stop_talking   → disables talking mode.
-  
-Requirements:
-  - Four image files (placed in the same directory or adjust paths):
-       character_nottalking_eyes_open.png  
-       character_nottalking_eyes_closed.png  
-       character_talking_eyes_open.png  
-       character_talking_eyes_closed.png  
-  - Pillow and Flask installed in your virtual environment.
+Avatar animation (blinking, talking) is handled entirely client-side in JavaScript.
+The server serves sprite image files and pushes talking/emotion state via SocketIO.
 """
 
 import os
-import threading, time, math, random, io
-from PIL import Image
+import threading
+import time
 import logging
 import json
 import asyncio
+import re
+import base64
+from collections import OrderedDict
+from io import BytesIO
+
+from PIL import Image, UnidentifiedImageError
 
 from flask import (
     Flask,
@@ -40,13 +28,6 @@ from flask import (
 )
 from flask_cors import CORS
 from flask_socketio import SocketIO
-import re
-import asyncio
-import threading
-from collections import OrderedDict
-import base64
-from io import BytesIO
-from PIL import Image, UnidentifiedImageError
 
 
 # === Custom Modules ===
@@ -81,132 +62,25 @@ engineio_logger.setLevel(logging.ERROR)
 
 CONFIG = load_config()
 
-# Frame dimensions (as requested)
-FRAME_WIDTH = 500
-FRAME_HEIGHT = 500
-
-# swayamount: 1 means off (no sway), 10 means maximum sway.
-swayamount = 1   # You can change this value from 1 to 10.
 emotion = 'neutral'
 
-# Get the base directory where the script is running
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  
 character_path = CONFIG['CHAR']['character_card_path']
-character_name = os.path.splitext(os.path.basename(character_path))[0]  # Extract filename without extension
-CHARACTER_DIR = os.path.join(BASE_DIR, "character", character_name, "images", emotion)
-
+character_name = os.path.splitext(os.path.basename(character_path))[0]
 sprite = character_name
 
-# Load images using the absolute path
-img_nottalking_open = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{emotion}_nottalking_eyes_open.png")).convert("RGBA")
-img_nottalking_closed = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{emotion}_nottalking_eyes_closed.png")).convert("RGBA")
-img_talking_open = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{emotion}_talking_eyes_open.png")).convert("RGBA")
-img_talking_closed = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{emotion}_talking_eyes_closed.png")).convert("RGBA")
-
-# Resize images to our frame dimensions.
-img_nottalking_open = img_nottalking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))
-img_nottalking_closed = img_nottalking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
-img_talking_open = img_talking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))
-img_talking_closed = img_talking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
-
 # Global state variables.
-is_talking = False
-is_blinking = False
-next_blink_time = time.time() + random.uniform(3, 4)
-blink_end_time = None
-latest_text_to_read = ""  # Initialize as an empty string (or a default message)
-
-current_frame = None
-frame_lock = threading.Lock()
-
+latest_text_to_read = ""
 audio_chunks_dict = OrderedDict()
-current_chunk_index = 0  # Keep track of which chunk is currently being served
+current_chunk_index = 0
 
-def apply_breathing(base_img, t):
-    """
-    Apply a breathing effect by scaling the chest region of the image.
-    In this version, we assume the chest occupies the lower 60% of the image.
-    (i.e. the cutoff is at 40% of the height.)
-    """
-    amplitude = 0.005  # 3% expansion
-    freq = 0.25       # about one breath every 4 seconds
-    breath = 1 + amplitude * math.sin(2 * math.pi * freq * t)
-    
-    # For chest covering the lower 60%, cutoff is at 40% of the height.
-    cutoff = int(FRAME_HEIGHT * 0.4)
-    
-    # Crop the lower portion.
-    lower = base_img.crop((0, cutoff, FRAME_WIDTH, FRAME_HEIGHT))
-    orig_lower_height = FRAME_HEIGHT - cutoff
-    new_lower_height = int(orig_lower_height * breath)
-    
-    # Resize the lower portion.
-    scaled_lower = lower.resize((FRAME_WIDTH, new_lower_height), resample=Image.BICUBIC)
-    
-    # Make a copy of the base image.
-    new_img = base_img.copy()
-    
-    # Compute vertical adjustment so the chest remains centered.
-    delta = new_lower_height - orig_lower_height
-    paste_y = cutoff - (delta // 2)
-    
-    # Paste the scaled lower portion back into the copy.
-    new_img.paste(scaled_lower, (0, paste_y))
-    return new_img
-
-def animation_loop():
-    global is_talking, is_blinking, next_blink_time, blink_end_time, current_frame
-    start_time = time.time()
-    while True:
-        now = time.time()
-        # --- Update blinking state ---
-        if not is_blinking and now >= next_blink_time:
-            is_blinking = True
-            blink_end_time = now + 0.4  # blink lasts 0.4 sec
-        if is_blinking and now >= blink_end_time:
-            is_blinking = False
-            next_blink_time = now + random.uniform(3, 4)
-        
-        # --- Determine which image to use ---
-        if is_talking:
-            if is_blinking:
-                base_img = img_talking_closed
-            else:
-                if random.random() < 0.7:
-                    base_img = img_talking_open
-                else:
-                    base_img = img_nottalking_open
-        else:
-            if is_blinking:
-                base_img = img_nottalking_closed
-            else:
-                base_img = img_nottalking_open
-        
-        # --- Apply horizontal sway ---
-        t = now - start_time
-        # The base sway computed (±10 pixels) is scaled by (swayamount - 1), so that when swayamount=1, sway=0.
-        sway_base = 10 * math.sin(1.5 * t)
-        sway_x = int((swayamount - 1) * sway_base)
-        
-        # --- Apply breathing effect ---
-        t = 0 #no breathing
-        base_with_breath = apply_breathing(base_img, t)
-
-        # Create a new frame with a transparent background.
-        frame = Image.new("RGBA", (FRAME_WIDTH, FRAME_HEIGHT), (0, 0, 0, 0))
-        # Paste the processed image with the horizontal offset.
-        frame.paste(base_with_breath, (sway_x, 0))
-        
-        # --- Update global current_frame ---
-        with frame_lock:
-            current_frame = frame.copy()
-        
-        time.sleep(0.1)  # Update at roughly 10 fps
-        
-                
-# Start the animation loop in a daemon thread.
-anim_thread = threading.Thread(target=animation_loop, daemon=True)
-anim_thread.start()
+def _get_sprite_urls(emo):
+    """Return the 4 sprite filenames for a given emotion."""
+    return {
+        "nottalking_open": f"{sprite}_{emo}_nottalking_eyes_open.png",
+        "nottalking_closed": f"{sprite}_{emo}_nottalking_eyes_closed.png",
+        "talking_open": f"{sprite}_{emo}_talking_eyes_open.png",
+        "talking_closed": f"{sprite}_{emo}_talking_eyes_closed.png",
+    }
 
 # ----------------- Flask Setup -----------------
 
@@ -232,28 +106,13 @@ previous_arm_positions = {
 CORS(flask_app)
 socketio = SocketIO(flask_app, cors_allowed_origins="*", logger=False, engineio_logger=False)
 
-def send_heartbeat():
-    while True:
-        socketio.sleep(10)  # Send heartbeat every 10 seconds
-        socketio.emit('heartbeat', {'status': 'alive'})
-        
 @socketio.on('connect')
 def handle_connect():
-    #start_idle()
-    #queue_message('Client connected')
-    socketio.start_background_task(send_heartbeat)
-    #if IDLE_MSGS_enabled == "True":
-        #socketio.start_background_task(idle_msg) 
-
-@socketio.on('heartbeat')
-def handle_heartbeat(message):
-    #queue_message('Received heartbeat from client')
     pass
 
 @socketio.on('disconnect')
 def handle_disconnect():
     pass
-    #queue_message('Client disconnected')
 
 @flask_app.route('/')
 def index():
@@ -286,77 +145,55 @@ def get_config_variable():
     #queue_message(jsonify({'talkinghead_base_url': f"http://{local_ip}:5012"}))
     return jsonify({'talkinghead_base_url': f"http://{local_ip}:5012"})
 
-@flask_app.route('/stream')
-def stream():
-    def generate_frames():
-        while True:
-            with frame_lock:
-                if current_frame is None:
-                    continue
-                buffer = io.BytesIO()
-                current_frame.save(buffer, format="PNG")
-                frame_data = buffer.getvalue()
-            yield (b"--frame\r\n"
-                   b"Content-Type: image/png\r\n\r\n" + frame_data + b"\r\n")
-            socketio.sleep(0.1)
-    return Response(generate_frames(), mimetype="multipart/x-mixed-replace; boundary=frame")
+@flask_app.route('/avatar_sprites')
+def avatar_sprites():
+    """Return JSON with the 4 sprite URLs for the current emotion."""
+    sprites = _get_sprite_urls(emotion)
+    base = f"/character_sprite/{emotion}/animation/"
+    return jsonify({k: base + v for k, v in sprites.items()})
+
+@flask_app.route('/character_sprite/<emo>/animation/<filename>')
+def character_sprite(emo, filename):
+    """Serve a character sprite image file."""
+    from flask import send_from_directory
+    sprite_dir = os.path.join(BASE_DIR, "character", character_name, "images", emo, "animation")
+    return send_from_directory(sprite_dir, filename)
 
 @flask_app.route('/start_talking')
 def start_talking_endpoint():
-    global is_talking
-    is_talking = True
-    #queue_message("DEBUG: Talking mode enabled.")
+    socketio.emit('talking_state', {'talking': True})
     return Response("started", status=200)
 
 @flask_app.route('/stop_talking')
 def stop_talking_endpoint():
-    global is_talking
-    is_talking = False
-    #queue_message("DEBUG: Talking mode disabled.")
+    socketio.emit('talking_state', {'talking': False})
     return Response("stopped", status=200)
 
 @flask_app.route('/emotion', methods=['POST'])
 def set_emotion():
     """
     Receives a single-word emotion and updates the stored emotion.
+    Pushes new sprite URLs to connected clients via SocketIO.
     """
-    global CHARACTER_DIR, img_nottalking_open, img_nottalking_closed, img_talking_open, img_talking_closed
-    detected_emotion = request.data.decode("utf-8").strip()  # Read raw data as a string
+    global emotion
+    detected_emotion = request.data.decode("utf-8").strip()
 
-    if detected_emotion:  # Ensure it's not empty
-        # Build the new emotion folder path
-        new_character_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
-
-        # Check if the folder exists, otherwise, fallback to 'neutral'
-        if not os.path.exists(new_character_dir):
-            #queue_message(f"Emotion folder '{new_character_dir}' not found. Falling back to 'neutral'.")
+    if detected_emotion:
+        # Check if the emotion folder exists, otherwise fallback to 'neutral'
+        emo_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
+        if not os.path.exists(emo_dir):
             detected_emotion = "neutral"
-            new_character_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
 
-        # **Update Global Emotion Directory**
-        CHARACTER_DIR = new_character_dir
-        #queue_message(f"Updated CHARACTER_DIR: {CHARACTER_DIR}")
+        emotion = detected_emotion
 
-        try:
-            # **🔄 Reload Character Images for New Emotion**
-            img_nottalking_open = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{detected_emotion}_nottalking_eyes_open.png")).convert("RGBA")
-            img_nottalking_closed = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{detected_emotion}_nottalking_eyes_closed.png")).convert("RGBA")
-            img_talking_open = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{detected_emotion}_talking_eyes_open.png")).convert("RGBA")
-            img_talking_closed = Image.open(os.path.join(CHARACTER_DIR, "animation", f"{sprite}_{detected_emotion}_talking_eyes_closed.png")).convert("RGBA")
+        # Push new sprite URLs to all connected clients
+        sprites = _get_sprite_urls(detected_emotion)
+        base = f"/character_sprite/{detected_emotion}/animation/"
+        socketio.emit('emotion_change', {k: base + v for k, v in sprites.items()})
 
-            # Resize images to match the frame dimensions
-            img_nottalking_open = img_nottalking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))
-            img_nottalking_closed = img_nottalking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
-            img_talking_open = img_talking_open.resize((FRAME_WIDTH, FRAME_HEIGHT))
-            img_talking_closed = img_talking_closed.resize((FRAME_WIDTH, FRAME_HEIGHT))
+        return jsonify({"message": "Emotion updated", "emotion": detected_emotion}), 200
 
-            return jsonify({"message": "Emotion updated", "emotion": detected_emotion}), 200
-
-        except FileNotFoundError as e:
-            queue_message(f"Error loading images for {detected_emotion}: {e}")
-            return jsonify({"error": "Missing image files"}), 500
-
-    return jsonify({"error": "No emotion provided"}), 400  # Ensure a response in all cases
+    return jsonify({"error": "No emotion provided"}), 400
 
 @flask_app.route('/process_llm', methods=['POST'])
 def receive_user_message():
@@ -447,8 +284,8 @@ def audio_stream():
     """
     Generate MP3 TTS and serve the first chunk using dictionary-based storage.
     """
-    global is_talking, current_chunk_index
-    is_talking = True  # Set talking state
+    global current_chunk_index
+    socketio.emit('talking_state', {'talking': True})
 
     # ✅ Reset chunk tracking for new requests
     audio_chunks_dict.clear()  

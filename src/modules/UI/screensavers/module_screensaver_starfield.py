@@ -19,7 +19,7 @@ This license applies only to this file and does not override licenses of other f
 import pygame
 import random
 import math
-from UI.module_screensaver_overlay import TimeOverlay
+from UI.screensavers.module_screensaver_overlay import TimeOverlay
 
 class StarfieldAnimation:
     def __init__(self, screen, width, height, show_time=False):

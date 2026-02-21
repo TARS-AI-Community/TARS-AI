@@ -40,14 +40,13 @@ class BounceAnimation:
         self.screen = screen
         self.width = width
         self.height = height
-        self.is_portrait = height > width  # Detect portrait mode
+        self.is_portrait = height > width
         self.initialized = False
         self.clock = pygame.time.Clock()
         
         self.logo_width = 160
         self.logo_height = 100
         
-        # For portrait mode, use dimensions directly; for landscape, swap for rotation
         if self.is_portrait:
             self.bounds_w = width
             self.bounds_h = height
@@ -287,7 +286,6 @@ class BounceAnimation:
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
         
-        # Only apply rotation when in landscape mode (OS doesn't handle rotation)
         if not self.is_portrait:
             glTranslatef(0, self.height, 0)
             glRotatef(-90, 0, 0, 1)

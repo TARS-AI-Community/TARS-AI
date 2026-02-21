@@ -171,6 +171,7 @@ class STTManager:
         
         # Pause/resume functionality for video playback
         self.paused = False
+        self.cancelled = False
         self.pause_lock = threading.Lock()
 
         # Audio settings - Set sample rate based on VAD configuration
@@ -255,22 +256,35 @@ class STTManager:
         """Stop the STT processing loop."""
         self.running = False
         self.shutdown_event.set()
-        self.thread.join()
+        self.thread.join(timeout=3)
     
     def pause(self):
-        """Pause STT processing (e.g., during video playback)."""
+        """Pause STT processing (e.g., during video playback or servo movement)."""
         with self.pause_lock:
             self.paused = True
-    
+
+    def cancel(self):
+        """Pause STT and flag in-flight LLM/TTS to be discarded."""
+        with self.pause_lock:
+            self.paused = True
+            self.cancelled = True
+
     def resume(self):
         """Resume STT processing."""
         with self.pause_lock:
             self.paused = False
-    
+
     def is_paused(self):
         """Check if STT is currently paused."""
         with self.pause_lock:
             return self.paused
+
+    def is_cancelled(self):
+        """Check and clear the cancellation flag (one-shot)."""
+        with self.pause_lock:
+            was = self.cancelled
+            self.cancelled = False
+            return was
 
     # === Model Loading Methods ===
 
@@ -304,9 +318,8 @@ class STTManager:
         Initialize the Vosk model for local STT transcription.
         """
         if Model is None:
-            queue_message("WARNING: Vosk not available (not installed)")
             return
-            
+
         if self.config['STT']['stt_processor'] == 'vosk':
             vosk_model_path = os.path.join(os.getcwd(), "..", "stt", self.config['STT']['vosk_model'])
             if not os.path.exists(vosk_model_path):
@@ -595,10 +608,10 @@ class STTManager:
     
     def _transcribe_with_openAi(self):
         """Transcribe and translate audio using OpenAI's Whisper API."""
-        
+
         language = CONFIG['STT']['language']
         client = OpenAI(api_key=CONFIG["TTS"]["openai_api_key"])
-        
+
         detected_speech = False
         silent_frames = 0
         audio_buffer = []  # Store audio chunks
@@ -608,26 +621,31 @@ class STTManager:
                             blocksize=4000, latency='high') as stream:
             for _ in range(self.MAX_RECORDING_FRAMES):  # Limit recording duration
                 data, _ = stream.read(4000)
-                
+
                 is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(
                     data, detected_speech, silent_frames
                 )
-                
+
                 if is_silence:
                     if not detected_speech:
                         return None
                     break
-                
+
                 # Amplify and store audio data
                 data = self.amplify_audio(data)
                 audio_buffer.append(data)
-        
+
         if not audio_buffer:
             return None
-        
+
         # Combine all audio chunks
         audio_data = np.concatenate(audio_buffer)
-        
+
+        # Reject near-silent recordings before sending to API
+        rms = np.sqrt(np.mean(audio_data.astype(np.float64) ** 2))
+        if rms < self.silence_threshold * self.silence_margin:
+            return None
+
         # Save to temporary WAV file (OpenAI requires a file)
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
@@ -636,19 +654,33 @@ class STTManager:
                 wf.setsampwidth(2)  # 16-bit
                 wf.setframerate(self.SAMPLE_RATE)
                 wf.writeframes(audio_data.tobytes())
-            
-            # Transcribe with OpenAI Whisper
+
+            # Transcribe with OpenAI Whisper (verbose_json gives no_speech_prob)
             try:
                 with open(temp_audio.name, 'rb') as audio_file:
-                    transcription = client.audio.transcriptions.create(
+                    response = client.audio.transcriptions.create(
                         model="whisper-1",
                         file=audio_file,
-                        response_format="text"
+                        response_format="verbose_json"
                     )
             finally:
                 # Clean up temp file
                 os.unlink(temp_audio.name)
-        
+
+        # Check no_speech_prob — reject if Whisper thinks there's no real speech
+        if hasattr(response, 'segments') and response.segments:
+            avg_no_speech = sum(
+                seg.get('no_speech_prob', 0) if isinstance(seg, dict)
+                else getattr(seg, 'no_speech_prob', 0)
+                for seg in response.segments
+            ) / len(response.segments)
+            if avg_no_speech > 0.5:
+                return None
+
+        transcription = response.text.strip() if hasattr(response, 'text') else ""
+        if not transcription:
+            return None
+
         # Translate to target language if not English
         if language and language.lower() not in ["english", "anglais"]:
             translation = client.chat.completions.create(
@@ -661,14 +693,14 @@ class STTManager:
             result_text = translation.choices[0].message.content
         else:
             result_text = transcription
-        
+
         # Format result to match your existing format
         formatted_result = {"text": result_text}
-        
+
         # Call utterance callback if it exists
         if self.utterance_callback:
             self.utterance_callback(json.dumps(formatted_result))
-        
+
         return formatted_result
 
     def _transcribe_with_faster_whisper(self):
@@ -948,7 +980,7 @@ class STTManager:
         try:
             recorder = PvRecorder(frame_length=512, device_index=-1)
             recorder.start()
-            while True:
+            while self.running and not self.shutdown_event.is_set():
                 audio_chunk = recorder.read()  # Read 512 frames per buffer
                 audio_chunk = np.array(audio_chunk, dtype=np.int16)
                 if audio_chunk.ndim != 1:
@@ -1020,33 +1052,24 @@ class STTManager:
 
     def _init_progress_bar(self):
         """Initialize progress bar settings and functions"""
-        bar_length = 10  
-        show_progress = True
-
-        def flush_all():
-            """Ensure all buffers are completely flushed"""
-            sys.stdout.flush()
-            sys.stderr.flush()
-            time.sleep(0.01)  # Small delay to allow the terminal to catch up
+        bar_length = 10
+        # Skip console progress bar on lite devices — the UI shows status instead.
+        show_console = not self.ui_manager.__class__.__name__ == 'UIManagerLite'
 
         def update_progress_bar(frames, max_frames):
-            if show_progress:
+            self.ui_manager.silence(frames)
+            if show_console:
                 progress = int((frames / max_frames) * bar_length)
                 filled = "#" * progress
                 empty = "-" * (bar_length - progress)
-                
-                self.ui_manager.silence(frames)
-                bar = f"\r[SILENCE: {filled}{empty}] {frames}/{max_frames}"
-                sys.stdout.write(bar)
+                sys.stdout.write(f"\r[SILENCE: {filled}{empty}] {frames}/{max_frames}")
                 sys.stdout.flush()
-                flush_all()  # 🔹 Ensure everything is flushed immediately
 
         def clear_progress_bar():
-            if show_progress:
-                self.ui_manager.silence(0)
+            self.ui_manager.silence(0)
+            if show_console:
                 sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
                 sys.stdout.flush()
-                flush_all()  # 🔹 Ensure everything is flushed immediately
         return update_progress_bar, clear_progress_bar
     
     # === VAD Methods ===

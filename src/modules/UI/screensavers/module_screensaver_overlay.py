@@ -18,8 +18,13 @@ This license applies only to this file and does not override licenses of other f
 """
 import pygame
 from datetime import datetime
-from OpenGL.GL import *
 from modules.module_config import load_config
+
+try:
+    from OpenGL.GL import *
+    _HAS_GL = True
+except ImportError:
+    _HAS_GL = False
 
 CONFIG = load_config()
 
@@ -30,7 +35,7 @@ class TimeOverlay:
         self.width = width
         self.height = height
         self.rotation = rotation
-        self.is_portrait = height > width  # Detect portrait mode
+        self.is_portrait = height > width
         self.ampm_format = CONFIG['UI']['ampm_format']
         pygame.font.init()
         self.font = pygame.font.Font("UI/astrolab.ttf", 30)
@@ -53,6 +58,8 @@ class TimeOverlay:
         screen.blit(text_surface, (x_pos, y_pos))
     
     def render_gl(self):
+        if not _HAS_GL:
+            return
         current_time = datetime.now()
         if self.ampm_format:
             time_str = current_time.strftime("%I:%M:%S %p")
@@ -82,10 +89,8 @@ class TimeOverlay:
         glLoadIdentity()
         
         if self.is_portrait:
-            # Rotation first in code = applied last (rotates the final 2D output)
             glRotatef(90, 0, 0, 1)
             glOrtho(0, self.height, 0, self.width, -1, 1)
-            # Position in logical landscape coordinates
             x = self.height - 80
             y = self.width - 30
         else:

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 TARS Configuration Manager / 2025-08-07
 Author: Charles-Olivier Dion (AtomikSpace)
@@ -510,7 +509,7 @@ class TarsConfigManager:
                         name=field_name,
                         value=existing_field.value,
                         inline_comment=template_field.inline_comment,
-                        description_comments=template_field.description_comments.copy() if template_field.description_comments else []  # Always use template description
+                        description_comments=template_field.description_comments.copy() if template_field.description_comments else []
                     )
                 else:
                     final_field = ConfigField(
@@ -605,16 +604,13 @@ class TarsConfigManager:
             Tuple of (success, message, actions_taken)
         """
         try:
-            # Create backup if requested
             if create_backup:
                 if not self.create_backup():
                     return False, "Failed to create backup", []
             
-            # Load configurations
             template_sections = self.parse_config_structure(self.template_file)
             existing_sections = self.parse_config_structure(self.config_file)
             
-            # Create updated configuration structure
             final_sections = {}
             actions_taken = []
             
@@ -626,7 +622,6 @@ class TarsConfigManager:
                 )
                 
                 for field_name, template_field in template_section.fields.items():
-                    # Determine value to use
                     if section_name in config_data and field_name in config_data[section_name]:
                         new_value = str(config_data[section_name][field_name])
                         actions_taken.append(f"Updated [{section_name}] {field_name}")
@@ -649,7 +644,6 @@ class TarsConfigManager:
                 
                 final_sections[section_name] = final_section
             
-            # Write configuration
             self.write_config_file(final_sections)
             
             return True, f"Configuration updated successfully ({len(actions_taken)} changes)", actions_taken

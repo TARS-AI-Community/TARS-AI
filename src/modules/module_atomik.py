@@ -129,7 +129,6 @@ class WakeWordSystem:
 
     def createModel(self, num_templates=5):
         if self.load_templates():
-            #print(f"Loaded Atomik model for '{self.wake_word}'")
             return True
 
         print("=" * 60)
@@ -167,7 +166,6 @@ class WakeWordSystem:
         return True
 
     def listenForWakeWord(self):
-        #print(f"Say '{self.wake_word.upper()}' to trigger detection")        
         detected_flag = False
 
         def audio_callback(indata, frames, time_info, status):
@@ -177,7 +175,6 @@ class WakeWordSystem:
 
             detected, confidence = self.detect()
             if detected:
-                #print(f"\nWake word detected! Confidence: {confidence:.2f}")
                 detected_flag = True
 
         with sd.InputStream(samplerate=self.sample_rate, channels=1, callback=audio_callback, blocksize=512):

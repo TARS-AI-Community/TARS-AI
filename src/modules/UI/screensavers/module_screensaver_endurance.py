@@ -26,7 +26,7 @@ from collections import defaultdict
 from PIL import Image
 
 try:
-    from UI.module_screensaver_overlay import TimeOverlay
+    from UI.screensavers.module_screensaver_overlay import TimeOverlay
 except ImportError:
     TimeOverlay = None
 
