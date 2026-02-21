@@ -24,6 +24,7 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.claude/settings.local.json
 MANIFEST
 
 # PyInstaller
@@ -151,6 +152,9 @@ output.wav
 # Memory files
 *.pickle.gz
 /src/memory/TARS_topics.json
+src/memory/TARS_topics.json
+/src/memory/TARS_lite.json
+src/memory/TARS_lite.json
 TARS.wav
 /memory/initial_memory.json
 /memory/initial_memory.loaded
@@ -162,6 +166,7 @@ src/memory/initial_memory.loaded
 src/memory/initial_memory.json
 initial_memory.json
 TARS_topics.json
+TARS_lite.json
 
 # Character Data
 character/persona.ini
