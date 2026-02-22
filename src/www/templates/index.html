@@ -1740,7 +1740,7 @@
             const badge = document.getElementById('wfStatusBadge');
             const hbtn  = document.getElementById('wfHotspotBtn');
             if (d.mode === 'client') {
-              icon.src = wfSignalIcon(d.signal || 0);
+              icon.src = '/static/imgs/wifi-blue.png';
               ssid.textContent = d.ssid || 'Connected';
               ip.textContent   = d.ip || '';
               badge.textContent = 'Connected';
