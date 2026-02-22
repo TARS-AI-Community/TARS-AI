@@ -1288,6 +1288,16 @@
         <i class="bi bi-gear-fill"></i>
       </button>
     </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link custom-tab" id="wifi-tab" data-bs-toggle="tab" data-bs-target="#wifi" type="button" role="tab" aria-label="WiFi Setup">
+        <i class="bi bi-wifi"></i>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link custom-tab" id="emotions-tab" data-bs-toggle="tab" data-bs-target="#emotions" type="button" role="tab" aria-label="Emotions">
+        <i class="bi bi-emoji-smile"></i>
+      </button>
+    </li>
     <li class="nav-item ms-auto" role="presentation">
       <button class="nav-link custom-tab" id="fullscreen-toggle" type="button" aria-label="Toggle Fullscreen" onclick="toggleFullscreen()">
         <i class="bi bi-fullscreen" id="fullscreen-icon"></i>
@@ -1567,6 +1577,399 @@
         </div>
       </div>
     </div>
+    <!-- WIFI TAB -->
+    <div class="tab-pane fade p-0" id="wifi" role="tabpanel" style="overflow-y:auto;">
+      <style>
+        #wifi { background: #0d1117; }
+        #wifi.active { display: block !important; opacity: 1 !important; visibility: visible !important; }
+        .wf-wrap { max-width: 500px; margin: 0 auto; padding: 1.5rem 1rem; }
+        .wf-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; }
+        .wf-status-row { display: flex; align-items: center; gap: .75rem; }
+        .wf-status-icon { width: 28px; height: 28px; flex-shrink: 0; }
+        .wf-status-text { flex: 1; }
+        .wf-status-text strong { display: block; color: #e6edf3; font-size: .95rem; }
+        .wf-status-text span { color: #8b949e; font-size: .78rem; }
+        .wf-badge { display: inline-block; padding: .2rem .55rem; border-radius: 20px; font-size: .72rem; font-weight: 600; }
+        .wf-badge-ok  { background: #1a3a2a; color: #3fb950; border: 1px solid #238636; }
+        .wf-badge-hot { background: #3a2a1a; color: #d29922; border: 1px solid #9e6a03; }
+        .wf-badge-off { background: #2a1a1a; color: #f85149; border: 1px solid #da3633; }
+        .wf-net-list { display: flex; flex-direction: column; gap: .4rem; max-height: 260px; overflow-y: auto; margin-bottom: 1rem; }
+        .wf-net-btn { display: flex; align-items: center; gap: .7rem; background: transparent; border: 1px solid #30363d; border-radius: 8px; padding: .6rem .9rem; color: #e6edf3; cursor: pointer; text-align: left; width: 100%; transition: border-color .15s, background .15s; }
+        .wf-net-btn:hover, .wf-net-btn.selected { border-color: #00ced1; background: rgba(0,206,209,.08); }
+        .wf-net-btn.in-use { border-color: #238636; }
+        .wf-net-icon { width: 20px; height: 20px; flex-shrink: 0; }
+        .wf-net-name { flex: 1; font-size: .9rem; }
+        .wf-net-sec { font-size: .72rem; color: #8b949e; }
+        .wf-input { width: 100%; padding: .5rem .85rem; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: .9rem; outline: none; margin-top: .35rem; }
+        .wf-input:focus { border-color: #00ced1; }
+        .wf-label { font-size: .8rem; color: #8b949e; display: block; margin-bottom: .15rem; }
+        .wf-connect-row { display: flex; gap: .6rem; align-items: flex-end; margin-top: .75rem; }
+        .wf-connect-row .wf-input-wrap { flex: 1; }
+        .wf-msg { font-size: .82rem; margin-top: .5rem; min-height: 1.1em; }
+        .wf-msg-ok  { color: #3fb950; }
+        .wf-msg-err { color: #f85149; }
+        .wf-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #30363d; border-top-color: #00ced1; border-radius: 50%; animation: wfspin .7s linear infinite; vertical-align: middle; margin-right: .3rem; }
+        @keyframes wfspin { to { transform: rotate(360deg); } }
+        .wf-scan-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: .6rem; }
+        .wf-scan-row h3 { margin: 0; font-size: .95rem; color: #e6edf3; }
+      </style>
+
+      <div class="wf-wrap">
+
+        <!-- Status Card -->
+        <div class="wf-card" id="wfStatusCard">
+          <div class="wf-status-row">
+            <img id="wfStatusIcon" class="wf-status-icon" src="/static/imgs/wifi-gray.png" alt="" />
+            <div class="wf-status-text">
+              <strong id="wfStatusSsid">Loading…</strong>
+              <span id="wfStatusIp"></span>
+            </div>
+            <span id="wfStatusBadge" class="wf-badge wf-badge-off">—</span>
+            <button class="btn btn-sm btn-outline-secondary" id="wfHotspotBtn" onclick="wfToggleHotspot()" style="font-size:.78rem;padding:.25rem .6rem;">Hotspot</button>
+          </div>
+        </div>
+
+        <!-- Networks Card -->
+        <div class="wf-card">
+          <div class="wf-scan-row" style="margin-right:-1.25rem;">
+            <h3>Networks</h3>
+            <button class="btn btn-sm btn-outline-secondary" onclick="wfScan()" id="wfScanBtn" style="font-size:.78rem;padding:.25rem .6rem;">&#x21bb; Scan</button>
+          </div>
+          <div class="wf-net-list" id="wfNetList">
+            <div style="text-align:center;color:#8b949e;font-size:.85rem;padding:.75rem 0;">
+              <span class="wf-spinner"></span>Scanning…
+            </div>
+          </div>
+
+          <!-- Selected network card (appears below list on selection) -->
+          <div id="wfSelectedCard" style="display:none;margin-top:.75rem;border-top:1px solid #30363d;padding-top:.85rem;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;margin-right:-1.25rem;">
+              <div>
+                <strong id="wfCardSsid" style="color:#e6edf3;font-size:.95rem;display:block;"></strong>
+                <span id="wfCardDesc" style="color:#8b949e;font-size:.78rem;"></span>
+              </div>
+              <button onclick="wfDeselect()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:1.1rem;padding:.2rem .4rem;">✕</button>
+            </div>
+
+            <!-- Personal: password only -->
+            <div id="wfPersonalFields">
+              <label class="wf-label">Password</label>
+              <input type="password" class="wf-input" id="wfPassword" placeholder="Leave blank for open networks" style="margin-bottom:.65rem;" />
+            </div>
+
+            <!-- Enterprise: username + password -->
+            <div id="wfEnterpriseFields" style="display:none;">
+              <label class="wf-label">Username</label>
+              <input type="text" class="wf-input" id="wfUsername" placeholder="e.g. student ID" style="margin-bottom:.45rem;" />
+              <label class="wf-label">Password</label>
+              <input type="password" class="wf-input" id="wfPasswordEnt" placeholder="Password" style="margin-bottom:.65rem;" />
+            </div>
+
+            <div style="display:flex;gap:.5rem;">
+              <button class="btn btn-sm btn-outline-secondary" onclick="wfDeselect()" style="flex:1;">Cancel</button>
+              <button class="btn btn-sm btn-primary" id="wfConnectBtn" onclick="wfConnect()" style="flex:1;">Connect</button>
+            </div>
+            <p class="wf-msg" id="wfMsg" style="margin-top:.5rem;"></p>
+          </div>
+        </div>
+
+      </div>
+
+
+
+      <!-- Confirmation overlay (shown before actually connecting) -->
+      <div id="wfConfirmOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:1rem;">
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:1.5rem;width:min(400px,94vw);">
+
+          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;">
+            <i class="bi bi-wifi" style="color:#00ced1;font-size:1.3rem;"></i>
+            <strong style="color:#e6edf3;font-size:1rem;">Ready to Connect</strong>
+          </div>
+
+          <p style="color:#8b949e;font-size:.8rem;margin-bottom:.3rem;">Network</p>
+          <p id="wfConfirmSsid" style="color:#e6edf3;font-size:1.2rem;font-weight:700;margin-bottom:1rem;"></p>
+
+          <!-- URL box -->
+          <div style="background:rgba(255,193,7,.07);border:1px solid rgba(255,193,7,.25);border-radius:8px;padding:.85rem;margin-bottom:.85rem;">
+            <p style="color:#d29922;font-size:.78rem;font-weight:600;margin-bottom:.6rem;">📋 Save these before connecting</p>
+            <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:.7rem;font-size:.82rem;line-height:2;">
+              <div><span style="color:#8b949e;font-size:.72rem;">Tailscale (anywhere):</span><br>
+                <span style="font-family:monospace;color:#00ced1;font-weight:700;">http://tars:5012</span></div>
+              <div style="border-top:1px solid #30363d;padding-top:.4rem;margin-top:.4rem;">
+                <span style="color:#8b949e;font-size:.72rem;">Local network (home WiFi):</span><br>
+                <span style="font-family:monospace;color:#00ced1;font-weight:700;">http://tars.local:5012</span></div>
+            </div>
+          </div>
+
+          <!-- Steps warning -->
+          <div style="background:rgba(0,206,209,.07);border:1px solid rgba(0,206,209,.2);border-radius:8px;padding:.85rem;margin-bottom:1rem;font-size:.8rem;">
+            <p style="color:#00ced1;font-weight:600;margin-bottom:.4rem;">⚠️ After clicking Connect Now:</p>
+            <ol style="color:#8b949e;margin:0;padding-left:1.2rem;line-height:1.9;">
+              <li>TARS connects to <strong id="wfConfirmSsid2" style="color:#e6edf3;"></strong></li>
+              <li>This page will disconnect (hotspot shuts down)</li>
+              <li>Reconnect your device to that network</li>
+              <li>Open one of the URLs above</li>
+            </ol>
+          </div>
+
+          <p class="wf-msg" id="wfConfirmMsg" style="margin-bottom:.6rem;"></p>
+
+          <div style="display:flex;gap:.6rem;">
+            <button class="btn btn-sm btn-outline-secondary" id="wfCancelBtn" onclick="wfConfirmCancel()" style="flex:1;">Cancel</button>
+            <button class="btn btn-sm btn-primary" id="wfConfirmBtn" onclick="wfConfirmConnect()" style="flex:1;">Connect Now</button>
+          </div>
+        </div>
+      </div>
+
+      <script>
+      (function() {
+        let wfSelected = null;
+
+        function wfSignalIcon(signal) {
+          if (signal >= 40) return '/static/imgs/wifi-blue.png';
+          return '/static/imgs/wifi-gray.png';
+        }
+
+        async function wfLoadStatus() {
+          try {
+            const r = await fetch('/api/wifi/status');
+            const d = await r.json();
+            const icon = document.getElementById('wfStatusIcon');
+            const ssid = document.getElementById('wfStatusSsid');
+            const ip   = document.getElementById('wfStatusIp');
+            const badge = document.getElementById('wfStatusBadge');
+            const hbtn  = document.getElementById('wfHotspotBtn');
+            if (d.mode === 'client') {
+              icon.src = wfSignalIcon(d.signal || 0);
+              ssid.textContent = d.ssid || 'Connected';
+              ip.textContent   = d.ip || '';
+              badge.textContent = 'Connected';
+              badge.className = 'wf-badge wf-badge-ok';
+              hbtn.textContent = 'Start Hotspot';
+            } else if (d.mode === 'hotspot') {
+              icon.src = '/static/imgs/wifi-yellow.png';
+              ssid.textContent = 'TARS-Setup';
+              ip.textContent   = '10.42.0.1';
+              badge.textContent = 'Hotspot';
+              badge.className = 'wf-badge wf-badge-hot';
+              hbtn.textContent = 'Stop Hotspot';
+            } else {
+              icon.src = '/static/imgs/wifi-gray.png';
+              ssid.textContent = 'Not connected';
+              ip.textContent   = '';
+              badge.textContent = 'Offline';
+              badge.className = 'wf-badge wf-badge-off';
+              hbtn.textContent = 'Start Hotspot';
+            }
+          } catch(e) { /* ignore */ }
+        }
+
+        window.wfScan = async function() {
+          const list = document.getElementById('wfNetList');
+          list.innerHTML = '<div style="text-align:center;color:#8b949e;font-size:.85rem;padding:.75rem 0;"><span class="wf-spinner"></span>Scanning…</div>';
+          wfSelected = null;
+          document.getElementById('wfSelectedCard').style.display = 'none';
+          try {
+            const r = await fetch('/api/wifi/networks');
+            const d = await r.json();
+            const nets = d.networks || [];
+            if (!nets.length) {
+              list.innerHTML = '<div style="text-align:center;color:#8b949e;font-size:.85rem;padding:.75rem 0;">No networks found.</div>';
+              return;
+            }
+            list.innerHTML = nets.map(n => `
+              <button class="wf-net-btn${n.in_use ? ' in-use' : ''}" onclick='wfSelect(${JSON.stringify(n)})' data-ssid="${n.ssid}">
+                <img class="wf-net-icon" src="${wfSignalIcon(n.signal)}" alt="" />
+                <span class="wf-net-name">${n.ssid}${n.in_use ? ' <span style=\'color:#3fb950;font-size:.7rem;\'>✓</span>' : ''}</span>
+                <span class="wf-net-sec">${n.security || ''}</span>
+              </button>`).join('');
+          } catch(e) {
+            list.innerHTML = `<div style="text-align:center;color:#f85149;font-size:.85rem;padding:.75rem 0;">Scan failed: ${e.message}</div>`;
+          }
+        };
+
+        window.wfSelect = function(net) {
+          wfSelected = net;
+          document.querySelectorAll('.wf-net-btn').forEach(b =>
+            b.classList.toggle('selected', b.dataset.ssid === net.ssid));
+
+          const isEnt = net.security === 'WPA2-Enterprise';
+          const isOpen = net.security === 'open';
+
+          document.getElementById('wfCardSsid').textContent = net.ssid;
+          document.getElementById('wfCardDesc').textContent = isOpen
+            ? 'Open network'
+            : isEnt ? 'Enterprise network (802.1X)' : 'Password required';
+
+          document.getElementById('wfPersonalFields').style.display  = isEnt ? 'none' : '';
+          document.getElementById('wfEnterpriseFields').style.display = isEnt ? '' : 'none';
+          document.getElementById('wfPassword').value    = '';
+          document.getElementById('wfUsername').value    = '';
+          document.getElementById('wfPasswordEnt').value = '';
+          document.getElementById('wfMsg').textContent   = '';
+          document.getElementById('wfMsg').className     = 'wf-msg';
+          document.getElementById('wfSelectedCard').style.display = '';
+        };
+
+        window.wfDeselect = function() {
+          wfSelected = null;
+          document.querySelectorAll('.wf-net-btn').forEach(b => b.classList.remove('selected'));
+          document.getElementById('wfSelectedCard').style.display = 'none';
+        };
+
+        window.wfConnect = function() {
+          if (!wfSelected) return;
+          // Show confirmation overlay before actually connecting
+          document.getElementById('wfConfirmSsid').textContent  = wfSelected.ssid;
+          document.getElementById('wfConfirmSsid2').textContent = wfSelected.ssid;
+          document.getElementById('wfConfirmMsg').textContent   = '';
+          document.getElementById('wfConfirmMsg').className     = 'wf-msg';
+          document.getElementById('wfConfirmBtn').disabled      = false;
+          document.getElementById('wfConfirmBtn').textContent   = 'Connect Now';
+          document.getElementById('wfConfirmOverlay').style.display = 'flex';
+        };
+
+        window.wfConfirmCancel = function() {
+          document.getElementById('wfConfirmOverlay').style.display = 'none';
+        };
+
+        window.wfConfirmConnect = async function() {
+          const btn = document.getElementById('wfConfirmBtn');
+          const cancelBtn = document.getElementById('wfCancelBtn');
+          const msg = document.getElementById('wfConfirmMsg');
+          const isEnt = wfSelected.security === 'WPA2-Enterprise';
+          const password = isEnt
+            ? document.getElementById('wfPasswordEnt').value
+            : document.getElementById('wfPassword').value;
+          const username = isEnt ? document.getElementById('wfUsername').value : '';
+
+          btn.disabled = true;
+          cancelBtn.disabled = true;
+          btn.innerHTML = '<span class="wf-spinner"></span>Connecting…';
+          msg.textContent = '';
+          try {
+            const r = await fetch('/api/wifi/connect', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ssid: wfSelected.ssid, password, username})
+            });
+            const d = await r.json();
+            if (!r.ok || !d.success) throw new Error(d.error || 'Connection failed');
+            msg.textContent = '✓ Connected! Hotspot shutting down…';
+            msg.className = 'wf-msg wf-msg-ok';
+            setTimeout(() => {
+              document.getElementById('wfConfirmOverlay').style.display = 'none';
+              wfDeselect();
+              wfLoadStatus();
+            }, 2500);
+          } catch(e) {
+            msg.textContent = '✗ ' + e.message;
+            msg.className = 'wf-msg wf-msg-err';
+            btn.disabled = false;
+            cancelBtn.disabled = false;
+            btn.textContent = 'Connect Now';
+          }
+        };
+
+
+
+        window.wfToggleHotspot = async function() {
+          const btn = document.getElementById('wfHotspotBtn');
+          btn.disabled = true;
+          try {
+            await fetch('/api/wifi/hotspot', {method: 'PUT'});
+            setTimeout(wfLoadStatus, 1500);
+          } finally {
+            btn.disabled = false;
+          }
+        };
+
+        // Load content when tab is shown
+        document.getElementById('wifi-tab').addEventListener('shown.bs.tab', function() {
+          wfLoadStatus();
+          wfScan();
+        });
+      })();
+      </script>
+    </div>
+
+    <!-- EMOTIONS TAB -->
+    <div class="tab-pane fade p-0" id="emotions" role="tabpanel">
+      <style>
+        #emotions { background: #0d1117; overflow-y: auto; }
+        .em-wrap { max-width: 480px; margin: 0 auto; padding: 1.5rem 1rem; }
+        .em-title { color: #8b949e; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: .75rem; }
+        .em-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; }
+        .em-btn {
+          display: flex; flex-direction: column; align-items: center; gap: .35rem;
+          background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+          padding: .9rem .5rem; cursor: pointer; color: #e6edf3;
+          font-size: .78rem; transition: border-color .15s, background .15s;
+        }
+        .em-btn:hover { border-color: #00ced1; background: rgba(0,206,209,.08); }
+        .em-btn.active { border-color: #00ced1; background: rgba(0,206,209,.15); }
+        .em-btn .em-icon { font-size: 1.8rem; line-height: 1; }
+        .em-status { text-align: center; color: #8b949e; font-size: .8rem; margin-top: 1rem; min-height: 1.2em; }
+      </style>
+
+      <div class="em-wrap">
+        <p class="em-title">Eyes Mood Control</p>
+        <div class="em-grid">
+          <button class="em-btn" onclick="emSetMood('NEUTRAL')">
+            <span class="em-icon">😐</span>Neutral
+          </button>
+          <button class="em-btn" onclick="emSetMood('HAPPY')">
+            <span class="em-icon">😊</span>Happy
+          </button>
+          <button class="em-btn" onclick="emSetMood('SAD')">
+            <span class="em-icon">😢</span>Sad
+          </button>
+          <button class="em-btn" onclick="emSetMood('ANGRY')">
+            <span class="em-icon">😠</span>Angry
+          </button>
+          <button class="em-btn" onclick="emSetMood('EXCITED')">
+            <span class="em-icon">🤩</span>Excited
+          </button>
+          <button class="em-btn" onclick="emSetMood('AFRAID')">
+            <span class="em-icon">😨</span>Afraid
+          </button>
+          <button class="em-btn" onclick="emSetMood('SIDEEYE_LEFT')">
+            <span class="em-icon">👈</span>Side-eye L
+          </button>
+          <button class="em-btn" onclick="emSetMood('SIDEEYE_RIGHT')">
+            <span class="em-icon">👉</span>Side-eye R
+          </button>
+          <button class="em-btn" onclick="emSetMood('SLEEPY')">
+            <span class="em-icon">😴</span>Sleepy
+          </button>
+        </div>
+        <p class="em-status" id="emStatus"></p>
+      </div>
+
+      <script>
+      (function() {
+        window.emSetMood = async function(mood) {
+          document.querySelectorAll('.em-btn').forEach(b => b.classList.remove('active'));
+          event.currentTarget.classList.add('active');
+          const status = document.getElementById('emStatus');
+          status.textContent = 'Sending…';
+          try {
+            const r = await fetch('/api/eyes/mood', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({mood})
+            });
+            const d = await r.json();
+            status.textContent = d.success ? '✓ Mood set to ' + mood.toLowerCase() : '✗ ' + (d.error || 'failed');
+          } catch(e) {
+            status.textContent = '✗ ' + e.message;
+          }
+        };
+      })();
+      </script>
+    </div>
+
+
 
   </div>
 

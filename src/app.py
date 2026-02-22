@@ -244,6 +244,15 @@ if __name__ == "__main__":
         )
         ui_manager.start()
         queue_message(f"LOAD: {'Lite' if _use_lite_ui else 'Full'} UI manager started")
+
+    # === ChatUI Thread (starts early so webui is available during model loading) ===
+    if CONFIG['CHATUI']['enabled'] == "True" and CHATUI_AVAILABLE:
+        queue_message("LOAD: ChatUI starting on port 5012...")
+        flask_thread = threading.Thread(
+            target=modules.module_chatui.start_flask_app,
+            daemon=True
+        )
+        flask_thread.start()
     else:
         ui_manager = UIManagerStub(
             shutdown_event=shutdown_event,
@@ -300,15 +309,6 @@ if __name__ == "__main__":
             daemon=True
         )
         bt_controller_thread.start()
-
-    # === ChatUI Thread ===
-    if CONFIG['CHATUI']['enabled'] == "True" and CHATUI_AVAILABLE:
-        queue_message("LOAD: ChatUI starting on port 5012...")
-        flask_thread = threading.Thread(
-            target=modules.module_chatui.start_flask_app,
-            daemon=True
-        )
-        flask_thread.start()
 
     # === Vision Initialization ===
     if VISION_AVAILABLE and CONFIG['VISION']['server_hosted'] != "True":
