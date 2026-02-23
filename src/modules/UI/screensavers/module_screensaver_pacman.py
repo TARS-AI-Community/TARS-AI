@@ -544,7 +544,8 @@ class PacmanAnimation:
 
         import os
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        font_path = os.path.join(script_dir, 'vga.ttf')
+        assets_dir = os.path.join(os.path.dirname(script_dir), 'assets')
+        font_path = os.path.join(assets_dir, 'vga.ttf')
 
         try:
             if os.path.exists(font_path):

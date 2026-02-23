@@ -38,7 +38,10 @@ class TimeOverlay:
         self.is_portrait = height > width
         self.ampm_format = CONFIG['UI']['ampm_format']
         pygame.font.init()
-        self.font = pygame.font.Font("UI/astrolab.ttf", 30)
+        import os
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        assets_dir = os.path.join(os.path.dirname(script_dir), 'assets')
+        self.font = pygame.font.Font(os.path.join(assets_dir, 'astrolab.ttf'), 30)
     
     def render(self, screen):
         current_time = datetime.now()

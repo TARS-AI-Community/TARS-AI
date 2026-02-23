@@ -999,7 +999,7 @@ class DashboardAnimation:
         
         import os
         module_dir = os.path.dirname(os.path.abspath(__file__))
-        font_path = os.path.join(module_dir, "AlteHaasGroteskBold.ttf")
+        font_path = os.path.join(module_dir, "..", "assets", "AlteHaasGroteskBold.ttf")
         
         try:
             self.fonts['large'] = pygame.font.Font(font_path, 72)

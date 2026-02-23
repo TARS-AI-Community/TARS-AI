@@ -37,6 +37,7 @@ from UI.screensavers.module_screensaver_defrag import DefragAnimation
 from UI.screensavers.module_screensaver_bounce import BounceAnimation
 from UI.screensavers.module_screensaver_endurance import EnduranceAnimation
 from UI.screensavers.module_screensaver_toasters import FlyingToastersAnimation
+from UI.screensavers.module_screensaver_aquarium import AquariumAnimation
 
 try:
     from OpenGL.GL import *
@@ -65,6 +66,7 @@ AVAILABLE_ANIMATIONS = {
     "bounce": {"class": BounceAnimation, "type": "opengl"},
     "endurance": {"class": EnduranceAnimation, "type": "opengl"},
     "toasters": {"class": FlyingToastersAnimation, "type": "pygame"},
+    "aquarium": {"class": AquariumAnimation, "type": "opengl"},
 }
 
 FALLBACK_ANIMATIONS = ["starfield", "matrix", "hyperspace", "pacman", "terminal", "face", "toasters"]
