@@ -83,7 +83,8 @@ class BounceAnimation:
     def _create_logo_texture(self):
         import os
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        brandy_path = os.path.join(script_dir, 'brandy.ttf')
+        assets_dir = os.path.join(os.path.dirname(script_dir), 'assets')
+        brandy_path = os.path.join(assets_dir, 'brandy.ttf')
         
         pygame.font.init()
         
