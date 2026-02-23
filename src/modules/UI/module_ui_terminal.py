@@ -25,6 +25,14 @@ from typing import List, Tuple, Callable, Optional
 
 from modules.module_config import load_config
 
+try:
+    from modules.module_wifi import get_wifi_status as _get_wifi_status
+    _HAS_WIFI = True
+except Exception:
+    _HAS_WIFI = False
+    def _get_wifi_status():
+        return {"mode": "disconnected", "ssid": None, "ip": None, "signal": 0}
+
 CONFIG = load_config()
 
 class TerminalSystem:
@@ -156,6 +164,26 @@ class TerminalSystem:
         self.app_list = []
         self.app_menu_rect = None
         self.back_button_rect = None
+
+
+        # WiFi status state
+        self._wifi_mode = "disconnected"
+        self._wifi_signal = 0
+        self._last_wifi_poll = 0.0
+        self._wifi_poll_interval = 5.0
+        _icon_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "apps")
+        self._wifi_icon_blue   = self._load_wifi_icon(os.path.join(_icon_dir, "wifi-blue.png"))
+        self._wifi_icon_yellow = self._load_wifi_icon(os.path.join(_icon_dir, "wifi-yellow.png"))
+        self._wifi_icon_gray   = self._load_wifi_icon(os.path.join(_icon_dir, "wifi-gray.png"))
+        # Initial wifi poll
+        if _HAS_WIFI:
+            try:
+                _s = _get_wifi_status()
+                self._wifi_mode   = _s.get("mode", "disconnected")
+                self._wifi_signal = _s.get("signal", 0)
+            except Exception:
+                pass
+        self._last_wifi_poll = import_time = __import__("time").time()
 
         self.overlay_surface = pygame.Surface((width, height), pygame.SRCALPHA)
 
@@ -496,6 +524,13 @@ class TerminalSystem:
             battery_height = button_height
             right_x -= battery_width
             self._draw_battery_indicator(surface, right_x, y, battery_width, battery_height)
+            right_x -= 8
+
+        if self._wifi_icon_gray is not None:
+            wifi_size = button_height
+            right_x -= 8
+            right_x -= wifi_size
+            self._draw_wifi_icon(surface, right_x, y, wifi_size)
 
     def handle_app_click(self, pos: Tuple[int, int]) -> bool:
         now = pygame.time.get_ticks()
@@ -648,6 +683,16 @@ class TerminalSystem:
                     self.cpu_temp_history.pop(0)
                 self.last_cpu_update_time = current_time
 
+        if _HAS_WIFI:
+            if current_time - self._last_wifi_poll >= self._wifi_poll_interval:
+                try:
+                    status = _get_wifi_status()
+                    self._wifi_mode   = status.get("mode", "disconnected")
+                    self._wifi_signal = status.get("signal", 0)
+                except Exception:
+                    pass
+                self._last_wifi_poll = current_time
+
     def _draw_tech_button(self, surface, rect, label, code, active=False, color_type=None, disabled=False):
         if disabled:
 
@@ -686,6 +731,27 @@ class TerminalSystem:
         text_surface = self.toolbar_font.render(label, True, text_color)
         text_rect = text_surface.get_rect(center=rect.center)
         surface.blit(text_surface, text_rect)
+
+    def _load_wifi_icon(self, path: str):
+        try:
+            img = pygame.image.load(path).convert_alpha()
+            return img
+        except Exception:
+            return None
+
+    def _current_wifi_icon(self):
+        if self._wifi_mode == "hotspot":
+            return self._wifi_icon_yellow
+        if self._wifi_mode == "client":
+            return self._wifi_icon_blue
+        return self._wifi_icon_gray
+
+    def _draw_wifi_icon(self, surface, x, y, size):
+        icon = self._current_wifi_icon()
+        if icon is None:
+            return
+        scaled = pygame.transform.smoothscale(icon, (size, size))
+        surface.blit(scaled, (x, y))
 
     def _draw_battery_indicator(self, surface, x, y, width, height):
         if not self.battery_module:
@@ -1125,6 +1191,14 @@ class TerminalSystem:
             cpu_y = bottom_toolbar_y + 5
             self._draw_cpu_temp_indicator(self.overlay_surface, cpu_x, cpu_y,
                                           cpu_width, cpu_height)
+
+        if self._wifi_icon_gray is not None:
+            wifi_size = self.bottom_toolbar_height - 10
+            wifi_x = self.width - wifi_size - 10
+            if self.cpu_temp_module and self.show_cpu_temp:
+                wifi_x -= (80 + 8)
+            wifi_y = bottom_toolbar_y + 5
+            self._draw_wifi_icon(self.overlay_surface, wifi_x, wifi_y, wifi_size)
 
         if not self.camera_active:
             self._draw_scroll_buttons(self.overlay_surface)
