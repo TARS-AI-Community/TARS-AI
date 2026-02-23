@@ -33,6 +33,8 @@ import random
 import math
 import cv2
 
+import time as _time
+
 from module_config import load_config
 from UI.module_ui_particles import ParticleSystem
 from UI.module_ui_starfield import StarfieldSystem
@@ -44,6 +46,12 @@ from UI.module_ui_camera import CameraModule
 from UI.module_ui_detections import DetectionManager
 from UI.module_ui_screensaver import ScreensaverManager
 from UI.module_ui_apps import AppManager
+
+try:
+    from module_wifi import get_wifi_status as _get_wifi_status
+    _HAS_WIFI = True
+except Exception:
+    _HAS_WIFI = False
 
 CONFIG = load_config()
 screenWidth = CONFIG['UI'].get('screen_width', 0)
@@ -128,6 +136,12 @@ class UIManager(threading.Thread):
 
         self.camera_module = None
         self.show_camera = False
+
+        # WiFi status – polled in a background thread so it never blocks rendering
+        self._wifi_mode = "disconnected"
+        self._wifi_signal = 0
+        self._wifi_poll_interval = 5.0
+        self._wifi_thread_running = False
 
         self.detection_manager = DetectionManager()
 
@@ -261,6 +275,27 @@ class UIManager(threading.Thread):
         except Exception as e:
             print(f"ERROR: Shutdown command failed: {e}")
         os._exit(0)  
+
+    def _start_wifi_polling(self):
+        """Start a daemon thread that polls WiFi status without blocking the render loop."""
+        if not _HAS_WIFI or self._wifi_thread_running:
+            return
+        self._wifi_thread_running = True
+        t = threading.Thread(target=self._wifi_poll_loop, daemon=True, name="ui-wifi-poll")
+        t.start()
+
+    def _wifi_poll_loop(self):
+        """Background loop: poll WiFi status and push it to the terminal system."""
+        while self._wifi_thread_running and self.running:
+            try:
+                status = _get_wifi_status()
+                self._wifi_mode = status.get("mode", "disconnected")
+                self._wifi_signal = status.get("signal", 0)
+                if self.terminal_system:
+                    self.terminal_system.set_wifi_status(self._wifi_mode, self._wifi_signal)
+            except Exception:
+                pass
+            _time.sleep(self._wifi_poll_interval)
 
     def silence(self, progress):
         self.silence_progress = progress
@@ -628,6 +663,9 @@ class UIManager(threading.Thread):
             font = pygame.font.Font("UI/mono.ttf", self.font_size)
             self.running = True
 
+            # Start background WiFi polling thread (after self.running = True)
+            self._start_wifi_polling()
+
             while self.running and not self.shutdown_event.is_set():
 
                 if self.paused:
@@ -865,6 +903,7 @@ class UIManager(threading.Thread):
             self.running = False
 
         finally:
+            self._wifi_thread_running = False
 
             if self.app_manager:
                 self.app_manager.deactivate()
