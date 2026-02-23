@@ -25,14 +25,6 @@ from typing import List, Tuple, Callable, Optional
 
 from modules.module_config import load_config
 
-try:
-    from modules.module_wifi import get_wifi_status as _get_wifi_status
-    _HAS_WIFI = True
-except Exception:
-    _HAS_WIFI = False
-    def _get_wifi_status():
-        return {"mode": "disconnected", "ssid": None, "ip": None, "signal": 0}
-
 CONFIG = load_config()
 
 class TerminalSystem:
@@ -165,25 +157,13 @@ class TerminalSystem:
         self.app_menu_rect = None
         self.back_button_rect = None
 
-
-        # WiFi status state
         self._wifi_mode = "disconnected"
         self._wifi_signal = 0
-        self._last_wifi_poll = 0.0
-        self._wifi_poll_interval = 5.0
+        self._wifi_initialized = False
         _icon_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "apps")
         self._wifi_icon_blue   = self._load_wifi_icon(os.path.join(_icon_dir, "wifi-blue.png"))
         self._wifi_icon_yellow = self._load_wifi_icon(os.path.join(_icon_dir, "wifi-yellow.png"))
         self._wifi_icon_gray   = self._load_wifi_icon(os.path.join(_icon_dir, "wifi-gray.png"))
-        # Initial wifi poll
-        if _HAS_WIFI:
-            try:
-                _s = _get_wifi_status()
-                self._wifi_mode   = _s.get("mode", "disconnected")
-                self._wifi_signal = _s.get("signal", 0)
-            except Exception:
-                pass
-        self._last_wifi_poll = import_time = __import__("time").time()
 
         self.overlay_surface = pygame.Surface((width, height), pygame.SRCALPHA)
 
@@ -394,6 +374,12 @@ class TerminalSystem:
 
     def set_camera_active(self, active: bool):
         self.camera_active = active
+
+    def set_wifi_status(self, mode: str, signal: int):
+        """Called by UIManager's background WiFi thread to update display state."""
+        self._wifi_mode = mode
+        self._wifi_signal = signal
+        self._wifi_initialized = True
 
     def set_app_active(self, active: bool):
         self.app_active = active
@@ -683,16 +669,6 @@ class TerminalSystem:
                     self.cpu_temp_history.pop(0)
                 self.last_cpu_update_time = current_time
 
-        if _HAS_WIFI:
-            if current_time - self._last_wifi_poll >= self._wifi_poll_interval:
-                try:
-                    status = _get_wifi_status()
-                    self._wifi_mode   = status.get("mode", "disconnected")
-                    self._wifi_signal = status.get("signal", 0)
-                except Exception:
-                    pass
-                self._last_wifi_poll = current_time
-
     def _draw_tech_button(self, surface, rect, label, code, active=False, color_type=None, disabled=False):
         if disabled:
 
@@ -751,6 +727,11 @@ class TerminalSystem:
         if icon is None:
             return
         scaled = pygame.transform.smoothscale(icon, (size, size))
+        if not self._wifi_initialized:
+            import math
+            alpha = int(80 + 175 * (0.5 + 0.5 * math.sin(self.status_blink * 2)))
+            scaled = scaled.copy()
+            scaled.set_alpha(alpha)
         surface.blit(scaled, (x, y))
 
     def _draw_battery_indicator(self, surface, x, y, width, height):
