@@ -28,11 +28,18 @@ except ImportError:
     HAS_OPENGL = False
 
 from modules.UI.apps.module_app_clock import ClockApp
+
+try:
+    from modules.UI.apps.module_app_eyes import EyesApp
+    HAS_EYES = True
+except Exception:
+    HAS_EYES = False
 from UI.screensavers.module_screensaver_dashboard import DashboardAnimation
 
 AVAILABLE_APPS = {
     "clock": {"class": ClockApp, "type": "pygame", "label": "Clock"},
     "dashboard": {"class": DashboardAnimation, "type": "opengl", "label": "Dashboard"},
+    **({"eyes": {"class": EyesApp, "type": "pygame", "label": "Eyes"}} if HAS_EYES else {}),
 }
 
 

@@ -49,6 +49,16 @@ except ImportError:
     get_image_caption_from_base64 = None
     queue_message("ChatUI: Vision module not available — image captioning disabled")
 
+# WiFi manager — lazy-initialised
+try:
+    from modules.module_wifi import WiFiManager as _WiFiManagerClass
+    _wifi_manager = _WiFiManagerClass()
+    WIFI_AVAILABLE = True
+except Exception as _wifi_err:
+    _wifi_manager = None
+    WIFI_AVAILABLE = False
+
+
 # Suppress Flask logs
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
@@ -116,12 +126,17 @@ def handle_disconnect():
 
 @flask_app.route('/')
 def index():
-    import socket
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.connect(("8.8.8.8", 80))  # Connects to an external server but doesn't send data
-        local_ip = s.getsockname()[0]
-        
-    ipadd = local_ip
+    if WIFI_AVAILABLE and _wifi_manager:
+        status = _wifi_manager.get_status()
+        ipadd = status.get('ip') or '0.0.0.0'
+    else:
+        import socket
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                ipadd = s.getsockname()[0]
+        except OSError:
+            ipadd = '10.42.0.1'
     return render_template('index.html',
                            char_name=json.dumps(character_name),
                            char_greeting='Welcome back',
@@ -890,6 +905,79 @@ def config_sync_status():
             "error": str(e),
             "tars_cms_enabled": False
         }), 500
+
+
+
+@flask_app.route('/api/wifi/status', methods=['GET'])
+def wifi_status():
+    if not WIFI_AVAILABLE:
+        return jsonify({"mode": "disconnected", "ssid": None, "ip": None, "signal": 0})
+    try:
+        return jsonify(_wifi_manager.get_status())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/api/wifi/networks', methods=['GET'])
+def wifi_networks():
+    if not WIFI_AVAILABLE:
+        return jsonify({"networks": []})
+    try:
+        networks = _wifi_manager.scan_networks()
+        return jsonify({"networks": networks})
+    except Exception as e:
+        return jsonify({"error": str(e), "networks": []}), 500
+
+
+@flask_app.route('/api/wifi/connect', methods=['POST'])
+def wifi_connect():
+    if not WIFI_AVAILABLE:
+        return jsonify({"success": False, "error": "WiFi module unavailable"}), 503
+    data = request.get_json(silent=True) or {}
+    ssid     = data.get('ssid', '').strip()
+    password = data.get('password', '')
+    username = data.get('username', '').strip()
+    if not ssid:
+        return jsonify({"success": False, "error": "ssid required"}), 400
+    try:
+        if username:
+            ok = _wifi_manager.connect_enterprise(ssid, username, password)
+        else:
+            ok = _wifi_manager.connect(ssid, password)
+        return jsonify({"success": ok})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@flask_app.route('/api/wifi/hotspot', methods=['PUT'])
+def wifi_hotspot():
+    if not WIFI_AVAILABLE:
+        return jsonify({"success": False, "error": "WiFi module unavailable"}), 503
+    try:
+        status = _wifi_manager.get_status()
+        if status.get('mode') == 'hotspot':
+            ok = _wifi_manager.stop_hotspot()
+            action = 'stopped'
+        else:
+            ok = _wifi_manager.start_hotspot()
+            action = 'started'
+        return jsonify({"success": ok, "action": action})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@flask_app.route('/api/eyes/mood', methods=['POST'])
+def eyes_set_mood():
+    import modules.UI.apps.module_app_eyes as _eyes_mod
+    data = request.get_json(silent=True) or {}
+    mood_name = data.get('mood', '').upper()
+    try:
+        from modules.module_eyes import Mood
+        mood = Mood[mood_name]
+        _eyes_mod.set_mood_request(mood)
+        return jsonify({'success': True, 'mood': mood_name})
+    except KeyError:
+        return jsonify({'success': False, 'error': f'Unknown mood: {mood_name}'}), 400
 
 
 def start_flask_app():
