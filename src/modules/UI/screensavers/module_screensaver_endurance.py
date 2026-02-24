@@ -317,8 +317,8 @@ class EnduranceAnimation:
         self.load_stage = 0
     
     def _load_stars(self):
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        starfield_path = os.path.join(script_dir, "models", "starfield.png")
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        starfield_path = os.path.join(script_dir, "assets", "starfield.png")
         
         if os.path.exists(starfield_path):
             img = Image.open(starfield_path).transpose(Image.FLIP_TOP_BOTTOM).convert('RGBA')
@@ -333,8 +333,8 @@ class EnduranceAnimation:
         self.sky_sphere = create_sky_sphere(radius=40, segments=32)
     
     def _load_model(self):
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        model_path = os.path.join(script_dir, "models", "endurance.obj")
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        model_path = os.path.join(script_dir, "assets", "endurance.obj")
         
         if os.path.exists(model_path):
             self.loader = OBJLoader()
