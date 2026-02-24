@@ -137,7 +137,6 @@ class UIManager(threading.Thread):
         self.camera_module = None
         self.show_camera = False
 
-        # WiFi status – polled in a background thread so it never blocks rendering
         self._wifi_mode = "disconnected"
         self._wifi_signal = 0
         self._wifi_poll_interval = 5.0
