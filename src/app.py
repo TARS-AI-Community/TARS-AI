@@ -133,13 +133,13 @@ class UIManagerStub:
     """Lightweight stub when full UI is disabled."""
     
     def __init__(self, *args, **kwargs):
-        pass
+        self.running = False
     
     def start(self):
-        pass
+        self.running = True
     
     def stop(self):
-        pass
+        self.running = False
     
     def pause(self):
         pass
@@ -147,6 +147,9 @@ class UIManagerStub:
     def resume(self):
         pass
     
+    def join(self, timeout=None):
+        pass
+
     def update_data(self, source, message, category="INFO"):
         queue_message(f"[{category}] {source}: {message}")
     
@@ -159,6 +162,9 @@ class UIManagerStub:
     def think(self):
         pass
     
+    def set_tars_status(self, status):
+        pass
+
     def silence(self, frames=0):
         pass
 
