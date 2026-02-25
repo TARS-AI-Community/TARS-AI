@@ -140,7 +140,8 @@ def index():
     return render_template('index.html',
                            char_name=json.dumps(character_name),
                            char_greeting='Welcome back',
-                           talkinghead_base_url=json.dumps(ipadd))
+                           talkinghead_base_url=json.dumps(ipadd),
+                           port=CONFIG['CHATUI'].get('port', 5012))
 
 @flask_app.route('/holo')
 def holo():
@@ -157,8 +158,8 @@ def get_config_variable():
     except Exception as e:
         return f"Error: {e}"
     
-    #queue_message(jsonify({'talkinghead_base_url': f"http://{local_ip}:5012"}))
-    return jsonify({'talkinghead_base_url': f"http://{local_ip}:5012"})
+    #queue_message(jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['CHATUI'].get('port', 5012)}"}))
+    return jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['CHATUI'].get('port', 5012)}"})
 
 @flask_app.route('/avatar_sprites')
 def avatar_sprites():
@@ -980,12 +981,14 @@ def eyes_set_mood():
         return jsonify({'success': False, 'error': f'Unknown mood: {mood_name}'}), 400
 
 
-def start_flask_app():
+def start_flask_app(port=None):
+    if port is None:
+        port = CONFIG['CHATUI'].get('port', 5012)
     import eventlet
     import eventlet.wsgi
-    queue_message("INFO: Starting Flask app with Eventlet...")
+    queue_message(f"INFO: Starting Flask app on port {port} with Eventlet...")
     eventlet.wsgi.server(
-        eventlet.listen(("0.0.0.0", 5012)),
+        eventlet.listen(("0.0.0.0", port)),
         flask_app,
         log_output=False  # Disable request logging.
     )

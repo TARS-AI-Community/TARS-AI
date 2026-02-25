@@ -182,7 +182,7 @@ def detect_emotion(text):
         return
     model_outputs = classifier(text)
     emotindetected = max(model_outputs[0], key=lambda x: x['score'])['label']
-    requests.post("http://127.0.0.1:5012/emotion", data=emotindetected, timeout=10)
+    requests.post(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/emotion", data=emotindetected, timeout=10)
     return
 
 def llm_process(user_input, bot_response):

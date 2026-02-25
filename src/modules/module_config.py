@@ -437,7 +437,8 @@ def load_config():
             "openai_voice" : config['TTS']['openai_voice'],            
         }),
         "CHATUI": {
-            "enabled": config['CHATUI']['enabled'],
+            "enabled": config.getboolean('CHATUI', 'enabled'),
+            "port": config.getint('CHATUI', 'port', fallback=5012),
         },
         "RAG": {
             "strategy": config.get('RAG', 'strategy', fallback='naive'),
@@ -602,6 +603,15 @@ CONFIG_METADATA = {
         'raspberry_version': {
             'options': ['pi5', 'pi4', 'pi3', 'pizero2'],
             'description': 'Raspberry Pi model for capability detection'
+        },
+    },
+    'CHATUI': {
+        '__description__': 'Chat UI Settings',
+        'enabled': {
+            'description': 'Enable the Chat UI'
+        },
+        'port': {
+            'description': 'Port for the Chat UI (default: 5012)'
         },
     },
     'CHAR': {
@@ -789,6 +799,9 @@ CONFIG_METADATA = {
     },
     'UI': {
         '__description__': 'Graphical interface settings',
+        'UI_Port': {
+            'description': 'Define port for the WEB UI'
+        },
         'UI_enabled': {
             'description': 'Enable the visual UI'
         },

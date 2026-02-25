@@ -247,9 +247,11 @@ if __name__ == "__main__":
 
     # === ChatUI Thread (starts early so webui is available during model loading) ===
     if CONFIG['CHATUI']['enabled'] == "True" and CHATUI_AVAILABLE:
-        queue_message("LOAD: ChatUI starting on port 5012...")
+        chatui_port = CONFIG['CHATUI'].get('port', 5012)
+        queue_message(f"LOAD: ChatUI starting on port {chatui_port}...")
         flask_thread = threading.Thread(
             target=modules.module_chatui.start_flask_app,
+            kwargs={'port': chatui_port},
             daemon=True
         )
         flask_thread.start()
