@@ -1,4 +1,5 @@
 #!/bin/bash
-cd "/home/tars/TARS-AI/src"
-source .venv/bin/activate
-python App-Start.py
+DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$DIR"
+$DIR/src/.venv/bin/activate
+python "$DIR/App-Start.py"
