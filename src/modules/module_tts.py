@@ -21,6 +21,9 @@ from io import BytesIO
 import asyncio
 
 from modules.module_messageQue import queue_message
+from modules.module_config import load_config
+
+CONFIG = load_config()
 
 # Conditional TTS module imports - not all are available on all devices
 text_to_speech_with_pipelining_piper = None
@@ -202,7 +205,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
     
     async def play_chunks():
         try:
-            requests.get("http://127.0.0.1:5012/start_talking", timeout=1)
+            requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/start_talking", timeout=1)
         except:
             pass
         
@@ -232,7 +235,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                     break
         
         try:
-            requests.get("http://127.0.0.1:5012/stop_talking", timeout=1)
+            requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/stop_talking", timeout=1)
         except:
             pass
     

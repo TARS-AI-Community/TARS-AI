@@ -362,8 +362,8 @@ def load_config():
         "BASE_DIR": base_dir,
         "CONTROLS": {
             "controller_name": config['CONTROLS']['controller_name'],
-            "enabled": config['CONTROLS']['enabled'],
-            "voicemovement": config['CONTROLS']['voicemovement'],
+            "enabled": config.getboolean('CONTROLS', 'enabled'),
+            "voicemovement": config.getboolean('CONTROLS', 'voicemovement'),
             "swap_turn_directions": config.getboolean('CONTROLS', 'swap_turn_directions', fallback=False),
             "invert_y": config.getboolean('CONTROLS', 'invert_y', fallback=False),
         },
@@ -437,7 +437,8 @@ def load_config():
             "openai_voice" : config['TTS']['openai_voice'],            
         }),
         "CHATUI": {
-            "enabled": config['CHATUI']['enabled'],
+            "enabled": config.getboolean('CHATUI', 'enabled'),
+            "port": config.getint('CHATUI', 'port', fallback=5012),
         },
         "RAG": {
             "strategy": config.get('RAG', 'strategy', fallback='naive'),
@@ -449,14 +450,14 @@ def load_config():
             "enable_topic_tracking": config.getboolean('RAG', 'enable_topic_tracking'),
         },
         "HOME_ASSISTANT": {
-            "enabled": config['HOME_ASSISTANT']['enabled'],
+            "enabled": config.getboolean('HOME_ASSISTANT', 'enabled'),
             "url": config['HOME_ASSISTANT']['url'],
             "HA_TOKEN": os.getenv('HA_TOKEN'),
         },
         "DISCORD": {
             "TOKEN": os.getenv('DISCORD_TOKEN'),
             "channel_id": config['DISCORD']['channel_id'],
-            "enabled": config['DISCORD']['enabled'],
+            "enabled": config.getboolean('DISCORD', 'enabled'),
         },
         "SERVO": {
             "arms_present": config.getboolean('SERVO', 'arms_present'),
@@ -492,7 +493,7 @@ def load_config():
             "perfectRightLegOffset": config['SERVO']['perfectRightLegOffset'],
         },
         "STABLE_DIFFUSION": {
-            "enabled": config['STABLE_DIFFUSION']['enabled'],
+            "enabled": config.getboolean('STABLE_DIFFUSION', 'enabled'),
             "service": config['STABLE_DIFFUSION']['service'],
             "url": config['STABLE_DIFFUSION']['url'],
             "prompt_prefix": config['STABLE_DIFFUSION']['prompt_prefix'],
@@ -602,6 +603,15 @@ CONFIG_METADATA = {
         'raspberry_version': {
             'options': ['pi5', 'pi4', 'pi3', 'pizero2'],
             'description': 'Raspberry Pi model for capability detection'
+        },
+    },
+    'CHATUI': {
+        '__description__': 'Chat UI Settings',
+        'enabled': {
+            'description': 'Enable the Chat UI'
+        },
+        'port': {
+            'description': 'Port for the Chat UI (default: 5012)'
         },
     },
     'CHAR': {
@@ -789,6 +799,9 @@ CONFIG_METADATA = {
     },
     'UI': {
         '__description__': 'Graphical interface settings',
+        'UI_Port': {
+            'description': 'Define port for the WEB UI'
+        },
         'UI_enabled': {
             'description': 'Enable the visual UI'
         },

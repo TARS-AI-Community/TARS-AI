@@ -35,14 +35,14 @@ def send_prompt_to_homeassistant(prompt):
     """
     queue_message(f"sending prompt {prompt}")
 
-    if config['HOME_ASSISTANT']['enabled'] == "True":
+    if config['HOME_ASSISTANT']['enabled']:
         url = f"{config['HOME_ASSISTANT']['url']}/api/conversation/process"
         cleaned_prompt = clean_prompt(prompt)  # Clean the prompt
         data = {"text": cleaned_prompt}
-        queue_message(data)
+        queue_message(f"HA Data: {data}")
         response = requests.post(url, json=data, headers=HEADERS)
         if response.ok:
-            queue_message(response.json())
+            queue_message(f"HA Response: {response.json()}")
             return response.json()
         else:
             raise Exception(f"Failed to send prompt: {response.status_code}, {response.text}")
