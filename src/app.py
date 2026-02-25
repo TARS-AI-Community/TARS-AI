@@ -65,14 +65,14 @@ else:
     from modules.module_memory import MemoryManager
 
 # === Conditional Discord Import ===
-if CONFIG['DISCORD']['enabled'] == 'True':
+if CONFIG['DISCORD']['enabled']:
     from modules.module_main import start_discord_bot, process_discord_message_callback
 
 # === Conditional Vision Import ===
 VISION_AVAILABLE = False
-if CONFIG['VISION']['enabled'] == "True":
+if CONFIG['VISION']['enabled']:
     caps = DEVICE_INFO.get("capabilities")
-    if caps is None or caps.can_use_vision or CONFIG['VISION']['server_hosted'] == "True":
+    if caps is None or caps.can_use_vision or CONFIG['VISION']['server_hosted']:
         try:
             from modules.module_vision import initialize_blip
             VISION_AVAILABLE = True
@@ -102,7 +102,7 @@ if CONFIG["UI"]["UI_enabled"]:
 
 # === Conditional ChatUI Import ===
 CHATUI_AVAILABLE = False
-if CONFIG['CHATUI']['enabled'] == "True":
+if CONFIG['CHATUI']['enabled']:
     try:
         import modules.module_chatui
         CHATUI_AVAILABLE = True
@@ -116,7 +116,7 @@ from modules import module_servoctl
 
 # === Conditional Bluetooth Controller ===
 BT_AVAILABLE = False
-if CONFIG['CONTROLS']['enabled'] == 'True':
+if CONFIG['CONTROLS']['enabled']:
     try:
         from modules.module_btcontroller import start_controls
         BT_AVAILABLE = True
@@ -246,7 +246,7 @@ if __name__ == "__main__":
         queue_message(f"LOAD: {'Lite' if _use_lite_ui else 'Full'} UI manager started")
 
     # === ChatUI Thread (starts early so webui is available during model loading) ===
-    if CONFIG['CHATUI']['enabled'] == "True" and CHATUI_AVAILABLE:
+    if CONFIG['CHATUI']['enabled'] and CHATUI_AVAILABLE:
         chatui_port = CONFIG['CHATUI'].get('port', 5012)
         queue_message(f"LOAD: ChatUI starting on port {chatui_port}...")
         flask_thread = threading.Thread(
@@ -255,7 +255,8 @@ if __name__ == "__main__":
             daemon=True
         )
         flask_thread.start()
-    else:
+    # === Ensure UI Manager is initialized ===
+    if ui_manager is None:
         ui_manager = UIManagerStub(
             shutdown_event=shutdown_event,
             battery_module=battery,
@@ -288,7 +289,7 @@ if __name__ == "__main__":
     stt_manager.set_post_utterance_callback(post_utterance_callback)
 
     # === Discord ===
-    if CONFIG['DISCORD']['enabled'] == 'True':
+    if CONFIG['DISCORD']['enabled']:
         start_discord_in_thread()
 
     # === Initialize Managers ===
@@ -304,7 +305,7 @@ if __name__ == "__main__":
 
     # === Bluetooth Controller Thread ===
     bt_controller_thread = None
-    if CONFIG['CONTROLS']['enabled'] == 'True' and BT_AVAILABLE:
+    if CONFIG['CONTROLS']['enabled'] and BT_AVAILABLE:
         bt_controller_thread = threading.Thread(
             target=start_bt_controller_thread,
             name="BTControllerThread",
