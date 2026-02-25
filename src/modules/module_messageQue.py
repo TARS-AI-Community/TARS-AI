@@ -59,6 +59,8 @@ def queue_message(message, stream=False):
     - stream (bool, optional): If True, outputs character-by-character; otherwise, prints instantly.
                                Defaults to False if not provided.
     """
+    if not isinstance(message, str):
+        message = str(message)
     if message and message.strip():
         message_queue.put((message.strip(), stream))  # 🔹 No lock needed here
 

@@ -731,6 +731,33 @@ def execute_function_call(func_call, bot_response, user_input):
             else:
                 bot_response["reply"] = "I didn't understand that system command."
 
+        elif function_name == "home_assistant":
+            from modules.module_homeassistant import send_prompt_to_homeassistant
+            prompt = parameters.get("prompt", user_input)
+            if prompt:
+                queue_message(f"Home Assistant: {prompt}")
+                ha_response = send_prompt_to_homeassistant(prompt)
+                if isinstance(ha_response, dict) and "error" in ha_response:
+                    bot_response["reply"] = f"Home Assistant error: {ha_response['error']}"
+                elif ha_response:
+                    # The response from process conversation usually has a 'response' or similar field
+                    # depending on the HA version. We'll try to extract the speech part if possible.
+                    speech = ""
+                    try:
+                        speech = ha_response.get("response", {}).get("speech", {}).get("plain", {}).get("speech", "")
+                    except:
+                        pass
+                    
+                    if speech:
+                        if ha_response.get("response", {}).get("response_type") == "error":
+                            bot_response["reply"] = f"Home Assistant reported: {speech}"
+                        else:
+                            bot_response["reply"] = speech
+                    else:
+                        bot_response["reply"] = "Action completed via Home Assistant."
+                else:
+                    bot_response["reply"] = "I couldn't get a response from Home Assistant."
+
         else:
             queue_message(f"Unknown function: {function_name}")
 

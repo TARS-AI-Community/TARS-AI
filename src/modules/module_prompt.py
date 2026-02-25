@@ -248,7 +248,14 @@ When user requests match these patterns, you MUST call the function:
    Example (exit): {{"function": "system_control", "parameters": {{"action": "exit"}}}}
    Example (shutdown): {{"function": "system_control", "parameters": {{"action": "shutdown"}}}}
 
-11. new_memories (REQUIRED field)
+11. home_assistant
+    Triggers: Use when the user wants to control smart home devices or ask about their status.
+      * "open the garage", "turn off the lights", "is the front door locked"
+      * "set the thermostat to 72", "is the garage open or closed"
+    Parameters: {{"prompt": "natural language command for Home Assistant. Use EXACT entity or area names if the user provides them."}}
+    Example: {{"function": "home_assistant", "parameters": {{"prompt": "open the garage door"}}}}
+
+12. new_memories (REQUIRED field)
    Extract ONLY high-level, persistent facts about the user from this conversation
    Focus on stable information that won't change conversation-to-conversation
    Write as short statements (3-6 words)
