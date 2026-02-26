@@ -1,0 +1,43 @@
+<div class="tab-pane fade show active" id="chat" role="tabpanel">
+  <div class="chat-wrap">
+
+    <!-- Avatar + messages -->
+    <div class="chat-body" id="chatBody">
+      <div class="avatar-header">
+        <img id="backgroundImage" src="" alt="Avatar">
+        <div class="avatar-glow"></div>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg-row msg-bot">
+          <div class="msg-meta">
+            <span class="msg-name" id="bot-name">{{ char_name }}</span>
+          </div>
+          <div class="msg-bubble msg-bubble-bot">
+            <p class="firstmess" id="bot-firstmess">{{ char_greeting }}</p>
+          </div>
+        </div>
+        <div id="output"></div>
+      </div>
+    </div>
+
+    <!-- Hidden upload form -->
+    <form id="imageUploadForm" method="POST" enctype="multipart/form-data" action="/upload" hidden>
+      <input type="file" id="imageUpload" name="file" accept="image/*">
+    </form>
+
+    <!-- Image preview -->
+    <div id="imagePreviewContainer">
+      <img id="imagePreview" src="" alt="Preview">
+      <button id="removeImageButton" aria-label="Remove image"><i class="bi bi-x"></i></button>
+    </div>
+
+    <!-- Input bar -->
+    <div class="chat-input-bar">
+      <input type="text" id="prompt" placeholder="Send a message…" autocomplete="off" />
+      <button id="muteButton"       aria-label="Mute"><i class="bi bi-volume-up-fill"></i></button>
+      <button id="uploadImageButton" aria-label="Upload image"><i class="bi bi-image"></i></button>
+      <button id="button-addon2"    aria-label="Send"><i class="bi bi-send-fill"></i></button>
+    </div>
+
+  </div>
+</div>

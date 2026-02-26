@@ -1,444 +1,66 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title id="titleid">AI</title>
+  <title id="titleid">T.A.R.S.</title>
 
-  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v={{ range(1, 99999) | random }}"
-    rel="stylesheet">
-  <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}?v={{ range(1, 99999) | random }}"
-    rel="stylesheet">
-  <link href="{{ url_for('static', filename='css/main.css') }}?v={{ range(1, 99999) | random }}" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap"
-    rel="stylesheet">
-  <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}?v={{ range(1, 99999) | random }}">
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v={{ range(1,99999)|random }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}?v={{ range(1,99999)|random }}" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/main.css') }}?v={{ range(1,99999)|random }}" rel="stylesheet">
+  <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}?v={{ range(1,99999)|random }}">
 
-  <script
-    src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v={{ range(1, 99999) | random }}"></script>
-  <script src="{{ url_for('static', filename='js/socket.io.js') }}?v={{ range(1, 99999) | random }}"></script>
+  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v={{ range(1,99999)|random }}"></script>
+  <script src="{{ url_for('static', filename='js/socket.io.js') }}?v={{ range(1,99999)|random }}"></script>
 </head>
 
 <body>
   <audio id="audioPlayer" controls hidden></audio>
 
-  <ul class="nav nav-tabs" id="myTab" role="tablist">
-    <li class="nav-item" role="presentation">
-      <button class="nav-link active custom-tab" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button"
-        role="tab" aria-label="Chat UI">
-        <i class="bi bi-chat-dots-fill"></i>
+  <!-- ── TAB BAR ── -->
+  <nav class="tab-bar" id="myTab" role="tablist">
+    <div class="tab-bar-left">
+      <button class="custom-tab active" id="chat-tab"    data-bs-toggle="tab" data-bs-target="#chat"    role="tab" aria-label="Chat"><i class="bi bi-chat-dots-fill"></i></button>
+      <button class="custom-tab"        id="motion-tab"  data-bs-toggle="tab" data-bs-target="#motion"  role="tab" aria-label="Motion"><i class="bi bi-joystick"></i></button>
+      <button class="custom-tab"        id="legs-tab"    data-bs-toggle="tab" data-bs-target="#legs"    role="tab" aria-label="Legs"><i class="bi bi-sliders"></i></button>
+      <button class="custom-tab"        id="arms-tab"    data-bs-toggle="tab" data-bs-target="#arms"    role="tab" aria-label="Arms"><i class="bi bi-sliders2"></i></button>
+      <button class="custom-tab"        id="config-tab"  data-bs-toggle="tab" data-bs-target="#config"  role="tab" aria-label="Config"><i class="bi bi-gear-fill"></i></button>
+      <button class="custom-tab"        id="wifi-tab"    data-bs-toggle="tab" data-bs-target="#wifi"    role="tab" aria-label="WiFi"><i class="bi bi-wifi"></i></button>
+      <button class="custom-tab"        id="emotions-tab" data-bs-toggle="tab" data-bs-target="#emotions" role="tab" aria-label="Emotions"><i class="bi bi-emoji-smile"></i></button>
+    </div>
+    <div class="tab-bar-right">
+      <div class="tars-watermark">T.A.R.S.</div>
+      <button class="custom-tab" id="fullscreen-toggle" onclick="toggleFullscreen()" aria-label="Fullscreen">
+        <i class="bi bi-fullscreen" id="fullscreen-icon"></i>
       </button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link custom-tab" id="motion-tab" data-bs-toggle="tab" data-bs-target="#motion" type="button"
-        role="tab" aria-label="Motion Control">
-        <i class="bi bi-joystick"></i>
-      </button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link custom-tab" id="legs-tab" data-bs-toggle="tab" data-bs-target="#legs" type="button"
-        role="tab" aria-label="Leg Controls">
-        <i class="bi bi-sliders"></i>
-      </button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link custom-tab" id="arms-tab" data-bs-toggle="tab" data-bs-target="#arms" type="button"
-        role="tab" aria-label="Arm Controls">
-        <i class="bi bi-sliders2"></i>
-      </button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link custom-tab" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button"
-        role="tab" aria-label="Configuration">
-        <i class="bi bi-gear-fill"></i>
-      </button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link custom-tab" id="wifi-tab" data-bs-toggle="tab" data-bs-target="#wifi" type="button"
-        role="tab" aria-label="WiFi Setup">
-        <i class="bi bi-wifi"></i>
-      </button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link custom-tab" id="emotions-tab" data-bs-toggle="tab" data-bs-target="#emotions"
-        type="button" role="tab" aria-label="Emotions">
-        <i class="bi bi-emoji-smile"></i>
-      </button>
-    </li>
-  </ul>
+    </div>
+  </nav>
 
+  <!-- ── TAB CONTENT ── -->
   <div class="tab-content" id="myTabContent">
-
-    <div class="tab-pane fade show active p-3" id="chat" role="tabpanel">
-      <div class="chat-container">
-        <div class="card h-100">
-          <div class="card-body" data-mdb-perfect-scrollbar="true">
-            <div class="chat-content-flow">
-              <div class="avatar-header">
-                <img id="backgroundImage" src="" alt="Avatar">
-              </div>
-
-              <div class="chat-messages">
-                <div class="d-flex justify-content-left mb-4">
-                  <div class="d-flex flex-column">
-                    <p class="small mb-1 name" id="bot name">$CHARNAME</p>
-                    <div class="response-bubble">
-                      <p class="firstmess" id="bot firstmess">$REPLACEFIRSTMEMESSAGE</p>
-                    </div>
-                  </div>
-                </div>
-                <div id="output"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <form id="imageUploadForm" method="POST" enctype="multipart/form-data" action="/upload" hidden>
-        <input class="form-control" type="file" id="imageUpload" name="file" accept="image/*">
-      </form>
-
-      <div id="imagePreviewContainer" style="display:none;">
-        <img id="imagePreview" src="" alt="Preview">
-        <button id="removeImageButton"><i class="bi bi-x"></i></button>
-      </div>
-
-      <div class="input-group">
-        <input type="text" id="prompt" class="form-control" placeholder="Type message" />
-        <button id="muteButton" class="btn btn-secondary" type="button"><i class="bi bi-volume-up-fill"></i></button>
-        <button id="uploadImageButton" class="btn btn-primary" type="button"><i class="bi bi-upload"></i></button>
-        <button class="btn btn-primary" type="button" id="button-addon2"><i
-            class="bi bi-arrow-right-circle-fill"></i></button>
-      </div>
-    </div>
-
-    <div class="tab-pane fade p-0" id="motion" role="tabpanel">
-      <div class="motion-control-container">
-        <div class="controller-section">
-          <div class="controller-wrapper">
-            <div class="gamepad-container">
-              <div class="dpad-wrapper">
-                <div class="dpad">
-                  <button class="dpad-btn dpad-up" id="btnUp" aria-label="Move Forward"></button>
-                  <button class="dpad-btn dpad-left" id="btnLeft" aria-label="Turn Left"></button>
-                  <button class="dpad-btn dpad-right" id="btnRight" aria-label="Turn Right"></button>
-                  <button class="dpad-btn dpad-down" id="btnDown" aria-label="Move Backward"></button>
-                </div>
-                <div class="speed-toggle-integrated">
-                  <label class="speed-label">
-                    <input type="radio" name="speed" value="slow" checked>
-                    <span class="speed-option">SLOW</span>
-                  </label>
-                  <label class="speed-label">
-                    <input type="radio" name="speed" value="fast">
-                    <span class="speed-option">FAST</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="actions-section">
-          <div class="actions-panel">
-            <div class="nx-title" style="padding:0;margin-bottom:14px;">MOVEMENTS</div>
-            <div class="actions-content">
-              <select id="actionSelect" class="action-select">
-                <option value="">Loading movements...</option>
-              </select>
-              <button class="execute-btn" onclick="executeAction()">
-                <i class="bi bi-play-circle-fill"></i>
-                <span>EXECUTE</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-pane fade p-0" id="legs" role="tabpanel">
-      <div class="servo-control-container-compact">
-        <h3 class="compact-section-title">
-          <i class="bi bi-bezier2"></i>LEG CONTROLS
-          <div class="live-dot" style="margin-left:6px;"></div>
-        </h3>
-        <div class="speed-slider-container">
-          <label class="speed-label">
-            <i class="bi bi-speedometer2"></i>SPEED
-          </label>
-          <input type="range" id="speedSlider" class="speed-slider" min="0.65" max="1" step="0.05" value="0.85">
-        </div>
-        <div class="servo-controls-compact">
-          <div class="servo-compact-slider">
-            <label class="servo-label-compact">L Leg</label>
-            <input type="range" id="leftLeg" class="servo-slider" min="5" max="100" step="5" value="50"
-              oninput="updateValueDisplay(this, 0)">
-            <span class="servo-value-display" onclick="resetServo('leftLeg', 0)">50</span>
-          </div>
-          <div class="servo-compact-slider">
-            <label class="servo-label-compact">L Height</label>
-            <input type="range" id="leftHeight" class="servo-slider" min="5" max="100" step="5" value="50"
-              oninput="updateValueDisplay(this, 1)">
-            <span class="servo-value-display" onclick="resetServo('leftHeight', 1)">50</span>
-          </div>
-          <div class="servo-compact-slider">
-            <label class="servo-label-compact">R Height</label>
-            <input type="range" id="rightHeight" class="servo-slider" min="5" max="100" step="5" value="50"
-              oninput="updateValueDisplay(this, 2)">
-            <span class="servo-value-display" onclick="resetServo('rightHeight', 2)">50</span>
-          </div>
-          <div class="servo-compact-slider">
-            <label class="servo-label-compact">R Leg</label>
-            <input type="range" id="rightLeg" class="servo-slider" min="5" max="100" step="5" value="50"
-              oninput="updateValueDisplay(this, 3)">
-            <span class="servo-value-display" onclick="resetServo('rightLeg', 3)">50</span>
-          </div>
-        </div>
-        <div class="compact-controls-buttons">
-          <button class="compact-execute-btn" onclick="applyLegControls()">EXECUTE</button>
-          <button class="compact-reset-btn" onclick="resetAllLegs()">RESET</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-pane fade p-0" id="arms" role="tabpanel">
-      <div class="servo-control-container-compact">
-        <h3 class="compact-section-title">
-          <i class="bi bi-hand-index"></i>ARM CONTROLS
-          <div class="live-dot" style="margin-left:6px;"></div>
-        </h3>
-        <div class="speed-slider-container">
-          <label class="speed-label">
-            <i class="bi bi-speedometer2"></i>SPEED
-          </label>
-          <input type="range" id="armSpeedSlider" class="speed-slider" min="0.65" max="1" step="0.05" value="0.85">
-        </div>
-        <div class="servo-controls-compact">
-          <div class="servo-compact-slider">
-            <label class="servo-label-compact">L Main</label>
-            <input type="range" id="leftMain" class="servo-slider" min="1" max="100" step="5" value="1"
-              oninput="updateArmValueDisplay(this, 0); updateArmConstraints();">
-            <span class="servo-value-display" onclick="resetArmServo('leftMain', 0)">1</span>
-          </div>
-          <div class="servo-compact-slider">
-            <label class="servo-label-compact">L Forearm</label>
-            <input type="range" id="leftForearm" class="servo-slider" min="1" max="100" step="5" value="1"
-              oninput="updateArmValueDisplay(this, 1); updateArmConstraints();">
-            <span class="servo-value-display" onclick="resetArmServo('leftForearm', 1)">1</span>
-          </div>
-          <div class="servo-compact-slider">
-            <label class="servo-label-compact">L Hand</label>
-            <input type="range" id="leftHand" class="servo-slider" min="1" max="100" step="5" value="1"
-              oninput="updateArmValueDisplay(this, 2)">
-            <span class="servo-value-display" onclick="resetArmServo('leftHand', 2)">1</span>
-          </div>
-        </div>
-        <div class="servo-controls-compact">
-          <div class="servo-compact-slider">
-            <label class="servo-label-compact">R Main</label>
-            <input type="range" id="rightMain" class="servo-slider" min="1" max="100" step="5" value="1"
-              oninput="updateArmValueDisplay(this, 3); updateArmConstraints();">
-            <span class="servo-value-display" onclick="resetArmServo('rightMain', 3)">1</span>
-          </div>
-          <div class="servo-compact-slider">
-            <label class="servo-label-compact">R Forearm</label>
-            <input type="range" id="rightForearm" class="servo-slider" min="1" max="100" step="5" value="1"
-              oninput="updateArmValueDisplay(this, 4); updateArmConstraints();">
-            <span class="servo-value-display" onclick="resetArmServo('rightForearm', 4)">1</span>
-          </div>
-          <div class="servo-compact-slider">
-            <label class="servo-label-compact">R Hand</label>
-            <input type="range" id="rightHand" class="servo-slider" min="1" max="100" step="5" value="1"
-              oninput="updateArmValueDisplay(this, 5)">
-            <span class="servo-value-display" onclick="resetArmServo('rightHand', 5)">1</span>
-          </div>
-        </div>
-        <div class="compact-controls-buttons">
-          <button class="compact-execute-btn" onclick="applyArmControls()">EXECUTE</button>
-          <button class="compact-reset-btn" onclick="resetAllArms()">RESET</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-pane fade p-0" id="config" role="tabpanel">
-      <div class="config-container">
-        <div class="config-header">
-          <div class="d-flex justify-content-between align-items-center w-100">
-            <div class="d-flex align-items-center">
-              <i class="bi bi-gear-fill me-2" style="font-size:22px;"></i>
-              <h4 class="mb-0">Configuration</h4>
-            </div>
-            <div class="ms-auto">
-              <button class="btn save-config-btn" id="saveConfigBtn">
-                <i class="bi bi-save"></i><span>Save Changes</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="config-body">
-          <div id="configForm">
-            <div class="text-center py-5">
-              <div class="spinner-border text-primary" role="status" style="width:3rem;height:3rem;">
-                <span class="visually-hidden">Loading...</span>
-              </div>
-              <p class="mt-3" style="color:var(--text-dim);font-family:var(--font-hud);">Loading configuration...</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-pane fade p-0" id="wifi" role="tabpanel" style="overflow-y:auto;">
-      <div class="wf-wrap">
-        <div class="wf-card" id="wfStatusCard">
-          <div class="wf-status-row">
-            <img id="wfStatusIcon" class="wf-status-icon" src="/static/imgs/wifi-gray.png" alt="">
-            <div class="wf-status-text">
-              <strong id="wfStatusSsid">Loading…</strong>
-              <span id="wfStatusIp"></span>
-            </div>
-            <span id="wfStatusBadge" class="wf-badge wf-badge-off">—</span>
-            <button class="btn btn-sm btn-outline-secondary" id="wfHotspotBtn" onclick="wfToggleHotspot()"
-              style="font-size:.78rem;padding:.25rem .6rem;">Hotspot</button>
-          </div>
-        </div>
-
-        <div class="wf-card">
-          <div class="wf-scan-row" style="margin-right:-1.25rem;">
-            <h3>Networks</h3>
-            <button class="btn btn-sm btn-outline-secondary" onclick="wfScan()" id="wfScanBtn"
-              style="font-size:.78rem;padding:.25rem .6rem;">&#x21bb; Scan</button>
-          </div>
-          <div class="wf-net-list" id="wfNetList">
-            <div style="text-align:center;color:var(--text-dim);font-size:.85rem;padding:.75rem 0;">
-              <span class="wf-spinner"></span>Scanning…
-            </div>
-          </div>
-          <div id="wfSelectedCard"
-            style="display:none;margin-top:.75rem;border-top:1px solid var(--panel-border);padding-top:.85rem;">
-            <div
-              style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;margin-right:-1.25rem;">
-              <div>
-                <strong id="wfCardSsid"
-                  style="color:var(--text-main);font-family:var(--font-hud);font-size:.95rem;display:block;"></strong>
-                <span id="wfCardDesc" style="color:var(--text-dim);font-size:.78rem;"></span>
-              </div>
-              <button onclick="wfDeselect()"
-                style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1.1rem;padding:.2rem .4rem;">✕</button>
-            </div>
-            <div id="wfPersonalFields">
-              <label class="wf-label">Password</label>
-              <input type="password" class="wf-input" id="wfPassword" placeholder="Leave blank for open networks"
-                style="margin-bottom:.65rem;">
-            </div>
-            <div id="wfEnterpriseFields" style="display:none;">
-              <label class="wf-label">Username</label>
-              <input type="text" class="wf-input" id="wfUsername" placeholder="e.g. student ID"
-                style="margin-bottom:.45rem;">
-              <label class="wf-label">Password</label>
-              <input type="password" class="wf-input" id="wfPasswordEnt" placeholder="Password"
-                style="margin-bottom:.65rem;">
-            </div>
-            <div style="display:flex;gap:.5rem;">
-              <button class="btn btn-sm btn-outline-secondary" onclick="wfDeselect()" style="flex:1;">Cancel</button>
-              <button class="btn btn-sm btn-primary" id="wfConnectBtn" onclick="wfConnect()"
-                style="flex:1;">Connect</button>
-            </div>
-            <p class="wf-msg" id="wfMsg" style="margin-top:.5rem;"></p>
-          </div>
-        </div>
-      </div>
-
-      <div id="wfConfirmOverlay"
-        style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:1rem;">
-        <div style="padding:1.5rem;width:min(400px,94vw);">
-          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;">
-            <i class="bi bi-wifi" style="color:var(--cyan);font-size:1.3rem;"></i>
-            <strong
-              style="color:var(--text-main);font-family:var(--font-hud);font-size:1rem;letter-spacing:1px;text-transform:uppercase;">Ready
-              to Connect</strong>
-          </div>
-          <p style="color:var(--text-dim);font-size:.8rem;margin-bottom:.3rem;font-family:var(--font-hud);">Network</p>
-          <p id="wfConfirmSsid"
-            style="color:var(--cyan);font-family:var(--font-hud);font-size:1.2rem;font-weight:700;margin-bottom:1rem;text-shadow:0 0 10px rgba(0,229,255,0.4);">
-          </p>
-          <div
-            style="background:rgba(255,183,0,.07);border:1px solid rgba(255,183,0,.25);border-radius:8px;padding:.85rem;margin-bottom:.85rem;">
-            <p
-              style="color:var(--orange);font-family:var(--font-hud);font-size:.78rem;font-weight:700;margin-bottom:.6rem;">
-              📋 Save these before connecting</p>
-            <div
-              style="background:var(--bg2);border:1px solid var(--panel-border);border-radius:6px;padding:.7rem;font-size:.82rem;line-height:2;font-family:var(--font-mono);">
-              <div><span style="color:var(--text-dim);font-size:.72rem;">Tailscale (anywhere):</span><br><span
-                  style="color:var(--cyan);font-weight:700;">http://tars:{{ port }}</span></div>
-              <div style="border-top:1px solid var(--panel-border);padding-top:.4rem;margin-top:.4rem;"><span
-                  style="color:var(--text-dim);font-size:.72rem;">Local network:</span><br><span
-                  style="color:var(--cyan);font-weight:700;">http://tars.local:{{ port }}</span></div>
-            </div>
-          </div>
-          <div
-            style="background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.2);border-radius:8px;padding:.85rem;margin-bottom:1rem;font-size:.8rem;">
-            <p style="color:var(--cyan);font-family:var(--font-hud);font-weight:700;margin-bottom:.4rem;">⚠️ After
-              clicking Connect Now:</p>
-            <ol
-              style="color:var(--text-dim);margin:0;padding-left:1.2rem;line-height:1.9;font-family:var(--font-mono);font-size:.8rem;">
-              <li>TARS connects to <strong id="wfConfirmSsid2" style="color:var(--text-main);"></strong></li>
-              <li>This page will disconnect (hotspot shuts down)</li>
-              <li>Reconnect your device to that network</li>
-              <li>Open one of the URLs above</li>
-            </ol>
-          </div>
-          <p class="wf-msg" id="wfConfirmMsg" style="margin-bottom:.6rem;"></p>
-          <div style="display:flex;gap:.6rem;">
-            <button class="btn btn-sm btn-outline-secondary" id="wfCancelBtn" onclick="wfConfirmCancel()"
-              style="flex:1;">Cancel</button>
-            <button class="btn btn-sm btn-primary" id="wfConfirmBtn" onclick="wfConfirmConnect()"
-              style="flex:1;">Connect Now</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-pane fade p-0" id="emotions" role="tabpanel">
-      <div class="em-wrap">
-        <p class="em-title">Eyes Mood Control</p>
-        <div class="em-grid">
-          <button class="em-btn" onclick="emSetMood('NEUTRAL')"> <span class="em-icon">😐</span>Neutral</button>
-          <button class="em-btn" onclick="emSetMood('HAPPY')"> <span class="em-icon">😊</span>Happy</button>
-          <button class="em-btn" onclick="emSetMood('SAD')"> <span class="em-icon">😢</span>Sad</button>
-          <button class="em-btn" onclick="emSetMood('ANGRY')"> <span class="em-icon">😠</span>Angry</button>
-          <button class="em-btn" onclick="emSetMood('EXCITED')"> <span class="em-icon">🤩</span>Excited</button>
-          <button class="nav-link custom-tab" id="fullscreen-toggle" type="button" aria-label="Toggle Fullscreen"
-            onclick="toggleFullscreen()">
-            <i class="bi bi-fullscreen" id="fullscreen-icon"></i>
-          </button>
-          <button class="em-btn" onclick="emSetMood('AFRAID')"> <span class="em-icon">😨</span>Afraid</button>
-          <button class="em-btn" onclick="emSetMood('SIDEEYE_LEFT')"> <span class="em-icon">👈</span>Side-eye L</button>
-          <button class="em-btn" onclick="emSetMood('SIDEEYE_RIGHT')"> <span class="em-icon">👉</span>Side-eye
-            R</button>
-          <button class="em-btn" onclick="emSetMood('SLEEPY')"> <span class="em-icon">😴</span>Sleepy</button>
-        </div>
-        <p class="em-status" id="emStatus"></p>
-      </div>
-    </div>
-
+    {% include 'tabs/chat.html' %}
+    {% include 'tabs/motion.html' %}
+    {% include 'tabs/legs.html' %}
+    {% include 'tabs/arms.html' %}
+    {% include 'tabs/config.html' %}
+    {% include 'tabs/wifi.html' %}
+    {% include 'tabs/emotions.html' %}
   </div>
+
+  <!-- Flask → JS bridge -->
   <script>
-    // Bridge Flask Template variables to the external main.js file
     window.APP_CONFIG = {
-      charName: "{{ char_name }}",
-      charGreeting: "{{ char_greeting }}",
-      port: "{{ port }}",
+      charName:      "{{ char_name }}",
+      charGreeting:  "{{ char_greeting }}",
+      port:          "{{ port }}",
       charAvatarUrl: "{{ url_for('static', filename='imgs/char.png') }}"
     };
   </script>
 
-  <script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1, 99999) | random }}"></script>
-
+  <script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1,99999)|random }}"></script>
 </body>
-
 </html>

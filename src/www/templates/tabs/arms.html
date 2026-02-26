@@ -1,0 +1,58 @@
+<div class="tab-pane fade" id="arms" role="tabpanel">
+  <div class="servo-wrap">
+    <div class="servo-header">
+      <i class="bi bi-hand-index"></i> ARM CONTROLS
+      <span class="live-dot"></span>
+    </div>
+
+    <div class="speed-row">
+      <span class="speed-row-label"><i class="bi bi-speedometer2"></i> SPEED</span>
+      <input type="range" id="armSpeedSlider" class="hud-range" min="0.65" max="1" step="0.05" value="0.85">
+    </div>
+
+    <!-- Left arm -->
+    <div class="servo-group-label">LEFT</div>
+    <div class="servo-sliders">
+      <div class="servo-card">
+        <label class="servo-card-label">MAIN</label>
+        <input type="range" id="leftMain" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this,0); updateArmConstraints();">
+        <span class="servo-val" onclick="resetArmServo('leftMain',0)">1</span>
+      </div>
+      <div class="servo-card">
+        <label class="servo-card-label">FOREARM</label>
+        <input type="range" id="leftForearm" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this,1); updateArmConstraints();">
+        <span class="servo-val" onclick="resetArmServo('leftForearm',1)">1</span>
+      </div>
+      <div class="servo-card">
+        <label class="servo-card-label">HAND</label>
+        <input type="range" id="leftHand" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this,2)">
+        <span class="servo-val" onclick="resetArmServo('leftHand',2)">1</span>
+      </div>
+    </div>
+
+    <!-- Right arm -->
+    <div class="servo-group-label">RIGHT</div>
+    <div class="servo-sliders">
+      <div class="servo-card">
+        <label class="servo-card-label">MAIN</label>
+        <input type="range" id="rightMain" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this,3); updateArmConstraints();">
+        <span class="servo-val" onclick="resetArmServo('rightMain',3)">1</span>
+      </div>
+      <div class="servo-card">
+        <label class="servo-card-label">FOREARM</label>
+        <input type="range" id="rightForearm" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this,4); updateArmConstraints();">
+        <span class="servo-val" onclick="resetArmServo('rightForearm',4)">1</span>
+      </div>
+      <div class="servo-card">
+        <label class="servo-card-label">HAND</label>
+        <input type="range" id="rightHand" class="servo-slider" min="1" max="100" step="5" value="1" oninput="updateArmValueDisplay(this,5)">
+        <span class="servo-val" onclick="resetArmServo('rightHand',5)">1</span>
+      </div>
+    </div>
+
+    <div class="servo-actions">
+      <button class="hud-btn hud-btn-primary" onclick="applyArmControls()">EXECUTE</button>
+      <button class="hud-btn hud-btn-warn"    onclick="resetAllArms()">RESET</button>
+    </div>
+  </div>
+</div>

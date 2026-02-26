@@ -1,0 +1,42 @@
+<div class="tab-pane fade" id="motion" role="tabpanel">
+  <div class="motion-wrap">
+
+    <!-- D-Pad -->
+    <div class="dpad-section">
+      <div class="section-label">MOVEMENT</div>
+      <div class="dpad-housing">
+        <div class="dpad">
+          <button class="dpad-btn dpad-up"    id="btnUp"    aria-label="Forward"><i class="bi bi-caret-up-fill"></i></button>
+          <button class="dpad-btn dpad-left"  id="btnLeft"  aria-label="Left"><i class="bi bi-caret-left-fill"></i></button>
+          <div class="dpad-center"><span>✛</span></div>
+          <button class="dpad-btn dpad-right" id="btnRight" aria-label="Right"><i class="bi bi-caret-right-fill"></i></button>
+          <button class="dpad-btn dpad-down"  id="btnDown"  aria-label="Backward"><i class="bi bi-caret-down-fill"></i></button>
+        </div>
+        <div class="speed-pills">
+          <label class="speed-pill">
+            <input type="radio" name="speed" value="slow" checked>
+            <span>SLOW</span>
+          </label>
+          <label class="speed-pill">
+            <input type="radio" name="speed" value="fast">
+            <span>FAST</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions-section">
+      <div class="section-label">EXECUTE</div>
+      <div class="actions-panel">
+        <select id="actionSelect" class="hud-select">
+          <option value="">Loading…</option>
+        </select>
+        <button class="hud-btn hud-btn-primary" onclick="executeAction()">
+          <i class="bi bi-play-fill"></i> RUN
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>

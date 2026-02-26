@@ -122,7 +122,7 @@ flask_app.secret_key = os.getenv("FLASK_SECRET_KEY", "tars_default_secret_key_88
 @flask_app.before_request
 def check_auth():
     # Public routes that don't require login
-    if request.path.startswith('/static') or request.path == '/login' or not CONFIG['CHATUI'].get('enabled', True):
+    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path == '/login' or not CONFIG['CHATUI'].get('enabled', True):
         return
         
     # Check if user is logged in
@@ -154,9 +154,9 @@ def index():
         except OSError:
             ipadd = '10.42.0.1'
     return render_template('index.html',
-                           char_name=json.dumps(character_name),
+                           char_name=character_name,
                            char_greeting='Welcome back',
-                           talkinghead_base_url=json.dumps(ipadd),
+                           talkinghead_base_url=ipadd,
                            port=CONFIG['CHATUI'].get('port', 5012))
 
 @flask_app.route('/login', methods=['GET', 'POST'])
@@ -251,8 +251,8 @@ def set_emotion():
 def receive_user_message():
     global latest_text_to_read
 
-    user_message = request.form.get('message', '')  
-    file = request.files.get('file')  
+    user_message = request.form.get('message', '')
+    file = request.files.get('file')
 
     if file:
         buffer = BytesIO()
@@ -282,7 +282,7 @@ def receive_user_message():
 
     if CONFIG['EMOTION']['enabled']:
         detect_emotion(reply)
-        
+
     return jsonify({"status": "success"})
 
 @flask_app.route('/upload', methods=['GET', 'POST'])
