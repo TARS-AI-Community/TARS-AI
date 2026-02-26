@@ -386,7 +386,10 @@ def execute_function_call(func_call, bot_response, user_input):
                 execute_movement(movements)
 
         elif function_name == "capture_camera_view":
-            if describe_camera_view_openai is None:
+            # Skip camera capture when user already uploaded a photo
+            if "Uploaded photo" in user_input:
+                pass
+            elif describe_camera_view_openai is None:
                 bot_response["reply"] = "Vision is not available on this device."
             else:
                 query = parameters.get("query", bot_response.get("question", ""))
