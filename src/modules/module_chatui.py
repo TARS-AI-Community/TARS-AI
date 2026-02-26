@@ -254,34 +254,39 @@ def receive_user_message():
     user_message = request.form.get('message', '')
     file = request.files.get('file')
 
-    if file:
-        buffer = BytesIO()
-        file.save(buffer)
-        buffer.seek(0)
+    try:
+        if file:
+            buffer = BytesIO()
+            file.save(buffer)
+            buffer.seek(0)
 
-        base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
+            base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
 
-        try:
-            raw_image = Image.open(buffer).convert('RGB')
-            if VISION_AVAILABLE:
-                caption = get_image_caption_from_base64(base64_image)
-            else:
-                caption = "Image uploaded (vision module not available)"
-        except UnidentifiedImageError as e:
-            queue_message(f"Failed to open the image: {e}")
-            caption = "Failed to process image"
+            try:
+                raw_image = Image.open(buffer).convert('RGB')
+                if VISION_AVAILABLE:
+                    caption = get_image_caption_from_base64(base64_image)
+                else:
+                    caption = "Image uploaded (vision module not available)"
+            except UnidentifiedImageError as e:
+                queue_message(f"Failed to open the image: {e}")
+                caption = "Failed to process image"
 
-        cmessage = f"*The Uploaded photo has the following description {caption}* and the user sent the following message with the photo: {user_message}"
-        reply = get_completion(cmessage)
-    else:
-        reply = get_completion(user_message)
+            cmessage = f"*The Uploaded photo has the following description {caption}* and the user sent the following message with the photo: {user_message}"
+            reply = get_completion(cmessage)
+        else:
+            reply = get_completion(user_message)
 
-    latest_text_to_read = reply
-    socketio.emit('bot_message', {'message': latest_text_to_read})
+        latest_text_to_read = reply
+        socketio.emit('bot_message', {'message': latest_text_to_read or ''})
 
-    if CONFIG['EMOTION']['enabled']:
-        detect_emotion(reply)
+        if CONFIG['EMOTION']['enabled'] and reply:
+            detect_emotion(reply)
+
+    except Exception as e:
+        queue_message(f"ERROR: process_llm failed: {e}")
+        socketio.emit('bot_message', {'message': f'Error processing message: {e}'})
 
     return jsonify({"status": "success"})
 
