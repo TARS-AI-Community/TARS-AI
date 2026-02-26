@@ -157,17 +157,19 @@ class CameraModule:
             sleep_time = max(0, frame_delay - elapsed_time)
             time.sleep(sleep_time)
 
-    def capture_single_image(self):
+    def capture_single_image(self, timeout=15):
         with self.lock:
             if self.first_frame_captured:
                 self.save_next_frame = True
-        while True:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
             with self.lock:
                 if self.last_saved_image:
                     saved_image = self.last_saved_image
                     self.last_saved_image = None
                     return saved_image
-            pygame.time.wait(100)
+            time.sleep(0.1)
+        raise RuntimeError("Camera capture timed out")
 
     def save_frame(self):
         if self.frame is None:
