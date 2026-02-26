@@ -352,6 +352,16 @@ document.addEventListener('DOMContentLoaded', function () {
   // set char name from APP_CONFIG
   const nameEl = document.getElementById('bot-name');
   if (nameEl && window.APP_CONFIG?.charName) nameEl.textContent = window.APP_CONFIG.charName;
+
+  // Avatar toggle — click header to collapse/expand
+  const avatarHeader = document.querySelector('.avatar-header');
+  if (avatarHeader) {
+    if (localStorage.getItem('avatarHidden') === '1') avatarHeader.classList.add('collapsed');
+    avatarHeader.addEventListener('click', () => {
+      avatarHeader.classList.toggle('collapsed');
+      localStorage.setItem('avatarHidden', avatarHeader.classList.contains('collapsed') ? '1' : '0');
+    });
+  }
 });
 
 

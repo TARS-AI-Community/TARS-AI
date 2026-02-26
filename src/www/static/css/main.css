@@ -417,6 +417,16 @@ body::after {
   padding: 14px 0 8px;
   border-bottom: 1px solid var(--border);
   background: rgba(0,0,0,0.2);
+  cursor: pointer;
+  overflow: hidden;
+  max-height: 300px;
+  transition: max-height 0.35s var(--ease), padding 0.35s var(--ease), border-color 0.35s var(--ease);
+}
+
+.avatar-header.collapsed {
+  max-height: 0;
+  padding: 0;
+  border-bottom-color: transparent;
 }
 
 #backgroundImage {
