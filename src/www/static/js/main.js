@@ -263,6 +263,7 @@ document.addEventListener('DOMContentLoaded', function () {
   socket.on('emotion_change', d => preloadAvatarSprites(d));
 
   function formatText(text) {
+    if (!text) return '';
     return text
       .replace(/\n/g, '<br>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -276,10 +277,10 @@ document.addEventListener('DOMContentLoaded', function () {
   function sendMessage() {
     const txt = prompt.value.trim();
     if (!txt && !selectedImageFile) return;
-    displayUserMessage(txt);
+    displayUserMessage(txt, selectedImageFile);
     sendUserMessage(txt, selectedImageFile);
     prompt.value = '';
-    const f = selectedImageFile; selectedImageFile = null;
+    selectedImageFile = null;
     $('imagePreviewContainer').style.display = 'none';
     $('imagePreview').src = '';
     // show typing indicator after 1s
@@ -322,15 +323,30 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.is-typing').forEach(el => el.remove());
   }
 
-  function displayUserMessage(message) {
+  function displayUserMessage(message, imageFile) {
     const chatBody = document.querySelector('.chat-messages');
     const row = document.createElement('div');
     row.className = 'msg-row msg-row-user';
-    row.innerHTML = `<div class="msg-bubble msg-bubble-user">
-      <div class="response-text">${formatText(message)}</div>
-    </div>`;
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble msg-bubble-user';
+    if (message) bubble.innerHTML = `<div class="response-text">${formatText(message)}</div>`;
+    row.appendChild(bubble);
     chatBody.appendChild(row);
     chatBody.scrollTop = chatBody.scrollHeight;
+
+    if (imageFile) {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const img = document.createElement('img');
+        img.src = e.target.result;
+        img.style.maxWidth = '200px';
+        img.style.borderRadius = 'var(--radius)';
+        img.style.marginTop = '6px';
+        bubble.insertBefore(img, bubble.firstChild);
+        chatBody.scrollTop = chatBody.scrollHeight;
+      };
+      reader.readAsDataURL(imageFile);
+    }
   }
 
   // set char name from APP_CONFIG
