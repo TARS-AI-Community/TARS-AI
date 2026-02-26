@@ -25,6 +25,9 @@ from flask import (
     request,
     render_template,
     Response,
+    session,
+    redirect,
+    url_for
 )
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -113,6 +116,19 @@ previous_arm_positions = {
     'right_hand': 1
 }
 
+flask_app.secret_key = os.getenv("FLASK_SECRET_KEY", "tars_default_secret_key_8822")
+
+# Authentication requirement check
+@flask_app.before_request
+def check_auth():
+    # Public routes that don't require login
+    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path == '/login' or not CONFIG['CHATUI'].get('enabled', True):
+        return
+        
+    # Check if user is logged in
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
 CORS(flask_app)
 socketio = SocketIO(flask_app, cors_allowed_origins="*", logger=False, engineio_logger=False)
 
@@ -138,10 +154,30 @@ def index():
         except OSError:
             ipadd = '10.42.0.1'
     return render_template('index.html',
-                           char_name=json.dumps(character_name),
+                           char_name=character_name,
                            char_greeting='Welcome back',
-                           talkinghead_base_url=json.dumps(ipadd),
+                           talkinghead_base_url=ipadd,
                            port=CONFIG['CHATUI'].get('port', 5012))
+
+@flask_app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        password = request.form.get('password')
+        correct_password = CONFIG['CHATUI'].get('password', 'tars')
+        
+        if password == correct_password:
+            session['logged_in'] = True
+            session.permanent = True  # Maintain cookie presence
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', error="Invalid password")
+            
+    return render_template('login.html')
+
+@flask_app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
 
 @flask_app.route('/holo')
 def holo():
@@ -215,38 +251,43 @@ def set_emotion():
 def receive_user_message():
     global latest_text_to_read
 
-    user_message = request.form.get('message', '')  
-    file = request.files.get('file')  
+    user_message = request.form.get('message', '')
+    file = request.files.get('file')
 
-    if file:
-        buffer = BytesIO()
-        file.save(buffer)
-        buffer.seek(0)
+    try:
+        if file:
+            buffer = BytesIO()
+            file.save(buffer)
+            buffer.seek(0)
 
-        base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
+            base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
 
-        try:
-            raw_image = Image.open(buffer).convert('RGB')
-            if VISION_AVAILABLE:
-                caption = get_image_caption_from_base64(base64_image)
-            else:
-                caption = "Image uploaded (vision module not available)"
-        except UnidentifiedImageError as e:
-            queue_message(f"Failed to open the image: {e}")
-            caption = "Failed to process image"
+            try:
+                raw_image = Image.open(buffer).convert('RGB')
+                if VISION_AVAILABLE:
+                    caption = get_image_caption_from_base64(base64_image)
+                else:
+                    caption = "Image uploaded (vision module not available)"
+            except UnidentifiedImageError as e:
+                queue_message(f"Failed to open the image: {e}")
+                caption = "Failed to process image"
 
-        cmessage = f"*The Uploaded photo has the following description {caption}* and the user sent the following message with the photo: {user_message}"
-        reply = get_completion(cmessage)
-    else:
-        reply = get_completion(user_message)
+            cmessage = f"*The Uploaded photo has the following description {caption}* and the user sent the following message with the photo: {user_message}"
+            reply = get_completion(cmessage)
+        else:
+            reply = get_completion(user_message)
 
-    latest_text_to_read = reply
-    socketio.emit('bot_message', {'message': latest_text_to_read})
+        latest_text_to_read = reply
+        socketio.emit('bot_message', {'message': latest_text_to_read or ''})
 
-    if CONFIG['EMOTION']['enabled']:
-        detect_emotion(reply)
-        
+        if CONFIG['EMOTION']['enabled'] and reply:
+            detect_emotion(reply)
+
+    except Exception as e:
+        queue_message(f"ERROR: process_llm failed: {e}")
+        socketio.emit('bot_message', {'message': f'Error processing message: {e}'})
+
     return jsonify({"status": "success"})
 
 @flask_app.route('/upload', methods=['GET', 'POST'])
