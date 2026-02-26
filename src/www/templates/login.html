@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TARS-AI | Access Control</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/holo.css') }}">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #000;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .login-container {
+            position: relative;
+            width: 400px;
+            padding: 40px;
+            background: rgba(15, 15, 15, 0.9);
+            border: 2px solid var(--holo-color, #00FCFC);
+            box-shadow: 0 0 20px rgba(0, 252, 252, 0.2), inset 0 0 10px rgba(0, 252, 252, 0.1);
+            border-radius: 4px;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            bottom: -10px;
+            border: 1px solid rgba(0, 252, 252, 0.3);
+            pointer-events: none;
+        }
+
+        .logo-area {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            color: var(--holo-color, #00FCFC);
+            text-shadow: 0 0 10px rgba(0, 252, 252, 0.8);
+            margin-bottom: 10px;
+            letter-spacing: 5px;
+        }
+
+        .system-status {
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 40px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+            color: var(--holo-color, #00FCFC);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(0, 252, 252, 0.3);
+            color: #fff;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s ease;
+            border-radius: 2px;
+        }
+
+        input[type="password"]:focus {
+            border-color: var(--holo-color, #00FCFC);
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 10px rgba(0, 252, 252, 0.2);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 15px;
+            background: rgba(0, 252, 252, 0.1);
+            border: 1px solid var(--holo-color, #00FCFC);
+            color: var(--holo-color, #00FCFC);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: var(--shadows);
+        }
+
+        .login-btn:hover {
+            background: rgba(0, 252, 252, 0.3);
+            box-shadow: var(--hover-shadows);
+            transform: translateY(-2px);
+        }
+
+        .login-btn:active {
+            transform: translateY(1px);
+        }
+
+        .error-msg {
+            color: #ff3232;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.9rem;
+            margin-top: 20px;
+            min-height: 1.2rem;
+        }
+
+        /* Decorative Scanlines */
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%,
+                    rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg,
+                    rgba(255, 0, 0, 0.06),
+                    rgba(0, 255, 0, 0.02),
+                    rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .background-flicker {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 252, 252, 0.02);
+            animation: flicker 4s infinite;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        @keyframes flicker {
+            0% {
+                opacity: 0.1;
+            }
+
+            5% {
+                opacity: 0.2;
+            }
+
+            10% {
+                opacity: 0.1;
+            }
+
+            15% {
+                opacity: 0.3;
+            }
+
+            20% {
+                opacity: 0.1;
+            }
+
+            50% {
+                opacity: 0.15;
+            }
+
+            80% {
+                opacity: 0.1;
+            }
+
+            90% {
+                opacity: 0.25;
+            }
+
+            100% {
+                opacity: 0.1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="scanlines"></div>
+    <div class="background-flicker"></div>
+
+    <div class="login-container">
+        <div class="logo-area">TARS</div>
+        <div class="system-status">Access Control Protocol</div>
+
+        <form method="POST" action="{{ url_for('login') }}">
+            <div class="form-group">
+                <label for="password">Input Authorization Key</label>
+                <input type="password" id="password" name="password" required autofocus placeholder="********">
+            </div>
+
+            <button type="submit" class="login-btn">Initialize Link</button>
+
+            <div class="error-msg">
+                {% if error %}
+                {{ error }}
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</body>
+
+</html>

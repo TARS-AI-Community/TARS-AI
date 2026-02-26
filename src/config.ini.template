@@ -224,6 +224,7 @@ negative_prompt = deformed, black and white, disfigured, low contrast, extra lim
 [CHATUI] # Required true for WEB UI
 enabled = True
 port = 80
+password = tarspass1234
 
 [UI] # Graphical interface 
 UI_enabled = True

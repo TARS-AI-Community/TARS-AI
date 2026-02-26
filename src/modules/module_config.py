@@ -439,6 +439,7 @@ def load_config():
         "CHATUI": {
             "enabled": config.getboolean('CHATUI', 'enabled'),
             "port": config.getint('CHATUI', 'port', fallback=5012),
+            "password": config.get('CHATUI', 'password', fallback='tars'),
         },
         "RAG": {
             "strategy": config.get('RAG', 'strategy', fallback='naive'),
@@ -610,8 +611,8 @@ CONFIG_METADATA = {
         'enabled': {
             'description': 'Enable the Chat UI'
         },
-        'port': {
-            'description': 'Port for the Chat UI (default: 5012)'
+        'password': {
+            'description': 'Password for the Chat UI (default: tars)'
         },
     },
     'CHAR': {

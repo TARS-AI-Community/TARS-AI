@@ -25,6 +25,9 @@ from flask import (
     request,
     render_template,
     Response,
+    session,
+    redirect,
+    url_for
 )
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -113,6 +116,19 @@ previous_arm_positions = {
     'right_hand': 1
 }
 
+flask_app.secret_key = os.getenv("FLASK_SECRET_KEY", "tars_default_secret_key_8822")
+
+# Authentication requirement check
+@flask_app.before_request
+def check_auth():
+    # Public routes that don't require login
+    if request.path.startswith('/static') or request.path == '/login' or not CONFIG['CHATUI'].get('enabled', True):
+        return
+        
+    # Check if user is logged in
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
 CORS(flask_app)
 socketio = SocketIO(flask_app, cors_allowed_origins="*", logger=False, engineio_logger=False)
 
@@ -142,6 +158,26 @@ def index():
                            char_greeting='Welcome back',
                            talkinghead_base_url=json.dumps(ipadd),
                            port=CONFIG['CHATUI'].get('port', 5012))
+
+@flask_app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        password = request.form.get('password')
+        correct_password = CONFIG['CHATUI'].get('password', 'tars')
+        
+        if password == correct_password:
+            session['logged_in'] = True
+            session.permanent = True  # Maintain cookie presence
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', error="Invalid password")
+            
+    return render_template('login.html')
+
+@flask_app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
 
 @flask_app.route('/holo')
 def holo():
