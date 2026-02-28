@@ -108,10 +108,17 @@
     }
   };
 
-  window.wfToggleHotspot = async function () {
-    const btn = $('wfHotspotBtn'); btn.disabled = true;
-    try { await fetch('/api/wifi/hotspot', { method: 'PUT' }); setTimeout(loadStatus, 1500); }
-    finally { btn.disabled = false; }
+  window.wfToggleHotspot = function () {
+    const btn = $('wfHotspotBtn');
+    const isHotspot = btn.textContent.trim() === 'Stop Hotspot';
+    const msg = isHotspot
+      ? 'Stop the hotspot and go offline?'
+      : 'This will disconnect Wi-Fi and start the hotspot. Continue?';
+    if (!confirm(msg)) return;
+    btn.disabled = true;
+    fetch('/api/wifi/hotspot', { method: 'PUT' })
+      .then(() => setTimeout(loadStatus, 1500))
+      .finally(() => { btn.disabled = false; });
   };
 
   const wifiTab = $('wifi-tab');
