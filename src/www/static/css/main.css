@@ -97,6 +97,67 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* slow-drifting nebula blobs (pure CSS, above body bg) */
+.nebula-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.nebula-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  will-change: transform, opacity;
+}
+
+.nb-1 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(120, 40, 200, 0.35) 0%, rgba(80, 20, 160, 0.1) 50%, transparent 70%);
+  top: 5%; left: -5%;
+  animation: nebulaDrift1 55s ease-in-out infinite;
+}
+
+.nb-2 {
+  width: 450px; height: 450px;
+  background: radial-gradient(circle, rgba(0, 180, 240, 0.25) 0%, rgba(0, 120, 200, 0.08) 50%, transparent 70%);
+  top: 50%; right: -10%;
+  animation: nebulaDrift2 65s ease-in-out infinite;
+}
+
+.nb-3 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(160, 30, 220, 0.30) 0%, rgba(100, 20, 180, 0.08) 50%, transparent 70%);
+  bottom: 0%; left: 25%;
+  animation: nebulaDrift3 60s ease-in-out infinite;
+}
+
+@keyframes nebulaDrift1 {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0.6; }
+  25%  { transform: translate(10vw, 12vh) scale(1.2); opacity: 0.8; }
+  50%  { transform: translate(18vw, 5vh) scale(0.95); opacity: 0.5; }
+  75%  { transform: translate(5vw, -8vh) scale(1.1); opacity: 0.7; }
+  100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+}
+
+@keyframes nebulaDrift2 {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0.5; }
+  25%  { transform: translate(-12vw, -6vh) scale(1.15); opacity: 0.7; }
+  50%  { transform: translate(-8vw, 10vh) scale(0.9); opacity: 0.6; }
+  75%  { transform: translate(5vw, 8vh) scale(1.1); opacity: 0.4; }
+  100% { transform: translate(0, 0) scale(1); opacity: 0.5; }
+}
+
+@keyframes nebulaDrift3 {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0.5; }
+  25%  { transform: translate(-8vw, -10vh) scale(1.1); opacity: 0.7; }
+  50%  { transform: translate(10vw, -5vh) scale(1.2); opacity: 0.6; }
+  75%  { transform: translate(15vw, 8vh) scale(0.95); opacity: 0.8; }
+  100% { transform: translate(0, 0) scale(1); opacity: 0.5; }
+}
+
 /* particle / cosmic ray canvas background */
 #particleBg {
   position: fixed;
