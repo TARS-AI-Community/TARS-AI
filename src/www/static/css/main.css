@@ -251,19 +251,22 @@ body::after {
 }
 
 .custom-tab.active {
-  background: linear-gradient(180deg, rgba(0,229,255,0.06) 0%, rgba(0,229,255,0.02) 100%);
-  box-shadow: inset 0 -3px 0 var(--gold), 0 0 20px rgba(0,229,255,0.06);
+  background: transparent;
+  box-shadow: inset 0 -3px 0 var(--cyan);
 }
 
 .custom-tab.active i {
-  color: var(--gold);
-  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.6));
+  background: linear-gradient(135deg, var(--cyan), var(--purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 10px rgba(0,229,255,0.5)) drop-shadow(0 0 20px rgba(180,77,255,0.3));
   animation: tabIconGlow 3s ease-in-out infinite;
 }
 
 @keyframes tabIconGlow {
-  0%, 100% { filter: drop-shadow(0 0 10px rgba(0,229,255,0.6)); }
-  50%      { filter: drop-shadow(0 0 16px rgba(0,229,255,0.9)); }
+  0%, 100% { filter: drop-shadow(0 0 10px rgba(0,229,255,0.5)) drop-shadow(0 0 20px rgba(180,77,255,0.3)); }
+  50%      { filter: drop-shadow(0 0 16px rgba(0,229,255,0.8)) drop-shadow(0 0 25px rgba(180,77,255,0.5)); }
 }
 
 /* TARS watermark in tab bar */
@@ -2235,17 +2238,23 @@ body::after {
 }
 
 .mobile-nav-btn.active {
-  background: rgba(0, 229, 255, 0.06);
+  background: transparent;
 }
 
 .mobile-nav-btn.active i {
-  color: var(--cyan);
-  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.6));
+  background: linear-gradient(135deg, var(--cyan), var(--purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 10px rgba(0,229,255,0.5)) drop-shadow(0 0 18px rgba(180,77,255,0.3));
   transform: translateY(-2px) scale(1.05);
 }
 
 .mobile-nav-btn.active span {
-  color: var(--cyan);
+  background: linear-gradient(135deg, var(--cyan), var(--purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .mobile-nav-btn:active {
