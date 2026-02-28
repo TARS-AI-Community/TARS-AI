@@ -1068,7 +1068,6 @@ window.showToast = function (message, type, duration) {
   document.addEventListener('DOMContentLoaded', function () {
     const track = document.getElementById('swipeTrack');
     const tabContent = document.getElementById('myTabContent');
-    const dots = document.querySelectorAll('.swipe-dot');
     const navBtns = document.querySelectorAll('.mobile-nav-btn');
 
     if (!track || !tabContent) return;
@@ -1171,7 +1170,7 @@ window.showToast = function (message, type, duration) {
 
       // update mobile nav active state
       updateMobileNav(index);
-      updateDots(index);
+      void(index);
     }
 
     function updateMobileNav(index) {
@@ -1186,11 +1185,6 @@ window.showToast = function (message, type, duration) {
       });
     }
 
-    function updateDots(index) {
-      dots.forEach(function (dot, i) {
-        dot.classList.toggle('active', i === index);
-      });
-    }
 
     // ── Sync desktop tab clicks with swipe state ──
     document.querySelectorAll('.custom-tab[data-bs-toggle="tab"]').forEach(function (tab) {
@@ -1205,7 +1199,7 @@ window.showToast = function (message, type, duration) {
             track.style.transform = 'translateX(-' + (idx * 100) + '%)';
           }
           updateMobileNav(idx);
-          updateDots(idx);
+          void(idx);
         }
       });
     });

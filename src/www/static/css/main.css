@@ -21,8 +21,8 @@
   --magenta-dim: rgba(255, 45, 138, 0.5);
   --purple:      #b44dff;
   --purple-dim:  rgba(180, 77, 255, 0.5);
-  --gold:        #ffd000;
-  --gold-dim:    rgba(255, 208, 0, 0.5);
+  --gold:        #00e5ff;
+  --gold-dim:    rgba(0, 229, 255, 0.5);
   --green:       #39ff14;
   --orange:      #ffb700;
   --red:         #ff4444;
@@ -157,7 +157,7 @@ body::after {
   bottom: 0; left: 0;
   height: 3px; width: 0;
   background: linear-gradient(90deg, var(--gold), var(--cyan));
-  box-shadow: 0 0 16px rgba(255, 208, 0, 0.5);
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.5);
   transition: left 0.35s var(--ease), width 0.35s var(--ease);
   pointer-events: none;
 }
@@ -190,19 +190,19 @@ body::after {
 }
 
 .custom-tab.active {
-  background: linear-gradient(180deg, rgba(255,208,0,0.06) 0%, rgba(255,208,0,0.02) 100%);
-  box-shadow: inset 0 -3px 0 var(--gold), 0 0 20px rgba(255,208,0,0.06);
+  background: linear-gradient(180deg, rgba(0,229,255,0.06) 0%, rgba(0,229,255,0.02) 100%);
+  box-shadow: inset 0 -3px 0 var(--gold), 0 0 20px rgba(0,229,255,0.06);
 }
 
 .custom-tab.active i {
   color: var(--gold);
-  filter: drop-shadow(0 0 10px rgba(255, 208, 0, 0.6));
+  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.6));
   animation: tabIconGlow 3s ease-in-out infinite;
 }
 
 @keyframes tabIconGlow {
-  0%, 100% { filter: drop-shadow(0 0 10px rgba(255,208,0,0.6)); }
-  50%      { filter: drop-shadow(0 0 16px rgba(255,208,0,0.9)); }
+  0%, 100% { filter: drop-shadow(0 0 10px rgba(0,229,255,0.6)); }
+  50%      { filter: drop-shadow(0 0 16px rgba(0,229,255,0.9)); }
 }
 
 /* TARS watermark in tab bar */
@@ -214,7 +214,7 @@ body::after {
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.3em;
-  background: linear-gradient(90deg, rgba(0,229,255,0.18), rgba(255,208,0,0.15));
+  background: linear-gradient(90deg, rgba(0,229,255,0.18), rgba(0,229,255,0.15));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -522,7 +522,7 @@ body::after {
   width: 3px; height: 14px;
   background: linear-gradient(180deg, var(--gold), var(--cyan));
   border-radius: 3px;
-  box-shadow: 0 0 10px rgba(255, 208, 0, 0.4);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
 }
 
 /* ══════════════════════════════════════════════
@@ -948,10 +948,10 @@ body::after {
 }
 
 .speed-pill input:checked + span {
-  background: rgba(255,208,0,0.08);
-  border-color: rgba(255,208,0,0.4);
+  background: rgba(0,229,255,0.08);
+  border-color: rgba(0,229,255,0.4);
   color: var(--gold);
-  box-shadow: 0 0 18px rgba(255,208,0,0.12);
+  box-shadow: 0 0 18px rgba(0,229,255,0.12);
 }
 
 /* actions panel */
@@ -1160,7 +1160,7 @@ body::after {
   color: var(--text);
 }
 
-.config-header-left i { color: var(--gold); font-size: 16px; filter: drop-shadow(0 0 6px rgba(255,208,0,0.4)); }
+.config-header-left i { color: var(--gold); font-size: 16px; filter: drop-shadow(0 0 6px rgba(0,229,255,0.4)); }
 
 .config-body {
   flex: 1;
@@ -1646,7 +1646,7 @@ body::after {
   letter-spacing: 0.22em;
   color: var(--gold);
   text-transform: uppercase;
-  text-shadow: 0 0 8px rgba(255,208,0,0.3);
+  text-shadow: 0 0 8px rgba(0,229,255,0.3);
 }
 
 .em-grid {
@@ -1907,15 +1907,15 @@ body::after {
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  background: rgba(255,208,0,0.06);
-  border: 1px solid rgba(255,208,0,0.25);
+  background: rgba(0,229,255,0.06);
+  border: 1px solid rgba(0,229,255,0.25);
   border-radius: 20px;
   font-family: var(--font-hud);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--gold);
-  text-shadow: 0 0 8px rgba(255,208,0,0.35);
+  text-shadow: 0 0 8px rgba(0,229,255,0.35);
   text-transform: uppercase;
   flex-shrink: 0;
   backdrop-filter: blur(12px);
@@ -2132,28 +2132,6 @@ body::after {
   box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
-.swipe-dots {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-  padding: 5px 0 2px;
-}
-
-.swipe-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--text-dim);
-  opacity: 0.35;
-  transition: all 0.3s var(--ease);
-}
-
-.swipe-dot.active {
-  background: var(--gold);
-  opacity: 1;
-  box-shadow: 0 0 8px rgba(255, 208, 0, 0.5);
-  transform: scale(1.3);
-}
 
 .mobile-nav-buttons {
   display: flex;
@@ -2196,29 +2174,17 @@ body::after {
 }
 
 .mobile-nav-btn.active {
-  background: rgba(255, 208, 0, 0.06);
-}
-
-.mobile-nav-btn.active::before {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 4px; height: 4px;
-  border-radius: 50%;
-  background: var(--gold);
-  box-shadow: 0 0 8px rgba(255,208,0,0.6);
+  background: rgba(0, 229, 255, 0.06);
 }
 
 .mobile-nav-btn.active i {
-  color: var(--gold);
-  filter: drop-shadow(0 0 10px rgba(255, 208, 0, 0.6));
+  color: var(--cyan);
+  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.6));
   transform: translateY(-2px) scale(1.05);
 }
 
 .mobile-nav-btn.active span {
-  color: var(--gold);
+  color: var(--cyan);
 }
 
 .mobile-nav-btn:active {
@@ -2227,9 +2193,9 @@ body::after {
 
 /* glow pulse on tab switch */
 @keyframes navGlow {
-  0%   { box-shadow: 0 0 0 rgba(255,208,0,0); }
-  50%  { box-shadow: 0 0 14px rgba(255,208,0,0.3); }
-  100% { box-shadow: 0 0 0 rgba(255,208,0,0); }
+  0%   { box-shadow: 0 0 0 rgba(0,229,255,0); }
+  50%  { box-shadow: 0 0 14px rgba(0,229,255,0.3); }
+  100% { box-shadow: 0 0 0 rgba(0,229,255,0); }
 }
 
 .mobile-nav-btn.glow-pulse {
