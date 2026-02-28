@@ -19,6 +19,7 @@
 </head>
 
 <body>
+  <canvas id="particleBg"></canvas>
   <audio id="audioPlayer" controls hidden></audio>
 
   <!-- ── TAB BAR ── -->
@@ -28,11 +29,15 @@
       <button class="custom-tab"        id="motion-tab"  data-bs-toggle="tab" data-bs-target="#motion"  role="tab" aria-label="Motion"><i class="bi bi-joystick"></i></button>
       <button class="custom-tab"        id="legs-tab"    data-bs-toggle="tab" data-bs-target="#legs"    role="tab" aria-label="Legs"><i class="bi bi-sliders"></i></button>
       <button class="custom-tab"        id="arms-tab"    data-bs-toggle="tab" data-bs-target="#arms"    role="tab" aria-label="Arms"><i class="bi bi-sliders2"></i></button>
+      <button class="custom-tab"        id="nexus-tab"   data-bs-toggle="tab" data-bs-target="#nexus"   role="tab" aria-label="Nexus"><i class="bi bi-cpu"></i></button>
       <button class="custom-tab"        id="config-tab"  data-bs-toggle="tab" data-bs-target="#config"  role="tab" aria-label="Config"><i class="bi bi-gear-fill"></i></button>
       <button class="custom-tab"        id="wifi-tab"    data-bs-toggle="tab" data-bs-target="#wifi"    role="tab" aria-label="WiFi"><i class="bi bi-wifi"></i></button>
       <button class="custom-tab"        id="emotions-tab" data-bs-toggle="tab" data-bs-target="#emotions" role="tab" aria-label="Emotions"><i class="bi bi-emoji-smile"></i></button>
     </div>
     <div class="tab-bar-right">
+      <div class="connection-indicator" id="connIndicator">
+        <span class="conn-dot" id="connDot"></span>
+      </div>
       <div class="tars-watermark">T.A.R.S.</div>
       <button class="custom-tab" id="fullscreen-toggle" onclick="toggleFullscreen()" aria-label="Fullscreen">
         <i class="bi bi-fullscreen" id="fullscreen-icon"></i>
@@ -42,14 +47,44 @@
 
   <!-- ── TAB CONTENT ── -->
   <div class="tab-content" id="myTabContent">
-    {% include 'tabs/chat.html' %}
-    {% include 'tabs/motion.html' %}
-    {% include 'tabs/legs.html' %}
-    {% include 'tabs/arms.html' %}
-    {% include 'tabs/config.html' %}
-    {% include 'tabs/wifi.html' %}
-    {% include 'tabs/emotions.html' %}
+    <div class="swipe-track" id="swipeTrack">
+      {% include 'tabs/chat.html' %}
+      {% include 'tabs/motion.html' %}
+      {% include 'tabs/legs.html' %}
+      {% include 'tabs/arms.html' %}
+      {% include 'tabs/nexus.html' %}
+      {% include 'tabs/config.html' %}
+      {% include 'tabs/wifi.html' %}
+      {% include 'tabs/emotions.html' %}
+    </div>
   </div>
+
+  <!-- ── MOBILE BOTTOM NAV ── -->
+  <nav class="mobile-nav" id="mobileNav">
+    <div class="swipe-dots" id="swipeDots">
+      <span class="swipe-dot active"></span>
+      <span class="swipe-dot"></span>
+      <span class="swipe-dot"></span>
+      <span class="swipe-dot"></span>
+      <span class="swipe-dot"></span>
+      <span class="swipe-dot"></span>
+      <span class="swipe-dot"></span>
+      <span class="swipe-dot"></span>
+    </div>
+    <div class="mobile-nav-buttons">
+      <button class="mobile-nav-btn active" data-tab-index="0" aria-label="Chat"><i class="bi bi-chat-dots-fill"></i><span>Chat</span></button>
+      <button class="mobile-nav-btn" data-tab-index="1" aria-label="Motion"><i class="bi bi-joystick"></i><span>Move</span></button>
+      <button class="mobile-nav-btn" data-tab-index="2" aria-label="Legs"><i class="bi bi-sliders"></i><span>Legs</span></button>
+      <button class="mobile-nav-btn" data-tab-index="3" aria-label="Arms"><i class="bi bi-sliders2"></i><span>Arms</span></button>
+      <button class="mobile-nav-btn" data-tab-index="4" aria-label="Nexus"><i class="bi bi-cpu"></i><span>Nexus</span></button>
+      <button class="mobile-nav-btn" data-tab-index="5" aria-label="Config"><i class="bi bi-gear-fill"></i><span>Config</span></button>
+      <button class="mobile-nav-btn" data-tab-index="6" aria-label="WiFi"><i class="bi bi-wifi"></i><span>WiFi</span></button>
+      <button class="mobile-nav-btn" data-tab-index="7" aria-label="Emotions"><i class="bi bi-emoji-smile"></i><span>Emo</span></button>
+    </div>
+  </nav>
+
+  <!-- Toast notifications -->
+  <div class="toast-container" id="toastContainer"></div>
 
   <!-- Flask → JS bridge -->
   <script>
@@ -62,5 +97,6 @@
   </script>
 
   <script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1,99999)|random }}"></script>
+  <script src="{{ url_for('static', filename='js/particles.js') }}?v={{ range(1,99999)|random }}"></script>
 </body>
 </html>

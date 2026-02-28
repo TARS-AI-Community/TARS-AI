@@ -3,10 +3,14 @@
 
     <!-- Avatar + messages -->
     <div class="chat-body" id="chatBody">
-      <div class="avatar-header">
+      <div class="avatar-header" id="avatarHeader">
         <img id="backgroundImage" src="" alt="Avatar">
         <div class="avatar-glow"></div>
       </div>
+      <button class="avatar-toggle" id="avatarToggle" aria-label="Toggle avatar">
+        <i class="bi bi-chevron-down"></i>
+        <span id="avatarToggleLabel">SHOW AVATAR</span>
+      </button>
       <div class="chat-messages" id="chatMessages">
         <div class="msg-row msg-bot">
           <div class="msg-meta">

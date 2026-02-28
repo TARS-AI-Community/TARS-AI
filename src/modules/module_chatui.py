@@ -1022,6 +1022,99 @@ def eyes_set_mood():
         return jsonify({'success': False, 'error': f'Unknown mood: {mood_name}'}), 400
 
 
+# ── NEXUS DASHBOARD ENDPOINTS ──────────────────────────────────────────────
+
+@flask_app.route('/api/system/metrics', methods=['GET'])
+def system_metrics():
+    """System metrics for the NEXUS dashboard tab."""
+    metrics = {}
+
+    # CPU load (1-min average as percentage of cores)
+    try:
+        load_avg = os.getloadavg()
+        cpu_count = os.cpu_count() or 4
+        metrics['cpu_load'] = round((load_avg[0] / cpu_count) * 100, 1)
+    except Exception:
+        metrics['cpu_load'] = 0
+
+    # RAM usage
+    try:
+        with open('/proc/meminfo') as f:
+            lines = f.readlines()
+        mem_total = int(lines[0].split()[1])
+        mem_available = int(lines[2].split()[1])
+        metrics['ram_usage'] = round((1 - mem_available / mem_total) * 100, 1)
+        metrics['ram_total_mb'] = round(mem_total / 1024)
+    except Exception:
+        metrics['ram_usage'] = 0
+        metrics['ram_total_mb'] = 0
+
+    # CPU temperature
+    try:
+        with open('/sys/class/thermal/thermal_zone0/temp') as f:
+            metrics['cpu_temp'] = round(int(f.read().strip()) / 1000, 1)
+    except Exception:
+        metrics['cpu_temp'] = 0
+
+    # Uptime
+    try:
+        with open('/proc/uptime') as f:
+            metrics['uptime_secs'] = round(float(f.read().split()[0]))
+    except Exception:
+        metrics['uptime_secs'] = 0
+
+    # Current emotion state
+    metrics['emotion'] = emotion or 'neutral'
+
+    # Battery (optional — may not be available on all hardware)
+    try:
+        from modules.module_battery import get_battery_status
+        batt = get_battery_status()
+        metrics['battery'] = {
+            'percentage': batt.get('normalized_percentage', batt.get('percentage', 0)),
+            'voltage': batt.get('voltage', 0),
+            'charging': batt.get('is_charging', False),
+            'state': batt.get('charging_state', 'UNKNOWN'),
+        }
+    except Exception:
+        metrics['battery'] = None
+
+    # Character info
+    metrics['character'] = character_name
+
+    return jsonify(metrics)
+
+
+@flask_app.route('/api/memory/stats', methods=['GET'])
+def memory_stats():
+    """Memory/knowledge graph statistics for the NEXUS dashboard."""
+    stats = {'topics': 0, 'memories': 0, 'topic_list': []}
+
+    # Try to load topic index
+    try:
+        topic_path = os.path.join(BASE_DIR, '..', 'memory', f'{character_name}_topics.json')
+        if os.path.exists(topic_path):
+            with open(topic_path, 'r') as f:
+                topics = json.load(f)
+            stats['topics'] = len(topics)
+            stats['topic_list'] = topics[:20]  # last 20 topics
+    except Exception:
+        pass
+
+    # Try to get memory count
+    try:
+        memory_dir = os.path.join(BASE_DIR, '..', 'memory')
+        lite_path = os.path.join(memory_dir, f'{character_name}_lite.json')
+        if os.path.exists(lite_path):
+            with open(lite_path, 'r') as f:
+                memories = json.load(f)
+            stats['memories'] = len(memories)
+    except Exception:
+        pass
+
+    return jsonify(stats)
+
+
 def start_flask_app(port=None):
     if port is None:
         port = CONFIG['CHATUI'].get('port', 5012)

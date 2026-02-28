@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TARS Walk - Interstellar</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #050510;
+      font-family: sans-serif;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #info {
+      position: absolute;
+      top: 20px;
+      width: 100%;
+      text-align: center;
+      color: #ffffff;
+      font-weight: bold;
+      text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+      pointer-events: none;
+      z-index: 10;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+  </style>
+  <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+</head>
+
+<body>
+  <div id="info">TARS - WASD to Move, Space to Talk<br />LEFCLICK: Rotate | RIGHTCLICK: Pan | SCROLL: Zoom</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // --- ENVIRONMENT CLASS ---
+    class Environment {
+      constructor(scene) {
+        this.scene = scene;
+        this.init();
+      }
+
+      init() {
+        const createRealisticPanelTexture = (color, darkerColor) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1024;
+          canvas.height = 1024;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = color;
+          ctx.fillRect(0, 0, 1024, 1024);
+          for (let i = 0; i < 5000; i++) {
+            ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`;
+            ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 2, 2);
+          }
+          ctx.strokeStyle = darkerColor;
+          ctx.lineWidth = 8;
+          ctx.strokeRect(0, 0, 1024, 1024);
+          ctx.strokeStyle = `rgba(0,0,0,0.1)`;
+          for (let i = 0; i < 15; i++) {
+            ctx.beginPath();
+            ctx.moveTo(Math.random() * 1024, Math.random() * 1024);
+            ctx.lineTo(Math.random() * 1024, Math.random() * 1024);
+            ctx.stroke();
+          }
+          ctx.fillStyle = darkerColor;
+          ctx.font = '12px Courier';
+          ctx.fillText("SEC-B // ARM-42", 50, 100);
+          ctx.fillText("CAUTION: PRESSURIZED", 800, 900);
+          return new THREE.CanvasTexture(canvas);
+        };
+
+        const wallTexture = createRealisticPanelTexture('#d0d0d0', '#606060');
+        const floorTexture = createRealisticPanelTexture('#333333', '#111111');
+
+        const wallMaterial = new THREE.MeshPhysicalMaterial({ map: wallTexture, roughness: 0.5, metalness: 0.4, clearcoat: 0.1 });
+        const floorMaterial = new THREE.MeshPhysicalMaterial({ map: floorTexture, roughness: 0.7, metalness: 0.6 });
+        const ribMaterial = new THREE.MeshPhysicalMaterial({ color: 0x444444, roughness: 0.3, metalness: 0.8 });
+        const emissionMaterial = new THREE.MeshBasicMaterial({ color: 0xccffff });
+
+        const corridorGroup = new THREE.Group();
+        this.scene.add(corridorGroup);
+
+        const corridorLength = 200;
+        const corridorWidth = 14;
+        const wallHeight = 12;
+
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(corridorWidth, corridorLength), floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        corridorGroup.add(floor);
+
+        const wallGeo = new THREE.PlaneGeometry(corridorLength, wallHeight);
+        const leftWall = new THREE.Mesh(wallGeo, wallMaterial);
+        leftWall.position.set(-corridorWidth / 2, wallHeight / 2, 0);
+        leftWall.rotation.y = Math.PI / 2;
+        leftWall.receiveShadow = true;
+        corridorGroup.add(leftWall);
+
+        const rightWall = new THREE.Mesh(wallGeo, wallMaterial);
+        rightWall.position.set(corridorWidth / 2, wallHeight / 2, 0);
+        rightWall.rotation.y = -Math.PI / 2;
+        rightWall.receiveShadow = true;
+        corridorGroup.add(rightWall);
+
+        const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(corridorWidth, corridorLength), wallMaterial);
+        ceiling.position.y = wallHeight;
+        ceiling.rotation.x = Math.PI / 2;
+        corridorGroup.add(ceiling);
+
+        for (let z = -corridorLength / 2; z < corridorLength / 2; z += 15) {
+          const rib = new THREE.Group();
+          const leftCol = new THREE.Mesh(new THREE.BoxGeometry(1, wallHeight, 1.5), ribMaterial);
+          leftCol.position.set(-corridorWidth / 2, wallHeight / 2, z);
+          rib.add(leftCol);
+          const rightCol = new THREE.Mesh(new THREE.BoxGeometry(1, wallHeight, 1.5), ribMaterial);
+          rightCol.position.set(corridorWidth / 2, wallHeight / 2, z);
+          rib.add(rightCol);
+          const topBeam = new THREE.Mesh(new THREE.BoxGeometry(corridorWidth + 1, 1, 1.5), ribMaterial);
+          topBeam.position.set(0, wallHeight, z);
+          rib.add(topBeam);
+          corridorGroup.add(rib);
+
+          const light = new THREE.PointLight(0xccffff, 15, 30, 2);
+          light.position.set(0, wallHeight - 1, z);
+          corridorGroup.add(light);
+
+          const panel = new THREE.Mesh(new THREE.PlaneGeometry(4, 0.5), emissionMaterial);
+          panel.position.set(0, wallHeight - 0.45, z + 0.76);
+          panel.rotation.x = Math.PI / 2;
+          corridorGroup.add(panel);
+        }
+
+        const pipeGeo = new THREE.CylinderGeometry(0.15, 0.15, corridorLength);
+        const pipeMat = new THREE.MeshPhysicalMaterial({ color: 0x222222, metalness: 0.9, roughness: 0.1 });
+        const pipe1 = new THREE.Mesh(pipeGeo, pipeMat);
+        pipe1.rotation.x = Math.PI / 2;
+        pipe1.position.set(-corridorWidth / 2 + 0.5, wallHeight - 2, 0);
+        corridorGroup.add(pipe1);
+      }
+    }
+
+    // --- TARS CLASS ---
+    class Tars {
+      constructor(scene) {
+        this.scene = scene;
+        this.mesh = new THREE.Group();
+        this.scene.add(this.mesh);
+
+        this.segWidth = 1.4;
+        this.segHeight = 7.0;
+        this.segDepth = 2.1;
+        this.gap = 0.15;
+
+        this.segments = [];
+        this.initGeometry();
+
+        this.state = 'IDLE';
+        this.walkTime = 0;
+        this.speed = 2.0;
+        this.turnSpeed = 2.0;
+
+        this.turnTime = 0;
+        this.turnDirection = 0;
+        this.isTurning = false;
+        this.turnPhase = 0;
+        this.turnPivotAngle = Math.PI / 6;
+      }
+
+      initGeometry() {
+        const createOuterTexture = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 512; canvas.height = 1024;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#1a1a1a';
+          ctx.fillRect(0, 0, 512, 1024);
+          const gridHeight = 350;
+          const step = 64;
+          ctx.fillStyle = '#222222';
+          ctx.strokeStyle = '#111111';
+          ctx.lineWidth = 4;
+          for (let y = 0; y < gridHeight; y += step) {
+            for (let x = 0; x < 512; x += step) {
+              ctx.fillRect(x + 2, y + 2, step - 4, step - 4);
+              ctx.strokeRect(x, y, step, step);
+            }
+          }
+          ctx.fillStyle = 'rgba(255,255,255,0.02)';
+          for (let i = 0; i < 1000; i++) ctx.fillRect(Math.random() * 512, Math.random() * 1024, 2, 2);
+          return new THREE.CanvasTexture(canvas);
+        };
+
+        const createCenterTexture = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1024; canvas.height = 1024;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#bbbbbb';
+          ctx.fillRect(0, 0, 1024, 1024);
+          ctx.fillStyle = '#111111';
+          ctx.fillRect(0, 750, 1024, 120);
+          ctx.fillRect(0, 150, 150, 100);
+          ctx.fillRect(874, 150, 150, 100);
+          ctx.strokeStyle = '#888888';
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(512, 0); ctx.lineTo(512, 1024); ctx.stroke();
+          [300, 450, 600, 900].forEach(y => {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1024, y); ctx.stroke();
+          });
+          ctx.fillStyle = '#cca300';
+          ctx.font = 'bold 80px monospace';
+          ctx.save();
+          ctx.translate(140, 500);
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillText("TARS", 0, 0);
+          for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 2; j++) {
+              ctx.beginPath(); ctx.arc(140 + i * 20, -50 + j * 20, 6, 0, Math.PI * 2); ctx.fill();
+            }
+          }
+          ctx.restore();
+          return new THREE.CanvasTexture(canvas);
+        };
+
+        const createScreenTexture = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256; canvas.height = 512;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#001133';
+          ctx.fillRect(0, 0, 256, 512);
+          ctx.fillStyle = '#00aaff';
+          ctx.fillRect(10, 10, 236, 30);
+          for (let i = 60; i < 450; i += 10) {
+            const width = Math.random() * 100 + 10;
+            ctx.fillStyle = `rgba(0, 170, 255, ${Math.random()})`;
+            ctx.fillRect(10, i, width, 4);
+          }
+          ctx.strokeStyle = '#00aaff';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(40, 150, 176, 200);
+          return new THREE.CanvasTexture(canvas);
+        };
+
+        const outerMaterial = new THREE.MeshStandardMaterial({ map: createOuterTexture(), color: 0xffffff, roughness: 0.7, metalness: 0.3 });
+        const centerMaterial = new THREE.MeshStandardMaterial({ map: createCenterTexture(), color: 0xffffff, roughness: 0.4, metalness: 0.6 });
+        const screenMaterial = new THREE.MeshBasicMaterial({ map: createScreenTexture(), color: 0xffffff });
+
+        const legWidth = this.segWidth;
+        const bodyWidth = (this.segWidth * 2) + this.gap;
+
+        const configs = [
+          { width: legWidth, mat: outerMaterial, x: -(bodyWidth / 2 + legWidth / 2 + this.gap) },
+          { width: bodyWidth, mat: centerMaterial, x: 0 },
+          { width: legWidth, mat: outerMaterial, x: (bodyWidth / 2 + legWidth / 2 + this.gap) }
+        ];
+
+        configs.forEach((cfg, i) => {
+          const geometry = new THREE.BoxGeometry(cfg.width, this.segHeight, this.segDepth);
+          const mesh = new THREE.Mesh(geometry, cfg.mat);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+
+          const pivotY = this.segHeight - 0.2;
+          const pivot = new THREE.Group();
+          pivot.position.set(cfg.x, pivotY, 0);
+          mesh.position.y = (this.segHeight / 2) - pivotY;
+          pivot.add(mesh);
+
+          if (i === 1) {
+            const screenW = bodyWidth * 0.6;
+            const screenH = this.segHeight * 0.4;
+            const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(screenW, screenH), screenMaterial);
+            screenMesh.position.set(0, 0.3, (this.segDepth / 2) + 0.01);
+            mesh.add(screenMesh);
+            const light = new THREE.PointLight(0x00aaff, 0.3, 1.5);
+            light.position.set(0, 0.3, this.segDepth / 2 + 0.2);
+            mesh.add(light);
+          }
+          this.mesh.add(pivot);
+          this.segments.push({ pivot, mesh });
+        });
+        this.mesh.position.y = 0;
+      }
+
+      update(delta, keys) {
+        const isWalking = keys.w || keys.s;
+        this.state = isWalking ? 'WALK' : 'IDLE';
+
+        if (keys.w) this.walk(delta, 1);
+        else if (keys.s) this.walk(delta, -1);
+        else this.resetWalk(delta);
+
+        if (keys.a && !this.isTurning) this.startTurn(1);
+        if (keys.d && !this.isTurning) this.startTurn(-1);
+        if (this.isTurning) this.animateTurn(delta);
+
+        if (keys.t) this.talk(delta);
+        else this.resetTalk(delta);
+      }
+
+      startTurn(direction) {
+        this.isTurning = true;
+        this.turnDirection = direction;
+        this.turnTime = 0;
+        this.turnPhase = 1;
+      }
+
+      animateTurn(delta) {
+        this.turnTime += delta * 4;
+        const maxSwing = 0.35;
+        if (this.turnPhase === 1) {
+          const progress = Math.min(this.turnTime, 1);
+          const swing = maxSwing * progress;
+          this.segments[0].pivot.rotation.x = swing * this.turnDirection;
+          this.segments[2].pivot.rotation.x = -swing * this.turnDirection;
+          if (this.turnTime >= 1) { this.turnTime = 0; this.turnPhase = 2; }
+        } else if (this.turnPhase === 2) {
+          const progress = Math.min(this.turnTime, 1);
+          const swing = maxSwing * (1 - progress);
+          this.segments[0].pivot.rotation.x = swing * this.turnDirection;
+          this.segments[2].pivot.rotation.x = -swing * this.turnDirection;
+          this.mesh.rotation.y += (this.turnPivotAngle * this.turnDirection * delta * 4);
+          if (this.turnTime >= 1) {
+            this.segments[0].pivot.rotation.x = 0;
+            this.segments[2].pivot.rotation.x = 0;
+            this.isTurning = false;
+            this.turnPhase = 0;
+          }
+        }
+      }
+
+      walk(delta, direction) {
+        this.walkTime += delta * this.speed * 4;
+        const angle = Math.sin(this.walkTime) * 0.3;
+        this.segments[0].pivot.rotation.x = -angle * direction;
+        this.segments[2].pivot.rotation.x = -angle * direction;
+        this.segments[1].pivot.rotation.x = angle * direction;
+        const moveSpeed = this.speed * delta * direction;
+        this.mesh.translateZ(moveSpeed);
+
+        const boundX = 4.0;
+        const boundZ = 95;
+        this.mesh.position.x = Math.max(-boundX, Math.min(boundX, this.mesh.position.x));
+        this.mesh.position.z = Math.max(-boundZ, Math.min(boundZ, this.mesh.position.z));
+      }
+
+      resetWalk(delta) {
+        const speed = 10 * delta;
+        this.segments.forEach(seg => {
+          if (seg.pivot.rotation.x > 0.01) seg.pivot.rotation.x -= speed;
+          else if (seg.pivot.rotation.x < -0.01) seg.pivot.rotation.x += speed;
+          else seg.pivot.rotation.x = 0;
+        });
+      }
+
+      talk(delta) {
+        this.segments[1].pivot.rotation.x = Math.sin(Date.now() * 0.8) * 0.03;
+      }
+
+      resetTalk(delta) {
+        if (this.state !== 'WALK') this.segments[1].pivot.rotation.x = 0;
+      }
+    }
+
+    // --- MAIN LOGIC ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050510);
+    scene.fog = new THREE.FogExp2(0x050510, 0.015);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 8, 20);
+    camera.lookAt(0, 3.5, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const environment = new Environment(scene);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight.position.set(5, 10, 5);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    const tars = new Tars(scene);
+
+    // Camera Controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.screenSpacePanning = true;
+    controls.minDistance = 10;
+    controls.maxDistance = 35;
+    controls.maxPolarAngle = Math.PI / 2; // Don't go below floor
+    controls.target.set(0, 3.5, 0);
+
+    const keys = { w: false, a: false, s: false, d: false, t: false };
+
+    window.addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      if (keys.hasOwnProperty(key)) keys[key] = true;
+      if (e.code === 'Space') keys.t = true;
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const key = e.key.toLowerCase();
+      if (keys.hasOwnProperty(key)) keys[key] = false;
+      if (e.code === 'Space') keys.t = false;
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      tars.update(delta, keys);
+
+      // Update camera target to follow TARS
+      controls.target.copy(tars.mesh.position);
+      controls.target.y += 3.5;
+      controls.update();
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+
+</html>

@@ -100,6 +100,7 @@
       const d = await r.json();
       if (!r.ok || !d.success) throw new Error(d.error || 'Connection failed');
       msg.textContent = '✓ Connected! Hotspot shutting down…'; msg.className = 'wf-msg wf-msg-ok';
+      if (window.showToast) showToast('WiFi connected to ' + wfSelected.ssid, 'success');
       setTimeout(() => { $('wfConfirmOverlay').style.display = 'none'; wfDeselect(); loadStatus(); }, 2500);
     } catch (e) {
       msg.textContent = '✗ ' + e.message; msg.className = 'wf-msg wf-msg-err';
@@ -258,9 +259,25 @@ document.addEventListener('DOMContentLoaded', function () {
   const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
   socket.on('bot_message',    d => displayBotMessage(d.message));
   socket.on('user_message',   d => displayUserMessage(d.message));
-  socket.on('disconnect',     () => setTimeout(() => socket.connect(), 5000));
   socket.on('talking_state',  d => { avatarIsTalking = d.talking; });
   socket.on('emotion_change', d => preloadAvatarSprites(d));
+
+  // Connection status indicator
+  const connDot = document.getElementById('connDot');
+  socket.on('connect', () => {
+    if (connDot) { connDot.className = 'conn-dot'; }
+  });
+  socket.on('disconnect', () => {
+    if (connDot) { connDot.className = 'conn-dot disconnected'; }
+    if (window.showToast) showToast('Connection lost — reconnecting...', 'error');
+    setTimeout(() => {
+      if (connDot) connDot.className = 'conn-dot reconnecting';
+      socket.connect();
+    }, 2000);
+  });
+  socket.on('reconnect_attempt', () => {
+    if (connDot) { connDot.className = 'conn-dot reconnecting'; }
+  });
 
   function formatText(text) {
     if (!text) return '';
@@ -353,14 +370,45 @@ document.addEventListener('DOMContentLoaded', function () {
   const nameEl = document.getElementById('bot-name');
   if (nameEl && window.APP_CONFIG?.charName) nameEl.textContent = window.APP_CONFIG.charName;
 
-  // Avatar toggle — click header to collapse/expand
+  // Avatar toggle — click header to collapse, click toggle bar to expand/collapse
   const avatarHeader = document.querySelector('.avatar-header');
+  const avatarToggle = document.getElementById('avatarToggle');
+  const avatarToggleLabel = document.getElementById('avatarToggleLabel');
+
+  function updateAvatarToggle(isCollapsed) {
+    if (!avatarToggle) return;
+    if (isCollapsed) {
+      avatarToggle.classList.add('collapsed-state');
+      avatarToggle.classList.remove('expanded');
+      if (avatarToggleLabel) avatarToggleLabel.textContent = 'SHOW AVATAR';
+    } else {
+      avatarToggle.classList.remove('collapsed-state');
+      avatarToggle.classList.add('expanded');
+      if (avatarToggleLabel) avatarToggleLabel.textContent = 'HIDE';
+    }
+  }
+
   if (avatarHeader) {
-    if (localStorage.getItem('avatarHidden') === '1') avatarHeader.classList.add('collapsed');
+    const startCollapsed = localStorage.getItem('avatarHidden') === '1';
+    if (startCollapsed) avatarHeader.classList.add('collapsed');
+    updateAvatarToggle(startCollapsed);
+
+    // Click avatar image to collapse it
     avatarHeader.addEventListener('click', () => {
-      avatarHeader.classList.toggle('collapsed');
-      localStorage.setItem('avatarHidden', avatarHeader.classList.contains('collapsed') ? '1' : '0');
+      avatarHeader.classList.add('collapsed');
+      localStorage.setItem('avatarHidden', '1');
+      updateAvatarToggle(true);
     });
+
+    // Click toggle bar to expand or collapse
+    if (avatarToggle) {
+      avatarToggle.addEventListener('click', () => {
+        const willCollapse = !avatarHeader.classList.contains('collapsed');
+        avatarHeader.classList.toggle('collapsed');
+        localStorage.setItem('avatarHidden', willCollapse ? '1' : '0');
+        updateAvatarToggle(willCollapse);
+      });
+    }
   }
 });
 
@@ -730,13 +778,14 @@ function executeAction() {
         if (d.success) {
           saveBtn.innerHTML='<i class="bi bi-check-circle-fill"></i> Saved!';
           saveBtn.classList.add('hud-btn-success');
+          if (window.showToast) showToast('Configuration saved', 'success');
           setTimeout(()=>{ saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; },2000);
-        } else { saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; alert('Error: '+(d.error||'Unknown')); }
+        } else { saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; if (window.showToast) showToast('Error: '+(d.error||'Unknown'), 'error'); }
       }).catch(err=>{ saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; alert('Error: '+err.message); });
   }
 
   const configTab = $('config-tab');
-  if (configTab) configTab.addEventListener('click', () => {
+  if (configTab) configTab.addEventListener('shown.bs.tab', () => {
     if ($('configForm').innerHTML.includes('Loading')) loadConfiguration();
   });
 
@@ -789,6 +838,414 @@ document.addEventListener('fullscreenchange', () => {
   const icon = $('fullscreen-icon');
   if (icon) icon.className = document.fullscreenElement ? 'bi bi-fullscreen-exit' : 'bi bi-fullscreen';
 });
+
+
+// ── TOAST NOTIFICATIONS ──────────────────────────────────────────────────────
+window.showToast = function (message, type, duration) {
+  type = type || 'info';
+  duration = duration || 3000;
+  var container = document.getElementById('toastContainer');
+  if (!container) return;
+  var toast = document.createElement('div');
+  toast.className = 'toast-msg toast-' + type;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(function () {
+    toast.classList.add('toast-out');
+    toast.addEventListener('animationend', function () { toast.remove(); });
+  }, duration);
+};
+
+
+// ── NEXUS DASHBOARD ──────────────────────────────────────────────────────────
+(function () {
+  var nexusActive = false;
+  var moodHistory = [];   // [{emotion, timestamp}] — last 50 entries
+  var consoleLines = [];  // rolling buffer of console strings
+  var MAX_CONSOLE = 80;
+  var pollInterval = null;
+
+  // Emotion → color mapping
+  var EMOTION_COLORS = {
+    neutral: '#00e5ff', happy: '#39ff14', sad: '#4488ff', angry: '#ff4444',
+    excited: '#ffb700', afraid: '#ff00ff', sleepy: '#3d5a6e',
+    curious: '#00e5ff', love: '#ff69b4', surprise: '#ffcc00'
+  };
+
+  function formatUptime(secs) {
+    var d = Math.floor(secs / 86400);
+    var h = Math.floor((secs % 86400) / 3600);
+    var m = Math.floor((secs % 3600) / 60);
+    if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
+    if (h > 0) return h + 'h ' + m + 'm';
+    return m + 'm';
+  }
+
+  function consolePush(msg) {
+    consoleLines.push(msg);
+    if (consoleLines.length > MAX_CONSOLE) consoleLines.shift();
+    var el = document.getElementById('nxConsole');
+    if (!el) return;
+    el.innerHTML = consoleLines.map(function (l) {
+      return '<div class="nexus-console-line">' + l + '</div>';
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function updateMetrics(data) {
+    var cpuEl = document.getElementById('nxCpu');
+    var ramEl = document.getElementById('nxRam');
+    var tempEl = document.getElementById('nxTemp');
+    var cpuBar = document.getElementById('nxCpuBar');
+    var ramBar = document.getElementById('nxRamBar');
+    var tempBar = document.getElementById('nxTempBar');
+
+    if (cpuEl)  cpuEl.textContent = data.cpu_load + '%';
+    if (ramEl)  ramEl.textContent = data.ram_usage + '%';
+    if (tempEl) tempEl.textContent = data.cpu_temp + '°C';
+    if (cpuBar) cpuBar.style.width = Math.min(data.cpu_load, 100) + '%';
+    if (ramBar) ramBar.style.width = Math.min(data.ram_usage, 100) + '%';
+    if (tempBar) tempBar.style.width = Math.min((data.cpu_temp / 85) * 100, 100) + '%';
+
+    // State badge
+    var stateText = document.getElementById('nxStateText');
+    if (stateText) stateText.textContent = (data.emotion || 'neutral').toUpperCase();
+
+    // System info
+    var charEl = document.getElementById('nxCharName');
+    if (charEl) charEl.textContent = data.character || '--';
+
+    var uptimeEl = document.getElementById('nxUptime');
+    if (uptimeEl) uptimeEl.textContent = formatUptime(data.uptime_secs || 0);
+
+    // Battery
+    var battEl = document.getElementById('nxBattery');
+    if (battEl && data.battery) {
+      var pct = Math.round(data.battery.percentage || 0);
+      var icon = data.battery.charging ? '⚡' : '';
+      battEl.textContent = pct + '% ' + icon + (data.battery.voltage ? ' (' + data.battery.voltage.toFixed(1) + 'V)' : '');
+    } else if (battEl) {
+      battEl.textContent = 'N/A';
+    }
+
+    // Console log entry
+    consolePush('&gt; [TARS_CORE] CPU: ' + data.cpu_load + '% | RAM: ' + data.ram_usage + '% | ' + data.cpu_temp + '°C | State: ' + (data.emotion || 'neutral'));
+
+    // Track mood history
+    var emo = (data.emotion || 'neutral').toLowerCase();
+    var last = moodHistory.length ? moodHistory[moodHistory.length - 1].emotion : null;
+    if (emo !== last || moodHistory.length === 0) {
+      moodHistory.push({ emotion: emo, timestamp: Date.now() });
+      if (moodHistory.length > 50) moodHistory.shift();
+      updateMoodTags(emo);
+    }
+
+    drawMoodChart();
+  }
+
+  function updateMoodTags(current) {
+    var container = document.getElementById('nxMoodTags');
+    if (!container) return;
+    // collect unique recent emotions
+    var seen = {};
+    var tags = [];
+    for (var i = moodHistory.length - 1; i >= 0 && tags.length < 5; i--) {
+      var e = moodHistory[i].emotion;
+      if (!seen[e]) { seen[e] = true; tags.unshift(e); }
+    }
+    container.innerHTML = tags.map(function (e) {
+      return '<span class="nexus-mood-tag' + (e === current ? ' active' : '') + '">' + e.toUpperCase() + '</span>';
+    }).join('');
+  }
+
+  function drawMoodChart() {
+    var canvas = document.getElementById('nxMoodCanvas');
+    if (!canvas || moodHistory.length < 2) return;
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width = canvas.offsetWidth * (window.devicePixelRatio > 1 ? 2 : 1);
+    var h = canvas.height = canvas.offsetHeight * (window.devicePixelRatio > 1 ? 2 : 1);
+    ctx.clearRect(0, 0, w, h);
+
+    // map emotion to a numeric value for charting
+    var EMOTION_VALUES = {
+      angry: 0, afraid: 0.15, sad: 0.25, sleepy: 0.35,
+      neutral: 0.5, curious: 0.6, happy: 0.75, love: 0.8,
+      excited: 0.9, surprise: 0.85
+    };
+
+    var points = moodHistory.map(function (m) {
+      return EMOTION_VALUES[m.emotion] !== undefined ? EMOTION_VALUES[m.emotion] : 0.5;
+    });
+
+    var padding = 10;
+    var graphW = w - padding * 2;
+    var graphH = h - padding * 2;
+
+    // draw subtle grid lines
+    ctx.strokeStyle = 'rgba(0,229,255,0.06)';
+    ctx.lineWidth = 1;
+    for (var gy = 0; gy <= 4; gy++) {
+      var y = padding + (gy / 4) * graphH;
+      ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(w - padding, y); ctx.stroke();
+    }
+
+    // draw line
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(0,229,255,0.7)';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    for (var i = 0; i < points.length; i++) {
+      var x = padding + (i / (points.length - 1)) * graphW;
+      var y2 = padding + (1 - points[i]) * graphH;
+      if (i === 0) ctx.moveTo(x, y2);
+      else ctx.lineTo(x, y2);
+    }
+    ctx.stroke();
+
+    // glow fill under line
+    var grad = ctx.createLinearGradient(0, padding, 0, h - padding);
+    grad.addColorStop(0, 'rgba(0,229,255,0.12)');
+    grad.addColorStop(1, 'rgba(0,229,255,0)');
+    ctx.lineTo(w - padding, h - padding);
+    ctx.lineTo(padding, h - padding);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // draw dots on data points
+    for (var j = 0; j < points.length; j++) {
+      var px = padding + (j / (points.length - 1)) * graphW;
+      var py = padding + (1 - points[j]) * graphH;
+      var emo2 = moodHistory[j].emotion;
+      ctx.beginPath();
+      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.fillStyle = EMOTION_COLORS[emo2] || 'var(--cyan)';
+      ctx.fill();
+    }
+  }
+
+  function fetchMetrics() {
+    fetch('/api/system/metrics')
+      .then(function (r) { return r.json(); })
+      .then(updateMetrics)
+      .catch(function () {
+        consolePush('&gt; [ERROR] Failed to fetch system metrics');
+      });
+  }
+
+  function fetchMemoryStats() {
+    fetch('/api/memory/stats')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var topicsEl = document.getElementById('nxTopics');
+        var memEl = document.getElementById('nxMemories');
+        if (topicsEl) topicsEl.textContent = data.topics || 0;
+        if (memEl) memEl.textContent = data.memories || 0;
+      })
+      .catch(function () {});
+  }
+
+  // Start polling when nexus tab is shown
+  document.addEventListener('DOMContentLoaded', function () {
+    var nexusTab = document.getElementById('nexus-tab');
+    if (!nexusTab) return;
+
+    nexusTab.addEventListener('shown.bs.tab', function () {
+      nexusActive = true;
+      fetchMetrics();
+      fetchMemoryStats();
+      if (!pollInterval) {
+        pollInterval = setInterval(function () {
+          if (nexusActive) fetchMetrics();
+        }, 5000); // poll every 5s
+      }
+    });
+
+    nexusTab.addEventListener('hide.bs.tab', function () {
+      nexusActive = false;
+    });
+  });
+})();
+
+
+// ── MOBILE SWIPE NAV ─────────────────────────────────────────────────────────
+(function () {
+  const TAB_IDS = ['chat', 'motion', 'legs', 'arms', 'nexus', 'config', 'wifi', 'emotions'];
+  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'legs-tab', 'arms-tab', 'nexus-tab', 'config-tab', 'wifi-tab', 'emotions-tab'];
+  let currentIndex = 0;
+  let isMobile = false;
+
+  // mobile detection
+  const mobileQuery = window.matchMedia('(max-width: 768px)');
+  const landscapeQuery = window.matchMedia('(max-width: 900px) and (orientation: landscape) and (max-height: 500px)');
+
+  function checkMobile() {
+    isMobile = mobileQuery.matches || landscapeQuery.matches;
+  }
+  checkMobile();
+  mobileQuery.addEventListener('change', checkMobile);
+  landscapeQuery.addEventListener('change', checkMobile);
+
+  // swipe state
+  let touchStartX = 0, touchStartY = 0, touchDeltaX = 0;
+  let direction = null; // null | 'horizontal' | 'vertical'
+  let isSwiping = false;
+
+  const SWIPE_THRESHOLD = 40;
+  const DIRECTION_LOCK = 12; // px before locking direction
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const track = document.getElementById('swipeTrack');
+    const tabContent = document.getElementById('myTabContent');
+    const dots = document.querySelectorAll('.swipe-dot');
+    const navBtns = document.querySelectorAll('.mobile-nav-btn');
+
+    if (!track || !tabContent) return;
+
+    // ── Touch handlers ──
+    tabContent.addEventListener('touchstart', function (e) {
+      if (!isMobile) return;
+      direction = null;
+      isSwiping = false;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchDeltaX = 0;
+      track.classList.remove('animating');
+    }, { passive: true });
+
+    tabContent.addEventListener('touchmove', function (e) {
+      if (!isMobile) return;
+
+      const dx = e.touches[0].clientX - touchStartX;
+      const dy = e.touches[0].clientY - touchStartY;
+
+      // lock direction after initial movement
+      if (!direction) {
+        if (Math.abs(dx) > DIRECTION_LOCK || Math.abs(dy) > DIRECTION_LOCK) {
+          direction = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+        }
+      }
+
+      if (direction !== 'horizontal') return;
+
+      // prevent vertical scroll while swiping horizontally
+      e.preventDefault();
+      isSwiping = true;
+
+      touchDeltaX = dx;
+      const baseOffset = -currentIndex * 100;
+
+      // rubber-band at edges
+      let pctDelta = (dx / tabContent.offsetWidth) * 100;
+      if ((currentIndex === 0 && dx > 0) || (currentIndex === TAB_IDS.length - 1 && dx < 0)) {
+        pctDelta *= 0.25; // resistance at bounds
+      }
+
+      track.style.transform = 'translateX(' + (baseOffset + pctDelta) + '%)';
+    }, { passive: false });
+
+    function onTouchFinish() {
+      if (!isMobile || !isSwiping) return;
+      isSwiping = false;
+
+      let newIndex = currentIndex;
+
+      if (Math.abs(touchDeltaX) > SWIPE_THRESHOLD) {
+        if (touchDeltaX < 0 && currentIndex < TAB_IDS.length - 1) {
+          newIndex = currentIndex + 1; // swipe left → next
+        } else if (touchDeltaX > 0 && currentIndex > 0) {
+          newIndex = currentIndex - 1; // swipe right → prev
+        }
+      }
+
+      goToTab(newIndex, true);
+    }
+
+    tabContent.addEventListener('touchend', onTouchFinish);
+    tabContent.addEventListener('touchcancel', onTouchFinish);
+
+    // ── Mobile nav button clicks ──
+    navBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const idx = parseInt(this.getAttribute('data-tab-index'));
+        if (!isNaN(idx)) goToTab(idx, true);
+      });
+    });
+
+    // ── Core tab switching ──
+    function goToTab(index, animated) {
+      if (index < 0 || index >= TAB_IDS.length) return;
+
+      const oldIndex = currentIndex;
+      currentIndex = index;
+
+      if (isMobile) {
+        // animate swipe-track
+        if (animated) {
+          track.classList.add('animating');
+          var onEnd = function () {
+            track.classList.remove('animating');
+            track.removeEventListener('transitionend', onEnd);
+          };
+          track.addEventListener('transitionend', onEnd);
+        }
+        track.style.transform = 'translateX(-' + (index * 100) + '%)';
+      }
+
+      // always trigger Bootstrap Tab for event compatibility
+      var tabBtn = document.getElementById(TAB_BTN_IDS[index]);
+      if (tabBtn && typeof bootstrap !== 'undefined') {
+        new bootstrap.Tab(tabBtn).show();
+      }
+
+      // update mobile nav active state
+      updateMobileNav(index);
+      updateDots(index);
+    }
+
+    function updateMobileNav(index) {
+      navBtns.forEach(function (btn, i) {
+        btn.classList.toggle('active', i === index);
+        if (i === index) {
+          btn.classList.remove('glow-pulse');
+          // force reflow to restart animation
+          void btn.offsetWidth;
+          btn.classList.add('glow-pulse');
+        }
+      });
+    }
+
+    function updateDots(index) {
+      dots.forEach(function (dot, i) {
+        dot.classList.toggle('active', i === index);
+      });
+    }
+
+    // ── Sync desktop tab clicks with swipe state ──
+    document.querySelectorAll('.custom-tab[data-bs-toggle="tab"]').forEach(function (tab) {
+      tab.addEventListener('shown.bs.tab', function () {
+        var target = this.getAttribute('data-bs-target');
+        if (!target) return;
+        var tabId = target.replace('#', '');
+        var idx = TAB_IDS.indexOf(tabId);
+        if (idx !== -1 && idx !== currentIndex) {
+          currentIndex = idx;
+          if (isMobile) {
+            track.style.transform = 'translateX(-' + (idx * 100) + '%)';
+          }
+          updateMobileNav(idx);
+          updateDots(idx);
+        }
+      });
+    });
+
+    // expose for other modules
+    window.switchTab = goToTab;
+    window.getCurrentTabIndex = function () { return currentIndex; };
+  });
+})();
 
 
 // ── UTIL: shorthand getElementById ───────────────────────────────────────────
