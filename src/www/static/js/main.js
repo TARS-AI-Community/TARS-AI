@@ -707,7 +707,7 @@ function executeAction() {
 
       document.querySelectorAll('.config-toggle').forEach(t => {
         t.addEventListener('change', function () {
-          const lbl = document.getElementById(this.id+'_label');
+          const lbl = this.parentElement.querySelector('.form-check-label');
           if (lbl) lbl.textContent = this.checked ? 'Enabled' : 'Disabled';
         });
       });
