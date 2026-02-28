@@ -501,6 +501,7 @@ body::after {
   flex-direction: column;
   height: 100%;
   width: 100%;
+  padding: 10px 10px 0;
 }
 
 .chat-body {
@@ -508,11 +509,11 @@ body::after {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  margin: 10px 10px 0;
   background: transparent;
   border: none;
   border-radius: var(--radius);
   position: relative;
+  min-height: 0;
 }
 
 /* avatar */
@@ -526,13 +527,53 @@ body::after {
   cursor: pointer;
   overflow: hidden;
   max-height: 300px;
-  transition: max-height 0.35s var(--ease), padding 0.35s var(--ease), border-color 0.35s var(--ease);
+  transition: max-height 0.35s var(--ease), padding 0.35s var(--ease);
+  -webkit-tap-highlight-color: transparent;
 }
 
+/* Collapsed: shrink to bar height, hide image via overflow */
 .avatar-header.collapsed {
-  max-height: 0;
+  max-height: 48px;
   padding: 0;
-  border-bottom-color: transparent;
+  border-bottom: 2px solid rgba(0, 229, 255, 0.5);
+}
+
+/* Hide image when collapsed — remove from flow so ::after is visible */
+.avatar-header.collapsed #backgroundImage,
+.avatar-header.collapsed .avatar-glow {
+  display: none;
+}
+
+/* "SHOW AVATAR" bar via pseudo-element — no extra HTML needed */
+.avatar-header::after {
+  content: '\25B2  SHOW AVATAR';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 48px;
+  background: rgba(0, 229, 255, 0.15);
+  border-top: 2px solid rgba(0, 229, 255, 0.5);
+  color: var(--cyan);
+  font-size: 13px;
+  font-family: var(--font-hud);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+  box-shadow: 0 0 24px rgba(0, 229, 255, 0.18) inset;
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+  pointer-events: none;
+}
+
+.avatar-header.collapsed::after {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.avatar-header.collapsed:hover::after {
+  background: rgba(0, 229, 255, 0.25);
+  color: #fff;
 }
 
 #backgroundImage {
@@ -558,64 +599,6 @@ body::after {
   width: 60%; height: 40px;
   background: radial-gradient(ellipse, rgba(0,229,255,0.12), transparent 70%);
   pointer-events: none;
-}
-
-/* Avatar show/hide toggle button — always a full-width bar */
-.avatar-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  height: 34px;
-  flex-shrink: 0;
-  background: rgba(14, 26, 48, 0.75);
-  border: none;
-  border-top: 1px solid rgba(0, 229, 255, 0.2);
-  border-bottom: 1px solid rgba(0, 229, 255, 0.2);
-  color: var(--cyan);
-  cursor: pointer;
-  font-size: 11px;
-  font-family: var(--font-hud);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  transition: background 0.2s, box-shadow 0.2s;
-  -webkit-tap-highlight-color: transparent;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 0 12px rgba(0, 229, 255, 0.06) inset;
-}
-
-.avatar-toggle:hover {
-  background: rgba(0, 229, 255, 0.1);
-  color: #fff;
-}
-
-.avatar-toggle:active {
-  background: rgba(0, 229, 255, 0.15);
-}
-
-.avatar-toggle i {
-  font-size: 13px;
-  transition: transform 0.3s var(--ease);
-}
-
-/* Chevron flips up when avatar is visible */
-.avatar-toggle.expanded i {
-  transform: rotate(180deg);
-}
-
-/* Extra glow when avatar is hidden — it's the only way back */
-.avatar-toggle.collapsed-state {
-  height: 44px;
-  font-size: 12px;
-  background: rgba(0, 229, 255, 0.12);
-  border-top: 2px solid rgba(0, 229, 255, 0.5);
-  border-bottom: 2px solid rgba(0, 229, 255, 0.5);
-  box-shadow: 0 0 24px rgba(0, 229, 255, 0.18) inset, 0 0 8px rgba(0, 229, 255, 0.1);
-  color: var(--cyan);
-  text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
 }
 
 /* messages */
@@ -2261,12 +2244,16 @@ body::after {
   #config.tab-pane, #legs.tab-pane, #arms.tab-pane { overflow-y: auto; }
 
   /* ── CHAT TAB MOBILE ── */
+  .chat-wrap {
+    padding: 0;
+  }
+
   .chat-body {
-    margin: 0;
     border-radius: 0;
   }
 
   .avatar-header { padding: 10px 0 8px; }
+  .avatar-header.collapsed { padding: 0; }
 
   #backgroundImage { max-height: 120px; }
 
@@ -2625,6 +2612,7 @@ body::after {
   /* Chat: smaller avatar */
   #backgroundImage { max-height: 80px; }
   .avatar-header { padding: 6px 0 4px; }
+  .avatar-header.collapsed { padding: 0; }
 }
 
 /* ── SAFE AREA INSETS (notched phones) ── */

@@ -370,45 +370,14 @@ document.addEventListener('DOMContentLoaded', function () {
   const nameEl = document.getElementById('bot-name');
   if (nameEl && window.APP_CONFIG?.charName) nameEl.textContent = window.APP_CONFIG.charName;
 
-  // Avatar toggle — click header to collapse, click toggle bar to expand/collapse
+  // Avatar toggle — click to collapse/expand
   const avatarHeader = document.querySelector('.avatar-header');
-  const avatarToggle = document.getElementById('avatarToggle');
-  const avatarToggleLabel = document.getElementById('avatarToggleLabel');
-
-  function updateAvatarToggle(isCollapsed) {
-    if (!avatarToggle) return;
-    if (isCollapsed) {
-      avatarToggle.classList.add('collapsed-state');
-      avatarToggle.classList.remove('expanded');
-      if (avatarToggleLabel) avatarToggleLabel.textContent = 'SHOW AVATAR';
-    } else {
-      avatarToggle.classList.remove('collapsed-state');
-      avatarToggle.classList.add('expanded');
-      if (avatarToggleLabel) avatarToggleLabel.textContent = 'HIDE';
-    }
-  }
-
   if (avatarHeader) {
-    const startCollapsed = localStorage.getItem('avatarHidden') === '1';
-    if (startCollapsed) avatarHeader.classList.add('collapsed');
-    updateAvatarToggle(startCollapsed);
-
-    // Click avatar image to collapse it
+    if (localStorage.getItem('avatarHidden') === '1') avatarHeader.classList.add('collapsed');
     avatarHeader.addEventListener('click', () => {
-      avatarHeader.classList.add('collapsed');
-      localStorage.setItem('avatarHidden', '1');
-      updateAvatarToggle(true);
+      avatarHeader.classList.toggle('collapsed');
+      localStorage.setItem('avatarHidden', avatarHeader.classList.contains('collapsed') ? '1' : '0');
     });
-
-    // Click toggle bar to expand or collapse
-    if (avatarToggle) {
-      avatarToggle.addEventListener('click', () => {
-        const willCollapse = !avatarHeader.classList.contains('collapsed');
-        avatarHeader.classList.toggle('collapsed');
-        localStorage.setItem('avatarHidden', willCollapse ? '1' : '0');
-        updateAvatarToggle(willCollapse);
-      });
-    }
   }
 });
 
