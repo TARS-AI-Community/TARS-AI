@@ -663,21 +663,72 @@ function executeAction() {
     });
   }
 
+  const SECTION_ICONS = {
+    'DEVICE':'bi-cpu-fill','CHATUI':'bi-chat-dots-fill','CHAR':'bi-person-fill',
+    'CONTROLS':'bi-controller','STT':'bi-mic-fill','LLM':'bi-robot',
+    'VISION':'bi-eye-fill','EMOTION':'bi-emoji-smile-fill','TTS':'bi-volume-up-fill',
+    'UI':'bi-display-fill','RAG':'bi-database-fill','BATTERY':'bi-battery-half',
+    'HOME_ASSISTANT':'bi-house-fill','DISCORD':'bi-discord',
+    'STABLE_DIFFUSION':'bi-image-fill','MISC':'bi-wrench-adjustable'
+  };
+  const SECTION_LABELS = {
+    'DEVICE':'Device','CHATUI':'Chat UI','CHAR':'Character','CONTROLS':'Controls',
+    'STT':'Speech','LLM':'AI Model','VISION':'Vision','EMOTION':'Emotion',
+    'TTS':'Voice','UI':'Display','RAG':'Memory','BATTERY':'Battery',
+    'HOME_ASSISTANT':'Home Asst','DISCORD':'Discord',
+    'STABLE_DIFFUSION':'Img Gen','MISC':'Misc'
+  };
+
+  const SECTION_ORDER = [
+    'DEVICE', 'UI', 'CHATUI',
+    'STT', 'TTS',
+    'LLM', 'CHAR', 'EMOTION',
+    'VISION', 'STABLE_DIFFUSION',
+    'RAG',
+    'CONTROLS',
+    'HOME_ASSISTANT', 'DISCORD',
+    'BATTERY', 'MISC'
+  ];
+
+  let activeConfigSection = null;
+
   function loadConfiguration() {
     fetch('/get_config').then(r=>r.json()).then(data => {
       const form = $('configForm');
-      let html = '<div class="accordion" id="configAccordion">';
-      let si = 0;
-      for (const [section, fields] of Object.entries(data.config)) {
+
+      // Order sections: SECTION_ORDER first, then any extras from backend
+      const allSections = Object.keys(data.config);
+      const ordered = SECTION_ORDER.filter(s => allSections.includes(s));
+      allSections.forEach(s => { if (!ordered.includes(s)) ordered.push(s); });
+
+      // Build icon grid
+      let html = '<div class="config-icon-grid">';
+      for (const section of ordered) {
+        const icon = SECTION_ICONS[section] || 'bi-gear';
+        const label = SECTION_LABELS[section] || section;
+        html += `<div class="config-icon-tile" data-section-target="${section}">
+          <div class="config-icon-tile-inner"><i class="bi ${icon}"></i></div>
+          <span class="config-icon-label">${label}</span>
+        </div>`;
+      }
+      html += '</div>';
+
+      // Build section panels
+      for (const section of ordered) {
+        const fields = data.config[section];
         const desc = data.field_options[`${section}.__section__`];
-        const accId = `collapse${si}`, first = si===0;
-        html += `<div class="accordion-item config-accordion-item">
-          <h2 class="accordion-header"><button class="accordion-button config-accordion-button${first?'':' collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${accId}" aria-expanded="${first}">
-            <i class="bi bi-folder-fill me-2"></i><span class="fw-bold">${section}</span>
-            ${desc?`<small class="ms-2 text-muted opacity-75">– ${desc.description||desc}</small>`:''}
-          </button></h2>
-          <div id="${accId}" class="accordion-collapse collapse${first?' show':''}" data-bs-parent="#configAccordion">
-            <div class="accordion-body config-accordion-body"><div class="row g-2">`;
+        const label = SECTION_LABELS[section] || section;
+        const icon = SECTION_ICONS[section] || 'bi-gear';
+
+        html += `<div class="config-panel" id="configPanel_${section}">
+          <div class="config-panel-header">
+            <button class="config-panel-back" data-section="${section}"><i class="bi bi-chevron-left"></i></button>
+            <div class="config-panel-title">
+              <i class="bi ${icon}"></i><span>${label}</span>
+              ${desc?`<small>${desc.description||desc}</small>`:''}
+            </div>
+          </div>
+          <div class="config-panel-body"><div class="row g-2">`;
 
         for (const [key, value] of Object.entries(fields)) {
           const fid = `cfg_${section}_${key}`, fi = data.field_options[`${section}.${key}`], desc2 = fi?.description||'';
@@ -707,11 +758,48 @@ function executeAction() {
           if (desc2) html += `<div class="config-hint mt-1"><i class="bi bi-info-circle"></i><small>${desc2}</small></div>`;
           html += '</div></div>';
         }
-        html += '</div></div></div></div>';
-        si++;
+        html += '</div></div></div>';
       }
-      html += '</div>';
+
       form.innerHTML = html;
+      activeConfigSection = null;
+
+      // Icon tile click handlers
+      document.querySelectorAll('.config-icon-tile').forEach(tile => {
+        tile.addEventListener('click', function() {
+          const target = this.dataset.sectionTarget;
+          const panel = document.getElementById(`configPanel_${target}`);
+          const grid = document.querySelector('.config-icon-grid');
+          if (activeConfigSection === target) {
+            panel.classList.remove('open');
+            this.classList.remove('active');
+            grid.classList.remove('has-active');
+            activeConfigSection = null;
+          } else {
+            document.querySelectorAll('.config-panel.open').forEach(p => p.classList.remove('open'));
+            document.querySelectorAll('.config-icon-tile.active').forEach(t => t.classList.remove('active'));
+            panel.classList.add('open');
+            this.classList.add('active');
+            grid.classList.add('has-active');
+            activeConfigSection = target;
+            setTimeout(() => panel.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
+          }
+        });
+      });
+
+      // Back button handlers
+      document.querySelectorAll('.config-panel-back').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const sec = this.dataset.section;
+          document.getElementById(`configPanel_${sec}`).classList.remove('open');
+          const tile = document.querySelector(`.config-icon-tile[data-section-target="${sec}"]`);
+          if (tile) tile.classList.remove('active');
+          document.querySelector('.config-icon-grid').classList.remove('has-active');
+          activeConfigSection = null;
+          document.querySelector('.config-icon-grid').scrollIntoView({ behavior:'smooth', block:'start' });
+        });
+      });
 
       document.querySelectorAll('.config-toggle').forEach(t => {
         t.addEventListener('change', function () {

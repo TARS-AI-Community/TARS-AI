@@ -1376,38 +1376,160 @@ body::after {
   letter-spacing: 0.1em;
 }
 
-/* accordion */
-.config-accordion-item {
-  background: rgba(14, 26, 48, 0.4) !important;
-  border: 1px solid rgba(0, 229, 255, 0.15) !important;
-  border-radius: var(--radius-sm) !important;
+/* icon grid */
+.config-icon-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  padding: 4px;
+}
+
+.config-icon-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 6px 10px;
+  cursor: pointer;
+  border-radius: 14px;
+  transition: all 0.25s var(--ease);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.config-icon-tile-inner {
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: rgba(14, 26, 48, 0.55);
+  border: 1px solid rgba(0, 229, 255, 0.12);
+  transition: all 0.3s var(--ease);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04);
+  position: relative;
   overflow: hidden;
-  margin-bottom: 8px;
+}
+
+.config-icon-tile-inner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: var(--glass-shine);
+  pointer-events: none;
+}
+
+.config-icon-tile-inner i {
+  font-size: 22px;
+  color: var(--cyan);
+  transition: all 0.3s var(--ease);
+  filter: drop-shadow(0 0 4px rgba(0,229,255,0.2));
+}
+
+.config-icon-label {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-align: center;
+  transition: color 0.25s;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-icon-tile:hover .config-icon-tile-inner {
+  border-color: rgba(0,229,255,0.35);
+  background: rgba(0,229,255,0.06);
+  box-shadow: 0 6px 20px rgba(0,229,255,0.12), inset 0 1px 0 rgba(255,255,255,0.06);
+  transform: translateY(-2px);
+}
+.config-icon-tile:hover .config-icon-label { color: var(--text); }
+
+.config-icon-tile:active .config-icon-tile-inner { transform: scale(0.92); }
+
+.config-icon-tile.active .config-icon-tile-inner {
+  border-color: var(--cyan);
+  background: rgba(0,229,255,0.1);
+  box-shadow: 0 0 24px rgba(0,229,255,0.25), 0 0 48px rgba(0,229,255,0.08), inset 0 0 16px rgba(0,229,255,0.06);
+}
+.config-icon-tile.active .config-icon-tile-inner i {
+  color: #fff;
+  filter: drop-shadow(0 0 10px rgba(0,229,255,0.7));
+}
+.config-icon-tile.active .config-icon-label {
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(0,229,255,0.3);
+}
+
+/* config panel (expands below grid) */
+.config-panel {
+  display: none;
+  margin-top: 10px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid rgba(0,229,255,0.15);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
-  transition: border-color 0.25s;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.config-panel.open {
+  display: block;
+  animation: cfgPanelIn 0.3s var(--ease);
+}
+@keyframes cfgPanelIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.config-accordion-item:hover { border-color: rgba(0,229,255,0.32) !important; }
-.config-accordion-item:last-child { margin-bottom: 0; }
-
-.config-accordion-button {
-  background: rgba(0,229,255,0.05) !important;
-  color: var(--cyan) !important;
-  font-family: var(--font-hud) !important;
-  font-size: var(--font-size-md) !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.08em !important;
-  padding: 12px 14px !important;
-  border: none !important;
+.config-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(0,229,255,0.05);
+  border-bottom: 1px solid rgba(0,229,255,0.1);
 }
 
-.config-accordion-button:not(.collapsed) { background: rgba(0,229,255,0.09) !important; box-shadow: inset 3px 0 0 var(--cyan) !important; border-bottom: 1px solid rgba(0,229,255,0.08) !important; }
-.config-accordion-button:focus { box-shadow: none !important; }
-.config-accordion-button::after { filter: brightness(0) saturate(100%) invert(75%) sepia(60%) saturate(600%) hue-rotate(155deg); }
+.config-panel-back {
+  background: rgba(14,26,48,0.5);
+  border: 1px solid rgba(0,229,255,0.2);
+  border-radius: 8px;
+  color: var(--cyan);
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  flex-shrink: 0;
+}
+.config-panel-back:hover { background: rgba(0,229,255,0.1); border-color: var(--cyan); }
 
-.config-accordion-body { background: transparent; padding: 12px; }
+.config-panel-title {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-hud);
+  font-size: 13px; font-weight: 700;
+  color: var(--cyan);
+  letter-spacing: 0.08em;
+}
+.config-panel-title i { font-size: 16px; filter: drop-shadow(0 0 6px rgba(0,229,255,0.4)); }
+.config-panel-title small {
+  color: var(--text-dim);
+  font-family: var(--font-body);
+  font-size: 10px; font-weight: 400;
+  margin-left: 4px;
+  opacity: 0.8;
+}
+
+.config-panel-body {
+  background: rgba(14,26,48,0.3);
+  padding: 14px;
+}
 
 .field-wrapper {
   background: rgba(14, 26, 48, 0.2);
@@ -1418,7 +1540,7 @@ body::after {
 }
 .field-wrapper:hover { background: rgba(14, 26, 48, 0.35); border-color: rgba(0, 229, 255, 0.18); box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
 
-.config-accordion-body .form-label {
+.config-panel-body .form-label {
   color: var(--text-dim) !important;
   font-size: var(--font-size-sm) !important;
   font-weight: 600 !important;
@@ -1456,7 +1578,8 @@ body::after {
 .config-section .form-check-input, #configForm .form-check-input {
   background-color: rgba(255,68,68,0.12) !important;
   border-color: rgba(255,68,68,0.3) !important;
-  width: 3rem; height: 1.5rem;
+  width: 2.2rem; height: 1.1rem;
+  margin-right: 8px;
   cursor: pointer;
   transition: all 0.3s var(--ease);
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);

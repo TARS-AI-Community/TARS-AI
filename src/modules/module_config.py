@@ -611,6 +611,9 @@ CONFIG_METADATA = {
         'enabled': {
             'description': 'Enable the Chat UI'
         },
+        'port': {
+            'description': 'Port for the Chat UI'
+        },
         'password': {
             'description': 'Password for the Chat UI (default: tars)'
         },
@@ -699,6 +702,9 @@ CONFIG_METADATA = {
         },
         'speechdelay': {
             'description': 'Silence duration before processing (tenths of seconds)'
+        },
+        'picovoice_keyword_path': {
+            'description': 'Path to Picovoice keyword file (.ppn)'
         },
     },
     'LLM': {
@@ -881,6 +887,70 @@ CONFIG_METADATA = {
         },
         'auto_shutdown': {
             'description': 'Shutdown system when battery is critical'
+        },
+    },
+    'HOME_ASSISTANT': {
+        '__description__': 'Home Assistant integration',
+        'enabled': {
+            'description': 'Enable Home Assistant module'
+        },
+        'url': {
+            'description': 'Home Assistant server URL'
+        },
+    },
+    'DISCORD': {
+        '__description__': 'Discord bot integration',
+        'enabled': {
+            'description': 'Enable Discord integration'
+        },
+        'channel_id': {
+            'description': 'Discord channel ID for bot messages'
+        },
+    },
+    'STABLE_DIFFUSION': {
+        '__description__': 'Image generation configuration',
+        'enabled': {
+            'description': 'Enable image generation module'
+        },
+        'service': {
+            'options': ['automatic1111', 'openai'],
+            'description': 'Image generation service'
+        },
+        'url': {
+            'description': 'Automatic1111 server URL'
+        },
+        'prompt_prefix': {
+            'description': 'Style prefix for image prompts'
+        },
+        'prompt_postfix': {
+            'description': 'Quality postfix for image prompts'
+        },
+        'seed': {
+            'description': 'Random seed (-1 for random)'
+        },
+        'sampler_name': {
+            'description': 'Diffusion sampler name'
+        },
+        'denoising_strength': {
+            'description': 'Denoising strength (0.0-1.0)'
+        },
+        'steps': {
+            'description': 'Number of diffusion steps'
+        },
+        'cfg_scale': {
+            'description': 'Classifier-free guidance scale'
+        },
+        'width': {
+            'description': 'Generated image width (px)'
+        },
+        'height': {
+            'description': 'Generated image height (px)'
+        },
+        'restore_faces': {
+            'description': 'Enable face restoration'
+        },
+        'negative_prompt': {
+            'description': 'Negative prompt to avoid unwanted elements'
         },
     },
     'MISC': {
