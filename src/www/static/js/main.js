@@ -924,34 +924,17 @@ window.showToast = function (message, type, duration) {
 // ── NEXUS DASHBOARD ──────────────────────────────────────────────────────────
 (function () {
   var nexusActive = false;
-  var moodHistory = [];   // [{emotion, timestamp}] — last 50 entries
   var consoleLines = [];  // rolling buffer of console strings
-  var MAX_CONSOLE = 80;
+  var MAX_CONSOLE = 200;
   var pollInterval = null;
+  var logHead = 0;  // cursor for incremental log fetching
 
-  // Emotion → color mapping
-  var EMOTION_COLORS = {
-    neutral: '#00e5ff', happy: '#39ff14', sad: '#4488ff', angry: '#ff4444',
-    excited: '#ffb700', afraid: '#ff00ff', sleepy: '#3d5a6e',
-    curious: '#00e5ff', love: '#ff69b4', surprise: '#ffcc00'
-  };
-
-  function formatUptime(secs) {
-    var d = Math.floor(secs / 86400);
-    var h = Math.floor((secs % 86400) / 3600);
-    var m = Math.floor((secs % 3600) / 60);
-    if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
-    if (h > 0) return h + 'h ' + m + 'm';
-    return m + 'm';
-  }
-
-  function consolePush(msg) {
-    consoleLines.push(msg);
-    if (consoleLines.length > MAX_CONSOLE) consoleLines.shift();
+  function renderConsole() {
     var el = document.getElementById('nxConsole');
     if (!el) return;
     el.innerHTML = consoleLines.map(function (l) {
-      return '<div class="nexus-console-line">' + l + '</div>';
+      var safe = l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<div class="nexus-console-line">' + safe + '</div>';
     }).join('');
     el.scrollTop = el.scrollHeight;
   }
@@ -970,143 +953,27 @@ window.showToast = function (message, type, duration) {
     if (cpuBar) cpuBar.style.width = Math.min(data.cpu_load, 100) + '%';
     if (ramBar) ramBar.style.width = Math.min(data.ram_usage, 100) + '%';
     if (tempBar) tempBar.style.width = Math.min((data.cpu_temp / 85) * 100, 100) + '%';
-
-    // State badge
-    var stateText = document.getElementById('nxStateText');
-    if (stateText) stateText.textContent = (data.emotion || 'neutral').toUpperCase();
-
-    // System info
-    var charEl = document.getElementById('nxCharName');
-    if (charEl) charEl.textContent = data.character || '--';
-
-    var uptimeEl = document.getElementById('nxUptime');
-    if (uptimeEl) uptimeEl.textContent = formatUptime(data.uptime_secs || 0);
-
-    // Battery
-    var battEl = document.getElementById('nxBattery');
-    if (battEl && data.battery) {
-      var pct = Math.round(data.battery.percentage || 0);
-      var icon = data.battery.charging ? '⚡' : '';
-      battEl.textContent = pct + '% ' + icon + (data.battery.voltage ? ' (' + data.battery.voltage.toFixed(1) + 'V)' : '');
-    } else if (battEl) {
-      battEl.textContent = 'N/A';
-    }
-
-    // Console log entry
-    consolePush('&gt; [TARS_CORE] CPU: ' + data.cpu_load + '% | RAM: ' + data.ram_usage + '% | ' + data.cpu_temp + '°C | State: ' + (data.emotion || 'neutral'));
-
-    // Track mood history
-    var emo = (data.emotion || 'neutral').toLowerCase();
-    var last = moodHistory.length ? moodHistory[moodHistory.length - 1].emotion : null;
-    if (emo !== last || moodHistory.length === 0) {
-      moodHistory.push({ emotion: emo, timestamp: Date.now() });
-      if (moodHistory.length > 50) moodHistory.shift();
-      updateMoodTags(emo);
-    }
-
-    drawMoodChart();
-  }
-
-  function updateMoodTags(current) {
-    var container = document.getElementById('nxMoodTags');
-    if (!container) return;
-    // collect unique recent emotions
-    var seen = {};
-    var tags = [];
-    for (var i = moodHistory.length - 1; i >= 0 && tags.length < 5; i--) {
-      var e = moodHistory[i].emotion;
-      if (!seen[e]) { seen[e] = true; tags.unshift(e); }
-    }
-    container.innerHTML = tags.map(function (e) {
-      return '<span class="nexus-mood-tag' + (e === current ? ' active' : '') + '">' + e.toUpperCase() + '</span>';
-    }).join('');
-  }
-
-  function drawMoodChart() {
-    var canvas = document.getElementById('nxMoodCanvas');
-    if (!canvas || moodHistory.length < 2) return;
-    var ctx = canvas.getContext('2d');
-    var w = canvas.width = canvas.offsetWidth * (window.devicePixelRatio > 1 ? 2 : 1);
-    var h = canvas.height = canvas.offsetHeight * (window.devicePixelRatio > 1 ? 2 : 1);
-    ctx.clearRect(0, 0, w, h);
-
-    // map emotion to a numeric value for charting
-    var EMOTION_VALUES = {
-      angry: 0, afraid: 0.15, sad: 0.25, sleepy: 0.35,
-      neutral: 0.5, curious: 0.6, happy: 0.75, love: 0.8,
-      excited: 0.9, surprise: 0.85
-    };
-
-    var points = moodHistory.map(function (m) {
-      return EMOTION_VALUES[m.emotion] !== undefined ? EMOTION_VALUES[m.emotion] : 0.5;
-    });
-
-    var padding = 10;
-    var graphW = w - padding * 2;
-    var graphH = h - padding * 2;
-
-    // draw subtle grid lines
-    ctx.strokeStyle = 'rgba(0,229,255,0.06)';
-    ctx.lineWidth = 1;
-    for (var gy = 0; gy <= 4; gy++) {
-      var y = padding + (gy / 4) * graphH;
-      ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(w - padding, y); ctx.stroke();
-    }
-
-    // draw line
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0,229,255,0.7)';
-    ctx.lineWidth = 2;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-
-    for (var i = 0; i < points.length; i++) {
-      var x = padding + (i / (points.length - 1)) * graphW;
-      var y2 = padding + (1 - points[i]) * graphH;
-      if (i === 0) ctx.moveTo(x, y2);
-      else ctx.lineTo(x, y2);
-    }
-    ctx.stroke();
-
-    // glow fill under line
-    var grad = ctx.createLinearGradient(0, padding, 0, h - padding);
-    grad.addColorStop(0, 'rgba(0,229,255,0.12)');
-    grad.addColorStop(1, 'rgba(0,229,255,0)');
-    ctx.lineTo(w - padding, h - padding);
-    ctx.lineTo(padding, h - padding);
-    ctx.closePath();
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    // draw dots on data points
-    for (var j = 0; j < points.length; j++) {
-      var px = padding + (j / (points.length - 1)) * graphW;
-      var py = padding + (1 - points[j]) * graphH;
-      var emo2 = moodHistory[j].emotion;
-      ctx.beginPath();
-      ctx.arc(px, py, 3, 0, Math.PI * 2);
-      ctx.fillStyle = EMOTION_COLORS[emo2] || 'var(--cyan)';
-      ctx.fill();
-    }
   }
 
   function fetchMetrics() {
     fetch('/api/system/metrics')
       .then(function (r) { return r.json(); })
       .then(updateMetrics)
-      .catch(function () {
-        consolePush('&gt; [ERROR] Failed to fetch system metrics');
-      });
+      .catch(function () {});
   }
 
-  function fetchMemoryStats() {
-    fetch('/api/memory/stats')
+  function fetchLogs() {
+    fetch('/api/console/logs?since=' + logHead)
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        var topicsEl = document.getElementById('nxTopics');
-        var memEl = document.getElementById('nxMemories');
-        if (topicsEl) topicsEl.textContent = data.topics || 0;
-        if (memEl) memEl.textContent = data.memories || 0;
+        if (data.lines && data.lines.length) {
+          for (var i = 0; i < data.lines.length; i++) {
+            consoleLines.push(data.lines[i]);
+          }
+          while (consoleLines.length > MAX_CONSOLE) consoleLines.shift();
+          renderConsole();
+        }
+        logHead = data.head;
       })
       .catch(function () {});
   }
@@ -1119,11 +986,14 @@ window.showToast = function (message, type, duration) {
     nexusTab.addEventListener('shown.bs.tab', function () {
       nexusActive = true;
       fetchMetrics();
-      fetchMemoryStats();
+      fetchLogs();
       if (!pollInterval) {
         pollInterval = setInterval(function () {
-          if (nexusActive) fetchMetrics();
-        }, 5000); // poll every 5s
+          if (nexusActive) {
+            fetchMetrics();
+            fetchLogs();
+          }
+        }, 2000);
       }
     });
 
@@ -1136,8 +1006,8 @@ window.showToast = function (message, type, duration) {
 
 // ── MOBILE SWIPE NAV ─────────────────────────────────────────────────────────
 (function () {
-  const TAB_IDS = ['chat', 'nexus', 'motion', 'body', 'emotions', 'wifi', 'config'];
-  const TAB_BTN_IDS = ['chat-tab', 'nexus-tab', 'motion-tab', 'body-tab', 'emotions-tab', 'wifi-tab', 'config-tab'];
+  const TAB_IDS = ['chat', 'motion', 'body', 'emotions', 'wifi', 'config', 'nexus'];
+  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'body-tab', 'emotions-tab', 'wifi-tab', 'config-tab', 'nexus-tab'];
   let currentIndex = 0;
   let isMobile = false;
 

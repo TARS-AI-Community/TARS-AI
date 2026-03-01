@@ -39,7 +39,7 @@ from modules.module_config import CONFIG_METADATA as CONFIG_UI_FIELDS
 from modules.module_llm import get_completion
 from modules.module_tts import generate_tts_audio
 from modules.module_llm import detect_emotion
-from modules.module_messageQue import queue_message
+from modules.module_messageQue import queue_message, get_recent_logs
 from modules.module_servoctl import *
 from modules.module_movement_registry import get_names, get_names_by_type, LEGS_ONLY, HAS_ARMS, MOVEMENTS
 
@@ -1113,6 +1113,14 @@ def memory_stats():
         pass
 
     return jsonify(stats)
+
+
+@flask_app.route('/api/console/logs', methods=['GET'])
+def console_logs():
+    """Stream terminal output to the WebUI nexus console."""
+    since = request.args.get('since', 0, type=int)
+    lines, head = get_recent_logs(since)
+    return jsonify({'lines': lines, 'head': head})
 
 
 def start_flask_app(port=None):
