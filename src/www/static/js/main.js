@@ -389,98 +389,99 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 
-// ── ARMS ────────────────────────────────────────────────────────────────────
+// ── BODY (ARMS + LEGS) ──────────────────────────────────────────────────────
+function updateBodyArmVal(slider) {
+  slider.closest('.servo-card').querySelector('.servo-val').textContent = slider.value;
+}
+
+function updateBodyLegVal(slider) {
+  slider.closest('.servo-card').querySelector('.servo-val').textContent = slider.value;
+}
+
+function resetBodyServo(id, def) {
+  const el = $(id);
+  el.value = def;
+  el.closest('.servo-card').querySelector('.servo-val').textContent = def;
+  updateArmConstraints();
+}
+
 function updateArmConstraints() {
-  const armTab = $('arms');
-  const vals   = armTab.querySelectorAll('.servo-val');
-  const leftMain = parseInt($('leftMain').value);
-  const lfSlider = $('leftForearm'), lhSlider = $('leftHand');
-  let maxLF = leftMain <= 50 ? Math.max(1, Math.round(leftMain / 2)) : Math.round(25 + (leftMain - 50) * 1.5);
-  if (parseInt(lfSlider.value) > maxLF) { lfSlider.value = maxLF; vals[1].textContent = maxLF; }
-  updateSliderGauge(lfSlider, maxLF);
-  let maxLH = parseInt(lfSlider.value) <= 50 ? Math.max(1, Math.round(parseInt(lfSlider.value) / 2)) : Math.round(25 + (parseInt(lfSlider.value) - 50) * 1.5);
-  if (parseInt(lhSlider.value) > maxLH) { lhSlider.value = maxLH; vals[2].textContent = maxLH; }
-  updateSliderGauge(lhSlider, maxLH);
-  const rightMain = parseInt($('rightMain').value);
-  const rfSlider = $('rightForearm'), rhSlider = $('rightHand');
-  let maxRF = rightMain <= 50 ? Math.max(1, Math.round(rightMain / 2)) : Math.round(25 + (rightMain - 50) * 1.5);
-  if (parseInt(rfSlider.value) > maxRF) { rfSlider.value = maxRF; vals[4].textContent = maxRF; }
-  updateSliderGauge(rfSlider, maxRF);
-  let maxRH = parseInt(rfSlider.value) <= 50 ? Math.max(1, Math.round(parseInt(rfSlider.value) / 2)) : Math.round(25 + (parseInt(rfSlider.value) - 50) * 1.5);
-  if (parseInt(rhSlider.value) > maxRH) { rhSlider.value = maxRH; vals[5].textContent = maxRH; }
-  updateSliderGauge(rhSlider, maxRH);
+  function clampChild(slider, maxVal) {
+    if (parseInt(slider.value) > maxVal) {
+      slider.value = maxVal;
+      slider.closest('.servo-card').querySelector('.servo-val').textContent = maxVal;
+    }
+    updateSliderGauge(slider, maxVal);
+  }
+  function calcMax(parentVal) {
+    return parentVal <= 50 ? Math.max(1, Math.round(parentVal / 2)) : Math.round(25 + (parentVal - 50) * 1.5);
+  }
+  // left arm chain
+  const lm = parseInt($('leftMain').value);
+  clampChild($('leftForearm'), calcMax(lm));
+  clampChild($('leftHand'), calcMax(parseInt($('leftForearm').value)));
+  // right arm chain
+  const rm = parseInt($('rightMain').value);
+  clampChild($('rightForearm'), calcMax(rm));
+  clampChild($('rightHand'), calcMax(parseInt($('rightForearm').value)));
 }
 
 function updateSliderGauge(slider, maxAllowed) {
   const pct = maxAllowed;
-  slider.style.background = `linear-gradient(to top,rgba(0,229,255,.3) 0%,rgba(0,229,255,.3) ${pct}%,rgba(220,53,69,.3) ${pct}%,rgba(220,53,69,.3) 100%)`;
+  slider.style.background = `linear-gradient(to right,rgba(0,229,255,.3) 0%,rgba(0,229,255,.3) ${pct}%,rgba(180,77,255,.3) ${pct}%,rgba(180,77,255,.3) 100%)`;
 }
 
-function updateArmValueDisplay(slider, i) {
-  $('arms').querySelectorAll('.servo-val')[i].textContent = slider.value;
-}
+// speed slider value display + stop touch propagation on all body sliders
+(function () {
+  var sp = document.getElementById('bodySpeedSlider');
+  if (sp) sp.addEventListener('input', function () {
+    var v = document.querySelector('.body-speed-val');
+    if (v) v.textContent = parseFloat(this.value).toFixed(2);
+  });
+  // prevent range inputs from triggering swipe navigation
+  document.querySelectorAll('.body-range, #bodySpeedSlider').forEach(function (slider) {
+    slider.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+    slider.addEventListener('touchmove', function (e) { e.stopPropagation(); }, { passive: true });
+  });
+})();
 
-function resetArmServo(id, i) {
-  $(id).value = 1;
-  $('arms').querySelectorAll('.servo-val')[i].textContent = '1';
-  updateArmConstraints();
-}
-
-function applyArmControls() {
+function applyBodyControls() {
+  const speed = +$('bodySpeedSlider').value;
   fetch('/move_arms', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({
       left_main: +$('leftMain').value, left_forearm: +$('leftForearm').value,
       left_hand: +$('leftHand').value, right_main: +$('rightMain').value,
       right_forearm: +$('rightForearm').value, right_hand: +$('rightHand').value,
-      speed: +$('armSpeedSlider').value
+      speed: speed
+    })
+  }).catch(console.error);
+  fetch('/move_legs', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      left_height: +$('leftHeight').value, right_height: +$('rightHeight').value,
+      left_leg: +$('leftLeg').value, right_leg: +$('rightLeg').value,
+      speed: speed
     })
   }).catch(console.error);
 }
 
-function resetAllArms() {
+function resetBody() {
+  const armIds = ['leftMain','leftForearm','leftHand','rightMain','rightForearm','rightHand'];
+  const legIds = ['leftHeight','rightHeight','leftLeg','rightLeg'];
   fetch('/move_arms', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ left_main:1, left_forearm:1, left_hand:1, right_main:1, right_forearm:1, right_hand:1, speed:0.75 })
   }).then(() => {
-    ['leftMain','leftForearm','leftHand','rightMain','rightForearm','rightHand'].forEach(id => $(id).value = 1);
-    $('arms').querySelectorAll('.servo-val').forEach(d => d.textContent = '1');
+    armIds.forEach(id => { $(id).value = 1; $(id).closest('.servo-card').querySelector('.servo-val').textContent = '1'; });
     updateArmConstraints();
     return fetch('/disable_servos', { method:'POST', headers:{'Content-Type':'application/json'} });
   }).then(() => fetch('/reset_positions', { method:'POST', headers:{'Content-Type':'application/json'} }))
     .then(() => fetch('/disable_servos', { method:'POST', headers:{'Content-Type':'application/json'} }))
     .catch(console.error);
-}
-
-
-// ── LEGS ────────────────────────────────────────────────────────────────────
-function updateValueDisplay(slider, i) {
-  document.querySelectorAll('.servo-val')[i].textContent = slider.value;
-}
-
-function resetServo(id, i) {
-  $(id).value = 50;
-  document.querySelectorAll('.servo-val')[i].textContent = '50';
-}
-
-function applyLegControls() {
-  fetch('/move_legs', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      left_height:  +$('leftHeight').value,
-      right_height: +$('rightHeight').value,
-      left_leg:     +$('leftLeg').value,
-      right_leg:    +$('rightLeg').value,
-      speed:        +$('speedSlider').value
-    })
-  }).catch(console.error);
-}
-
-function resetAllLegs() {
   fetch('/neutral_legs', { method:'POST', headers:{'Content-Type':'application/json'} })
     .then(() => {
-      ['leftHeight','rightHeight','leftLeg','rightLeg'].forEach(id => $(id).value = 50);
-      $('legs').querySelectorAll('.servo-val').forEach(d => d.textContent = '50');
+      legIds.forEach(id => { $(id).value = 50; $(id).closest('.servo-card').querySelector('.servo-val').textContent = '50'; });
       return fetch('/reset_positions', { method:'POST', headers:{'Content-Type':'application/json'} });
     }).catch(console.error);
 }
@@ -772,24 +773,20 @@ function executeAction() {
 
 // ── TAB RESET LOGIC ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
-  const legsTab = $('legs-tab'), armsTab = $('arms-tab');
+  const bodyTab = $('body-tab');
 
-  if (legsTab) legsTab.addEventListener('hide.bs.tab', () => {
+  if (bodyTab) bodyTab.addEventListener('hide.bs.tab', () => {
     const lh=+$('leftHeight').value, rh=+$('rightHeight').value,
           ll=+$('leftLeg').value,    rl=+$('rightLeg').value;
-    if (lh!==50||rh!==50||ll!==50||rl!==50) resetAllLegs();
-  });
-
-  if (armsTab) armsTab.addEventListener('hide.bs.tab', () => {
-    const lm=+$('leftMain').value, lf=+$('leftForearm').value, lh=+$('leftHand').value,
-          rm=+$('rightMain').value, rf=+$('rightForearm').value, rh=+$('rightHand').value;
-    if (lm!==1||lf!==1||lh!==1||rm!==1||rf!==1||rh!==1) resetAllArms();
+    const lm=+$('leftMain').value, lf=+$('leftForearm').value, lha=+$('leftHand').value,
+          rm=+$('rightMain').value, rf=+$('rightForearm').value, rha=+$('rightHand').value;
+    if (lh!==50||rh!==50||ll!==50||rl!==50||lm!==1||lf!==1||lha!==1||rm!==1||rf!==1||rha!==1) resetBody();
   });
 
   document.querySelectorAll('.custom-tab').forEach(tab => {
     tab.addEventListener('shown.bs.tab', e => {
       const id = e.target.getAttribute('data-bs-target')?.replace('#','');
-      if (id==='legs'||id==='arms') {
+      if (id==='body') {
         fetch('/reset_positions',{method:'POST',headers:{'Content-Type':'application/json'}}).catch(()=>{});
       }
     });
@@ -1048,8 +1045,8 @@ window.showToast = function (message, type, duration) {
 
 // ── MOBILE SWIPE NAV ─────────────────────────────────────────────────────────
 (function () {
-  const TAB_IDS = ['chat', 'motion', 'legs', 'arms', 'nexus', 'config', 'wifi', 'emotions'];
-  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'legs-tab', 'arms-tab', 'nexus-tab', 'config-tab', 'wifi-tab', 'emotions-tab'];
+  const TAB_IDS = ['chat', 'nexus', 'motion', 'body', 'emotions', 'wifi', 'config'];
+  const TAB_BTN_IDS = ['chat-tab', 'nexus-tab', 'motion-tab', 'body-tab', 'emotions-tab', 'wifi-tab', 'config-tab'];
   let currentIndex = 0;
   let isMobile = false;
 
@@ -1068,6 +1065,7 @@ window.showToast = function (message, type, duration) {
   let touchStartX = 0, touchStartY = 0, touchDeltaX = 0;
   let direction = null; // null | 'horizontal' | 'vertical'
   let isSwiping = false;
+  let touchOnSlider = false; // ignore swipe when interacting with range inputs
 
   const SWIPE_THRESHOLD = 40;
   const DIRECTION_LOCK = 12; // px before locking direction
@@ -1082,6 +1080,10 @@ window.showToast = function (message, type, duration) {
     // ── Touch handlers ──
     tabContent.addEventListener('touchstart', function (e) {
       if (!isMobile) return;
+      // skip swipe when touching range sliders or their containers
+      var el = e.target;
+      touchOnSlider = (el.tagName === 'INPUT' && el.type === 'range') ||
+                      !!(el.closest && el.closest('.servo-card, .body-speed'));
       direction = null;
       isSwiping = false;
       touchStartX = e.touches[0].clientX;
@@ -1091,7 +1093,7 @@ window.showToast = function (message, type, duration) {
     }, { passive: true });
 
     tabContent.addEventListener('touchmove', function (e) {
-      if (!isMobile) return;
+      if (!isMobile || touchOnSlider) return;
 
       const dx = e.touches[0].clientX - touchStartX;
       const dy = e.touches[0].clientY - touchStartY;
