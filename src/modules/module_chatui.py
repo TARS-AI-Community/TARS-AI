@@ -52,12 +52,21 @@ except ImportError:
     get_image_caption_from_base64 = None
     queue_message("ChatUI: Vision module not available — image captioning disabled")
 
-# WiFi manager — lazy-initialised
+# WiFi manager — background-initialised to avoid blocking boot
 try:
     from modules.module_wifi import WiFiManager as _WiFiManagerClass
-    _wifi_manager = _WiFiManagerClass()
+    _wifi_manager = None
     WIFI_AVAILABLE = True
-except Exception as _wifi_err:
+
+    def _init_wifi_bg():
+        global _wifi_manager
+        try:
+            _wifi_manager = _WiFiManagerClass()
+        except Exception:
+            pass  # _wifi_manager stays None; routes guard against this
+
+    threading.Thread(target=_init_wifi_bg, daemon=True, name="wifi-init").start()
+except ImportError:
     _wifi_manager = None
     WIFI_AVAILABLE = False
 
@@ -958,7 +967,7 @@ def config_sync_status():
 
 @flask_app.route('/api/wifi/status', methods=['GET'])
 def wifi_status():
-    if not WIFI_AVAILABLE:
+    if not WIFI_AVAILABLE or not _wifi_manager:
         return jsonify({"mode": "disconnected", "ssid": None, "ip": None, "signal": 0})
     try:
         return jsonify(_wifi_manager.get_status())
@@ -968,7 +977,7 @@ def wifi_status():
 
 @flask_app.route('/api/wifi/networks', methods=['GET'])
 def wifi_networks():
-    if not WIFI_AVAILABLE:
+    if not WIFI_AVAILABLE or not _wifi_manager:
         return jsonify({"networks": []})
     try:
         networks = _wifi_manager.scan_networks()
@@ -979,7 +988,7 @@ def wifi_networks():
 
 @flask_app.route('/api/wifi/connect', methods=['POST'])
 def wifi_connect():
-    if not WIFI_AVAILABLE:
+    if not WIFI_AVAILABLE or not _wifi_manager:
         return jsonify({"success": False, "error": "WiFi module unavailable"}), 503
     data = request.get_json(silent=True) or {}
     ssid     = data.get('ssid', '').strip()
@@ -999,8 +1008,8 @@ def wifi_connect():
 
 @flask_app.route('/api/wifi/hotspot', methods=['PUT'])
 def wifi_hotspot():
-    if not WIFI_AVAILABLE:
-        return jsonify({"success": False, "error": "WiFi module unavailable"}), 503
+    if not WIFI_AVAILABLE or not _wifi_manager:
+        return jsonify({"success": False, "error": "WiFi initialising, try again shortly"}), 503
     try:
         status = _wifi_manager.get_status()
         if status.get('mode') == 'hotspot':
