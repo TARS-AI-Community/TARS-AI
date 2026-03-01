@@ -85,7 +85,9 @@ function buildPanelOutline(count){
   return pts;
 }
 
-// ─── sample T.A.R.S. text ──────────────────────────────────────────────────
+// ─── sample character name text ─────────────────────────────────────────────
+const CHAR_NAME = (document.querySelector('.logo') || {}).textContent || 'T.A.R.S.';
+
 function sampleTARS(step, maxPts){
   const off = document.createElement('canvas');
   off.width=W; off.height=H;
@@ -94,14 +96,14 @@ function sampleTARS(step, maxPts){
   const maxW = W * 0.85;
   let fs = Math.min(W * 0.20, H * 0.22, 160);
   c.font = `900 ${fs}px "Orbitron", sans-serif`;
-  let measured = c.measureText('T.A.R.S.').width;
+  let measured = c.measureText(CHAR_NAME).width;
   if(measured > maxW) fs *= (maxW / measured);
 
   c.fillStyle = '#fff';
   c.font = `900 ${fs}px "Orbitron", sans-serif`;
   c.textAlign    = 'center';
   c.textBaseline = 'middle';
-  c.fillText('T.A.R.S.', W/2, H/2);
+  c.fillText(CHAR_NAME, W/2, H/2);
 
   const img=c.getImageData(0,0,W,H).data;
   const pts=[];

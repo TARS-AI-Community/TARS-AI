@@ -14,13 +14,16 @@ import os
 
 from modules.module_messageQue import queue_message
 
+# Resolve src/ directory (parent of modules/)
+SRC_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 class CharacterManager:
     """
     Manages character attributes and dynamic properties for TARS-AI.
     """
     def __init__(self, config):
         self.config = config
-        self.character_card_path =  os.path.join("..", self.config['CHAR']['character_card_path'])
+        self.character_card_path = os.path.join(SRC_DIR, self.config['CHAR']['character_card_path'])
         self.character_card = None
         self.char_name = None
         self.description = None
@@ -29,7 +32,8 @@ class CharacterManager:
         self.char_greeting = None
         self.example_dialogue = None
         self.load_character_attributes()
-        self.load_persona_traits()
+        if self.char_name:
+            self.load_persona_traits()
 
     def load_character_attributes(self):
         """
@@ -67,7 +71,7 @@ class CharacterManager:
         """
         Load persona traits from the persona.ini file.
         """
-        persona_path =  os.path.join("..", 'character', self.char_name, 'persona.ini')
+        persona_path = os.path.join(SRC_DIR, 'character', self.char_name, 'persona.ini')
         config = configparser.ConfigParser()
 
         try:

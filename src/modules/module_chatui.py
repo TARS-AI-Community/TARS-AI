@@ -170,9 +170,9 @@ def login():
             session.permanent = True  # Maintain cookie presence
             return redirect(url_for('index'))
         else:
-            return render_template('login.html', error="Invalid password")
-            
-    return render_template('login.html')
+            return render_template('login.html', error="Invalid password", char_name=character_name)
+
+    return render_template('login.html', char_name=character_name)
 
 @flask_app.route('/logout')
 def logout():
