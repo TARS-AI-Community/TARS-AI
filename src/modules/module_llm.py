@@ -179,15 +179,11 @@ def process_completion(prompt):
 
 def detect_emotion(text):
     if classifier is None:
-        return
+        return None
     model_outputs = classifier(text)
     emotindetected = max(model_outputs[0], key=lambda x: x['score'])['label']
-    try:
-        requests.post(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/emotion", data=emotindetected, timeout=10)
-    except Exception as e:
-        queue_message(f"WARNING: Emotion update failed: {e}")
-    return
-
+    return emotindetected
+    
 def llm_process(user_input, bot_response):
     global memory_manager
     if isinstance(bot_response, str):
@@ -261,12 +257,6 @@ def llm_process(user_input, bot_response):
                     queue_message(f"MEMORY: Failed to save: {e}")
 
             threading.Thread(target=save_memories).start()
-
-    if CONFIG["EMOTION"]["enabled"]:
-        threading.Thread(
-            target=detect_emotion,
-            args=(bot_response["reply"],)
-        ).start()
 
     return _sanitize_for_tts(bot_response["reply"])
 

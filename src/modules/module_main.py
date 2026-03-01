@@ -15,7 +15,7 @@ import asyncio
 
 # === Custom Modules ===
 from modules.module_config import load_config, get_capabilities
-from modules.module_llm import process_completion
+from modules.module_llm import process_completion, detect_emotion
 from modules.module_tts import play_audio_chunks
 from modules.module_messageQue import queue_message
 from modules.module_servoctl import initialize_servos
@@ -187,6 +187,15 @@ def utterance_callback(message):
             queue_message("INFO: LLM response discarded (movement interrupted)")
             ui_manager.set_tars_status("STANDBY")
             return
+
+        if CONFIG['EMOTION']['enabled'] and reply:
+            detected = detect_emotion(reply)
+            if detected:
+                try:
+                    from modules.module_chatui import update_emotion
+                    update_emotion(detected)
+                except Exception:
+                    pass
 
         character_name = CONFIG['CHAR']['character_name']
         ui_manager.update_data(character_name, reply, "TARS")

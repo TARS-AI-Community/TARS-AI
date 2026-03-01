@@ -38,7 +38,7 @@ from modules.module_config import load_config
 from modules.module_config import CONFIG_METADATA as CONFIG_UI_FIELDS
 from modules.module_llm import get_completion
 from modules.module_tts import generate_tts_audio
-from modules.module_llm import detect_emotion
+from modules.module_llm import detect_emotion, classifier as emotion_classifier
 from modules.module_messageQue import queue_message, get_recent_logs
 from modules.module_servoctl import *
 from modules.module_movement_registry import get_names, get_names_by_type, LEGS_ONLY, HAS_ARMS, MOVEMENTS
@@ -122,7 +122,7 @@ flask_app.secret_key = os.getenv("FLASK_SECRET_KEY", "tars_default_secret_key_88
 @flask_app.before_request
 def check_auth():
     # Public routes that don't require login
-    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path == '/login' or not CONFIG['CHATUI'].get('enabled', True):
+    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path in ('/login', '/emotion', '/start_talking', '/stop_talking') or not CONFIG['CHATUI'].get('enabled', True):
         return
         
     # Check if user is logged in
@@ -221,28 +221,32 @@ def stop_talking_endpoint():
     socketio.emit('talking_state', {'talking': False})
     return Response("stopped", status=200)
 
+def update_emotion(detected_emotion):
+    """Update the stored emotion and push new sprites to clients."""
+    global emotion
+    if not detected_emotion:
+        return
+    
+    queue_message(f"Emotion is set: {detected_emotion}")
+
+    emo_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
+    if not os.path.exists(emo_dir):
+        detected_emotion = "neutral"
+    emotion = detected_emotion
+    sprites = _get_sprite_urls(detected_emotion)
+    base = f"/character_sprite/{detected_emotion}/animation/"
+    socketio.emit('emotion_change', {k: base + v for k, v in sprites.items()})
+
 @flask_app.route('/emotion', methods=['POST'])
 def set_emotion():
     """
     Receives a single-word emotion and updates the stored emotion.
     Pushes new sprite URLs to connected clients via SocketIO.
     """
-    global emotion
     detected_emotion = request.data.decode("utf-8").strip()
 
     if detected_emotion:
-        # Check if the emotion folder exists, otherwise fallback to 'neutral'
-        emo_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
-        if not os.path.exists(emo_dir):
-            detected_emotion = "neutral"
-
-        emotion = detected_emotion
-
-        # Push new sprite URLs to all connected clients
-        sprites = _get_sprite_urls(detected_emotion)
-        base = f"/character_sprite/{detected_emotion}/animation/"
-        socketio.emit('emotion_change', {k: base + v for k, v in sprites.items()})
-
+        update_emotion(detected_emotion)
         return jsonify({"message": "Emotion updated", "emotion": detected_emotion}), 200
 
     return jsonify({"error": "No emotion provided"}), 400
@@ -282,7 +286,9 @@ def receive_user_message():
         socketio.emit('bot_message', {'message': latest_text_to_read or ''})
 
         if CONFIG['EMOTION']['enabled'] and reply:
-            detect_emotion(reply)
+            detected = detect_emotion(reply)
+            if detected:
+                update_emotion(detected)
 
     except Exception as e:
         queue_message(f"ERROR: process_llm failed: {e}")
