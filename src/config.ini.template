@@ -195,9 +195,9 @@ global_timer_paused = False
 enabled = False
 # If set to False, the Stable Diffusion module will be disabled.
 service = automatic1111
-# You can pick from openai (requires paid account) and stablediffusion(requires setup).
+# You can pick from automatic1111, comfyui, or openai (requires paid account).
 url = http://192.168.2.57:5002
-# URL of the Automatic1111 Install. This is where requests to generate images are sent..
+# URL of the image generation server (Automatic1111 or ComfyUI).
 prompt_prefix = in the style of midjourney
 # The prefix is used to help create a specific aesthetic for the images.
 prompt_postfix = clearly defined, high def, (detailed scene and background), key visual, vibrant, highly detailed
@@ -220,6 +220,10 @@ restore_faces = False
 # Set to True if you want better face rendering in the generated image.
 negative_prompt = deformed, black and white, disfigured, low contrast, extra limbs, bad anatomy, bad hands
 # The model will attempt to avoid creating images with these characteristics.
+comfyui_workflow = Documentation/Comfy_UI_SD.json
+# Path to ComfyUI workflow JSON for text-to-image (relative to project root).
+comfyui_img2img_workflow = Documentation/Comfy_UI_IMG2IMG.json
+# Path to ComfyUI workflow JSON for image-to-image (relative to project root).
 
 [CHATUI] # Required true for WEB UI
 enabled = True

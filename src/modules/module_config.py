@@ -508,6 +508,8 @@ def load_config():
             "height": int(config['STABLE_DIFFUSION']['height']),
             "restore_faces": config.getboolean('STABLE_DIFFUSION', 'restore_faces'),
             "negative_prompt": config['STABLE_DIFFUSION']['negative_prompt'],
+            "comfyui_workflow": config.get('STABLE_DIFFUSION', 'comfyui_workflow', fallback='Documentation/Comfy_UI_SD.json'),
+            "comfyui_img2img_workflow": config.get('STABLE_DIFFUSION', 'comfyui_img2img_workflow', fallback='Documentation/Comfy_UI_IMG2IMG.json'),
         },
         "UI": {
             "UI_enabled": config.getboolean('UI', 'UI_enabled'),
@@ -913,11 +915,11 @@ CONFIG_METADATA = {
             'description': 'Enable image generation module'
         },
         'service': {
-            'options': ['automatic1111', 'openai'],
+            'options': ['automatic1111', 'comfyui', 'openai'],
             'description': 'Image generation service'
         },
         'url': {
-            'description': 'Automatic1111 server URL'
+            'description': 'Image generation server URL'
         },
         'prompt_prefix': {
             'description': 'Style prefix for image prompts'
@@ -951,6 +953,12 @@ CONFIG_METADATA = {
         },
         'negative_prompt': {
             'description': 'Negative prompt to avoid unwanted elements'
+        },
+        'comfyui_workflow': {
+            'description': 'ComfyUI workflow JSON path for txt2img'
+        },
+        'comfyui_img2img_workflow': {
+            'description': 'ComfyUI workflow JSON path for img2img'
         },
     },
     'MISC': {

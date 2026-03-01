@@ -727,6 +727,45 @@ def execute_function_call(func_call, bot_response, user_input):
             else:
                 bot_response["reply"] = "I didn't understand that system command."
 
+        elif function_name == "generate_image":
+            from modules.module_stablediffusion import generate_image
+            prompt = parameters.get("prompt", "")
+            if not prompt:
+                bot_response["reply"] = "No image description provided."
+            else:
+                queue_message(f"Generating image: {prompt}")
+                # Always override — small LLMs tend to apologize even when calling the function
+                bot_response["reply"] = "On it — generating your image now."
+
+                def _on_image_ready(image_bytes):
+                    try:
+                        queue_message(f"[SD] Image ready ({len(image_bytes)} bytes) — emitting to WebUI")
+                        import base64 as _b64
+                        b64 = _b64.b64encode(image_bytes).decode('utf-8')
+                        img_html = f'<img style="max-width:100%;border-radius:8px;" src="data:image/png;base64,{b64}">'
+                        from modules.module_chatui import socketio
+                        socketio.emit('bot_message', {'message': img_html})
+                        queue_message("[SD] WebUI image emit sent")
+                    except Exception as _e:
+                        queue_message(f"[SD] WebUI image emit failed: {_e}")
+
+                def _generate_bg():
+                    queue_message("[SD] Background generation thread started")
+                    try:
+                        result = generate_image(prompt, on_image_ready=_on_image_ready)
+                        queue_message(f"[SD] Background generation done: {result}")
+                    except Exception as _e:
+                        queue_message(f"[SD] Background image generation failed: {_e}")
+
+                # Use socketio.start_background_task so the green thread can emit via eventlet
+                try:
+                    from modules.module_chatui import socketio as _sio
+                    _sio.start_background_task(_generate_bg)
+                    queue_message("[SD] Started via socketio.start_background_task")
+                except Exception:
+                    threading.Thread(target=_generate_bg, daemon=True).start()
+                    queue_message("[SD] Started via threading fallback")
+
         elif function_name == "home_assistant":
             from modules.module_homeassistant import send_prompt_to_homeassistant
             prompt = parameters.get("prompt", user_input)
