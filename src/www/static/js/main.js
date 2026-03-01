@@ -180,7 +180,7 @@ fetch('/avatar_sprites').then(r => r.json()).then(d => {
 
 
 // ── AUDIO ───────────────────────────────────────────────────────────────────
-let isMuted = false;
+let isMuted = true;
 
 function start_talking() { if (!isMuted) avatarIsTalking = true; }
 function stop_talking()  { avatarIsTalking = false; }
@@ -188,6 +188,9 @@ function stop_talking()  { avatarIsTalking = false; }
 document.addEventListener('DOMContentLoaded', function () {
   const audioPlayer = $('audioPlayer');
   const muteBtn = $('muteButton');
+
+  // Default to muted on load
+  audioPlayer.muted = true;
 
   muteBtn.addEventListener('click', function () {
     const icon = this.querySelector('i');

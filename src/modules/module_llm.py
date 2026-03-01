@@ -182,7 +182,10 @@ def detect_emotion(text):
         return
     model_outputs = classifier(text)
     emotindetected = max(model_outputs[0], key=lambda x: x['score'])['label']
-    requests.post(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/emotion", data=emotindetected, timeout=10)
+    try:
+        requests.post(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/emotion", data=emotindetected, timeout=10)
+    except Exception as e:
+        queue_message(f"WARNING: Emotion update failed: {e}")
     return
 
 def llm_process(user_input, bot_response):
