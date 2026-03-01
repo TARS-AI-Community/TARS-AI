@@ -461,12 +461,12 @@ def stop_tars_ai():
     subprocess.Popen("pkill -f 'python app.py'", shell=True)
 
 def run_tars_ai_fullscreen():
-    command = "cd src && source .venv/bin/activate && python app.py show_ui=true"
+    command = "cd src && sudo .venv/bin/python app.py show_ui=true"
     subprocess.run(command, shell=True, executable="/bin/bash")
 
 def run_tars_ai_normal():
     command = (
-        "cd src && source .venv/bin/activate && python app.py show_ui=false"
+        "cd src && sudo .venv/bin/python app.py show_ui=false"
     )
     subprocess.run(command, shell=True, executable="/bin/bash")
 
