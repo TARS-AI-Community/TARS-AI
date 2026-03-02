@@ -113,6 +113,8 @@ class SpectrumSystem:
         self.start_audio_stream()
 
     def audio_callback(self, indata, frames, time_info, status):
+        if status:
+            print(f"[SPECTRUM] Audio callback status: {status}")
         with self.audio_lock:
             self.audio_buffer = indata[:, 0].copy()
 

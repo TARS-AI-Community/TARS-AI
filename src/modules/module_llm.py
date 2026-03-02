@@ -181,8 +181,8 @@ def detect_emotion(text):
     if classifier is None:
         return None
     model_outputs = classifier(text)
-    emotindetected = max(model_outputs[0], key=lambda x: x['score'])['label']
-    return emotindetected
+    emotion_detected = max(model_outputs[0], key=lambda x: x['score'])['label']
+    return emotion_detected
     
 def llm_process(user_input, bot_response):
     global memory_manager
@@ -200,7 +200,7 @@ def llm_process(user_input, bot_response):
 
             bot_response = bot_response.replace("True", "true").replace("False", "false")
 
-            json_match = re.search(r'\{.*\}', bot_response, re.DOTALL)
+            json_match = re.search(r'\{.*?\}', bot_response, re.DOTALL)
             if json_match:
                 bot_response = json_match.group(0)
 
@@ -690,12 +690,12 @@ def execute_function_call(func_call, bot_response, user_input):
                             from modules.module_main import shutdown_event
                             if shutdown_event:
                                 shutdown_event.set()
-                            import os
-                            os._exit(0)
+                            import sys
+                            sys.exit(0)
                     except Exception as e:
                         queue_message(f"Exit failed: {e}")
-                        import os
-                        os._exit(0)
+                        import sys
+                        sys.exit(0)
 
                 threading.Thread(target=exit_after_tts, daemon=False).start()
 
@@ -713,14 +713,14 @@ def execute_function_call(func_call, bot_response, user_input):
                         else:
                             import subprocess
                             subprocess.Popen(['sudo', 'shutdown', 'now'])
-                            import os
-                            os._exit(0)
+                            import sys
+                            sys.exit(0)
                     except Exception as e:
                         queue_message(f"Shutdown failed: {e}")
                         import subprocess
                         subprocess.Popen(['sudo', 'shutdown', 'now'])
-                        import os
-                        os._exit(0)
+                        import sys
+                        sys.exit(0)
 
                 threading.Thread(target=shutdown_after_tts, daemon=False).start()
 
@@ -780,7 +780,7 @@ def execute_function_call(func_call, bot_response, user_input):
                     speech = ""
                     try:
                         speech = ha_response.get("response", {}).get("speech", {}).get("plain", {}).get("speech", "")
-                    except:
+                    except Exception:
                         pass
                     
                     if speech:

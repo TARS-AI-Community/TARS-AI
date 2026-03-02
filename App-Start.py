@@ -1,6 +1,8 @@
 import os
 os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+# Ensure PipeWire/PulseAudio is reachable (needed when launched from autostart)
+os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 
 import subprocess
 import time
@@ -461,12 +463,12 @@ def stop_tars_ai():
     subprocess.Popen("pkill -f 'python app.py'", shell=True)
 
 def run_tars_ai_fullscreen():
-    command = "cd src && sudo .venv/bin/python app.py show_ui=true"
+    command = "cd src && source .venv/bin/activate && python app.py show_ui=true"
     subprocess.run(command, shell=True, executable="/bin/bash")
 
 def run_tars_ai_normal():
     command = (
-        "cd src && sudo .venv/bin/python app.py show_ui=false"
+        "cd src && source .venv/bin/activate && python app.py show_ui=false"
     )
     subprocess.run(command, shell=True, executable="/bin/bash")
 

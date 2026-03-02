@@ -174,16 +174,10 @@ class STTManager:
         self.cancelled = False
         self.pause_lock = threading.Lock()
 
-        # Audio settings - Set sample rate based on VAD configuration
-        if self.config["STT"].get("vad_enabled", False):
-            # If VAD is enabled, force 16000 Hz sample rate
-            self.SAMPLE_RATE = 16000
-            self.DEFAULT_SAMPLE_RATE = 16000
-            queue_message("INFO: Using 16000 Hz sample rate for VAD compatibility")
-        else:
-            # If VAD is disabled, use system default
-            self.DEFAULT_SAMPLE_RATE = 16000
-            self.SAMPLE_RATE = self.find_default_mic_sample_rate()
+        # Audio settings - Always use 16000 Hz for STT compatibility
+        # PulseAudio handles hardware resampling transparently
+        self.SAMPLE_RATE = 16000
+        self.DEFAULT_SAMPLE_RATE = 16000
 
         self.amp_gain = amp_gain  # Microphone amplification multiplier
         self.silence_margin = 3.5  # Noise floor multiplier
@@ -917,16 +911,13 @@ class STTManager:
                 data, _ = stream.read(frames_per_chunk)
                 data = self.amplify_audio(data)  # Apply amplification
 
-                # Check for silence
-                is_silence, _, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
+                # Check for silence — trust returned silent_frames from VAD
+                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
                 if is_silence:
-                    silent_frames += 1
-                    if silent_frames > self.MAX_SILENT_FRAMES:
-                        queue_message("DEBUG: Silence timeout reached in FastRTC wake word detection.")
-                        break
-                    continue
-                else:
-                    silent_frames = 0
+                    queue_message("DEBUG: Silence timeout reached in FastRTC wake word detection.")
+                    break
+                if not detected_speech:
+                    continue  # Still silent, skip transcription
 
                 # Convert to format expected by FastRTC (float32)
                 audio_data = data.astype(np.float32) / 32768.0
@@ -1009,16 +1000,13 @@ class STTManager:
         except Exception as e:
             queue_message(f"ERROR: Wake word detection failed: {e}")
             return False
-        # finally:
-        #     try:
-        #         if recorder is not None:
-        #             recorder.delete()
-        #     except Exception:
-        #         pass
-        #     try:
-        #         self.porcupine.delete()
-        #     except Exception:
-        #         pass
+        finally:
+            try:
+                if recorder is not None:
+                    recorder.stop()
+                    recorder.delete()
+            except Exception:
+                pass
 
         return False
     
@@ -1157,7 +1145,7 @@ class STTManager:
         try:
             update_bar, clear_bar = self._init_progress_bar()
             self.DEBUG = False
-            rms = self.prepare_audio_data(self.amplify_audio(data))
+            rms = self.prepare_audio_data(data)
             self.silence_threshold_margin = self.silence_threshold * self.silence_margin
 
             if rms is None:
@@ -1205,6 +1193,7 @@ class STTManager:
         ) as stream:
             for _ in range(total_frames):
                 data, _ = stream.read(4000)
+                data = self.amplify_audio(data)
                 rms = self.prepare_audio_data(data)
                 if rms is not None:
                     background_rms_values.append(rms)

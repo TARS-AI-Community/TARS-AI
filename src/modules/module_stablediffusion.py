@@ -70,8 +70,16 @@ def get_image_from_dalle_v3(prompt):
             resized_image.save(temp_png_file, format='PNG')  # Save the resized image
             temp_png_file_path = temp_png_file.name
 
-        # Display the image in fullscreen using a thread
-        display_thread = threading.Thread(target=display_image_fullscreen, args=(temp_png_file_path,))
+        # Display the image in fullscreen using a thread, clean up after
+        def _display_and_cleanup(path):
+            try:
+                display_image_fullscreen(path)
+            finally:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+        display_thread = threading.Thread(target=_display_and_cleanup, args=(temp_png_file_path,))
         display_thread.start()
 
         # Return a success message
@@ -116,8 +124,16 @@ def get_image_from_automatic1111(sdpromptllm):
             temp_png_file.write(image_data)
             temp_png_file_path = temp_png_file.name
 
-        # Start a new thread to display the image
-        display_thread = threading.Thread(target=display_image_fullscreen, args=(temp_png_file_path,))
+        # Start a new thread to display the image, clean up after
+        def _display_and_cleanup(path):
+            try:
+                display_image_fullscreen(path)
+            finally:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+        display_thread = threading.Thread(target=_display_and_cleanup, args=(temp_png_file_path,))
         display_thread.start()
 
         # Continue with the rest of the program (non-blocking)
@@ -216,7 +232,15 @@ def get_image_from_comfyui(prompt, on_image_ready=None):
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
                         tmp.write(image_bytes)
                         tmp_path = tmp.name
-                    display_thread = threading.Thread(target=display_image_fullscreen, args=(tmp_path,))
+                    def _display_and_cleanup(path):
+                        try:
+                            display_image_fullscreen(path)
+                        finally:
+                            try:
+                                os.unlink(path)
+                            except OSError:
+                                pass
+                    display_thread = threading.Thread(target=_display_and_cleanup, args=(tmp_path,))
                     display_thread.start()
 
                 return "The image has been created and displayed on screen."

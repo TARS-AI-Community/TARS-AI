@@ -18,6 +18,7 @@ This license applies only to this file and does not override licenses of other f
 """
 import os
 import json
+import threading
 import requests
 from typing import List, Dict, Any, Optional, Set
 from datetime import datetime, timedelta
@@ -53,6 +54,7 @@ class MemoryManager:
         self.initial_memory_path = os.path.abspath(os.path.join(os.path.join("..", "memory", "initial_memory.json")))
 
         self.ui_manager = ui_manager
+        self._write_lock = threading.Lock()
 
         self.init_dynamic_memory()
         self.load_initial_memory(self.initial_memory_path)
@@ -232,8 +234,9 @@ class MemoryManager:
             "user_input": user_input,
             "bot_response": bot_response,
         }
-        self.hyper_db.add_document(document)
-        self.hyper_db.save(self.memory_db_path)
+        with self._write_lock:
+            self.hyper_db.add_document(document)
+            self.hyper_db.save(self.memory_db_path)
 
     def _parse_timestamp(self, memory: Dict[str, Any]) -> Optional[datetime]:
         try:
@@ -486,7 +489,11 @@ class MemoryManager:
                 bot_response = memory.get("botresponse", "")
                 self.write_longterm_memory(user_input, bot_response)
 
-            os.rename(json_file_path, os.path.splitext(json_file_path)[0] + ".loaded")
+            try:
+                self.hyper_db.save(self.memory_db_path)
+                os.rename(json_file_path, os.path.splitext(json_file_path)[0] + ".loaded")
+            except Exception as e:
+                queue_message(f"ERROR: Failed to save after initial memory injection: {e}")
 
     def token_count(self, text: str) -> dict:
         llm_backend = self.config['LLM']['llm_backend']

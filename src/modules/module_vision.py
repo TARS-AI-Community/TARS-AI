@@ -112,8 +112,10 @@ def capture_image() -> str:
         raise RuntimeError("Camera module not available")
         
     try:
-        camera = CameraModule(1920, 1080)
-        image_path = camera.capture_single_image()
+        global CAMERA
+        if CAMERA is None:
+            CAMERA = CameraModule(1920, 1080)
+        image_path = CAMERA.capture_single_image()
         print(f"Image saved: {image_path}")
         return image_path
 

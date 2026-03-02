@@ -19,16 +19,19 @@ This license applies only to this file and does not override licenses of other f
 from datetime import datetime
 import os
 import re
+import threading
 from modules.module_messageQue import queue_message
 
 _location_cache = {"lat": None, "lon": None, "name": None}
+_location_cache_lock = threading.Lock()
 
 
 def _resolve_location_name(lat, lon):
     global _location_cache
 
-    if _location_cache["lat"] == lat and _location_cache["lon"] == lon and _location_cache["name"]:
-        return _location_cache["name"]
+    with _location_cache_lock:
+        if _location_cache["lat"] == lat and _location_cache["lon"] == lon and _location_cache["name"]:
+            return _location_cache["name"]
 
     try:
         import requests
@@ -49,7 +52,8 @@ def _resolve_location_name(lat, lon):
         name = ", ".join(parts) if parts else data.get("display_name", "")
 
         if name:
-            _location_cache.update({"lat": lat, "lon": lon, "name": name})
+            with _location_cache_lock:
+                _location_cache.update({"lat": lat, "lon": lon, "name": name})
             queue_message(f"[LOCATION] Resolved: {name}")
             return name
 
