@@ -69,19 +69,8 @@ def start_bt_controller_thread():
         return
     try:
         queue_message(f"LOAD: Starting BT Controller thread...")
-        attempt = 0
         while not stop_event.is_set():
-            try:
-                start_controls()
-                attempt = 0  # Reset on success
-            except Exception as e:
-                attempt += 1
-                delay = min(0.5 * (2 ** attempt), 30)
-                queue_message(f"ERROR: BT Controller failed (attempt {attempt}): {e}")
-                if attempt >= 10:
-                    queue_message("ERROR: BT Controller max retries reached, stopping")
-                    break
-                stop_event.wait(delay)
+            start_controls()
     except Exception as e:
         queue_message(f"ERROR: {e}")
 

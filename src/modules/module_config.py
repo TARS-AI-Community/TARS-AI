@@ -158,11 +158,14 @@ def apply_device_overrides(config_dict: dict, capabilities: DeviceCapabilities) 
             queue_message(f"WARNING: STT '{stt_processor}' not supported on {capabilities.profile.value}, using '{capabilities.fallback_stt}'")
         config_dict["STT"]["stt_processor"] = capabilities.fallback_stt
     
-    tts_option = config_dict["TTS"]["ttsoption"]
+    tts_option = config_dict["TTS"].ttsoption if hasattr(config_dict["TTS"], 'ttsoption') else config_dict["TTS"]["ttsoption"]
     if tts_option not in capabilities.allowed_tts:
         if show_warnings:
             queue_message(f"WARNING: TTS '{tts_option}' not supported on {capabilities.profile.value}, using '{capabilities.fallback_tts}'")
-        config_dict["TTS"]["ttsoption"] = capabilities.fallback_tts
+        if hasattr(config_dict["TTS"], 'ttsoption'):
+            config_dict["TTS"].ttsoption = capabilities.fallback_tts
+        else:
+            config_dict["TTS"]["ttsoption"] = capabilities.fallback_tts
     
     vad_method = config_dict["STT"]["vad_method"]
     if vad_method not in capabilities.allowed_vad:

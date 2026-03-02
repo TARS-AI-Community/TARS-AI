@@ -206,7 +206,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
     async def play_chunks():
         try:
             requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/start_talking", timeout=1)
-        except Exception:
+        except:
             pass
         
         while True:
@@ -214,7 +214,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 try:
                     audio_chunk = await asyncio.wait_for(audio_queue.get(), timeout=0.1)
                 except asyncio.TimeoutError:
-                    if audio_queue.empty() and synthesis_done.is_set():
+                    if synthesis_done.is_set() and audio_queue.empty():
                         break
                     continue
                 
@@ -236,7 +236,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
         
         try:
             requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/stop_talking", timeout=1)
-        except Exception:
+        except:
             pass
     
     await asyncio.gather(

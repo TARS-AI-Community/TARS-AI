@@ -18,8 +18,6 @@ This license applies only to this file and does not override licenses of other f
 """
 import os
 import json
-import tempfile
-import threading
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 
@@ -72,7 +70,6 @@ class MemoryManagerLite:
         self.initial_memory_path = os.path.abspath(os.path.join(os.path.join("..", "memory", "initial_memory.json")))
 
         self.ui_manager = ui_manager
-        self._write_lock = threading.Lock()
 
         self.init_dynamic_memory()
         self.load_initial_memory(self.initial_memory_path)
@@ -119,16 +116,9 @@ class MemoryManagerLite:
 
     def _save_memory(self):
         try:
-            dir_path = os.path.dirname(self.memory_db_path)
-            os.makedirs(dir_path, exist_ok=True)
-            fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix='.tmp')
-            try:
-                with os.fdopen(fd, 'w') as f:
-                    json.dump(self.documents, f, indent=2)
-                os.replace(tmp_path, self.memory_db_path)
-            except Exception:
-                os.unlink(tmp_path)
-                raise
+            os.makedirs(os.path.dirname(self.memory_db_path), exist_ok=True)
+            with open(self.memory_db_path, 'w') as f:
+                json.dump(self.documents, f, indent=2)
         except Exception as e:
             queue_message(f"ERROR: Failed to save lite memory: {e}")
 
@@ -279,9 +269,8 @@ class MemoryManagerLite:
             "timestamp": current_time,
             "keywords": keywords
         }
-        with self._write_lock:
-            self.documents.append(document)
-            self._save_memory()
+        self.documents.append(document)
+        self._save_memory()
 
         if self.ui_manager:
             self.ui_manager.save_memory()
@@ -311,7 +300,7 @@ class MemoryManagerLite:
                 if days_ago <= self.recency_boost_days:
                     recency_boost = 0.2 * (1 - days_ago / self.recency_boost_days)
                     score += recency_boost
-            except (ValueError, TypeError):
+            except:
                 pass
 
             scored_docs.append((i, doc, score))
@@ -439,7 +428,7 @@ class MemoryManagerLite:
                         user_input = entry.get('user_input', '')
                         if user_input:
                             recent_topics.append(user_input)
-                except (ValueError, TypeError):
+                except:
                     continue
 
             if recent_topics:

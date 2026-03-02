@@ -869,11 +869,20 @@ class STTManager:
                 character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
                 queue_message(f"{character_name}: Sleeping...")
 
-            if self._detect_wake_word():
-                _sleeping_logged = False  # Reset so it logs again next sleep cycle
-                # Check again if paused before transcribing
-                if not self.is_paused():
-                    self._transcribe_utterance()
+            try:
+                if self._detect_wake_word():
+                    _sleeping_logged = False  # Reset so it logs again next sleep cycle
+                    # Check again if paused before transcribing
+                    if not self.is_paused():
+                        self._transcribe_utterance()
+            except sd.PortAudioError as e:
+                queue_message(f"WARNING: STT audio stream error ({e}), restarting in 2s...")
+                _sleeping_logged = False
+                time.sleep(2.0)
+            except Exception as e:
+                queue_message(f"ERROR: STT loop exception: {e}")
+                _sleeping_logged = False
+                time.sleep(1.0)
         queue_message("INFO: STT Manager stopped.")
 
     def _detect_wake_word(self) -> bool:
@@ -901,65 +910,62 @@ class STTManager:
         except Exception:
             pass
 
-        chunk_duration = 2.0  # Process 1-second chunks
+        chunk_duration = 2.0
         frames_per_chunk = int(self.SAMPLE_RATE * chunk_duration)
         silent_frames = 0
-        max_iterations = 100  # Prevent infinite loops
+        max_iterations = 100
 
-        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
-            for iteration in range(max_iterations):
-                if not self.running or self.shutdown_event.is_set():
-                    break
+        try:
+            with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+                for iteration in range(max_iterations):
+                    if not self.running or self.shutdown_event.is_set():
+                        break
 
-                # Read a short audio chunk
-                data, _ = stream.read(frames_per_chunk)
-                data = self.amplify_audio(data)  # Apply amplification
+                    # Read a short audio chunk
+                    data, _ = stream.read(frames_per_chunk)
+                    data = self.amplify_audio(data)
 
-                # Check for silence
-                is_silence, _, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
-                if is_silence:
-                    silent_frames += 1
-                    if silent_frames > self.MAX_SILENT_FRAMES:
+                    # Check for silence — trust returned silent_frames from VAD
+                    is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
+                    if is_silence:
                         queue_message("DEBUG: Silence timeout reached in FastRTC wake word detection.")
                         break
-                    continue
-                else:
-                    silent_frames = 0
-                    break
-                if not detected_speech:
-                    continue  # Still silent, skip transcription
-                
-                # Convert to format expected by FastRTC (float32)
-                audio_data = data.astype(np.float32) / 32768.0
-                # Ensure 1D array: flatten from (44100,) to [44100]
-                audio_data = audio_data.flatten()
-                #queue_message(f"DEBUG: audio_data shape: {audio_data.shape}, sample_rate: {self.SAMPLE_RATE}")
+                    if not detected_speech:
+                        continue  # Still silent, skip transcription
 
-                try:
-                    transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip().lower()
-                except Exception as e:
-                    queue_message(f"ERROR: FastRTC STT failed: {e}")
-                    continue
+                    # Speech detected — transcribe and check for wake word
+                    audio_data = data.astype(np.float32) / 32768.0
+                    audio_data = audio_data.flatten()
 
-                if self.DEBUG:
-                    queue_message(f"DEBUG: FastRTC Wake Word Transcript: '{transcript}'")
-
-                if self.WAKE_WORD in transcript:
-                    if self.config["STT"].get("use_indicators"):
-                        self.play_wav("../stt/beep_on.wav")
                     try:
-                        requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/start_talking", timeout=1)
-                    except Exception:
-                        pass
-                    if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
-                        wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                        character_name = os.path.splitext(os.path.basename(
-                            self.config.get("CHAR", {}).get("character_card_path", "TARS")
-                        ))[0]
-                        queue_message(f"{character_name}: {wake_response}", stream=True)
-                        if self.wake_word_callback:
-                            self.wake_word_callback(wake_response)
-                    return True
+                        transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip().lower()
+                    except Exception as e:
+                        queue_message(f"ERROR: FastRTC STT failed: {e}")
+                        continue
+
+                    if self.DEBUG:
+                        queue_message(f"DEBUG: FastRTC Wake Word Transcript: '{transcript}'")
+
+                    if self.WAKE_WORD in transcript:
+                        if self.config["STT"].get("use_indicators"):
+                            self.play_wav("../stt/beep_on.wav")
+                        try:
+                            requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/start_talking", timeout=1)
+                        except Exception:
+                            pass
+                        if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
+                            wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                            character_name = os.path.splitext(os.path.basename(
+                                self.config.get("CHAR", {}).get("character_card_path", "TARS")
+                            ))[0]
+                            queue_message(f"{character_name}: {wake_response}", stream=True)
+                            if self.wake_word_callback:
+                                self.wake_word_callback(wake_response)
+                        return True
+
+        except sd.PortAudioError as e:
+            queue_message(f"WARNING: Audio stream interrupted ({e}), will retry.")
+            time.sleep(1.0)
 
         return False
     

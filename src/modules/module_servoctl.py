@@ -51,19 +51,11 @@ def _load_servo_positions():
         return {}
 
 def _save_servo_positions():
-
+    
     import json
-    import tempfile
     try:
-        dir_path = os.path.dirname(SERVO_POSITIONS_FILE) or '.'
-        fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix='.tmp')
-        try:
-            with os.fdopen(fd, 'w') as f:
-                json.dump(servo_positions, f)
-            os.replace(tmp_path, SERVO_POSITIONS_FILE)
-        except Exception:
-            os.unlink(tmp_path)
-            raise
+        with open(SERVO_POSITIONS_FILE, 'w') as f:
+            json.dump(servo_positions, f)
     except Exception as e:
         print(f"[SERVO] Warning: Could not save positions: {e}")
 

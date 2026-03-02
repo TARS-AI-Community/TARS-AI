@@ -94,7 +94,6 @@ sprite = character_name
 latest_text_to_read = ""
 audio_chunks_dict = OrderedDict()
 current_chunk_index = 0
-_audio_lock = threading.Lock()
 
 def _get_sprite_urls(emo):
     """Return the 4 sprite filenames for a given emotion."""
@@ -361,9 +360,8 @@ def audio_stream():
     socketio.emit('talking_state', {'talking': True})
 
     # ✅ Reset chunk tracking for new requests
-    with _audio_lock:
-        audio_chunks_dict.clear()
-        current_chunk_index = 0
+    audio_chunks_dict.clear()  
+    current_chunk_index = 0  
 
     def get_final_text():
         return latest_text_to_read if 'latest_text_to_read' in globals() else "No response available."
@@ -377,12 +375,11 @@ def audio_stream():
         """
         index = 0
         async for chunk in generate_tts_audio(final_text, CONFIG['TTS']['ttsoption']):
-            with _audio_lock:
-                audio_chunks_dict[index] = chunk.getvalue()
+            audio_chunks_dict[index] = chunk.getvalue()  # Store chunk with its order
             index += 1
 
-        with _audio_lock:
-            audio_chunks_dict[index] = None  # Mark end of chunks
+        #queue_message(f"Generated {len(audio_chunks_dict)} chunks.")
+        audio_chunks_dict[index] = None  # Mark end of chunks
 
     # Run the async generator in a background thread
     def run_async_generator():
@@ -416,22 +413,25 @@ def get_next_audio_chunk():
     """
     global current_chunk_index
 
-    with _audio_lock:
-        if current_chunk_index in audio_chunks_dict:
-            next_chunk = audio_chunks_dict[current_chunk_index]
+    if current_chunk_index in audio_chunks_dict:
+        next_chunk = audio_chunks_dict[current_chunk_index]
+        
+        if next_chunk is None:
+            #queue_message(f"End of chunks at index {current_chunk_index}.")
+            return Response(status=204)  # No more audio
 
-            if next_chunk is None:
-                return Response(status=204)  # No more audio
+        #queue_message(f"Serving chunk {current_chunk_index}.")
+        response = Response(next_chunk, mimetype="audio/mp3", headers={
+            'Content-Type': 'audio/mp3',
+            'Content-Length': str(len(next_chunk)),  # Ensure correct content size
+        })
 
-            response = Response(next_chunk, mimetype="audio/mp3", headers={
-                'Content-Type': 'audio/mp3',
-                'Content-Length': str(len(next_chunk)),
-            })
-
-            current_chunk_index += 1
-            return response
-        else:
-            return Response(status=204)  # No content available yet
+        # ✅ Update `current_chunk_index` **AFTER** the chunk is sent
+        current_chunk_index += 1
+        return response
+    else:
+        #queue_message(f"Chunk {current_chunk_index} not available yet.")
+        return Response(status=204)  # No content available yet
 
 # Add these routes to your Flask application
 
