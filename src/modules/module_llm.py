@@ -184,6 +184,35 @@ def detect_emotion(text):
     emotion_detected = max(model_outputs[0], key=lambda x: x['score'])['label']
     return emotion_detected
     
+def _repair_truncated_json(s):
+    """Repair truncated JSON by closing unclosed strings, brackets, and braces."""
+    in_string = False
+    escape_next = False
+    stack = []
+
+    for char in s:
+        if escape_next:
+            escape_next = False
+            continue
+        if char == '\\' and in_string:
+            escape_next = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char in '{[':
+            stack.append('}' if char == '{' else ']')
+        elif char in '}]' and stack and stack[-1] == char:
+            stack.pop()
+
+    if in_string:
+        s += '"'
+    while stack:
+        s += stack.pop()
+    return s
+
 def llm_process(user_input, bot_response):
     global memory_manager
     if isinstance(bot_response, str):
@@ -200,14 +229,19 @@ def llm_process(user_input, bot_response):
 
             bot_response = bot_response.replace("True", "true").replace("False", "false")
 
-            json_match = re.search(r'\{.*?\}', bot_response, re.DOTALL)
+            json_match = re.search(r'\{.*\}', bot_response, re.DOTALL)
             if json_match:
                 bot_response = json_match.group(0)
 
             while bot_response.endswith('}}') and bot_response.count('{') < bot_response.count('}'):
                 bot_response = bot_response[:-1]
 
-            bot_response = json.loads(bot_response)
+            try:
+                bot_response = json.loads(bot_response)
+            except json.JSONDecodeError:
+                # Attempt to repair truncated JSON from LLM
+                bot_response = _repair_truncated_json(bot_response)
+                bot_response = json.loads(bot_response)
 
         except json.JSONDecodeError as e:
             queue_message(f"ERROR: JSON parsing failed: {e}")

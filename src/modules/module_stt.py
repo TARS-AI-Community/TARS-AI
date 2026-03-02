@@ -856,13 +856,21 @@ class STTManager:
     def _stt_processing_loop(self):
         """Main loop that detects the wake word and transcribes utterances."""
         queue_message("INFO: Starting STT processing loop...")
+        _sleeping_logged = False
         while self.running and not self.shutdown_event.is_set():
             # Skip processing if paused (e.g., during video playback)
             if self.is_paused():
                 time.sleep(0.1)  # Sleep while paused to avoid busy waiting
                 continue
-            
+
+            if not _sleeping_logged:
+                _sleeping_logged = True
+                character_path = self.config.get("CHAR", {}).get("character_card_path")
+                character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
+                queue_message(f"{character_name}: Sleeping...")
+
             if self._detect_wake_word():
+                _sleeping_logged = False  # Reset so it logs again next sleep cycle
                 # Check again if paused before transcribing
                 if not self.is_paused():
                     self._transcribe_utterance()
@@ -871,10 +879,6 @@ class STTManager:
     def _detect_wake_word(self) -> bool:
         if self.config["STT"]["use_indicators"]:
             self.play_wav("../stt/beep_off.wav")
-
-        character_path = self.config.get("CHAR", {}).get("character_card_path")
-        character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
-        queue_message(f"{character_name}: Sleeping...")
 
         wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
         if wake_word_processor == "fastrtc":
@@ -911,14 +915,20 @@ class STTManager:
                 data, _ = stream.read(frames_per_chunk)
                 data = self.amplify_audio(data)  # Apply amplification
 
-                # Check for silence — trust returned silent_frames from VAD
-                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
+                # Check for silence
+                is_silence, _, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
                 if is_silence:
-                    queue_message("DEBUG: Silence timeout reached in FastRTC wake word detection.")
+                    silent_frames += 1
+                    if silent_frames > self.MAX_SILENT_FRAMES:
+                        queue_message("DEBUG: Silence timeout reached in FastRTC wake word detection.")
+                        break
+                    continue
+                else:
+                    silent_frames = 0
                     break
                 if not detected_speech:
                     continue  # Still silent, skip transcription
-
+                
                 # Convert to format expected by FastRTC (float32)
                 audio_data = data.astype(np.float32) / 32768.0
                 # Ensure 1D array: flatten from (44100,) to [44100]
