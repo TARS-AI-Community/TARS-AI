@@ -236,7 +236,7 @@ _EMOTION_TO_MOOD = {
     "joy":        "HAPPY",
     "excitement": "EXCITED",
     "excited":    "EXCITED",
-    "love":       "HAPPY",
+    "love":       "LOVE",
     "optimism":   "HAPPY",
     "gratitude":  "HAPPY",
     "pride":      "HAPPY",
@@ -249,12 +249,13 @@ _EMOTION_TO_MOOD = {
     "grief":      "SAD",
     "remorse":    "SAD",
     "disappointment": "SAD",
-    "embarrassment":  "SAD",
+    "embarrassment":  "SHY",
     # angry
     "angry":      "ANGRY",
     "anger":      "ANGRY",
-    "annoyance":  "ANGRY",
-    "disgust":    "ANGRY",
+    "annoyance":  "ANNOYED",
+    "disgust":    "DISGUSTED",
+    "disapproval":"DISGUSTED",
     # afraid
     "afraid":     "AFRAID",
     "fear":       "AFRAID",
@@ -262,13 +263,16 @@ _EMOTION_TO_MOOD = {
     # sleepy / bored
     "sleepy":     "SLEEPY",
     "boredom":    "SLEEPY",
+    # confused
+    "confusion":  "CONFUSED",
+    "curiosity":  "CURIOUS",
+    "realization":"SURPRISED",
+    # surprised
+    "surprise":   "SURPRISED",
     # neutral / other
     "neutral":    "NEUTRAL",
-    "confusion":  "NEUTRAL",
-    "surprise":   "EXCITED",
-    "curiosity":  "NEUTRAL",
     "caring":     "HAPPY",
-    "desire":     "HAPPY",
+    "desire":     "LOVE",
     "relief":     "HAPPY",
 }
 
@@ -280,6 +284,9 @@ def update_emotion(detected_emotion):
 
     queue_message(f"Emotion is set: {detected_emotion}")
 
+    # Look up the eye mood from the original emotion BEFORE sprite fallback
+    mood_name = _EMOTION_TO_MOOD.get(detected_emotion.lower(), "NEUTRAL")
+
     emo_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
     if not os.path.exists(emo_dir):
         detected_emotion = "neutral"
@@ -289,7 +296,6 @@ def update_emotion(detected_emotion):
     socketio.emit('emotion_change', {k: base + v for k, v in sprites.items()})
 
     # Trigger RoboEyes mood to match the detected emotion
-    mood_name = _EMOTION_TO_MOOD.get(detected_emotion.lower(), "NEUTRAL")
     try:
         import modules.UI.apps.module_app_eyes as _eyes_mod
         from modules.module_eyes import Mood
