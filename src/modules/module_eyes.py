@@ -23,6 +23,13 @@ class Mood(Enum):
     SIDEEYE_LEFT = auto()
     SIDEEYE_RIGHT = auto()
     SLEEPY = auto()
+    CONFUSED = auto()
+    SURPRISED = auto()
+    DISGUSTED = auto()
+    LOVE = auto()
+    SHY = auto()
+    ANNOYED = auto()
+    CURIOUS = auto()
 
 
 # Emotion transition speeds (higher = faster)
@@ -36,6 +43,13 @@ EMOTION_TRANSITION_SPEEDS = {
     Mood.AFRAID: 7.0,
     Mood.SIDEEYE_LEFT: 4.0,
     Mood.SIDEEYE_RIGHT: 4.0,
+    Mood.CONFUSED: 3.0,
+    Mood.SURPRISED: 8.0,
+    Mood.DISGUSTED: 4.0,
+    Mood.LOVE: 3.0,
+    Mood.SHY: 2.5,
+    Mood.ANNOYED: 4.0,
+    Mood.CURIOUS: 3.5,
 }
 
 # Blink intervals per mood (min, max in seconds)
@@ -49,6 +63,33 @@ BLINK_INTERVALS = {
     Mood.AFRAID: (2.0, 3.5),
     Mood.SIDEEYE_LEFT: (3.0, 5.0),
     Mood.SIDEEYE_RIGHT: (3.0, 5.0),
+    Mood.CONFUSED: (2.5, 4.5),
+    Mood.SURPRISED: (3.0, 6.0),
+    Mood.DISGUSTED: (3.0, 5.0),
+    Mood.LOVE: (3.5, 6.0),
+    Mood.SHY: (2.0, 3.5),
+    Mood.ANNOYED: (2.5, 4.0),
+    Mood.CURIOUS: (2.0, 4.0),
+}
+
+# Mood-specific eye colors
+MOOD_COLORS = {
+    Mood.NEUTRAL:       (0, 206, 209),
+    Mood.HAPPY:         (0, 206, 209),
+    Mood.SAD:           (70, 130, 200),
+    Mood.ANGRY:         (220, 40, 40),
+    Mood.EXCITED:       (255, 220, 50),
+    Mood.AFRAID:        (180, 120, 255),
+    Mood.SIDEEYE_LEFT:  (0, 206, 209),
+    Mood.SIDEEYE_RIGHT: (0, 206, 209),
+    Mood.SLEEPY:        (0, 100, 110),
+    Mood.CONFUSED:      (255, 200, 50),
+    Mood.SURPRISED:     (255, 255, 180),
+    Mood.DISGUSTED:     (80, 180, 80),
+    Mood.LOVE:          (255, 80, 140),
+    Mood.SHY:           (255, 150, 170),
+    Mood.ANNOYED:       (255, 130, 40),
+    Mood.CURIOUS:       (80, 200, 255),
 }
 
 
@@ -153,6 +194,14 @@ class RoboEyes:
         self._anim_confused_timer = 0.0
         self._anim_offset_x = 0.0
         self._anim_offset_y = 0.0
+
+        # Mood color (smooth transition)
+        default_color = MOOD_COLORS[Mood.NEUTRAL]
+        self._current_color = [float(default_color[0]), float(default_color[1]), float(default_color[2])]
+
+        # Heart particles for LOVE mood
+        self._heart_particles = []  # list of [x, y, size, life, drift_x]
+        self._heart_spawn_timer = 0.0
 
     # ── Blink System ─────────────────────────────────────────────────────────
 
@@ -319,6 +368,36 @@ class RoboEyes:
         self._pupil_scale = smooth_lerp(self._pupil_scale, self._pupil_scale_target, 10.0, dt)
         self._squint_intensity = smooth_lerp(self._squint_intensity, self._squint_target, 6.0, dt)
 
+        # Smooth mood color transition
+        target_color = MOOD_COLORS.get(self._mood, MOOD_COLORS[Mood.NEUTRAL])
+        for i in range(3):
+            self._current_color[i] = smooth_lerp(self._current_color[i], float(target_color[i]), 4.0, dt)
+
+        # Heart particles (LOVE mood)
+        if self._mood == Mood.LOVE:
+            self._heart_spawn_timer += dt
+            if self._heart_spawn_timer >= 0.8 and len(self._heart_particles) < 6:
+                cx = self.screen_width // 2
+                cy = self.screen_height // 2
+                self._heart_particles.append([
+                    cx + random.uniform(-60, 60),   # x
+                    cy + random.uniform(-20, 20),    # y
+                    random.uniform(10, 18),           # size
+                    0.0,                              # life
+                    random.uniform(-15, 15),          # drift_x
+                ])
+                self._heart_spawn_timer = 0.0
+        else:
+            self._heart_spawn_timer = 0.0
+
+        # Update heart particles
+        for h in self._heart_particles:
+            h[3] += dt           # life
+            h[1] -= 50 * dt     # float upward
+            h[0] += h[4] * dt   # horizontal drift
+            h[2] *= 0.995       # shrink slowly
+        self._heart_particles = [h for h in self._heart_particles if h[3] < 2.5]
+
     def _update_animations(self, dt: float):
         if self._current_animation is None:
             if self._anim_laugh:
@@ -446,6 +525,7 @@ class RoboEyes:
             target_angle_r = -15 * intensity
             self._left_open_target = 0.8
             self._right_open_target = 0.8
+            self._anim_offset_y = math.sin(pygame.time.get_ticks() * 0.002) * 3
 
         elif self._mood == Mood.AFRAID:
             target_top_l = h * 0.5 * intensity
@@ -474,10 +554,90 @@ class RoboEyes:
             target_angle_r = 30 * intensity
             self._left_open_target = 1.0
             self._right_open_target = 1.0
+            # Red pulsing glow
+            pulse = math.sin(pygame.time.get_ticks() * 0.005) * 0.15
+            base = MOOD_COLORS[Mood.ANGRY]
+            self._current_color = [min(255, base[0] + pulse * 60), base[1], base[2]]
 
         elif self._mood == Mood.SLEEPY:
             self._left_open_target = 0.1
             self._right_open_target = 0.1
+
+        elif self._mood == Mood.CONFUSED:
+            # Asymmetric eyes — one raised eyebrow, slight tilt
+            target_top_l = h * 0.35 * intensity
+            target_angle_l = 20 * intensity
+            target_angle_r = -10 * intensity
+            self._left_open_target = 0.7
+            self._right_open_target = 1.1
+            self._eye_offset_y_left = -5 * intensity
+            self._eye_offset_y_right = 5 * intensity
+            self._anim_offset_x = math.sin(pygame.time.get_ticks() * 0.004) * 4
+
+        elif self._mood == Mood.SURPRISED:
+            # Wide open eyes, raised
+            self._left_open_target = 1.4
+            self._right_open_target = 1.4
+            self._pupil_scale_target = 0.75
+            self._eye_offset_y_left = -8 * intensity
+            self._eye_offset_y_right = -8 * intensity
+
+        elif self._mood == Mood.DISGUSTED:
+            # Squinted eyes, slight look away, bottom lids raised
+            target_bot_l = h * 0.25 * intensity
+            target_bot_r = h * 0.25 * intensity
+            target_angle_l = -10 * intensity
+            target_angle_r = 10 * intensity
+            self._left_open_target = 0.6
+            self._right_open_target = 0.6
+            self._squint_target = 0.4 * intensity
+            self._target_look_x = -0.3
+
+        elif self._mood == Mood.LOVE:
+            # Dreamy half-lidded eyes, soft upward gaze, curved bottom lids
+            target_bot_l = h * 0.15 * intensity
+            target_bot_r = h * 0.15 * intensity
+            target_curve_l = 1.0 * intensity
+            target_curve_r = 1.0 * intensity
+            use_curved_bottom = True
+            self._left_open_target = 0.75
+            self._right_open_target = 0.75
+            self._pupil_scale_target = 1.3
+            self._eye_offset_y_left = -4 * intensity
+            self._eye_offset_y_right = -4 * intensity
+
+        elif self._mood == Mood.SHY:
+            # Eyes looking down, partially closed, slight asymmetry
+            target_top_l = h * 0.2 * intensity
+            target_top_r = h * 0.15 * intensity
+            self._left_open_target = 0.5
+            self._right_open_target = 0.55
+            self._eye_offset_y_left = 10 * intensity
+            self._eye_offset_y_right = 10 * intensity
+            self._target_look_x = -0.2
+            self._pupil_scale_target = 0.85
+
+        elif self._mood == Mood.ANNOYED:
+            # Mild squint, one eyebrow lower, less intense than ANGRY
+            target_top_l = h * 0.3 * intensity
+            target_top_r = h * 0.15 * intensity
+            target_angle_l = -15 * intensity
+            target_angle_r = 8 * intensity
+            self._left_open_target = 0.8
+            self._right_open_target = 0.9
+            self._squint_target = 0.2 * intensity
+            self._target_look_x = 0.15
+
+        elif self._mood == Mood.CURIOUS:
+            # One eye wider, slight head tilt, looking to the side
+            target_angle_l = 10 * intensity
+            target_angle_r = -5 * intensity
+            self._left_open_target = 1.3
+            self._right_open_target = 0.9
+            self._pupil_scale_target = 1.15
+            self._target_look_x = 0.4
+            self._eye_offset_y_left = -6 * intensity
+            self._eye_offset_y_right = 2 * intensity
 
         self._curved_bottom_left = use_curved_bottom
         self._curved_bottom_right = use_curved_bottom
@@ -505,6 +665,8 @@ class RoboEyes:
         self._draw_eye(surface, right_x, center_y, False,
                        curved_bottom=self._curved_bottom_right,
                        curve_amount=self._curved_amount_right)
+
+        self._draw_effects(surface)
 
     def _draw_curved_bottom_lid(self, surface: pygame.Surface, x: int, y: int, w: int, h: int, curve_amount: float):
         if curve_amount < 0.01:
@@ -544,7 +706,8 @@ class RoboEyes:
             eye_height,
         )
         border_radius = min(self.config.border_radius, self.config.width // 2, max(1, eye_height // 2))
-        pygame.draw.rect(surface, self.config.eye_color, eye_rect, border_radius=border_radius)
+        eye_color = (int(self._current_color[0]), int(self._current_color[1]), int(self._current_color[2]))
+        pygame.draw.rect(surface, eye_color, eye_rect, border_radius=border_radius)
 
         lid_color = self.config.bg_color
 
@@ -595,3 +758,31 @@ class RoboEyes:
             lid_rect = pygame.Rect(total_x - 2, total_y + eye_height - int(lid_bottom),
                                    self.config.width + 4, lid_h + 10)
             pygame.draw.rect(surface, lid_color, lid_rect)
+
+    @staticmethod
+    def _draw_heart(surface: pygame.Surface, cx: int, cy: int, size: int, color):
+        """Draw a heart shape at (cx, cy) with given size."""
+        r = max(1, size // 3)
+        # Two circles for the top bumps
+        pygame.draw.circle(surface, color, (cx - r, cy - r // 2), r)
+        pygame.draw.circle(surface, color, (cx + r, cy - r // 2), r)
+        # Triangle for the bottom point
+        points = [
+            (cx - size // 2 - 1, cy),
+            (cx + size // 2 + 1, cy),
+            (cx, cy + int(size * 0.7)),
+        ]
+        pygame.draw.polygon(surface, color, points)
+
+    def _draw_effects(self, surface: pygame.Surface):
+        """Draw mood overlay effects (hearts, etc.)."""
+        for h in self._heart_particles:
+            x, y, size, life = int(h[0]), int(h[1]), int(h[2]), h[3]
+            if size < 2:
+                continue
+            # Fade: full pink at birth, dimmer as life increases
+            fade = max(0.0, 1.0 - life / 2.5)
+            r = int(255 * fade)
+            g = int(80 * fade)
+            b = int(140 * fade)
+            self._draw_heart(surface, x, y, size, (r, g, b))

@@ -1,5 +1,8 @@
 import requests
 import base64
+import json
+import os
+import random
 from PIL import Image
 import tempfile
 import time
@@ -10,26 +13,31 @@ from io import BytesIO
 from modules.module_config import load_config
 from modules.module_messageQue import queue_message
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Load configuration
 config = load_config()
 
-def generate_image(prompt):
+def generate_image(prompt, on_image_ready=None):
     """
     Generate an image based on the provided prompt using the configured image generation service.
 
     Parameters:
     - prompt (str): A textual description of the image to be generated.
+    - on_image_ready (callable): Optional callback(image_bytes) called when the image is available.
 
     Returns:
     - str: The result of the image generation process. If the tool is disabled, returns "Image Tool not enabled."
     """
     result = "Image Tool not enabled"
-    if config['STABLE_DIFFUSION']['enabled'] == "True":
+    if config['STABLE_DIFFUSION']['enabled']:
         if config['STABLE_DIFFUSION']['service'] == "openai":
             result = get_image_from_dalle_v3(prompt)
         if config['STABLE_DIFFUSION']['service'] == "automatic1111":
             result = get_image_from_automatic1111(prompt)
-    return result 
+        if config['STABLE_DIFFUSION']['service'] == "comfyui":
+            result = get_image_from_comfyui(prompt, on_image_ready=on_image_ready)
+    return result
 
 def get_image_from_dalle_v3(prompt):
     # Initialize the OpenAI client
@@ -121,9 +129,113 @@ def get_image_from_automatic1111(sdpromptllm):
         queue_message(f"Error: {e}")
 
     return f"Image generated and displayed in fullscreen."
-  
+
+def get_image_from_comfyui(prompt, on_image_ready=None):
+    """Generate an image using ComfyUI API with a workflow JSON template."""
+    comfy_url = config['STABLE_DIFFUSION']['url'].rstrip('/')
+    workflow_path = config['STABLE_DIFFUSION'].get('comfyui_workflow', 'Documentation/Comfy_UI_SD.json')
+
+    # Resolve relative paths against project root
+    if not os.path.isabs(workflow_path):
+        workflow_path = os.path.join(BASE_DIR, workflow_path)
+
+    if not os.path.exists(workflow_path):
+        queue_message(f"ComfyUI workflow not found: {workflow_path}")
+        return "ComfyUI workflow template not found."
+
+    try:
+        with open(workflow_path, 'r') as f:
+            workflow = json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        queue_message(f"Failed to load ComfyUI workflow: {e}")
+        return "Failed to load ComfyUI workflow template."
+
+    # Inject prompt into positive prompt node (node 3)
+    if "3" in workflow and "inputs" in workflow["3"]:
+        workflow["3"]["inputs"]["text"] = prompt
+
+    # Randomize seed in sampler node (node 11)
+    if "11" in workflow and "inputs" in workflow["11"]:
+        if "noise_seed" in workflow["11"]["inputs"]:
+            workflow["11"]["inputs"]["noise_seed"] = random.randint(1, 999999999999999)
+        elif "seed" in workflow["11"]["inputs"]:
+            workflow["11"]["inputs"]["seed"] = random.randint(1, 999999999999999)
+
+    try:
+        # Queue the prompt
+        resp = requests.post(f"{comfy_url}/prompt", json={"prompt": workflow}, timeout=10)
+        if resp.status_code != 200:
+            queue_message(f"ComfyUI queue error: {resp.text}")
+            return f"ComfyUI error: {resp.text}"
+
+        prompt_id = resp.json().get("prompt_id")
+        if not prompt_id:
+            queue_message("ComfyUI returned no prompt_id")
+            return "ComfyUI error: no prompt_id returned."
+
+        # Poll for completion
+        for _ in range(60):
+            time.sleep(1)
+            hist_resp = requests.get(f"{comfy_url}/history/{prompt_id}", timeout=10)
+            if hist_resp.status_code != 200 or not hist_resp.json():
+                continue
+
+            history = hist_resp.json().get(prompt_id)
+            if not history:
+                continue
+
+            outputs = history.get("outputs", {})
+            for node_id, node_output in outputs.items():
+                if "images" not in node_output:
+                    continue
+
+                img_info = node_output["images"][0]
+                fname = img_info.get("filename")
+                subfolder = img_info.get("subfolder", "")
+                img_type = img_info.get("type", "output")
+
+                img_resp = requests.get(
+                    f"{comfy_url}/view",
+                    params={"filename": fname, "subfolder": subfolder, "type": img_type},
+                    timeout=30
+                )
+                if img_resp.status_code != 200:
+                    queue_message(f"ComfyUI failed to fetch image: {img_resp.status_code}")
+                    return "ComfyUI error fetching generated image."
+
+                image_bytes = img_resp.content
+
+                # Fire WebUI callback with raw bytes
+                if on_image_ready:
+                    try:
+                        on_image_ready(image_bytes)
+                    except Exception as cb_err:
+                        queue_message(f"ComfyUI image callback error: {cb_err}")
+                else:
+                    # Only display locally via pygame when there is no WebUI callback
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                        tmp.write(image_bytes)
+                        tmp_path = tmp.name
+                    display_thread = threading.Thread(target=display_image_fullscreen, args=(tmp_path,))
+                    display_thread.start()
+
+                return "The image has been created and displayed on screen."
+
+        queue_message("ComfyUI image generation timed out.")
+        return "Image generation timed out."
+
+    except requests.exceptions.RequestException as e:
+        queue_message(f"ComfyUI request error: {e}")
+        return f"ComfyUI error: {e}"
+
 def display_image_fullscreen(image_path):
     """Function to display an image in fullscreen, scaled to fit the screen, for 8 seconds."""
+    try:
+        _display_image_fullscreen_inner(image_path)
+    except Exception as e:
+        queue_message(f"Display error (non-fatal): {e}")
+
+def _display_image_fullscreen_inner(image_path):
     # Initialize Pygame
     pygame.init()
 

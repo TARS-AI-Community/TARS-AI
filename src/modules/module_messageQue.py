@@ -2,10 +2,29 @@ import sys
 import time
 import threading
 import queue
+from collections import deque
 
 # Queue for handling message processing
 message_queue = queue.Queue()
 output_lock = threading.Lock()  # 🔹 Single lock for ALL stdout operations
+
+# Rolling log buffer for the WebUI console
+_log_buffer = deque(maxlen=200)
+_log_lock = threading.Lock()
+_log_counter = 0
+
+def get_recent_logs(since=0):
+    """Return log lines newer than since and the current counter."""
+    with _log_lock:
+        lines = [msg for idx, msg in _log_buffer if idx > since]
+        head = _log_buffer[-1][0] if _log_buffer else since
+    return lines, head
+
+def _buffer_log(message):
+    global _log_counter
+    with _log_lock:
+        _log_counter += 1
+        _log_buffer.append((_log_counter, message))
 
 def process_message_queue():
     """ Continuously process the message queue in order. """
@@ -29,11 +48,13 @@ def process_message_queue():
             with output_lock:  # 🔹 Lock only while printing
                 print(message, flush=True)
 
+        _buffer_log(message)
+
         message_queue.task_done()
 
 def stream_text_blocking(text, delay=0.03):
     """ Streams text character-by-character in a non-blocking manner. """
-    
+
     def _stream():
         with output_lock:  # 🔹 Ensures no other process writes during streaming
             sys.stdout.flush()

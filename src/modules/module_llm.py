@@ -179,11 +179,39 @@ def process_completion(prompt):
 
 def detect_emotion(text):
     if classifier is None:
-        return
+        return None
     model_outputs = classifier(text)
-    emotindetected = max(model_outputs[0], key=lambda x: x['score'])['label']
-    requests.post(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/emotion", data=emotindetected, timeout=10)
-    return
+    emotion_detected = max(model_outputs[0], key=lambda x: x['score'])['label']
+    return emotion_detected
+    
+def _repair_truncated_json(s):
+    """Repair truncated JSON by closing unclosed strings, brackets, and braces."""
+    in_string = False
+    escape_next = False
+    stack = []
+
+    for char in s:
+        if escape_next:
+            escape_next = False
+            continue
+        if char == '\\' and in_string:
+            escape_next = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char in '{[':
+            stack.append('}' if char == '{' else ']')
+        elif char in '}]' and stack and stack[-1] == char:
+            stack.pop()
+
+    if in_string:
+        s += '"'
+    while stack:
+        s += stack.pop()
+    return s
 
 def llm_process(user_input, bot_response):
     global memory_manager
@@ -208,7 +236,12 @@ def llm_process(user_input, bot_response):
             while bot_response.endswith('}}') and bot_response.count('{') < bot_response.count('}'):
                 bot_response = bot_response[:-1]
 
-            bot_response = json.loads(bot_response)
+            try:
+                bot_response = json.loads(bot_response)
+            except json.JSONDecodeError:
+                # Attempt to repair truncated JSON from LLM
+                bot_response = _repair_truncated_json(bot_response)
+                bot_response = json.loads(bot_response)
 
         except json.JSONDecodeError as e:
             queue_message(f"ERROR: JSON parsing failed: {e}")
@@ -258,12 +291,6 @@ def llm_process(user_input, bot_response):
                     queue_message(f"MEMORY: Failed to save: {e}")
 
             threading.Thread(target=save_memories).start()
-
-    if CONFIG["EMOTION"]["enabled"]:
-        threading.Thread(
-            target=detect_emotion,
-            args=(bot_response["reply"],)
-        ).start()
 
     return _sanitize_for_tts(bot_response["reply"])
 
@@ -697,12 +724,12 @@ def execute_function_call(func_call, bot_response, user_input):
                             from modules.module_main import shutdown_event
                             if shutdown_event:
                                 shutdown_event.set()
-                            import os
-                            os._exit(0)
+                            import sys
+                            sys.exit(0)
                     except Exception as e:
                         queue_message(f"Exit failed: {e}")
-                        import os
-                        os._exit(0)
+                        import sys
+                        sys.exit(0)
 
                 threading.Thread(target=exit_after_tts, daemon=False).start()
 
@@ -720,19 +747,58 @@ def execute_function_call(func_call, bot_response, user_input):
                         else:
                             import subprocess
                             subprocess.Popen(['sudo', 'shutdown', 'now'])
-                            import os
-                            os._exit(0)
+                            import sys
+                            sys.exit(0)
                     except Exception as e:
                         queue_message(f"Shutdown failed: {e}")
                         import subprocess
                         subprocess.Popen(['sudo', 'shutdown', 'now'])
-                        import os
-                        os._exit(0)
+                        import sys
+                        sys.exit(0)
 
                 threading.Thread(target=shutdown_after_tts, daemon=False).start()
 
             else:
                 bot_response["reply"] = "I didn't understand that system command."
+
+        elif function_name == "generate_image":
+            from modules.module_stablediffusion import generate_image
+            prompt = parameters.get("prompt", "")
+            if not prompt:
+                bot_response["reply"] = "No image description provided."
+            else:
+                queue_message(f"Generating image: {prompt}")
+                # Always override — small LLMs tend to apologize even when calling the function
+                bot_response["reply"] = "On it — generating your image now."
+
+                def _on_image_ready(image_bytes):
+                    try:
+                        queue_message(f"[SD] Image ready ({len(image_bytes)} bytes) — emitting to WebUI")
+                        import base64 as _b64
+                        b64 = _b64.b64encode(image_bytes).decode('utf-8')
+                        img_html = f'<img style="max-width:100%;border-radius:8px;" src="data:image/png;base64,{b64}">'
+                        from modules.module_chatui import socketio
+                        socketio.emit('bot_message', {'message': img_html})
+                        queue_message("[SD] WebUI image emit sent")
+                    except Exception as _e:
+                        queue_message(f"[SD] WebUI image emit failed: {_e}")
+
+                def _generate_bg():
+                    queue_message("[SD] Background generation thread started")
+                    try:
+                        result = generate_image(prompt, on_image_ready=_on_image_ready)
+                        queue_message(f"[SD] Background generation done: {result}")
+                    except Exception as _e:
+                        queue_message(f"[SD] Background image generation failed: {_e}")
+
+                # Use socketio.start_background_task so the green thread can emit via eventlet
+                try:
+                    from modules.module_chatui import socketio as _sio
+                    _sio.start_background_task(_generate_bg)
+                    queue_message("[SD] Started via socketio.start_background_task")
+                except Exception:
+                    threading.Thread(target=_generate_bg, daemon=True).start()
+                    queue_message("[SD] Started via threading fallback")
 
         elif function_name == "home_assistant":
             from modules.module_homeassistant import send_prompt_to_homeassistant
@@ -748,7 +814,7 @@ def execute_function_call(func_call, bot_response, user_input):
                     speech = ""
                     try:
                         speech = ha_response.get("response", {}).get("speech", {}).get("plain", {}).get("speech", "")
-                    except:
+                    except Exception:
                         pass
                     
                     if speech:

@@ -38,8 +38,8 @@ from modules.module_config import load_config
 from modules.module_config import CONFIG_METADATA as CONFIG_UI_FIELDS
 from modules.module_llm import get_completion
 from modules.module_tts import generate_tts_audio
-from modules.module_llm import detect_emotion
-from modules.module_messageQue import queue_message
+from modules.module_llm import detect_emotion, classifier as emotion_classifier
+from modules.module_messageQue import queue_message, get_recent_logs
 from modules.module_servoctl import *
 from modules.module_movement_registry import get_names, get_names_by_type, LEGS_ONLY, HAS_ARMS, MOVEMENTS
 
@@ -52,12 +52,21 @@ except ImportError:
     get_image_caption_from_base64 = None
     queue_message("ChatUI: Vision module not available — image captioning disabled")
 
-# WiFi manager — lazy-initialised
+# WiFi manager — background-initialised to avoid blocking boot
 try:
     from modules.module_wifi import WiFiManager as _WiFiManagerClass
-    _wifi_manager = _WiFiManagerClass()
+    _wifi_manager = None
     WIFI_AVAILABLE = True
-except Exception as _wifi_err:
+
+    def _init_wifi_bg():
+        global _wifi_manager
+        try:
+            _wifi_manager = _WiFiManagerClass()
+        except Exception:
+            pass  # _wifi_manager stays None; routes guard against this
+
+    threading.Thread(target=_init_wifi_bg, daemon=True, name="wifi-init").start()
+except ImportError:
     _wifi_manager = None
     WIFI_AVAILABLE = False
 
@@ -122,7 +131,7 @@ flask_app.secret_key = os.getenv("FLASK_SECRET_KEY", "tars_default_secret_key_88
 @flask_app.before_request
 def check_auth():
     # Public routes that don't require login
-    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path == '/login' or not CONFIG['CHATUI'].get('enabled', True):
+    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path in ('/login', '/emotion', '/start_talking', '/stop_talking') or not CONFIG['CHATUI'].get('enabled', True):
         return
         
     # Check if user is logged in
@@ -170,9 +179,9 @@ def login():
             session.permanent = True  # Maintain cookie presence
             return redirect(url_for('index'))
         else:
-            return render_template('login.html', error="Invalid password")
-            
-    return render_template('login.html')
+            return render_template('login.html', error="Invalid password", char_name=character_name)
+
+    return render_template('login.html', char_name=character_name)
 
 @flask_app.route('/logout')
 def logout():
@@ -221,28 +230,89 @@ def stop_talking_endpoint():
     socketio.emit('talking_state', {'talking': False})
     return Response("stopped", status=200)
 
+_EMOTION_TO_MOOD = {
+    # happy / positive
+    "happy":      "HAPPY",
+    "joy":        "HAPPY",
+    "excitement": "EXCITED",
+    "excited":    "EXCITED",
+    "love":       "LOVE",
+    "optimism":   "HAPPY",
+    "gratitude":  "HAPPY",
+    "pride":      "HAPPY",
+    "amusement":  "HAPPY",
+    "admiration": "HAPPY",
+    "approval":   "HAPPY",
+    # sad / negative
+    "sad":        "SAD",
+    "sadness":    "SAD",
+    "grief":      "SAD",
+    "remorse":    "SAD",
+    "disappointment": "SAD",
+    "embarrassment":  "SHY",
+    # angry
+    "angry":      "ANGRY",
+    "anger":      "ANGRY",
+    "annoyance":  "ANNOYED",
+    "disgust":    "DISGUSTED",
+    "disapproval":"DISGUSTED",
+    # afraid
+    "afraid":     "AFRAID",
+    "fear":       "AFRAID",
+    "nervousness":"AFRAID",
+    # sleepy / bored
+    "sleepy":     "SLEEPY",
+    "boredom":    "SLEEPY",
+    # confused
+    "confusion":  "CONFUSED",
+    "curiosity":  "CURIOUS",
+    "realization":"SURPRISED",
+    # surprised
+    "surprise":   "SURPRISED",
+    # neutral / other
+    "neutral":    "NEUTRAL",
+    "caring":     "HAPPY",
+    "desire":     "LOVE",
+    "relief":     "HAPPY",
+}
+
+def update_emotion(detected_emotion):
+    """Update the stored emotion, push new sprites to clients, and update RoboEyes."""
+    global emotion
+    if not detected_emotion:
+        return
+
+    queue_message(f"Emotion is set: {detected_emotion}")
+
+    # Look up the eye mood from the original emotion BEFORE sprite fallback
+    mood_name = _EMOTION_TO_MOOD.get(detected_emotion.lower(), "NEUTRAL")
+
+    emo_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
+    if not os.path.exists(emo_dir):
+        detected_emotion = "neutral"
+    emotion = detected_emotion
+    sprites = _get_sprite_urls(detected_emotion)
+    base = f"/character_sprite/{detected_emotion}/animation/"
+    socketio.emit('emotion_change', {k: base + v for k, v in sprites.items()})
+
+    # Trigger RoboEyes mood to match the detected emotion
+    try:
+        import modules.UI.apps.module_app_eyes as _eyes_mod
+        from modules.module_eyes import Mood
+        _eyes_mod.set_mood_request(Mood[mood_name])
+    except Exception:
+        pass
+
 @flask_app.route('/emotion', methods=['POST'])
 def set_emotion():
     """
     Receives a single-word emotion and updates the stored emotion.
     Pushes new sprite URLs to connected clients via SocketIO.
     """
-    global emotion
     detected_emotion = request.data.decode("utf-8").strip()
 
     if detected_emotion:
-        # Check if the emotion folder exists, otherwise fallback to 'neutral'
-        emo_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
-        if not os.path.exists(emo_dir):
-            detected_emotion = "neutral"
-
-        emotion = detected_emotion
-
-        # Push new sprite URLs to all connected clients
-        sprites = _get_sprite_urls(detected_emotion)
-        base = f"/character_sprite/{detected_emotion}/animation/"
-        socketio.emit('emotion_change', {k: base + v for k, v in sprites.items()})
-
+        update_emotion(detected_emotion)
         return jsonify({"message": "Emotion updated", "emotion": detected_emotion}), 200
 
     return jsonify({"error": "No emotion provided"}), 400
@@ -282,7 +352,9 @@ def receive_user_message():
         socketio.emit('bot_message', {'message': latest_text_to_read or ''})
 
         if CONFIG['EMOTION']['enabled'] and reply:
-            detect_emotion(reply)
+            detected = detect_emotion(reply)
+            if detected:
+                update_emotion(detected)
 
     except Exception as e:
         queue_message(f"ERROR: process_llm failed: {e}")
@@ -952,7 +1024,7 @@ def config_sync_status():
 
 @flask_app.route('/api/wifi/status', methods=['GET'])
 def wifi_status():
-    if not WIFI_AVAILABLE:
+    if not WIFI_AVAILABLE or not _wifi_manager:
         return jsonify({"mode": "disconnected", "ssid": None, "ip": None, "signal": 0})
     try:
         return jsonify(_wifi_manager.get_status())
@@ -962,7 +1034,7 @@ def wifi_status():
 
 @flask_app.route('/api/wifi/networks', methods=['GET'])
 def wifi_networks():
-    if not WIFI_AVAILABLE:
+    if not WIFI_AVAILABLE or not _wifi_manager:
         return jsonify({"networks": []})
     try:
         networks = _wifi_manager.scan_networks()
@@ -973,7 +1045,7 @@ def wifi_networks():
 
 @flask_app.route('/api/wifi/connect', methods=['POST'])
 def wifi_connect():
-    if not WIFI_AVAILABLE:
+    if not WIFI_AVAILABLE or not _wifi_manager:
         return jsonify({"success": False, "error": "WiFi module unavailable"}), 503
     data = request.get_json(silent=True) or {}
     ssid     = data.get('ssid', '').strip()
@@ -993,8 +1065,8 @@ def wifi_connect():
 
 @flask_app.route('/api/wifi/hotspot', methods=['PUT'])
 def wifi_hotspot():
-    if not WIFI_AVAILABLE:
-        return jsonify({"success": False, "error": "WiFi module unavailable"}), 503
+    if not WIFI_AVAILABLE or not _wifi_manager:
+        return jsonify({"success": False, "error": "WiFi initialising, try again shortly"}), 503
     try:
         status = _wifi_manager.get_status()
         if status.get('mode') == 'hotspot':
@@ -1020,6 +1092,107 @@ def eyes_set_mood():
         return jsonify({'success': True, 'mood': mood_name})
     except KeyError:
         return jsonify({'success': False, 'error': f'Unknown mood: {mood_name}'}), 400
+
+
+# ── NEXUS DASHBOARD ENDPOINTS ──────────────────────────────────────────────
+
+@flask_app.route('/api/system/metrics', methods=['GET'])
+def system_metrics():
+    """System metrics for the NEXUS dashboard tab."""
+    metrics = {}
+
+    # CPU load (1-min average as percentage of cores)
+    try:
+        load_avg = os.getloadavg()
+        cpu_count = os.cpu_count() or 4
+        metrics['cpu_load'] = round((load_avg[0] / cpu_count) * 100, 1)
+    except Exception:
+        metrics['cpu_load'] = 0
+
+    # RAM usage
+    try:
+        with open('/proc/meminfo') as f:
+            lines = f.readlines()
+        mem_total = int(lines[0].split()[1])
+        mem_available = int(lines[2].split()[1])
+        metrics['ram_usage'] = round((1 - mem_available / mem_total) * 100, 1)
+        metrics['ram_total_mb'] = round(mem_total / 1024)
+    except Exception:
+        metrics['ram_usage'] = 0
+        metrics['ram_total_mb'] = 0
+
+    # CPU temperature
+    try:
+        with open('/sys/class/thermal/thermal_zone0/temp') as f:
+            metrics['cpu_temp'] = round(int(f.read().strip()) / 1000, 1)
+    except Exception:
+        metrics['cpu_temp'] = 0
+
+    # Uptime
+    try:
+        with open('/proc/uptime') as f:
+            metrics['uptime_secs'] = round(float(f.read().split()[0]))
+    except Exception:
+        metrics['uptime_secs'] = 0
+
+    # Current emotion state
+    metrics['emotion'] = emotion or 'neutral'
+
+    # Battery (optional — may not be available on all hardware)
+    try:
+        from modules.module_battery import get_battery_status
+        batt = get_battery_status()
+        metrics['battery'] = {
+            'percentage': batt.get('normalized_percentage', batt.get('percentage', 0)),
+            'voltage': batt.get('voltage', 0),
+            'charging': batt.get('is_charging', False),
+            'state': batt.get('charging_state', 'UNKNOWN'),
+        }
+    except Exception:
+        metrics['battery'] = None
+
+    # Character info
+    metrics['character'] = character_name
+
+    return jsonify(metrics)
+
+
+@flask_app.route('/api/memory/stats', methods=['GET'])
+def memory_stats():
+    """Memory/knowledge graph statistics for the NEXUS dashboard."""
+    stats = {'topics': 0, 'memories': 0, 'topic_list': []}
+
+    # Try to load topic index
+    try:
+        topic_path = os.path.join(BASE_DIR, '..', 'memory', f'{character_name}_topics.json')
+        if os.path.exists(topic_path):
+            with open(topic_path, 'r') as f:
+                topics = json.load(f)
+            stats['topics'] = len(topics)
+            stats['topic_list'] = topics[:20]  # last 20 topics
+    except Exception:
+        pass
+
+    # Try to get memory count
+    try:
+        memory_dir = os.path.join(BASE_DIR, '..', 'memory')
+        lite_path = os.path.join(memory_dir, f'{character_name}_lite.json')
+        if os.path.exists(lite_path):
+            with open(lite_path, 'r') as f:
+                memories = json.load(f)
+            stats['memories'] = len(memories)
+    except Exception:
+        pass
+
+    return jsonify(stats)
+
+
+@flask_app.route('/api/console/logs', methods=['GET'])
+def console_logs():
+    """Stream terminal output to the WebUI nexus console."""
+    since = request.args.get('since', 0, type=int)
+    lines, head = get_recent_logs(since)
+    return jsonify({'lines': lines, 'head': head})
 
 
 def start_flask_app(port=None):

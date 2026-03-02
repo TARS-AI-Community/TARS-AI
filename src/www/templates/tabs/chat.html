@@ -1,12 +1,14 @@
 <div class="tab-pane fade show active" id="chat" role="tabpanel">
   <div class="chat-wrap">
 
-    <!-- Avatar + messages -->
+    <!-- Avatar (click to toggle) -->
+    <div class="avatar-header" id="avatarHeader">
+      <img id="backgroundImage" src="" alt="Avatar">
+      <div class="avatar-glow"></div>
+    </div>
+
+    <!-- Messages -->
     <div class="chat-body" id="chatBody">
-      <div class="avatar-header">
-        <img id="backgroundImage" src="" alt="Avatar">
-        <div class="avatar-glow"></div>
-      </div>
       <div class="chat-messages" id="chatMessages">
         <div class="msg-row msg-bot">
           <div class="msg-meta">
@@ -34,7 +36,7 @@
     <!-- Input bar -->
     <div class="chat-input-bar">
       <input type="text" id="prompt" placeholder="Send a message…" autocomplete="off" />
-      <button id="muteButton"       aria-label="Mute"><i class="bi bi-volume-up-fill"></i></button>
+      <button id="muteButton"       aria-label="Mute"><i class="bi bi-volume-mute-fill"></i></button>
       <button id="uploadImageButton" aria-label="Upload image"><i class="bi bi-image"></i></button>
       <button id="button-addon2"    aria-label="Send"><i class="bi bi-send-fill"></i></button>
     </div>

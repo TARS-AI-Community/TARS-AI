@@ -1,0 +1,31 @@
+<!-- ── NEXUS DASHBOARD TAB ── -->
+<div class="tab-pane fade" id="nexus" role="tabpanel">
+  <div class="nexus-wrap">
+
+    <!-- Status strip -->
+    <div class="nexus-status-strip">
+      <div class="nexus-metric">
+        <span class="nexus-metric-label">CPU</span>
+        <span class="nexus-metric-value" id="nxCpu">--</span>
+        <div class="nexus-metric-bar"><div class="nexus-metric-fill nexus-bar-cpu" id="nxCpuBar"></div></div>
+      </div>
+      <div class="nexus-metric">
+        <span class="nexus-metric-label">RAM</span>
+        <span class="nexus-metric-value" id="nxRam">--</span>
+        <div class="nexus-metric-bar"><div class="nexus-metric-fill nexus-bar-ram" id="nxRamBar"></div></div>
+      </div>
+      <div class="nexus-metric">
+        <span class="nexus-metric-label">TEMP</span>
+        <span class="nexus-metric-value" id="nxTemp">--</span>
+        <div class="nexus-metric-bar"><div class="nexus-metric-fill nexus-bar-temp" id="nxTempBar"></div></div>
+      </div>
+    </div>
+
+    <!-- Real-time console -->
+    <div class="nexus-panel nexus-panel-console">
+      <div class="section-label"><span>Real-time Console</span></div>
+      <div class="nexus-console" id="nxConsole"></div>
+    </div>
+
+  </div>
+</div>

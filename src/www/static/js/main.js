@@ -100,6 +100,7 @@
       const d = await r.json();
       if (!r.ok || !d.success) throw new Error(d.error || 'Connection failed');
       msg.textContent = '✓ Connected! Hotspot shutting down…'; msg.className = 'wf-msg wf-msg-ok';
+      if (window.showToast) showToast('WiFi connected to ' + wfSelected.ssid, 'success');
       setTimeout(() => { $('wfConfirmOverlay').style.display = 'none'; wfDeselect(); loadStatus(); }, 2500);
     } catch (e) {
       msg.textContent = '✗ ' + e.message; msg.className = 'wf-msg wf-msg-err';
@@ -107,10 +108,17 @@
     }
   };
 
-  window.wfToggleHotspot = async function () {
-    const btn = $('wfHotspotBtn'); btn.disabled = true;
-    try { await fetch('/api/wifi/hotspot', { method: 'PUT' }); setTimeout(loadStatus, 1500); }
-    finally { btn.disabled = false; }
+  window.wfToggleHotspot = function () {
+    const btn = $('wfHotspotBtn');
+    const isHotspot = btn.textContent.trim() === 'Stop Hotspot';
+    const msg = isHotspot
+      ? 'Stop the hotspot and go offline?'
+      : 'This will disconnect Wi-Fi and start the hotspot. Continue?';
+    if (!confirm(msg)) return;
+    btn.disabled = true;
+    fetch('/api/wifi/hotspot', { method: 'PUT' })
+      .then(() => setTimeout(loadStatus, 1500))
+      .finally(() => { btn.disabled = false; });
   };
 
   const wifiTab = $('wifi-tab');
@@ -172,7 +180,7 @@ fetch('/avatar_sprites').then(r => r.json()).then(d => {
 
 
 // ── AUDIO ───────────────────────────────────────────────────────────────────
-let isMuted = false;
+let isMuted = true;
 
 function start_talking() { if (!isMuted) avatarIsTalking = true; }
 function stop_talking()  { avatarIsTalking = false; }
@@ -180,6 +188,9 @@ function stop_talking()  { avatarIsTalking = false; }
 document.addEventListener('DOMContentLoaded', function () {
   const audioPlayer = $('audioPlayer');
   const muteBtn = $('muteButton');
+
+  // Default to muted on load
+  audioPlayer.muted = true;
 
   muteBtn.addEventListener('click', function () {
     const icon = this.querySelector('i');
@@ -258,9 +269,25 @@ document.addEventListener('DOMContentLoaded', function () {
   const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
   socket.on('bot_message',    d => displayBotMessage(d.message));
   socket.on('user_message',   d => displayUserMessage(d.message));
-  socket.on('disconnect',     () => setTimeout(() => socket.connect(), 5000));
   socket.on('talking_state',  d => { avatarIsTalking = d.talking; });
   socket.on('emotion_change', d => preloadAvatarSprites(d));
+
+  // Connection status indicator
+  const connDot = document.getElementById('connDot');
+  socket.on('connect', () => {
+    if (connDot) { connDot.className = 'conn-dot'; }
+  });
+  socket.on('disconnect', () => {
+    if (connDot) { connDot.className = 'conn-dot disconnected'; }
+    if (window.showToast) showToast('Connection lost — reconnecting...', 'error');
+    setTimeout(() => {
+      if (connDot) connDot.className = 'conn-dot reconnecting';
+      socket.connect();
+    }, 2000);
+  });
+  socket.on('reconnect_attempt', () => {
+    if (connDot) { connDot.className = 'conn-dot reconnecting'; }
+  });
 
   function formatText(text) {
     if (!text) return '';
@@ -353,7 +380,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const nameEl = document.getElementById('bot-name');
   if (nameEl && window.APP_CONFIG?.charName) nameEl.textContent = window.APP_CONFIG.charName;
 
-  // Avatar toggle — click header to collapse/expand
+  // Avatar toggle — click to collapse/expand
   const avatarHeader = document.querySelector('.avatar-header');
   if (avatarHeader) {
     if (localStorage.getItem('avatarHidden') === '1') avatarHeader.classList.add('collapsed');
@@ -365,98 +392,99 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 
-// ── ARMS ────────────────────────────────────────────────────────────────────
+// ── BODY (ARMS + LEGS) ──────────────────────────────────────────────────────
+function updateBodyArmVal(slider) {
+  slider.closest('.servo-card').querySelector('.servo-val').textContent = slider.value;
+}
+
+function updateBodyLegVal(slider) {
+  slider.closest('.servo-card').querySelector('.servo-val').textContent = slider.value;
+}
+
+function resetBodyServo(id, def) {
+  const el = $(id);
+  el.value = def;
+  el.closest('.servo-card').querySelector('.servo-val').textContent = def;
+  updateArmConstraints();
+}
+
 function updateArmConstraints() {
-  const armTab = $('arms');
-  const vals   = armTab.querySelectorAll('.servo-val');
-  const leftMain = parseInt($('leftMain').value);
-  const lfSlider = $('leftForearm'), lhSlider = $('leftHand');
-  let maxLF = leftMain <= 50 ? Math.max(1, Math.round(leftMain / 2)) : Math.round(25 + (leftMain - 50) * 1.5);
-  if (parseInt(lfSlider.value) > maxLF) { lfSlider.value = maxLF; vals[1].textContent = maxLF; }
-  updateSliderGauge(lfSlider, maxLF);
-  let maxLH = parseInt(lfSlider.value) <= 50 ? Math.max(1, Math.round(parseInt(lfSlider.value) / 2)) : Math.round(25 + (parseInt(lfSlider.value) - 50) * 1.5);
-  if (parseInt(lhSlider.value) > maxLH) { lhSlider.value = maxLH; vals[2].textContent = maxLH; }
-  updateSliderGauge(lhSlider, maxLH);
-  const rightMain = parseInt($('rightMain').value);
-  const rfSlider = $('rightForearm'), rhSlider = $('rightHand');
-  let maxRF = rightMain <= 50 ? Math.max(1, Math.round(rightMain / 2)) : Math.round(25 + (rightMain - 50) * 1.5);
-  if (parseInt(rfSlider.value) > maxRF) { rfSlider.value = maxRF; vals[4].textContent = maxRF; }
-  updateSliderGauge(rfSlider, maxRF);
-  let maxRH = parseInt(rfSlider.value) <= 50 ? Math.max(1, Math.round(parseInt(rfSlider.value) / 2)) : Math.round(25 + (parseInt(rfSlider.value) - 50) * 1.5);
-  if (parseInt(rhSlider.value) > maxRH) { rhSlider.value = maxRH; vals[5].textContent = maxRH; }
-  updateSliderGauge(rhSlider, maxRH);
+  function clampChild(slider, maxVal) {
+    if (parseInt(slider.value) > maxVal) {
+      slider.value = maxVal;
+      slider.closest('.servo-card').querySelector('.servo-val').textContent = maxVal;
+    }
+    updateSliderGauge(slider, maxVal);
+  }
+  function calcMax(parentVal) {
+    return parentVal <= 50 ? Math.max(1, Math.round(parentVal / 2)) : Math.round(25 + (parentVal - 50) * 1.5);
+  }
+  // left arm chain
+  const lm = parseInt($('leftMain').value);
+  clampChild($('leftForearm'), calcMax(lm));
+  clampChild($('leftHand'), calcMax(parseInt($('leftForearm').value)));
+  // right arm chain
+  const rm = parseInt($('rightMain').value);
+  clampChild($('rightForearm'), calcMax(rm));
+  clampChild($('rightHand'), calcMax(parseInt($('rightForearm').value)));
 }
 
 function updateSliderGauge(slider, maxAllowed) {
   const pct = maxAllowed;
-  slider.style.background = `linear-gradient(to top,rgba(0,229,255,.3) 0%,rgba(0,229,255,.3) ${pct}%,rgba(220,53,69,.3) ${pct}%,rgba(220,53,69,.3) 100%)`;
+  slider.style.background = `linear-gradient(to right,rgba(0,229,255,.3) 0%,rgba(0,229,255,.3) ${pct}%,rgba(180,77,255,.3) ${pct}%,rgba(180,77,255,.3) 100%)`;
 }
 
-function updateArmValueDisplay(slider, i) {
-  $('arms').querySelectorAll('.servo-val')[i].textContent = slider.value;
-}
+// speed slider value display + stop touch propagation on all body sliders
+(function () {
+  var sp = document.getElementById('bodySpeedSlider');
+  if (sp) sp.addEventListener('input', function () {
+    var v = document.querySelector('.body-speed-val');
+    if (v) v.textContent = parseFloat(this.value).toFixed(2);
+  });
+  // prevent range inputs from triggering swipe navigation
+  document.querySelectorAll('.body-range, #bodySpeedSlider').forEach(function (slider) {
+    slider.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+    slider.addEventListener('touchmove', function (e) { e.stopPropagation(); }, { passive: true });
+  });
+})();
 
-function resetArmServo(id, i) {
-  $(id).value = 1;
-  $('arms').querySelectorAll('.servo-val')[i].textContent = '1';
-  updateArmConstraints();
-}
-
-function applyArmControls() {
+function applyBodyControls() {
+  const speed = +$('bodySpeedSlider').value;
   fetch('/move_arms', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({
       left_main: +$('leftMain').value, left_forearm: +$('leftForearm').value,
       left_hand: +$('leftHand').value, right_main: +$('rightMain').value,
       right_forearm: +$('rightForearm').value, right_hand: +$('rightHand').value,
-      speed: +$('armSpeedSlider').value
+      speed: speed
+    })
+  }).catch(console.error);
+  fetch('/move_legs', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      left_height: +$('leftHeight').value, right_height: +$('rightHeight').value,
+      left_leg: +$('leftLeg').value, right_leg: +$('rightLeg').value,
+      speed: speed
     })
   }).catch(console.error);
 }
 
-function resetAllArms() {
+function resetBody() {
+  const armIds = ['leftMain','leftForearm','leftHand','rightMain','rightForearm','rightHand'];
+  const legIds = ['leftHeight','rightHeight','leftLeg','rightLeg'];
   fetch('/move_arms', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ left_main:1, left_forearm:1, left_hand:1, right_main:1, right_forearm:1, right_hand:1, speed:0.75 })
   }).then(() => {
-    ['leftMain','leftForearm','leftHand','rightMain','rightForearm','rightHand'].forEach(id => $(id).value = 1);
-    $('arms').querySelectorAll('.servo-val').forEach(d => d.textContent = '1');
+    armIds.forEach(id => { $(id).value = 1; $(id).closest('.servo-card').querySelector('.servo-val').textContent = '1'; });
     updateArmConstraints();
     return fetch('/disable_servos', { method:'POST', headers:{'Content-Type':'application/json'} });
   }).then(() => fetch('/reset_positions', { method:'POST', headers:{'Content-Type':'application/json'} }))
     .then(() => fetch('/disable_servos', { method:'POST', headers:{'Content-Type':'application/json'} }))
     .catch(console.error);
-}
-
-
-// ── LEGS ────────────────────────────────────────────────────────────────────
-function updateValueDisplay(slider, i) {
-  document.querySelectorAll('.servo-val')[i].textContent = slider.value;
-}
-
-function resetServo(id, i) {
-  $(id).value = 50;
-  document.querySelectorAll('.servo-val')[i].textContent = '50';
-}
-
-function applyLegControls() {
-  fetch('/move_legs', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      left_height:  +$('leftHeight').value,
-      right_height: +$('rightHeight').value,
-      left_leg:     +$('leftLeg').value,
-      right_leg:    +$('rightLeg').value,
-      speed:        +$('speedSlider').value
-    })
-  }).catch(console.error);
-}
-
-function resetAllLegs() {
   fetch('/neutral_legs', { method:'POST', headers:{'Content-Type':'application/json'} })
     .then(() => {
-      ['leftHeight','rightHeight','leftLeg','rightLeg'].forEach(id => $(id).value = 50);
-      $('legs').querySelectorAll('.servo-val').forEach(d => d.textContent = '50');
+      legIds.forEach(id => { $(id).value = 50; $(id).closest('.servo-card').querySelector('.servo-val').textContent = '50'; });
       return fetch('/reset_positions', { method:'POST', headers:{'Content-Type':'application/json'} });
     }).catch(console.error);
 }
@@ -638,21 +666,72 @@ function executeAction() {
     });
   }
 
+  const SECTION_ICONS = {
+    'DEVICE':'bi-cpu-fill','CHATUI':'bi-chat-dots-fill','CHAR':'bi-person-fill',
+    'CONTROLS':'bi-controller','STT':'bi-mic-fill','LLM':'bi-robot',
+    'VISION':'bi-eye-fill','EMOTION':'bi-emoji-smile-fill','TTS':'bi-volume-up-fill',
+    'UI':'bi-display-fill','RAG':'bi-database-fill','BATTERY':'bi-battery-half',
+    'HOME_ASSISTANT':'bi-house-fill','DISCORD':'bi-discord',
+    'STABLE_DIFFUSION':'bi-image-fill','MISC':'bi-wrench-adjustable'
+  };
+  const SECTION_LABELS = {
+    'DEVICE':'Device','CHATUI':'Chat UI','CHAR':'Character','CONTROLS':'Controls',
+    'STT':'Speech','LLM':'AI Model','VISION':'Vision','EMOTION':'Emotion',
+    'TTS':'Voice','UI':'Display','RAG':'Memory','BATTERY':'Battery',
+    'HOME_ASSISTANT':'Home Asst','DISCORD':'Discord',
+    'STABLE_DIFFUSION':'Img Gen','MISC':'Misc'
+  };
+
+  const SECTION_ORDER = [
+    'DEVICE', 'UI', 'CHATUI',
+    'STT', 'TTS',
+    'LLM', 'CHAR', 'EMOTION',
+    'VISION', 'STABLE_DIFFUSION',
+    'RAG',
+    'CONTROLS',
+    'HOME_ASSISTANT', 'DISCORD',
+    'BATTERY', 'MISC'
+  ];
+
+  let activeConfigSection = null;
+
   function loadConfiguration() {
     fetch('/get_config').then(r=>r.json()).then(data => {
       const form = $('configForm');
-      let html = '<div class="accordion" id="configAccordion">';
-      let si = 0;
-      for (const [section, fields] of Object.entries(data.config)) {
+
+      // Order sections: SECTION_ORDER first, then any extras from backend
+      const allSections = Object.keys(data.config);
+      const ordered = SECTION_ORDER.filter(s => allSections.includes(s));
+      allSections.forEach(s => { if (!ordered.includes(s)) ordered.push(s); });
+
+      // Build icon grid
+      let html = '<div class="config-icon-grid">';
+      for (const section of ordered) {
+        const icon = SECTION_ICONS[section] || 'bi-gear';
+        const label = SECTION_LABELS[section] || section;
+        html += `<div class="config-icon-tile" data-section-target="${section}">
+          <div class="config-icon-tile-inner"><i class="bi ${icon}"></i></div>
+          <span class="config-icon-label">${label}</span>
+        </div>`;
+      }
+      html += '</div>';
+
+      // Build section panels
+      for (const section of ordered) {
+        const fields = data.config[section];
         const desc = data.field_options[`${section}.__section__`];
-        const accId = `collapse${si}`, first = si===0;
-        html += `<div class="accordion-item config-accordion-item">
-          <h2 class="accordion-header"><button class="accordion-button config-accordion-button${first?'':' collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${accId}" aria-expanded="${first}">
-            <i class="bi bi-folder-fill me-2"></i><span class="fw-bold">${section}</span>
-            ${desc?`<small class="ms-2 text-muted opacity-75">– ${desc.description||desc}</small>`:''}
-          </button></h2>
-          <div id="${accId}" class="accordion-collapse collapse${first?' show':''}" data-bs-parent="#configAccordion">
-            <div class="accordion-body config-accordion-body"><div class="row g-2">`;
+        const label = SECTION_LABELS[section] || section;
+        const icon = SECTION_ICONS[section] || 'bi-gear';
+
+        html += `<div class="config-panel" id="configPanel_${section}">
+          <div class="config-panel-header">
+            <button class="config-panel-back" data-section="${section}"><i class="bi bi-chevron-left"></i></button>
+            <div class="config-panel-title">
+              <i class="bi ${icon}"></i><span>${label}</span>
+              ${desc?`<small>${desc.description||desc}</small>`:''}
+            </div>
+          </div>
+          <div class="config-panel-body"><div class="row g-2">`;
 
         for (const [key, value] of Object.entries(fields)) {
           const fid = `cfg_${section}_${key}`, fi = data.field_options[`${section}.${key}`], desc2 = fi?.description||'';
@@ -682,15 +761,52 @@ function executeAction() {
           if (desc2) html += `<div class="config-hint mt-1"><i class="bi bi-info-circle"></i><small>${desc2}</small></div>`;
           html += '</div></div>';
         }
-        html += '</div></div></div></div>';
-        si++;
+        html += '</div></div></div>';
       }
-      html += '</div>';
+
       form.innerHTML = html;
+      activeConfigSection = null;
+
+      // Icon tile click handlers
+      document.querySelectorAll('.config-icon-tile').forEach(tile => {
+        tile.addEventListener('click', function() {
+          const target = this.dataset.sectionTarget;
+          const panel = document.getElementById(`configPanel_${target}`);
+          const grid = document.querySelector('.config-icon-grid');
+          if (activeConfigSection === target) {
+            panel.classList.remove('open');
+            this.classList.remove('active');
+            grid.classList.remove('has-active');
+            activeConfigSection = null;
+          } else {
+            document.querySelectorAll('.config-panel.open').forEach(p => p.classList.remove('open'));
+            document.querySelectorAll('.config-icon-tile.active').forEach(t => t.classList.remove('active'));
+            panel.classList.add('open');
+            this.classList.add('active');
+            grid.classList.add('has-active');
+            activeConfigSection = target;
+            setTimeout(() => panel.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
+          }
+        });
+      });
+
+      // Back button handlers
+      document.querySelectorAll('.config-panel-back').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const sec = this.dataset.section;
+          document.getElementById(`configPanel_${sec}`).classList.remove('open');
+          const tile = document.querySelector(`.config-icon-tile[data-section-target="${sec}"]`);
+          if (tile) tile.classList.remove('active');
+          document.querySelector('.config-icon-grid').classList.remove('has-active');
+          activeConfigSection = null;
+          document.querySelector('.config-icon-grid').scrollIntoView({ behavior:'smooth', block:'start' });
+        });
+      });
 
       document.querySelectorAll('.config-toggle').forEach(t => {
         t.addEventListener('change', function () {
-          const lbl = document.getElementById(this.id+'_label');
+          const lbl = this.parentElement.querySelector('.form-check-label');
           if (lbl) lbl.textContent = this.checked ? 'Enabled' : 'Disabled';
         });
       });
@@ -730,13 +846,14 @@ function executeAction() {
         if (d.success) {
           saveBtn.innerHTML='<i class="bi bi-check-circle-fill"></i> Saved!';
           saveBtn.classList.add('hud-btn-success');
+          if (window.showToast) showToast('Configuration saved', 'success');
           setTimeout(()=>{ saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; },2000);
-        } else { saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; alert('Error: '+(d.error||'Unknown')); }
+        } else { saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; if (window.showToast) showToast('Error: '+(d.error||'Unknown'), 'error'); }
       }).catch(err=>{ saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; alert('Error: '+err.message); });
   }
 
   const configTab = $('config-tab');
-  if (configTab) configTab.addEventListener('click', () => {
+  if (configTab) configTab.addEventListener('shown.bs.tab', () => {
     if ($('configForm').innerHTML.includes('Loading')) loadConfiguration();
   });
 
@@ -747,24 +864,20 @@ function executeAction() {
 
 // ── TAB RESET LOGIC ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
-  const legsTab = $('legs-tab'), armsTab = $('arms-tab');
+  const bodyTab = $('body-tab');
 
-  if (legsTab) legsTab.addEventListener('hide.bs.tab', () => {
+  if (bodyTab) bodyTab.addEventListener('hide.bs.tab', () => {
     const lh=+$('leftHeight').value, rh=+$('rightHeight').value,
           ll=+$('leftLeg').value,    rl=+$('rightLeg').value;
-    if (lh!==50||rh!==50||ll!==50||rl!==50) resetAllLegs();
-  });
-
-  if (armsTab) armsTab.addEventListener('hide.bs.tab', () => {
-    const lm=+$('leftMain').value, lf=+$('leftForearm').value, lh=+$('leftHand').value,
-          rm=+$('rightMain').value, rf=+$('rightForearm').value, rh=+$('rightHand').value;
-    if (lm!==1||lf!==1||lh!==1||rm!==1||rf!==1||rh!==1) resetAllArms();
+    const lm=+$('leftMain').value, lf=+$('leftForearm').value, lha=+$('leftHand').value,
+          rm=+$('rightMain').value, rf=+$('rightForearm').value, rha=+$('rightHand').value;
+    if (lh!==50||rh!==50||ll!==50||rl!==50||lm!==1||lf!==1||lha!==1||rm!==1||rf!==1||rha!==1) resetBody();
   });
 
   document.querySelectorAll('.custom-tab').forEach(tab => {
     tab.addEventListener('shown.bs.tab', e => {
       const id = e.target.getAttribute('data-bs-target')?.replace('#','');
-      if (id==='legs'||id==='arms') {
+      if (id==='body') {
         fetch('/reset_positions',{method:'POST',headers:{'Content-Type':'application/json'}}).catch(()=>{});
       }
     });
@@ -789,6 +902,283 @@ document.addEventListener('fullscreenchange', () => {
   const icon = $('fullscreen-icon');
   if (icon) icon.className = document.fullscreenElement ? 'bi bi-fullscreen-exit' : 'bi bi-fullscreen';
 });
+
+
+// ── TOAST NOTIFICATIONS ──────────────────────────────────────────────────────
+window.showToast = function (message, type, duration) {
+  type = type || 'info';
+  duration = duration || 3000;
+  var container = document.getElementById('toastContainer');
+  if (!container) return;
+  var toast = document.createElement('div');
+  toast.className = 'toast-msg toast-' + type;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(function () {
+    toast.classList.add('toast-out');
+    toast.addEventListener('animationend', function () { toast.remove(); });
+  }, duration);
+};
+
+
+// ── NEXUS DASHBOARD ──────────────────────────────────────────────────────────
+(function () {
+  var nexusActive = false;
+  var consoleLines = [];  // rolling buffer of console strings
+  var MAX_CONSOLE = 200;
+  var pollInterval = null;
+  var logHead = 0;  // cursor for incremental log fetching
+
+  function renderConsole() {
+    var el = document.getElementById('nxConsole');
+    if (!el) return;
+    el.innerHTML = consoleLines.map(function (l) {
+      var safe = l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<div class="nexus-console-line">' + safe + '</div>';
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function updateMetrics(data) {
+    var cpuEl = document.getElementById('nxCpu');
+    var ramEl = document.getElementById('nxRam');
+    var tempEl = document.getElementById('nxTemp');
+    var cpuBar = document.getElementById('nxCpuBar');
+    var ramBar = document.getElementById('nxRamBar');
+    var tempBar = document.getElementById('nxTempBar');
+
+    if (cpuEl)  cpuEl.textContent = data.cpu_load + '%';
+    if (ramEl)  ramEl.textContent = data.ram_usage + '%';
+    if (tempEl) tempEl.textContent = data.cpu_temp + '°C';
+    if (cpuBar) cpuBar.style.width = Math.min(data.cpu_load, 100) + '%';
+    if (ramBar) ramBar.style.width = Math.min(data.ram_usage, 100) + '%';
+    if (tempBar) tempBar.style.width = Math.min((data.cpu_temp / 85) * 100, 100) + '%';
+  }
+
+  function fetchMetrics() {
+    fetch('/api/system/metrics')
+      .then(function (r) { return r.json(); })
+      .then(updateMetrics)
+      .catch(function () {});
+  }
+
+  function fetchLogs() {
+    fetch('/api/console/logs?since=' + logHead)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.lines && data.lines.length) {
+          for (var i = 0; i < data.lines.length; i++) {
+            consoleLines.push(data.lines[i]);
+          }
+          while (consoleLines.length > MAX_CONSOLE) consoleLines.shift();
+          renderConsole();
+        }
+        logHead = data.head;
+      })
+      .catch(function () {});
+  }
+
+  // Start polling when nexus tab is shown
+  document.addEventListener('DOMContentLoaded', function () {
+    var nexusTab = document.getElementById('nexus-tab');
+    if (!nexusTab) return;
+
+    nexusTab.addEventListener('shown.bs.tab', function () {
+      nexusActive = true;
+      fetchMetrics();
+      fetchLogs();
+      if (!pollInterval) {
+        pollInterval = setInterval(function () {
+          if (nexusActive) {
+            fetchMetrics();
+            fetchLogs();
+          }
+        }, 2000);
+      }
+    });
+
+    nexusTab.addEventListener('hide.bs.tab', function () {
+      nexusActive = false;
+    });
+  });
+})();
+
+
+// ── MOBILE SWIPE NAV ─────────────────────────────────────────────────────────
+(function () {
+  const TAB_IDS = ['chat', 'motion', 'body', 'emotions', 'wifi', 'config', 'nexus'];
+  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'body-tab', 'emotions-tab', 'wifi-tab', 'config-tab', 'nexus-tab'];
+  let currentIndex = 0;
+  let isMobile = false;
+
+  // mobile detection
+  const mobileQuery = window.matchMedia('(max-width: 768px)');
+  const landscapeQuery = window.matchMedia('(max-width: 900px) and (orientation: landscape) and (max-height: 500px)');
+
+  function checkMobile() {
+    isMobile = mobileQuery.matches || landscapeQuery.matches;
+  }
+  checkMobile();
+  mobileQuery.addEventListener('change', checkMobile);
+  landscapeQuery.addEventListener('change', checkMobile);
+
+  // swipe state
+  let touchStartX = 0, touchStartY = 0, touchDeltaX = 0;
+  let direction = null; // null | 'horizontal' | 'vertical'
+  let isSwiping = false;
+  let touchOnSlider = false; // ignore swipe when interacting with range inputs
+
+  const SWIPE_THRESHOLD = 40;
+  const DIRECTION_LOCK = 12; // px before locking direction
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const track = document.getElementById('swipeTrack');
+    const tabContent = document.getElementById('myTabContent');
+    const navBtns = document.querySelectorAll('.mobile-nav-btn');
+
+    if (!track || !tabContent) return;
+
+    // ── Touch handlers ──
+    tabContent.addEventListener('touchstart', function (e) {
+      if (!isMobile) return;
+      // skip swipe when touching range sliders or their containers
+      var el = e.target;
+      touchOnSlider = (el.tagName === 'INPUT' && el.type === 'range') ||
+                      !!(el.closest && el.closest('.servo-card, .body-speed'));
+      direction = null;
+      isSwiping = false;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchDeltaX = 0;
+      track.classList.remove('animating');
+    }, { passive: true });
+
+    tabContent.addEventListener('touchmove', function (e) {
+      if (!isMobile || touchOnSlider) return;
+
+      const dx = e.touches[0].clientX - touchStartX;
+      const dy = e.touches[0].clientY - touchStartY;
+
+      // lock direction after initial movement
+      if (!direction) {
+        if (Math.abs(dx) > DIRECTION_LOCK || Math.abs(dy) > DIRECTION_LOCK) {
+          direction = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+        }
+      }
+
+      if (direction !== 'horizontal') return;
+
+      // prevent vertical scroll while swiping horizontally
+      e.preventDefault();
+      isSwiping = true;
+
+      touchDeltaX = dx;
+      const baseOffset = -currentIndex * 100;
+
+      // rubber-band at edges
+      let pctDelta = (dx / tabContent.offsetWidth) * 100;
+      if ((currentIndex === 0 && dx > 0) || (currentIndex === TAB_IDS.length - 1 && dx < 0)) {
+        pctDelta *= 0.25; // resistance at bounds
+      }
+
+      track.style.transform = 'translateX(' + (baseOffset + pctDelta) + '%)';
+    }, { passive: false });
+
+    function onTouchFinish() {
+      if (!isMobile || !isSwiping) return;
+      isSwiping = false;
+
+      let newIndex = currentIndex;
+
+      if (Math.abs(touchDeltaX) > SWIPE_THRESHOLD) {
+        if (touchDeltaX < 0 && currentIndex < TAB_IDS.length - 1) {
+          newIndex = currentIndex + 1; // swipe left → next
+        } else if (touchDeltaX > 0 && currentIndex > 0) {
+          newIndex = currentIndex - 1; // swipe right → prev
+        }
+      }
+
+      goToTab(newIndex, true);
+    }
+
+    tabContent.addEventListener('touchend', onTouchFinish);
+    tabContent.addEventListener('touchcancel', onTouchFinish);
+
+    // ── Mobile nav button clicks ──
+    navBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const idx = parseInt(this.getAttribute('data-tab-index'));
+        if (!isNaN(idx)) goToTab(idx, true);
+      });
+    });
+
+    // ── Core tab switching ──
+    function goToTab(index, animated) {
+      if (index < 0 || index >= TAB_IDS.length) return;
+
+      const oldIndex = currentIndex;
+      currentIndex = index;
+
+      if (isMobile) {
+        // animate swipe-track
+        if (animated) {
+          track.classList.add('animating');
+          var onEnd = function () {
+            track.classList.remove('animating');
+            track.removeEventListener('transitionend', onEnd);
+          };
+          track.addEventListener('transitionend', onEnd);
+        }
+        track.style.transform = 'translateX(-' + (index * 100) + '%)';
+      }
+
+      // always trigger Bootstrap Tab for event compatibility
+      var tabBtn = document.getElementById(TAB_BTN_IDS[index]);
+      if (tabBtn && typeof bootstrap !== 'undefined') {
+        new bootstrap.Tab(tabBtn).show();
+      }
+
+      // update mobile nav active state
+      updateMobileNav(index);
+      void(index);
+    }
+
+    function updateMobileNav(index) {
+      navBtns.forEach(function (btn, i) {
+        btn.classList.toggle('active', i === index);
+        if (i === index) {
+          btn.classList.remove('glow-pulse');
+          // force reflow to restart animation
+          void btn.offsetWidth;
+          btn.classList.add('glow-pulse');
+        }
+      });
+    }
+
+
+    // ── Sync desktop tab clicks with swipe state ──
+    document.querySelectorAll('.custom-tab[data-bs-toggle="tab"]').forEach(function (tab) {
+      tab.addEventListener('shown.bs.tab', function () {
+        var target = this.getAttribute('data-bs-target');
+        if (!target) return;
+        var tabId = target.replace('#', '');
+        var idx = TAB_IDS.indexOf(tabId);
+        if (idx !== -1 && idx !== currentIndex) {
+          currentIndex = idx;
+          if (isMobile) {
+            track.style.transform = 'translateX(-' + (idx * 100) + '%)';
+          }
+          updateMobileNav(idx);
+          void(idx);
+        }
+      });
+    });
+
+    // expose for other modules
+    window.switchTab = goToTab;
+    window.getCurrentTabIndex = function () { return currentIndex; };
+  });
+})();
 
 
 // ── UTIL: shorthand getElementById ───────────────────────────────────────────

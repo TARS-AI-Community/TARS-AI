@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>TARS · Access Control</title>
+  <title>{{ char_name }} · Access Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
@@ -15,7 +15,7 @@
   <div id="login">
     <div class="panel">
       <div class="c2"></div>
-      <div class="logo">T.A.R.S.</div>
+      <div class="logo">{{ char_name }}</div>
       <div class="sub">Access Control Protocol · v4.1</div>
       <div class="status-row">
         <div class="dot" id="dot"></div>
@@ -39,7 +39,7 @@
         {% endif %}
       </form>
       <div class="footer">
-        <span>TARS-AI</span>
+        <span>{{ char_name }}</span>
         <span class="footer-sep">·</span>
         <span id="clk"></span>
       </div>

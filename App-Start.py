@@ -1,6 +1,8 @@
 import os
 os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+# Ensure PipeWire/PulseAudio is reachable (needed when launched from autostart)
+os.environ.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 
 import subprocess
 import time
