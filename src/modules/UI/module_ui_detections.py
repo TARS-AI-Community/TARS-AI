@@ -23,6 +23,29 @@ import numpy as np
 import pygame
 from pathlib import Path
 
+_ONNX_MODELS = {
+    "face_detection_yunet_2023mar.onnx": (
+        "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+    ),
+    "face_recognition_sface_2021dec.onnx": (
+        "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
+    ),
+}
+
+def _ensure_models(models_dir: Path):
+    """Download any missing ONNX model files."""
+    import urllib.request
+    models_dir.mkdir(parents=True, exist_ok=True)
+    for filename, url in _ONNX_MODELS.items():
+        dest = models_dir / filename
+        if not dest.exists():
+            print(f"INFO: Downloading missing model {filename}...")
+            try:
+                urllib.request.urlretrieve(url, dest)
+                print(f"INFO: Downloaded {filename} ({dest.stat().st_size // 1024} KB)")
+            except Exception as e:
+                print(f"WARNING: Could not download {filename}: {e}")
+
 
 class BaseDetector:
     name = "DETECTOR"
@@ -226,6 +249,7 @@ class FaceRecognitionDetector(BaseDetector):
         self.has_unknown = False
 
         try:
+            _ensure_models(self.MODELS_DIR)
             yunet_path = str(self.MODELS_DIR / self.YUNET_MODEL)
             sface_path = str(self.MODELS_DIR / self.SFACE_MODEL)
 
