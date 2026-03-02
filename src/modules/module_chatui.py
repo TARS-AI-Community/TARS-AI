@@ -230,12 +230,54 @@ def stop_talking_endpoint():
     socketio.emit('talking_state', {'talking': False})
     return Response("stopped", status=200)
 
+_EMOTION_TO_MOOD = {
+    # happy / positive
+    "happy":      "HAPPY",
+    "joy":        "HAPPY",
+    "excitement": "EXCITED",
+    "excited":    "EXCITED",
+    "love":       "HAPPY",
+    "optimism":   "HAPPY",
+    "gratitude":  "HAPPY",
+    "pride":      "HAPPY",
+    "amusement":  "HAPPY",
+    "admiration": "HAPPY",
+    "approval":   "HAPPY",
+    # sad / negative
+    "sad":        "SAD",
+    "sadness":    "SAD",
+    "grief":      "SAD",
+    "remorse":    "SAD",
+    "disappointment": "SAD",
+    "embarrassment":  "SAD",
+    # angry
+    "angry":      "ANGRY",
+    "anger":      "ANGRY",
+    "annoyance":  "ANGRY",
+    "disgust":    "ANGRY",
+    # afraid
+    "afraid":     "AFRAID",
+    "fear":       "AFRAID",
+    "nervousness":"AFRAID",
+    # sleepy / bored
+    "sleepy":     "SLEEPY",
+    "boredom":    "SLEEPY",
+    # neutral / other
+    "neutral":    "NEUTRAL",
+    "confusion":  "NEUTRAL",
+    "surprise":   "EXCITED",
+    "curiosity":  "NEUTRAL",
+    "caring":     "HAPPY",
+    "desire":     "HAPPY",
+    "relief":     "HAPPY",
+}
+
 def update_emotion(detected_emotion):
-    """Update the stored emotion and push new sprites to clients."""
+    """Update the stored emotion, push new sprites to clients, and update RoboEyes."""
     global emotion
     if not detected_emotion:
         return
-    
+
     queue_message(f"Emotion is set: {detected_emotion}")
 
     emo_dir = os.path.join(BASE_DIR, "character", character_name, "images", detected_emotion)
@@ -245,6 +287,15 @@ def update_emotion(detected_emotion):
     sprites = _get_sprite_urls(detected_emotion)
     base = f"/character_sprite/{detected_emotion}/animation/"
     socketio.emit('emotion_change', {k: base + v for k, v in sprites.items()})
+
+    # Trigger RoboEyes mood to match the detected emotion
+    mood_name = _EMOTION_TO_MOOD.get(detected_emotion.lower(), "NEUTRAL")
+    try:
+        import modules.UI.apps.module_app_eyes as _eyes_mod
+        from modules.module_eyes import Mood
+        _eyes_mod.set_mood_request(Mood[mood_name])
+    except Exception:
+        pass
 
 @flask_app.route('/emotion', methods=['POST'])
 def set_emotion():
