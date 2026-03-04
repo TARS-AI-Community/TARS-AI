@@ -160,7 +160,10 @@ def get_image_from_comfyui(prompt, on_image_ready=None):
             workflow["11"]["inputs"]["noise_seed"] = random.randint(1, 999999999999999)
         elif "seed" in workflow["11"]["inputs"]:
             workflow["11"]["inputs"]["seed"] = random.randint(1, 999999999999999)
-
+        if "steps" in workflow["11"]["inputs"]:
+            workflow["11"]["inputs"]["steps"] = int(config['STABLE_DIFFUSION']['steps'])
+        if "cfg" in workflow["11"]["inputs"]:
+            workflow["11"]["inputs"]["cfg"] = float(config['STABLE_DIFFUSION']['cfg_scale'])
     try:
         # Queue the prompt
         resp = requests.post(f"{comfy_url}/prompt", json={"prompt": workflow}, timeout=10)
