@@ -36,9 +36,6 @@ torchaudio = None
 librosa = None
 get_stt_model = None
 Model = None
-KaldiRecognizer = None
-SetLogLevel = None
-WhisperModel = None
 pvporcupine = None
 PvRecorder = None
 OpenAI = None
@@ -69,25 +66,6 @@ if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "fastrtc" in CAPABILITI
     try:
         from fastrtc import get_stt_model as _get_stt_model
         get_stt_model = _get_stt_model
-    except ImportError:
-        pass
-
-# Vosk (Pi5, Pi4, Pi3)
-if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "vosk" in CAPABILITIES.allowed_stt):
-    try:
-        from vosk import Model as _Model, KaldiRecognizer as _KaldiRecognizer, SetLogLevel as _SetLogLevel
-        Model = _Model
-        KaldiRecognizer = _KaldiRecognizer
-        SetLogLevel = _SetLogLevel
-        SetLogLevel(-1)  # Suppress Vosk logs
-    except ImportError:
-        pass
-
-# Faster Whisper (Pi5 only)
-if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "faster-whisper" in CAPABILITIES.allowed_stt):
-    try:
-        from faster_whisper import WhisperModel as _WhisperModel
-        WhisperModel = _WhisperModel
     except ImportError:
         pass
 
@@ -200,8 +178,6 @@ class STTManager:
         # Wake word and model settings
         self.WAKE_WORD = config.get("STT", {}).get("wake_word", "hey tar").lower()
         self.fastrtc_model = None
-        self.vosk_model = None
-        self.faster_whisper_model = None
         self.silero_model = None  # For Silero STT (if used)
         self.silero_vad_model = None
         self.get_speech_timestamps = None
@@ -211,21 +187,14 @@ class STTManager:
         self.DEBUG = False
 
     def _initialize_models(self):
-        """
-        Measure background noise and load the selected STT model.
-        For "whisper" configuration, faster-whisper will be used.
-        """
+        """Measure background noise and load the selected STT model."""
         self._measure_background_noise()
-        stt_processor = self.config.get("STT", {}).get("stt_processor", "vosk")
+        stt_processor = self.config.get("STT", {}).get("stt_processor", "fastrtc")
 
         if stt_processor == "fastrtc":
             self._load_fastrtc_model()
-        if stt_processor in ["whisper", "faster-whisper"]:
-            self._load_fasterwhisper_model()
         elif stt_processor == "silero":
             self._load_silero_model()
-        else:
-            self._load_vosk_model()
 
         # Wake word processor initialization
         wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
@@ -288,93 +257,12 @@ class STTManager:
 
     # === Model Loading Methods ===
 
-    def _download_vosk_model(self, url, dest_folder):
-        """Download the Vosk model from the specified URL with basic progress display."""
-        file_name = url.split("/")[-1]
-        dest_path = os.path.join(dest_folder, file_name)
-
-        queue_message(f"INFO: Downloading Vosk model from {url}...")
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-
-        total_size = int(response.headers.get('content-length', 0))
-        downloaded_size = 0
-
-        with open(dest_path, "wb") as file:
-            for chunk in response.iter_content(chunk_size=8192):
-                file.write(chunk)
-                downloaded_size += len(chunk)
-        queue_message(f"INFO: Download complete. Extracting...")
-        if file_name.endswith(".zip"):
-            import zipfile
-            with zipfile.ZipFile(dest_path, 'r') as zip_ref:
-                zip_ref.extractall(dest_folder)
-            os.remove(dest_path)
-            queue_message(f"INFO: Zip file deleted.")
-        queue_message(f"INFO: Extraction complete.")
-
-    def _load_vosk_model(self):
-        """
-        Initialize the Vosk model for local STT transcription.
-        """
-        if Model is None:
-            return
-
-        if self.config['STT']['stt_processor'] == 'vosk':
-            vosk_model_path = os.path.join(os.getcwd(), "..", "stt", self.config['STT']['vosk_model'])
-            if not os.path.exists(vosk_model_path):
-                queue_message(f"ERROR: Vosk model not found. Downloading...")
-                download_url = f"https://alphacephei.com/vosk/models/{self.config['STT']['vosk_model']}.zip"
-                self._download_vosk_model(download_url, os.path.join(os.getcwd(), "..", "stt"))
-                queue_message(f"INFO: Restarting model loading...")
-                self._load_vosk_model()
-                return
-
-            self.vosk_model = Model(vosk_model_path)
-            queue_message(f"LOAD: Vosk model loaded: {self.config['STT']['vosk_model']}")
-
     def _load_atomik_model(self):
         if WakeWordSystem is None:
             queue_message("WARNING: Atomik wake word not available")
             return
         detector = WakeWordSystem(self.WAKE_WORD)
         detector.createModel()
-
-    def _load_fasterwhisper_model(self):
-        """Load the Faster-Whisper model for local transcription."""
-        if WhisperModel is None or torch is None:
-            queue_message("WARNING: Faster-Whisper not available (missing dependencies)")
-            self.faster_whisper_model = None
-            return
-            
-        try:
-            import warnings
-            warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
-            original_torch_load = torch.load
-
-            def patched_torch_load(fp, map_location, *args, **kwargs):
-                return original_torch_load(fp, map_location=map_location, weights_only=True, *args, **kwargs)
-
-            torch.load = patched_torch_load
-
-            model_size = self.config["STT"].get("whisper_model", "tiny")
-            queue_message(f"INFO: Preparing to load Faster-Whisper model '{model_size}'...")
-
-            # Set up a folder for Whisper models inside the stt directory via environment variable.
-            whisper_folder = os.path.join(os.getcwd(), "..", "stt", "whisper")
-            os.makedirs(whisper_folder, exist_ok=True)
-            os.environ["HF_HUB_CACHE"] = whisper_folder
-
-            # Let faster-whisper handle the download automatically.
-            self.faster_whisper_model = WhisperModel(
-                model_size, device="cpu", compute_type="int8", num_workers=4
-            )
-            queue_message("INFO: Faster-Whisper model loaded successfully.")
-        except Exception as e:
-            queue_message(f"ERROR: Failed to load Faster-Whisper model: {e}")
-            self.faster_whisper_model = None
-        finally:
-            torch.load = original_torch_load
 
     def _load_silero_model(self):
         """Load Silero STT model via Torch Hub into the stt folder (without a hub subfolder)."""
@@ -473,14 +361,10 @@ class STTManager:
 
             if processor == "fastrtc":
                 result = self._transcribe_with_fastrtc()
-            elif processor in ["whisper", "faster-whisper"]:
-                result = self._transcribe_with_faster_whisper()
             elif processor == "silero":
                 result = self._transcribe_silero()
             elif processor == "external":
                 result = self._transcribe_with_server()
-            elif processor == "vosk":
-                result = self._transcribe_with_vosk()
             elif processor == "openai":
                 result = self._transcribe_with_openAi()
             else:
@@ -575,42 +459,6 @@ class STTManager:
             return None
         
         
-    def _transcribe_with_vosk(self):
-        """Transcribe audio using the local Vosk model."""
-        if KaldiRecognizer is None or self.vosk_model is None:
-            queue_message("ERROR: Vosk not available for transcription")
-            return None
-            
-        recognizer = KaldiRecognizer(self.vosk_model, self.SAMPLE_RATE)
-        recognizer.SetWords(False)
-        recognizer.SetPartialWords(False)
-
-        detected_speech = False
-        silent_frames = 0
-
-        with sd.InputStream(samplerate=self.SAMPLE_RATE,
-                            channels=1, dtype="int16",
-                            blocksize=4000, latency='high') as stream:
-            for _ in range(self.MAX_RECORDING_FRAMES):  # Limit recording duration (~12.5 seconds)
-                data, _ = stream.read(4000)
-                
-                is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(data, detected_speech, silent_frames) #force RMS as VAD doesnt like vosk
-                if is_silence:
-                    if not detected_speech:
-                        return None
-                    break
-                
-                #write the audio data
-                data = self.amplify_audio(data) #amp the sound
-
-
-                if recognizer.AcceptWaveform(data.tobytes()):
-                    result = recognizer.Result()
-                    if self.utterance_callback:
-                        self.utterance_callback(result)
-                    return result
-        return None
-    
     def _transcribe_with_openAi(self):
         """Transcribe and translate audio using OpenAI's Whisper API."""
 
@@ -707,53 +555,6 @@ class STTManager:
             self.utterance_callback(json.dumps(formatted_result))
 
         return formatted_result
-
-    def _transcribe_with_faster_whisper(self):
-        """Transcribe audio using Faster-Whisper."""
-        audio_buffer = BytesIO()
-        detected_speech = False
-        silent_frames = 0
-        max_silent_frames = self.MAX_SILENT_FRAMES
-
-        with sd.InputStream(
-            samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
-        ) as stream, wave.open(audio_buffer, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(self.SAMPLE_RATE)
-            for _ in range(self.MAX_RECORDING_FRAMES):
-                data, _ = stream.read(4000)
-
-                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
-                if is_silence:
-                    if not detected_speech:
-                        return None
-                    break
-
-                wf.writeframes(data.tobytes())
-
-        audio_buffer.seek(0)
-        if audio_buffer.getbuffer().nbytes == 0:
-            queue_message("ERROR: No audio recorded.")
-            return None
-
-        audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
-        audio_data = np.clip(audio_data, -1.0, 1.0)
-        if sample_rate != self.DEFAULT_SAMPLE_RATE:
-            audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=self.DEFAULT_SAMPLE_RATE)
-
-        segments, _ = self.faster_whisper_model.transcribe(
-            audio_data, temperature=0.0, beam_size=1, language="en"
-        )
-        transcribed_text = " ".join(segment.text for segment in segments).strip()
-        if transcribed_text:
-            formatted_result = {"text": transcribed_text}
-            if self.utterance_callback:
-                self.utterance_callback(json.dumps(formatted_result))
-            return formatted_result
-        else:
-            #queue_message("ERROR: No transcription from Faster-Whisper.")
-            return None
 
     def _transcribe_silero(self):
         """Transcribe audio using Silero STT."""

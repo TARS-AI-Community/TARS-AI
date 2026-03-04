@@ -164,9 +164,7 @@ wake_word_processor = atomik
 sensitivity = 7
 
 # Engine used to convert your speech to text after the wake word is detected.
-# vosk: Offline, lightweight, English-focused (runs on Pi)
-# faster-whisper: Offline, accurate, uses more resources (Pi5 recommended)
-# silero: Offline speech recognition
+# silero: Offline speech recognition (Pi5 recommended)
 # fastrtc: Real-time cloud-based transcription (fast, accurate)
 # openai: OpenAI Whisper API (cloud, best for non-English, requires API key)
 # external: Use a separate STT server (set external_url below)
@@ -179,20 +177,6 @@ use_indicators = True
 # URL of an external STT server. Only used when stt_processor = external.
 # Point this to your self-hosted Whisper or other STT service.
 external_url = http://192.168.2.57:5678
-
-# Whisper model size for on-device transcription (faster-whisper processor).
-# Larger models are more accurate but use more RAM and are slower.
-# tiny: ~1GB RAM, fastest, least accurate
-# base: ~1GB RAM, good balance for Pi5
-# small: ~2GB RAM, better accuracy
-# medium: ~5GB RAM, high accuracy (not recommended for Pi)
-# large: ~10GB RAM, highest accuracy (not feasible on Pi)
-whisper_model = tiny
-
-# Vosk model name for on-device STT. Download from https://alphacephei.com/vosk/models
-# vosk-model-small-en-us-0.15: Small, fast, good accuracy (recommended)
-# vosk-model-en-us-0.22: Larger, more accurate, slower
-vosk_model = vosk-model-small-en-us-0.15
 
 # Voice Activity Detection method. Determines when you have stopped speaking.
 # rms: Simple volume-based detection (lightweight, works on all Pi models)

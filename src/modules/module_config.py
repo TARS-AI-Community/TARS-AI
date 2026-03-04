@@ -56,7 +56,7 @@ class DeviceCapabilities:
 DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PI5: DeviceCapabilities(
         profile=DeviceProfile.PI5,
-        allowed_stt={"vosk", "faster-whisper", "whisper", "fastrtc", "silero", "openai", "external"},
+        allowed_stt={"fastrtc", "silero", "openai", "external"},
         allowed_tts={"espeak", "piper", "silero", "alltalk", "elevenlabs", "minimax", "openai", "azure"},
         allowed_vad={"silero", "rms"},
         allowed_wake={"picovoice", "fastrtc", "atomik"},
@@ -67,14 +67,14 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         can_use_opengl=True,
         can_use_cv2=True,
         max_context_size=16000,
-        fallback_stt="vosk",
+        fallback_stt="fastrtc",
         fallback_tts="espeak",
         fallback_vad="rms",
         fallback_wake="picovoice",
     ),
     DeviceProfile.PI4: DeviceCapabilities(
         profile=DeviceProfile.PI4,
-        allowed_stt={"vosk", "openai", "external"},
+        allowed_stt={"openai", "external"},
         allowed_tts={"espeak", "piper", "alltalk", "elevenlabs", "minimax", "openai", "azure"},
         allowed_vad={"silero", "rms"},
         allowed_wake={"picovoice", "atomik"},
@@ -85,7 +85,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         can_use_opengl=True,
         can_use_cv2=False,
         max_context_size=8000,
-        fallback_stt="vosk",
+        fallback_stt="openai",
         fallback_tts="espeak",
         fallback_vad="rms",
         fallback_wake="picovoice",
@@ -395,8 +395,6 @@ def load_config():
             "vad_method": config['STT']['vad_method'],
             "sensitivity": config['STT']['sensitivity'],
             "external_url": config['STT']['external_url'],
-            "whisper_model": config['STT']['whisper_model'],
-            "vosk_model": config['STT']['vosk_model'],
             "speechdelay": int(config['STT']['speechdelay']),
             "picovoice_keyword_path": config['STT']['picovoice_keyword_path'],
             "language": config['STT']['language'],
@@ -696,8 +694,8 @@ CONFIG_METADATA = {
         },
         'stt_processor': {
             'label': 'STT Engine',
-            'options': ['vosk', 'faster-whisper', 'silero', 'fastrtc', 'openai', 'external'],
-            'description': 'After TARS hears the wake word, this is the software that converts your actual speech into text. Think of it as the "ears" of TARS. "fastrtc" sends your audio to the cloud for fast, accurate transcription (recommended if you have internet). "vosk" runs entirely on your Pi with no internet needed, but is less accurate. "faster-whisper" also runs on your Pi and is more accurate than vosk but needs a Pi 5. "openai" uses OpenAI\'s Whisper service (best for non-English languages, needs API key and internet). "external" lets you point to your own speech-to-text server running elsewhere.'
+            'options': ['silero', 'fastrtc', 'openai', 'external'],
+            'description': 'After TARS hears the wake word, this is the software that converts your actual speech into text. Think of it as the "ears" of TARS. "fastrtc" sends your audio to the cloud for fast, accurate transcription (recommended if you have internet). "silero" runs on your Pi with no internet needed (Pi5 recommended). "openai" uses OpenAI\'s Whisper service (best for non-English languages, needs API key and internet). "external" lets you point to your own speech-to-text server running elsewhere.'
         },
         'wake_word_processor': {
             'label': 'Wake Word Engine',
@@ -719,15 +717,6 @@ CONFIG_METADATA = {
         'external_url': {
             'depends_on': [{'field': 'stt_processor', 'values': ['external']}],
             'description': 'If you set stt_processor to "external", put the web address of your speech-to-text server here. This is for advanced users who run their own Whisper or other STT server on a separate machine. If you are not using "external" mode, this setting is ignored. Format: http://IP-ADDRESS:PORT'
-        },
-        'whisper_model': {
-            'depends_on': [{'field': 'stt_processor', 'values': ['faster-whisper', 'whisper']}],
-            'options': ['tiny', 'base', 'small', 'medium', 'large'],
-            'description': 'If you are using "faster-whisper" as your stt_processor, this controls the size of the AI model used to understand your speech. Bigger models understand you better but use more of your Pi\'s memory and are slower. "tiny" is the fastest and uses least memory (~1GB) - good enough for clear speech in a quiet room. "base" is a good middle ground. "small" is noticeably more accurate but uses ~2GB of RAM. "medium" and "large" are too heavy for a Raspberry Pi and will likely crash. If you are not using faster-whisper, this setting is ignored.'
-        },
-        'vosk_model': {
-            'depends_on': [{'field': 'stt_processor', 'values': ['vosk']}],
-            'description': 'If you are using "vosk" as your stt_processor, this is the name of the language model it uses. The default "vosk-model-small-en-us-0.15" is small and fast. You can download other models from alphacephei.com/vosk/models for different languages or better accuracy. "vosk-model-en-us-0.22" is a larger, more accurate English model. If you are not using vosk, this setting is ignored.'
         },
         'speechdelay': {
             'description': 'After you stop talking, TARS waits this long before it decides you are done and starts processing your message. The number is in tenths of a second, so 20 = 2 seconds. If this is too short (like 5 = half a second), TARS will cut you off mid-sentence every time you pause to think. If it is too long (like 40 = 4 seconds), there will be an awkward silence after every sentence before TARS responds. 15-25 (1.5 to 2.5 seconds) works well for most people.'
