@@ -1607,6 +1607,64 @@ body::after {
 }
 .config-hint i { color: var(--cyan) !important; }
 
+/* Hover tooltip for config field descriptions */
+.config-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  margin-left: 2px;
+}
+.config-tooltip-icon {
+  color: var(--cyan) !important;
+  opacity: 0.45;
+  font-size: 11px !important;
+  transition: opacity 0.2s;
+}
+.config-tooltip-wrap:hover .config-tooltip-icon {
+  opacity: 1;
+}
+/* Tooltip is appended to <body> via JS so it escapes all overflow:hidden parents */
+.config-tooltip-popup {
+  display: block;
+  position: fixed;
+  z-index: 99999;
+  background: rgba(10,20,40,0.97);
+  border: 1px solid rgba(0,229,255,0.35);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #c0d0e0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: 1.5;
+  white-space: normal;
+  min-width: 240px;
+  max-width: 340px;
+  width: max-content;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 16px rgba(0,229,255,0.1);
+  pointer-events: none;
+}
+.config-tooltip-popup::after {
+  content: '';
+  position: absolute;
+  border: 6px solid transparent;
+}
+.config-tooltip-popup.arrow-bottom::after {
+  top: 100%;
+  left: var(--arrow-x, 50%);
+  transform: translateX(-50%);
+  border-top-color: rgba(0,229,255,0.35);
+}
+.config-tooltip-popup.arrow-top::after {
+  bottom: 100%;
+  left: var(--arrow-x, 50%);
+  transform: translateX(-50%);
+  border-bottom-color: rgba(0,229,255,0.35);
+}
+
 .config-array-badge {
   font-family: var(--font-hud);
   font-size: 9px; font-weight: 700;

@@ -496,6 +496,7 @@ class STTManager:
 
     def _transcribe_with_fastrtc(self):
         """Transcribe audio using FastRTC STT with improved speech detection."""
+        FASTRTC_RATE = 16000  # FastRTC/Moonshine expects 16 kHz audio
         audio_buffer = BytesIO()
         detected_speech = False
         silent_frames = 0
@@ -506,20 +507,20 @@ class STTManager:
         MAX_SILENT_FRAMES = 20
 
         with sd.InputStream(
-            samplerate=self.SAMPLE_RATE, channels=1, dtype="int16"
+            samplerate=FASTRTC_RATE, channels=1, dtype="int16"
         ) as stream, wave.open(audio_buffer, "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
-            wf.setframerate(self.SAMPLE_RATE)
+            wf.setframerate(FASTRTC_RATE)
 
             for frame_idx in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
-                
+
                 is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(
                     data, detected_speech, silent_frames
                 )
                 silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
-                
+
                 # Add the same early exit check as other functions
                 if is_silence:
                     if not detected_speech:
@@ -528,7 +529,7 @@ class STTManager:
                     if speech_frames >= MIN_SPEECH_FRAMES and silent_frames >= MAX_SILENT_FRAMES:
                         print()
                         break
-                
+
                 if not detected_speech:
                     pre_roll_buffer.append(data.tobytes())
                     if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
@@ -540,10 +541,10 @@ class STTManager:
                         pre_roll_buffer = []
 
                     wf.writeframes(data.tobytes())
-                    
+
                     if not is_silence:
                         speech_frames += 1
-            
+
             if speech_frames < MIN_SPEECH_FRAMES:
                 return None
 
@@ -552,14 +553,18 @@ class STTManager:
             return None
 
         audio_data, sample_rate = sf.read(audio_buffer, dtype="float32")
-        
+
+        # Resample to 16 kHz if needed (safety net)
+        if sample_rate != FASTRTC_RATE and librosa is not None:
+            audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=FASTRTC_RATE)
+
         audio_max = np.abs(audio_data).max()
         if audio_max < 0.1:
             audio_data = audio_data * (0.3 / max(audio_max, 0.001))
-        
+
         audio_data = np.clip(audio_data, -1.0, 1.0)
 
-        transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip()
+        transcript = self.fastrtc_model.stt((FASTRTC_RATE, audio_data)).strip()
 
         if transcript:
             formatted_result = {"text": transcript}
@@ -903,12 +908,13 @@ class STTManager:
         except Exception:
             pass
 
-        chunk_duration = 2.0  # Process 1-second chunks
-        frames_per_chunk = int(self.SAMPLE_RATE * chunk_duration)
+        FASTRTC_RATE = 16000  # FastRTC/Moonshine expects 16 kHz audio
+        chunk_duration = 2.0  # Process 2-second chunks
+        frames_per_chunk = int(FASTRTC_RATE * chunk_duration)
         silent_frames = 0
         max_iterations = 100  # Prevent infinite loops
 
-        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+        with sd.InputStream(samplerate=FASTRTC_RATE, channels=1, dtype="int16") as stream:
             for iteration in range(max_iterations):
                 if not self.running or self.shutdown_event.is_set():
                     break
@@ -935,7 +941,7 @@ class STTManager:
                 #queue_message(f"DEBUG: audio_data shape: {audio_data.shape}, sample_rate: {self.SAMPLE_RATE}")
 
                 try:
-                    transcript = self.fastrtc_model.stt((self.SAMPLE_RATE, audio_data)).strip().lower()
+                    transcript = self.fastrtc_model.stt((FASTRTC_RATE, audio_data)).strip().lower()
                 except Exception as e:
                     queue_message(f"ERROR: FastRTC STT failed: {e}")
                     continue
