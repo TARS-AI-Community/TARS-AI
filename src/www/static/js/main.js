@@ -667,7 +667,7 @@ function executeAction() {
   }
 
   const SECTION_ICONS = {
-    'DEVICE':'bi-cpu-fill','CHATUI':'bi-chat-dots-fill','CHAR':'bi-person-fill',
+    'DEVICE':'bi-cpu-fill','CHAR':'bi-person-fill',
     'CONTROLS':'bi-controller','STT':'bi-mic-fill','LLM':'bi-robot',
     'VISION':'bi-eye-fill','EMOTION':'bi-emoji-smile-fill','TTS':'bi-volume-up-fill',
     'UI':'bi-display-fill','RAG':'bi-database-fill','BATTERY':'bi-battery-half',
@@ -675,7 +675,7 @@ function executeAction() {
     'STABLE_DIFFUSION':'bi-image-fill','MISC':'bi-wrench-adjustable'
   };
   const SECTION_LABELS = {
-    'DEVICE':'Device','CHATUI':'Chat UI','CHAR':'Character','CONTROLS':'Controls',
+    'DEVICE':'Device','CHAR':'Character','CONTROLS':'Controls',
     'STT':'Speech','LLM':'AI Model','VISION':'Vision','EMOTION':'Emotion',
     'TTS':'Voice','UI':'Display','RAG':'Memory','BATTERY':'Battery',
     'HOME_ASSISTANT':'Home Asst','DISCORD':'Discord',
@@ -683,10 +683,10 @@ function executeAction() {
   };
 
   const SECTION_ORDER = [
-    'DEVICE', 'CHAR', 'LLM',
+    'CHAR', 'LLM',
     'STT', 'TTS',
     'EMOTION', 'VISION', 'RAG',
-    'UI', 'CHATUI',
+    'UI',
     'CONTROLS',
     'HOME_ASSISTANT', 'DISCORD',
     'STABLE_DIFFUSION',
@@ -735,8 +735,11 @@ function executeAction() {
 
         for (const [key, value] of Object.entries(fields)) {
           const fid = `cfg_${section}_${key}`, fi = data.field_options[`${section}.${key}`], desc2 = fi?.description||'';
-          html += `<div class="col-md-6 col-lg-4"><div class="field-wrapper">
-            <label for="${fid}" class="form-label d-flex align-items-center gap-1"><span>${key}</span>`;
+          const depData = fi?.depends_on ? JSON.stringify(Array.isArray(fi.depends_on) ? fi.depends_on : [fi.depends_on]) : null;
+          html += depData
+            ? `<div class="col-md-6 col-lg-4" data-dep-conds='${depData}' data-dep-section="${section}"><div class="field-wrapper">`
+            : `<div class="col-md-6 col-lg-4"><div class="field-wrapper">`;
+          html += `<label for="${fid}" class="form-label d-flex align-items-center gap-1"><span>${fi?.label||key}</span>`;
           if (desc2) html += `<span class="config-tooltip-wrap" data-tip="${esc(desc2)}"><i class="bi bi-info-circle config-tooltip-icon"></i></span>`;
 
           if (fi?.type==='screensaver_select') {
@@ -811,6 +814,7 @@ function executeAction() {
         });
       });
       initTagInputs(); initScreensaverSelects(); initConfigTooltips();
+      applyDependencies(); attachDependencyHandlers(); attachBackendUrlAutoFill();
     }).catch(err => {
       $('configForm').innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error: ${err.message}</div>`;
     });
@@ -859,6 +863,54 @@ function executeAction() {
     // Clean up if user scrolls away
     document.querySelectorAll('.config-panel-body, .tab-content, .config-wrap').forEach(el => {
       el.addEventListener('scroll', removeTip);
+    });
+  }
+
+  function applyDependencies() {
+    document.querySelectorAll('[data-dep-conds]').forEach(wrapper => {
+      const conds = JSON.parse(wrapper.dataset.depConds);
+      const section = wrapper.dataset.depSection;
+      const visible = conds.every(cond => {
+        const parentEl = document.getElementById(`cfg_${section}_${cond.field}`);
+        if (!parentEl) return true;
+        const val = parentEl.type === 'checkbox'
+          ? (parentEl.checked ? 'true' : 'false')
+          : parentEl.value.toLowerCase();
+        return cond.values.map(v => v.toLowerCase()).includes(val);
+      });
+      wrapper.style.display = visible ? '' : 'none';
+    });
+  }
+
+  function attachDependencyHandlers() {
+    const attached = new Set();
+    document.querySelectorAll('[data-dep-conds]').forEach(wrapper => {
+      const conds = JSON.parse(wrapper.dataset.depConds);
+      const section = wrapper.dataset.depSection;
+      conds.forEach(cond => {
+        const parentId = `cfg_${section}_${cond.field}`;
+        if (!attached.has(parentId)) {
+          attached.add(parentId);
+          const parentEl = document.getElementById(parentId);
+          if (parentEl) parentEl.addEventListener('change', applyDependencies);
+        }
+      });
+    });
+  }
+
+  const BACKEND_URLS = {
+    'openai':    'https://api.openai.com/v1',
+    'grok':      'https://api.x.ai/v1',
+    'deepinfra': 'https://api.deepinfra.com/v1/openai',
+  };
+
+  function attachBackendUrlAutoFill() {
+    const backendEl = document.getElementById('cfg_LLM_llm_backend');
+    const urlEl = document.getElementById('cfg_LLM_base_url');
+    if (!backendEl || !urlEl) return;
+    backendEl.addEventListener('change', () => {
+      const url = BACKEND_URLS[backendEl.value];
+      if (url) urlEl.value = url;
     });
   }
 

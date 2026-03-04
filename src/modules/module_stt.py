@@ -904,7 +904,7 @@ class STTManager:
             return False
 
         try:
-            requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/stop_talking", timeout=1)
+            requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/stop_talking", timeout=1)
         except Exception:
             pass
 
@@ -953,7 +953,7 @@ class STTManager:
                     if self.config["STT"].get("use_indicators"):
                         self.play_wav("../stt/beep_on.wav")
                     try:
-                        requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/start_talking", timeout=1)
+                        requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking", timeout=1)
                     except Exception:
                         pass
                     if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
@@ -975,7 +975,7 @@ class STTManager:
         """
         # Notify external service to stop talking.
         try:
-            requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/stop_talking", timeout=1)
+            requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/stop_talking", timeout=1)
         except Exception:
             pass
 
@@ -999,7 +999,7 @@ class STTManager:
                     try:
                         if self.config["STT"].get("use_indicators"):
                             self.play_wav("../stt/beep_on.wav")
-                        requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/start_talking", timeout=1)
+                        requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking", timeout=1)
                     except Exception:
                         pass
 
@@ -1042,7 +1042,7 @@ class STTManager:
             if self.config["STT"].get("use_indicators"):
                 self.play_wav("../stt/beep_on.wav")
             try:
-                requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/start_talking", timeout=1)
+                requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking", timeout=1)
             except Exception:
                 pass
             if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:

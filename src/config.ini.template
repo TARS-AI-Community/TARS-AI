@@ -56,8 +56,8 @@ responses = ["Hi", "Yes?", "hey!", "What's up?", "Can I help you?", "What do you
 thinking_responses = ["Let me think...", "soooo.....", "soo....", "Let's seeee...", "Let me seeee...", "Let's see.....", "One Moment...", "One Moment", "hum", "humm", "Analyzing...", "Processing...", "Calculating...", "Computing...", "Running the numbers...", "Checking...", "One moment...", "Scanning data...", "Assessing...", "Evaluating...", "Let me calculate...", "Working on it...", "Just a moment...", "Reviewing...", "Compiling...", "Cross-referencing...", "Thinking it through...", "Give me a second...", "Hold on..."]
 
 # Your geographic coordinates and location name. Used by the LLM to provide
-# location-aware responses (weather, time zones, local info).
-# Set these to your actual location.
+# location-aware responses (weather, time zones, local info), as well as 
+# the dashboard widget. Set these to your actual location.
 latitude = 45.5017
 longitude = -73.5673
 location_name = Montreal, Quebec, Canada

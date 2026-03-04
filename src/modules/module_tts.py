@@ -205,7 +205,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
     
     async def play_chunks():
         try:
-            requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/start_talking", timeout=1)
+            requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking", timeout=1)
         except:
             pass
         
@@ -235,7 +235,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                     break
         
         try:
-            requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/stop_talking", timeout=1)
+            requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/stop_talking", timeout=1)
         except:
             pass
     

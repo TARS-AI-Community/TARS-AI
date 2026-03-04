@@ -114,6 +114,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "www", "static")
 
 # Initialize Flask app with absolute paths
 flask_app = Flask(__name__, template_folder=CHARACTER_DIR, static_url_path='/static', static_folder=STATIC_DIR)
+flask_app.json.sort_keys = False
 
 # Track previous arm positions to determine movement direction
 previous_arm_positions = {
@@ -131,7 +132,7 @@ flask_app.secret_key = os.getenv("FLASK_SECRET_KEY", "tars_default_secret_key_88
 @flask_app.before_request
 def check_auth():
     # Public routes that don't require login
-    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path in ('/login', '/emotion', '/start_talking', '/stop_talking') or not CONFIG['CHATUI'].get('enabled', True):
+    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path in ('/login', '/emotion', '/start_talking', '/stop_talking') or not CONFIG['UI'].get('webui_enabled', True):
         return
         
     # Check if user is logged in
@@ -166,13 +167,13 @@ def index():
                            char_name=character_name,
                            char_greeting='Welcome back',
                            talkinghead_base_url=ipadd,
-                           port=CONFIG['CHATUI'].get('port', 5012))
+                           port=CONFIG['UI'].get('webui_port', 80))
 
 @flask_app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         password = request.form.get('password')
-        correct_password = CONFIG['CHATUI'].get('password', 'tars')
+        correct_password = CONFIG['UI'].get('webui_password', 'tarspass1234')
         
         if password == correct_password:
             session['logged_in'] = True
@@ -203,8 +204,8 @@ def get_config_variable():
     except Exception as e:
         return f"Error: {e}"
     
-    #queue_message(jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['CHATUI'].get('port', 5012)}"}))
-    return jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['CHATUI'].get('port', 5012)}"})
+    #queue_message(jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['UI'].get('webui_port', 80)}"}))
+    return jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['UI'].get('webui_port', 80)}"})
 
 @flask_app.route('/avatar_sprites')
 def avatar_sprites():
@@ -941,6 +942,10 @@ def get_config():
                         field_options[field_key]['description'] = field_def['description']
                     if 'type' in field_def:
                         field_options[field_key]['type'] = field_def['type']
+                    if 'depends_on' in field_def:
+                        field_options[field_key]['depends_on'] = field_def['depends_on']
+                    if 'label' in field_def:
+                        field_options[field_key]['label'] = field_def['label']
         
         return jsonify({
             "config": filtered_config,
@@ -1197,7 +1202,7 @@ def console_logs():
 
 def start_flask_app(port=None):
     if port is None:
-        port = CONFIG['CHATUI'].get('port', 5012)
+        port = CONFIG['UI'].get('webui_port', 80)
     import eventlet
     import eventlet.wsgi
     queue_message(f"INFO: Starting Flask app on port {port} with Eventlet...")
