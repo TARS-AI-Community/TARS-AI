@@ -525,21 +525,6 @@ class MemoryManager:
                     self._token_error_logged = True
                 return {"length": 0}
 
-        elif llm_backend in ["ooba", "tabby"]:
-            url = f"{self.config['LLM']['base_url']}/v1/internal/token-count" if llm_backend == "ooba" else f"{self.config['LLM']['base_url']}/v1/token/encode"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.config['LLM']['api_key']}"
-            }
-            data = {"text": text}
-
-            try:
-                response = requests.post(url, headers=headers, json=data)
-                response.raise_for_status()
-                return response.json()
-            except requests.exceptions.RequestException as e:
-                queue_message(f"ERROR: Request to {llm_backend} token count API failed: {e}")
-                return {"length": 0}
         else:
             queue_message(f"ERROR: Unsupported LLM backend: {llm_backend}")
             return {"length": 0}

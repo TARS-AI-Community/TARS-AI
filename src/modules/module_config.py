@@ -565,8 +565,6 @@ def get_api_key(llm_backend: str) -> str:
     backend_to_env_var = {
         "openai": "OPENAI_API_KEY",
         "grok": "GROK_API_KEY",
-        "ooba": "OOBA_API_KEY",
-        "tabby": "TABBY_API_KEY",
         "deepinfra": "DEEPINFRA_API_KEY"
     }
     if llm_backend not in backend_to_env_var:
@@ -651,17 +649,17 @@ CONFIG_METADATA = {
         '__description__': 'Configure the AI brain that generates TARS responses',
         'llm_backend': {
             'label': 'AI Backend',
-            'options': ['openai', 'grok', 'ooba', 'tabby', 'deepinfra', 'other'],
-            'description': 'Choose which AI service TARS talks to for generating its responses. "openai" uses OpenAI (ChatGPT) and auto-fills the URL. "grok" uses xAI and auto-fills the URL. "deepinfra" uses DeepInfra and auto-fills the URL. "ooba" and "tabby" are for self-hosted models - set your own URL. "other" is for any OpenAI-compatible API (Featherless, Ollama, LM Studio, etc.) - set your own URL and it will never be overwritten. If you are not sure, start with "openai".'
+            'options': ['openai', 'grok', 'deepinfra', 'other'],
+            'description': 'Choose which AI service TARS talks to for generating its responses. "openai" uses OpenAI (ChatGPT) and auto-fills the URL. "grok" uses xAI and auto-fills the URL. "deepinfra" uses DeepInfra and auto-fills the URL. "other" is for any OpenAI-compatible API (Featherless, Ollama, LM Studio, etc.) - set your own URL and it will never be overwritten. If you are not sure, start with "openai".'
         },
         'base_url': {
             'label': 'Base URL',
-            'depends_on': [{'field': 'llm_backend', 'values': ['ooba', 'tabby', 'other']}],
-            'description': 'The API endpoint for your AI service. For "ooba", "tabby", and "other" backends, set your server address here (e.g. http://192.168.1.100:11434/v1 for Ollama, or https://api.featherless.ai/v1 for Featherless). For "openai", "grok", and "deepinfra" this is handled automatically.'
+            'depends_on': [{'field': 'llm_backend', 'values': ['other']}],
+            'description': 'The API endpoint for your AI service. For the "other" backend, set your server address here (e.g. http://192.168.1.100:11434/v1 for Ollama, or https://api.featherless.ai/v1 for Featherless). For "openai", "grok", and "deepinfra" this is handled automatically.'
         },
         'openai_model': {
             'label': 'model',
-            'depends_on': [{'field': 'llm_backend', 'values': ['openai', 'ooba', 'tabby', 'deepinfra', 'other']}],
+            'depends_on': [{'field': 'llm_backend', 'values': ['openai', 'deepinfra', 'other']}],
             'description': 'The specific AI model to use when your backend is set to "openai". Different models have different capabilities and costs. "gpt-4o-mini" is cheap and fast (good starting point). "gpt-4o" is smarter but costs more per message. If you are using Ollama on your own computer, put the model name you downloaded there, like "llama3.1:8b" or "qwen2.5:3b". This setting is ignored if you picked a different backend above.'
         },
         'grok_model': {

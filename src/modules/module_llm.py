@@ -144,16 +144,6 @@ def _prepare_request_data(llm_backend, prompt):
             "top_p": CONFIG['LLM']['top_p'],
             "response_format": {"type": "json_object"}
         }
-    elif llm_backend in ["ooba", "tabby"]:
-        url = f"{CONFIG['LLM']['base_url']}/v1/completions"
-        data = {
-            "prompt": prompt,
-            "max_tokens": CONFIG['LLM']['max_tokens'],
-            "temperature": CONFIG['LLM']['temperature'],
-            "top_p": CONFIG['LLM']['top_p']
-        }
-        if llm_backend == "ooba":
-            data["seed"] = CONFIG['LLM']['seed']
     else:
         raise ValueError(f"Unsupported LLM backend: {llm_backend}")
 
@@ -365,13 +355,6 @@ def _summarize_search_results(search_results, user_question):
                 "temperature": float(CONFIG['LLM'].get('temperature', 0.7))
             }
 
-        elif llm_backend in ["ooba", "tabby"]:
-            url = f"{CONFIG['LLM']['base_url']}/v1/completions"
-            data = {
-                "prompt": summary_prompt,
-                "max_tokens": 250,
-                "temperature": float(CONFIG['LLM'].get('temperature', 0.7))
-            }
         else:
             return None
 

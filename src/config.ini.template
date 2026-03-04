@@ -74,8 +74,6 @@ location_name = Montreal, Quebec, Canada
 # Which API backend to use for AI responses.
 # openai: OpenAI API (GPT models) or any OpenAI-compatible API (Ollama, LM Studio, etc.)
 # grok: xAI's Grok API
-# tabby: TabbyAPI local server
-# ooba: Oobabooga text-generation-webui
 # deepinfra: DeepInfra API
 llm_backend = openai
 
