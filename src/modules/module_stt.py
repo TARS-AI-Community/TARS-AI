@@ -36,8 +36,6 @@ torchaudio = None
 librosa = None
 get_stt_model = None
 Model = None
-pvporcupine = None
-PvRecorder = None
 OpenAI = None
 WakeWordSystem = None
 
@@ -66,20 +64,6 @@ if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "fastrtc" in CAPABILITI
     try:
         from fastrtc import get_stt_model as _get_stt_model
         get_stt_model = _get_stt_model
-    except ImportError:
-        pass
-
-# Picovoice (Pi5, Pi4, Pi3)
-if CAPABILITIES is None or (CAPABILITIES.allowed_wake and "picovoice" in CAPABILITIES.allowed_wake):
-    try:
-        import pvporcupine as _pvporcupine
-        pvporcupine = _pvporcupine
-    except ImportError:
-        pass
-    
-    try:
-        from pvrecorder import PvRecorder as _PvRecorder
-        PvRecorder = _PvRecorder
     except ImportError:
         pass
 
@@ -197,15 +181,8 @@ class STTManager:
             self._load_silero_model()
 
         # Wake word processor initialization
-        wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
-        if wake_word_processor == "picovoice" and pvporcupine is not None:
-            self.porcupine = pvporcupine.create(
-                access_key=CONFIG["STT"]["picovoice_api_key"],
-                keyword_paths=[CONFIG["STT"]["picovoice_keyword_path"]]
-            )
-        elif wake_word_processor == "picovoice" and pvporcupine is None:
-            queue_message("WARNING: Picovoice not available, wake word disabled")
-        elif wake_word_processor == "fastrtc" and not self.fastrtc_model:
+        wake_word_processor = self.config["STT"].get("wake_word_processor", "atomik")
+        if wake_word_processor == "fastrtc" and not self.fastrtc_model:
             self._load_fastrtc_model() 
         elif wake_word_processor == "atomik":
             self._load_atomik_model() 
@@ -688,13 +665,11 @@ class STTManager:
         character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
         queue_message(f"{character_name}: Sleeping...")
 
-        wake_word_processor = self.config["STT"].get("wake_word_processor", "picovoice")
+        wake_word_processor = self.config["STT"].get("wake_word_processor", "atomik")
         if wake_word_processor == "fastrtc":
             return self._detect_wake_word_fastrtc()
-        elif wake_word_processor == "atomik":
-            return self._detect_wake_word_atomik()
         else:
-            return self._detect_wake_word_picovoice()
+            return self._detect_wake_word_atomik()
 
     def _detect_wake_word_fastrtc(self) -> bool:
         """
@@ -766,66 +741,6 @@ class STTManager:
                         if self.wake_word_callback:
                             self.wake_word_callback(wake_response)
                     return True
-
-        return False
-    
-
-    def _detect_wake_word_picovoice(self) -> bool:
-        """
-        Detect the wake word using enhanced false-positive filtering.
-        """
-        # Notify external service to stop talking.
-        try:
-            requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/stop_talking", timeout=1)
-        except Exception:
-            pass
-
-        silent_frames = 0
-        max_iterations = 100  # Prevent infinite loops
-        recorder = None
-
-        try:
-            recorder = PvRecorder(frame_length=512, device_index=-1)
-            recorder.start()
-            while self.running and not self.shutdown_event.is_set():
-                audio_chunk = recorder.read()  # Read 512 frames per buffer
-                audio_chunk = np.array(audio_chunk, dtype=np.int16)
-                if audio_chunk.ndim != 1:
-                    audio_chunk = audio_chunk.flatten()  # Make sure it's a 1D array
-
-                # Use Porcupine to process the audio chunk and detect the wake word
-                keyword_index = self.porcupine.process(audio_chunk)
-
-                if keyword_index >= 0:
-                    try:
-                        if self.config["STT"].get("use_indicators"):
-                            self.play_wav("../stt/beep_on.wav")
-                        requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking", timeout=1)
-                    except Exception:
-                        pass
-
-                    character_path = self.config.get("CHAR", {}).get("character_card_path")
-                    character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
-                    if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
-                        wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                        queue_message(f"{character_name}: {wake_response}", stream=True)
-                        if self.wake_word_callback:
-                            self.wake_word_callback(wake_response)
-                    return True
-                    
-        except Exception as e:
-            queue_message(f"ERROR: Wake word detection failed: {e}")
-            return False
-        # finally:
-        #     try:
-        #         if recorder is not None:
-        #             recorder.delete()
-        #     except Exception:
-        #         pass
-        #     try:
-        #         self.porcupine.delete()
-        #     except Exception:
-        #         pass
 
         return False
     

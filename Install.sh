@@ -591,23 +591,6 @@ flashrank                       # Lightweight re-ranker
 EMBEDDINGS
     fi
 
-    cat >> "$req_file" << 'PICOVOICE'
-
-# === WAKE WORD (All Pi versions) ===
-pvporcupine                     # Wake word detection by Picovoice
-pvrecorder                      # Recorder for Picovoice
-
-PICOVOICE
-
-    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" || "$PI_VERSION" == "pi3" ]]; then
-        cat >> "$req_file" << 'VOSK'
-
-# === LOCAL STT (Pi3/Pi4/Pi5) ===
-vosk                            # Offline speech recognition
-
-VOSK
-    fi
-
     cat >> "$req_file" << 'LOCALTTS'
 
 # === LOCAL TTS (All Pi versions) ===

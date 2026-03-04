@@ -154,7 +154,6 @@ wake_word = hey tars
 # Engine used to detect the wake word in ambient audio.
 # atomik: Built-in detector (recommended, no API key needed, adjustable sensitivity)
 # fastrtc: Uses FastRTC real-time communication framework for detection
-# picovoice: Picovoice Porcupine (requires API key in .env, very accurate)
 wake_word_processor = atomik
 
 # Wake word detection strictness (1-10). Only applies to the Atomik processor.
@@ -188,11 +187,6 @@ vad_method = rms
 # Too short: Cuts you off mid-sentence. Too long: Feels slow to respond.
 # Recommended: 15-25 (1.5 to 2.5 seconds)
 speechdelay = 20
-
-# Path to the Picovoice Porcupine wake word model file (.ppn).
-# Only used when wake_word_processor = picovoice.
-# Generate custom keyword files at https://console.picovoice.ai/
-picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 
 
 # =============================================================================

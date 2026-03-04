@@ -59,7 +59,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         allowed_stt={"fastrtc", "silero", "openai", "external"},
         allowed_tts={"espeak", "piper", "silero", "alltalk", "elevenlabs", "minimax", "openai", "azure"},
         allowed_vad={"silero", "rms"},
-        allowed_wake={"picovoice", "fastrtc", "atomik"},
+        allowed_wake={"fastrtc", "atomik"},
         can_use_embeddings=True,
         can_use_ui=True,
         can_use_vision=True,
@@ -70,14 +70,14 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         fallback_stt="fastrtc",
         fallback_tts="espeak",
         fallback_vad="rms",
-        fallback_wake="picovoice",
+        fallback_wake="atomik",
     ),
     DeviceProfile.PI4: DeviceCapabilities(
         profile=DeviceProfile.PI4,
         allowed_stt={"openai", "external"},
         allowed_tts={"espeak", "piper", "alltalk", "elevenlabs", "minimax", "openai", "azure"},
         allowed_vad={"silero", "rms"},
-        allowed_wake={"picovoice", "atomik"},
+        allowed_wake={"atomik"},
         can_use_embeddings=True,
         can_use_ui=True,
         can_use_vision=False,
@@ -88,14 +88,14 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         fallback_stt="openai",
         fallback_tts="espeak",
         fallback_vad="rms",
-        fallback_wake="picovoice",
+        fallback_wake="atomik",
     ),
     DeviceProfile.PI3: DeviceCapabilities(
         profile=DeviceProfile.PI3,
         allowed_stt={"openai", "external"},
         allowed_tts={"espeak", "elevenlabs", "minimax", "openai", "azure"},
         allowed_vad={"rms"},
-        allowed_wake={"picovoice", "atomik"},
+        allowed_wake={"atomik"},
         can_use_embeddings=False,
         can_use_ui=True,
         can_use_vision=False,
@@ -106,14 +106,14 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         fallback_stt="openai",
         fallback_tts="openai",
         fallback_vad="rms",
-        fallback_wake="picovoice",
+        fallback_wake="atomik",
     ),
     DeviceProfile.PIZERO2: DeviceCapabilities(
         profile=DeviceProfile.PIZERO2,
         allowed_stt={"openai"},
         allowed_tts={"elevenlabs", "minimax", "openai", "azure"},
         allowed_vad={"rms"},
-        allowed_wake={"picovoice", "atomik"},
+        allowed_wake={"atomik"},
         can_use_embeddings=False,
         can_use_ui=True,
         can_use_vision=False,
@@ -124,7 +124,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         fallback_stt="openai",
         fallback_tts="openai",
         fallback_vad="rms",
-        fallback_wake="picovoice",
+        fallback_wake="atomik",
     ),
 }
 
@@ -396,9 +396,7 @@ def load_config():
             "sensitivity": config['STT']['sensitivity'],
             "external_url": config['STT']['external_url'],
             "speechdelay": int(config['STT']['speechdelay']),
-            "picovoice_keyword_path": config['STT']['picovoice_keyword_path'],
             "language": config['STT']['language'],
-            "picovoice_api_key": os.getenv('PICOVOICE_API_KEY')
         },
         "CHAR": {
             "character_name": character_name,
@@ -699,8 +697,8 @@ CONFIG_METADATA = {
         },
         'wake_word_processor': {
             'label': 'Wake Word Engine',
-            'options': ['picovoice', 'fastrtc', 'atomik'],
-            'description': 'The software that listens for your wake word. "atomik" is built right into TARS, completely free, and works offline - this is the recommended choice for most people. You can adjust how sensitive it is with the "sensitivity" setting below. "fastrtc" uses an internet-based service for detection. "picovoice" is a professional wake word service that is very accurate but requires you to sign up for a free API key at picovoice.ai and put it in your .env file.'
+            'options': ['atomik', 'fastrtc'],
+            'description': 'The software that listens for your wake word. "atomik" is built right into TARS, completely free, and works offline - this is the recommended choice for most people. You can adjust how sensitive it is with the "sensitivity" setting below. "fastrtc" uses an internet-based service for detection.'
         },
         'wake_word': {
             'description': 'The magic phrase you say to get TARS attention, like saying "Hey Siri" or "OK Google". TARS is always listening in the background for this specific phrase. When it hears it, it "wakes up" and starts recording whatever you say next. You can change this to anything you want, but shorter phrases (2-3 syllables) work best. For example: "hey tars", "ok robot", "computer". Avoid very common words that might trigger accidentally.'
@@ -720,10 +718,6 @@ CONFIG_METADATA = {
         },
         'speechdelay': {
             'description': 'After you stop talking, TARS waits this long before it decides you are done and starts processing your message. The number is in tenths of a second, so 20 = 2 seconds. If this is too short (like 5 = half a second), TARS will cut you off mid-sentence every time you pause to think. If it is too long (like 40 = 4 seconds), there will be an awkward silence after every sentence before TARS responds. 15-25 (1.5 to 2.5 seconds) works well for most people.'
-        },
-        'picovoice_keyword_path': {
-            'depends_on': [{'field': 'wake_word_processor', 'values': ['picovoice']}],
-            'description': 'Only matters if you are using "picovoice" as your wake_word_processor. This is the path to a special file (.ppn) that Picovoice uses to recognize your wake word. You can create custom wake word files for free at console.picovoice.ai. If you are not using picovoice, ignore this setting.'
         },
         'language': {
             'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
