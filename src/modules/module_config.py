@@ -937,7 +937,7 @@ CONFIG_METADATA = {
             'description': 'Same as above but for image-to-image generation (where TARS modifies an existing image instead of creating one from scratch). Only used with ComfyUI.'
         },
         'seed': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
             'description': 'Controls randomness in generated images. Leave at -1 for normal use - each image will be unique and different. If you set this to a specific number (like 12345), the EXACT same image will be generated every time you use the same prompt. This is useful for testing or if you found an image you like and want to reproduce it.'
         },
         'denoising_strength': {
