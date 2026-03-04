@@ -3100,6 +3100,11 @@ body::after {
   .chared-header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .chared-header-right { width: 100%; }
   .chared-selector { flex: 1; }
-  .chared-traits-grid { grid-template-columns: 1fr 1fr; }
-  .chared-panel { padding: 12px; }
+  .chared-traits-grid { grid-template-columns: 1fr; }
+  .chared-panel { padding: 10px; }
+  .chared-inner-tab { padding: 8px 10px 10px; font-size: 9px; }
+  /* Larger touch targets for trait sliders on mobile */
+  .chared-trait-slider { height: 6px; }
+  .chared-trait-slider::-webkit-slider-thumb { width: 22px; height: 22px; }
+  .chared-trait-slider::-moz-range-thumb { width: 22px; height: 22px; }
 }
