@@ -357,7 +357,7 @@ def load_config():
     persona_config.read(persona_path)
 
     required_sections = [
-        'CONTROLS', 'STT', 'CHAR', 'LLM', 'VISION', 'EMOTION', 'TTS', 'DISCORD', 'SERVO', 'STABLE_DIFFUSION'
+        'CONTROLS', 'STT', 'CHAR', 'LLM', 'VISION', 'EMOTION', 'TTS', 'DISCORD', 'STABLE_DIFFUSION'
     ]
     missing_sections = [section for section in required_sections if section not in config]
 
@@ -458,11 +458,11 @@ def load_config():
         }),
         "RAG": {
             "enabled": config.getboolean('RAG', 'enabled', fallback=True),
-            "enable_topic_tracking": config.getboolean('RAG', 'enable_topic_tracking'),
             "strategy": config.get('RAG', 'strategy', fallback='naive'),
+            "enable_topic_tracking": config.getboolean('RAG', 'enable_topic_tracking'),
+            "vector_weight": config.getfloat('RAG', 'vector_weight', fallback=0.5),
             "context_window": config.getint('RAG', 'context_window', fallback=2),
             "max_memories": config.getint('RAG', 'max_memories', fallback=3),
-            "vector_weight": config.getfloat('RAG', 'vector_weight', fallback=0.5),
             "top_k": config.getint('RAG', 'top_k', fallback=5),
             "recency_boost_days": config.getint('RAG', 'recency_boost_days', fallback=7),
         },
@@ -535,6 +535,8 @@ def load_config():
             "use_camera_module": config.getboolean('UI', 'use_camera_module'),
             "show_mouse": config.getboolean('UI', 'show_mouse'),
             "fullscreen": config.getboolean('UI', 'fullscreen'),
+            "screen_width": config.getint('UI', 'screen_width', fallback=480),
+            "screen_height": config.getint('UI', 'screen_height', fallback=320),
             "show_time": config.getboolean('UI', 'show_time', fallback=True),
             "show_cpu_temp": config.getboolean('UI', 'show_cpu_temp', fallback=False),
             "ampm_format": config.getboolean('UI', 'ampm_format', fallback=True),
@@ -648,10 +650,12 @@ CONFIG_METADATA = {
     'LLM': {
         '__description__': 'Configure the AI brain that generates TARS responses',
         'llm_backend': {
+            'label': 'AI Backend',
             'options': ['openai', 'grok', 'ooba', 'tabby', 'deepinfra', 'other'],
             'description': 'Choose which AI service TARS talks to for generating its responses. "openai" uses OpenAI (ChatGPT) and auto-fills the URL. "grok" uses xAI and auto-fills the URL. "deepinfra" uses DeepInfra and auto-fills the URL. "ooba" and "tabby" are for self-hosted models - set your own URL. "other" is for any OpenAI-compatible API (Featherless, Ollama, LM Studio, etc.) - set your own URL and it will never be overwritten. If you are not sure, start with "openai".'
         },
         'base_url': {
+            'label': 'Base URL',
             'depends_on': [{'field': 'llm_backend', 'values': ['ooba', 'tabby', 'other']}],
             'description': 'The API endpoint for your AI service. For "ooba", "tabby", and "other" backends, set your server address here (e.g. http://192.168.1.100:11434/v1 for Ollama, or https://api.featherless.ai/v1 for Featherless). For "openai", "grok", and "deepinfra" this is handled automatically.'
         },
@@ -693,10 +697,12 @@ CONFIG_METADATA = {
             'description': 'When this is on, TARS will play a short beep sound when it starts listening to you (after the wake word) and another beep when it stops listening. This is really helpful so you know when to start and stop talking. Turn this off if the beeps annoy you.'
         },
         'stt_processor': {
+            'label': 'STT Engine',
             'options': ['vosk', 'faster-whisper', 'silero', 'fastrtc', 'openai', 'external'],
             'description': 'After TARS hears the wake word, this is the software that converts your actual speech into text. Think of it as the "ears" of TARS. "fastrtc" sends your audio to the cloud for fast, accurate transcription (recommended if you have internet). "vosk" runs entirely on your Pi with no internet needed, but is less accurate. "faster-whisper" also runs on your Pi and is more accurate than vosk but needs a Pi 5. "openai" uses OpenAI\'s Whisper service (best for non-English languages, needs API key and internet). "external" lets you point to your own speech-to-text server running elsewhere.'
         },
         'wake_word_processor': {
+            'label': 'Wake Word Engine',
             'options': ['picovoice', 'fastrtc', 'atomik'],
             'description': 'The software that listens for your wake word. "atomik" is built right into TARS, completely free, and works offline - this is the recommended choice for most people. You can adjust how sensitive it is with the "sensitivity" setting below. "fastrtc" uses an internet-based service for detection. "picovoice" is a professional wake word service that is very accurate but requires you to sign up for a free API key at picovoice.ai and put it in your .env file.'
         },
@@ -704,6 +710,7 @@ CONFIG_METADATA = {
             'description': 'The magic phrase you say to get TARS attention, like saying "Hey Siri" or "OK Google". TARS is always listening in the background for this specific phrase. When it hears it, it "wakes up" and starts recording whatever you say next. You can change this to anything you want, but shorter phrases (2-3 syllables) work best. For example: "hey tars", "ok robot", "computer". Avoid very common words that might trigger accidentally.'
         },
         'vad_method': {
+            'label': 'VAD Method',
             'options': ['silero', 'rms'],
             'description': 'VAD stands for "Voice Activity Detection" - this is how TARS figures out when you have STOPPED talking so it can process your message. "rms" simply listens for silence (when the volume drops below a threshold). It is lightweight and works on any Pi. "silero" uses a small AI model to detect speech vs silence, which is more accurate (it won\'t be fooled by background noise as easily) but uses more processing power - only recommended for Pi 5.'
         },
@@ -742,10 +749,12 @@ CONFIG_METADATA = {
             'description': 'When this is ON, TARS will use voice settings stored in the character card file instead of the settings on this page. This is useful if you have multiple characters (like TARS, a pirate, a wizard, etc.) and each one should have a different voice. When OFF, the voice settings on this page are always used regardless of which character is loaded.'
         },
         'ttsoption': {
+            'label': 'TTS Engine',
             'options': ['espeak', 'piper', 'silero', 'alltalk', 'elevenlabs', 'minimax', 'openai', 'azure'],
             'description': 'Choose how TARS speaks out loud. This is the most important voice setting. FREE options that work without internet: "piper" sounds natural and is the best free option (recommended for Pi 5 and Pi 4). "espeak" is a basic robotic-sounding voice but works on any Pi, even very weak ones. "silero" is another good-sounding option but only works on Pi 5. If you have a separate PC, "alltalk" lets you run a high-quality voice server on it. PAID cloud options (need internet + API key in .env file): "elevenlabs" has the most natural, human-like voices. "openai" is good quality and works well in many languages. "minimax" and "azure" are other cloud options with different voice styles.'
         },
         'ttsurl': {
+            'label': 'TTS URL',
             'depends_on': [{'field': 'ttsoption', 'values': ['alltalk']}],
             'description': 'If you picked "alltalk" above, put the web address of your AllTalk server here. AllTalk is a voice synthesis program you run on a separate, more powerful computer (like a gaming PC). Format: http://IP-ADDRESS:PORT (for example: http://192.168.1.100:7852). If you are not using alltalk, this setting is ignored.'
         },
@@ -802,6 +811,7 @@ CONFIG_METADATA = {
             'description': 'When OFF (default), the camera image processing happens directly on your Raspberry Pi. When ON, the image is sent to a separate, more powerful computer to be processed. Turn this ON if your Pi is too weak to handle vision (Pi 3 or Pi 4), and then set up the vision server on another computer. If you have a Pi 5, you can leave this OFF to process everything locally.'
         },
         'base_url': {
+            'label': 'Base URL',
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'server_hosted', 'values': ['True', 'true']}],
             'description': 'Only matters if "server_hosted" is ON. Enter the web address of the computer running the vision server. Format: http://IP-ADDRESS:PORT (for example: http://192.168.1.100:5678). The vision server script is included in the TARS project and you run it on a more powerful computer that handles the image processing.'
         },
@@ -815,6 +825,10 @@ CONFIG_METADATA = {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'options': ['naive', 'hybrid'],
             'description': 'How TARS searches through its memories. "hybrid" (recommended) uses two different search methods together - it looks for memories that are similar in meaning AND memories that contain matching keywords. This gives the best results. "naive" only uses meaning-based search, which is faster but might miss some relevant memories. Unless you are having performance issues, stick with "hybrid".'
+        },
+        'vector_weight': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'strategy', 'values': ['hybrid']}],
+            'description': 'When using hybrid search, this controls how much weight goes to meaning-based search (vectors) vs keyword search. 0.5 = equal weight to both. Higher (0.7-0.9) = favors meaning and context. Lower (0.1-0.3) = favors exact keyword matches. Most people should leave this at 0.5.'
         },
         'enable_topic_tracking': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
@@ -854,6 +868,7 @@ CONFIG_METADATA = {
             'description': 'The network port used by the on-device display server. Most people should not change this.'
         },
         'UI_enabled': {
+            'label': 'Enabled',
             'description': 'Master switch for the physical screen attached to your TARS robot. Turn this OFF if your TARS does not have a screen, or if you want to save resources by running "headless" (no display). When OFF, TARS still works - you just interact through the web interface or voice only.'
         },
         'use_camera_module': {
@@ -867,6 +882,14 @@ CONFIG_METADATA = {
         'fullscreen': {
             'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
             'description': 'When ON, the TARS display takes up the entire screen with no window borders or title bar - this is what you want for a finished robot. When OFF, it runs in a regular window that you can move and resize, which is useful during development or if you are also using the Pi desktop for other things.'
+        },
+        'screen_width': {
+            'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
+            'description': 'Width of the TARS on-device display in pixels. Common: 480 for standard 3.5" Pi display, 800 for 5" or 7" displays. Set to 0 for auto-detect.'
+        },
+        'screen_height': {
+            'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
+            'description': 'Height of the TARS on-device display in pixels. Common: 320 for standard 3.5" Pi display, 480 for 5" displays, 600 for 7" displays. Set to 0 for auto-detect.'
         },
         'show_time': {
             'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
@@ -914,9 +937,11 @@ CONFIG_METADATA = {
             'description': 'Master switch for game controller support. Turn ON if you have a Bluetooth or USB controller paired to your Pi and want to use it to control TARS movement and actions. Leave OFF if you do not have a controller or do not want to use one.'
         },
         'ventilate': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'When ON, TARS will periodically shift its body into a position that lets more air flow through the case. This helps keep the electronics cool, especially if your TARS is in a sealed or enclosed case where heat can build up. If your Pi is running hot (check with show_cpu_temp in the UI section), try turning this ON.'
         },
         'voicemovement': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'When ON, you can tell TARS to move by voice, like saying "walk forward", "turn left", or "stop". This works even without a controller connected. When OFF, TARS can only be moved with a physical game controller.'
         },
         'swap_turn_directions': {
@@ -987,6 +1012,7 @@ CONFIG_METADATA = {
             'description': 'How many passes the AI makes over the image while creating it. More steps = better quality but takes longer to generate. 20 is a good starting point that balances speed and quality. Going above 30-40 usually does not improve the image much but makes it take noticeably longer. Going below 15 can make images look blurry or unfinished.'
         },
         'cfg_scale': {
+            'label': 'CFG Scale',
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
             'description': 'How closely the generated image follows your text description. Think of it as a "creativity vs accuracy" slider. At low values (1-5), the AI takes a lot of creative freedom and the image might not match your description well but could look artistic. At medium values (7-9), there is a good balance (recommended). At high values (10-20), the AI tries very hard to match your exact words, but the image can start looking artificial or over-processed.'
         },
@@ -1017,120 +1043,6 @@ CONFIG_METADATA = {
         'negative_prompt': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'A list of things you do NOT want in the generated images. The AI will try to avoid these. The default list helps prevent common ugly artifacts like deformed body parts, extra limbs, and bad anatomy. You can add your own terms if you notice recurring problems. For example, add "blurry" if images keep coming out unfocused, or "watermark" to avoid watermark-like artifacts.'
-        },
-    },
-    'SERVO': {
-        '__description__': 'Fine-tune servo positions and calibration for legs and arms',
-        'arms_present': {
-            'description': 'Set to True if your TARS build has arm servos physically installed. This changes movement calculations to account for the extra weight. Only enable if arms are actually built and wired up.'
-        },
-        'leftUpHeight': {
-            'description': 'PWM value for the left leg at its highest position. Lower values = higher position for most servos. Adjust if the left leg does not reach high enough or goes too high.'
-        },
-        'leftDownHeight': {
-            'description': 'PWM value for the left leg at its lowest position. Higher values = lower position for most servos.'
-        },
-        'perfectLeftHeightOffset': {
-            'description': 'Fine-tune offset for the left leg height. Positive values shift the entire left leg range up, negative shifts it down. Use this to level TARS if one side sits higher than the other.'
-        },
-        'rightUpHeight': {
-            'description': 'PWM value for the right leg at its highest position.'
-        },
-        'rightDownHeight': {
-            'description': 'PWM value for the right leg at its lowest position.'
-        },
-        'perfectRightHeightOffset': {
-            'description': 'Fine-tune offset for the right leg height. Use this alongside perfectLeftHeightOffset to make sure TARS stands level.'
-        },
-        'forwardLeftLeg': {
-            'description': 'PWM value for the left leg swung fully forward (for walking).'
-        },
-        'backLeftLeg': {
-            'description': 'PWM value for the left leg swung fully backward (for walking).'
-        },
-        'perfectLeftLegOffset': {
-            'description': 'Fine-tune offset for the left leg swing. Adjusts the neutral standing position of the left leg forward or backward.'
-        },
-        'forwardRightLeg': {
-            'description': 'PWM value for the right leg swung fully forward (for walking).'
-        },
-        'backRightLeg': {
-            'description': 'PWM value for the right leg swung fully backward (for walking).'
-        },
-        'perfectRightLegOffset': {
-            'description': 'Fine-tune offset for the right leg swing. Adjusts the neutral standing position of the right leg forward or backward.'
-        },
-        'leftMainMin': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM minimum for the left shoulder (main arm joint).'
-        },
-        'leftMainMax': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM maximum for the left shoulder (main arm joint).'
-        },
-        'leftMainOffset': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'Fine-tune offset for the left shoulder position.'
-        },
-        'leftForarmMin': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM minimum for the left forearm (elbow joint).'
-        },
-        'leftForarmMax': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM maximum for the left forearm (elbow joint).'
-        },
-        'leftForearmOffset': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'Fine-tune offset for the left forearm position.'
-        },
-        'leftHandMin': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM minimum for the left hand (wrist joint).'
-        },
-        'leftHandMax': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM maximum for the left hand (wrist joint).'
-        },
-        'leftHandOffset': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'Fine-tune offset for the left hand position.'
-        },
-        'rightMainMin': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM minimum for the right shoulder (main arm joint).'
-        },
-        'rightMainMax': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM maximum for the right shoulder (main arm joint).'
-        },
-        'rightMainOffset': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'Fine-tune offset for the right shoulder position.'
-        },
-        'rightForarmMin': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM minimum for the right forearm (elbow joint).'
-        },
-        'rightForarmMax': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM maximum for the right forearm (elbow joint).'
-        },
-        'rightForearmOffset': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'Fine-tune offset for the right forearm position.'
-        },
-        'rightHandMin': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM minimum for the right hand (wrist joint).'
-        },
-        'rightHandMax': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'PWM maximum for the right hand (wrist joint).'
-        },
-        'rightHandOffset': {
-            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
-            'description': 'Fine-tune offset for the right hand position.'
         },
     },
     'MISC': {

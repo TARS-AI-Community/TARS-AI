@@ -667,20 +667,20 @@ function executeAction() {
   }
 
   const SECTION_ICONS = {
-    'DEVICE':'bi-cpu-fill','CHAR':'bi-person-fill',
+    'CHAR':'bi-person-fill',
     'CONTROLS':'bi-controller','STT':'bi-mic-fill','LLM':'bi-robot',
     'VISION':'bi-eye-fill','EMOTION':'bi-emoji-smile-fill','TTS':'bi-volume-up-fill',
     'UI':'bi-display-fill','RAG':'bi-database-fill',
     'HOME_ASSISTANT':'bi-house-fill','DISCORD':'bi-discord',
-    'STABLE_DIFFUSION':'bi-image-fill','SERVO':'bi-sliders',
+    'STABLE_DIFFUSION':'bi-image-fill',
     'MISC':'bi-wrench-adjustable'
   };
   const SECTION_LABELS = {
-    'DEVICE':'Device','CHAR':'Character','CONTROLS':'Controls',
+    'CHAR':'Character','CONTROLS':'Controls',
     'STT':'Speech','LLM':'AI Model','VISION':'Vision','EMOTION':'Emotion',
     'TTS':'Voice','UI':'Display','RAG':'Memory',
     'HOME_ASSISTANT':'Home Asst','DISCORD':'Discord',
-    'STABLE_DIFFUSION':'Img Gen','SERVO':'Servos',
+    'STABLE_DIFFUSION':'Img Gen',
     'MISC':'Misc'
   };
 
@@ -689,7 +689,7 @@ function executeAction() {
     'STT', 'TTS',
     'EMOTION', 'VISION', 'RAG',
     'UI',
-    'CONTROLS', 'SERVO',
+    'CONTROLS',
     'HOME_ASSISTANT', 'DISCORD',
     'STABLE_DIFFUSION',
     'MISC'
