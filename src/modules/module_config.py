@@ -538,7 +538,8 @@ def get_api_key(llm_backend: str) -> str:
     backend_to_env_var = {
         "openai": "OPENAI_API_KEY",
         "grok": "GROK_API_KEY",
-        "deepinfra": "DEEPINFRA_API_KEY"
+        "deepinfra": "DEEPINFRA_API_KEY",
+        "other": "OTHER_API_KEY"
     }
     if llm_backend not in backend_to_env_var:
         print(f"WARNING: Unsupported LLM backend '{llm_backend}', skipping API key lookup.")

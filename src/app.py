@@ -276,7 +276,7 @@ if __name__ == "__main__":
         else:
             queue_message("LOAD: UI disabled in config")
 
-    ui_manager.update_data("System", "Initializing application...", "DEBUG")
+    ui_manager.update_data("System", "Initializing application...", "LOAD")
 
     # === Character and Memory Managers ===
     char_manager = CharacterManager(config=CONFIG)
