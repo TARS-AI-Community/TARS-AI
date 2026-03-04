@@ -2873,7 +2873,7 @@ body::after {
   color: var(--text);
   border: 1px solid var(--border);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 16px; /* ≥16px prevents iOS auto-zoom */
 }
 
 .chared-selector:focus {
@@ -3004,7 +3004,7 @@ body::after {
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-sm) !important;
   font-family: var(--font-mono) !important;
-  font-size: 12px !important;
+  font-size: 16px !important; /* ≥16px prevents iOS auto-zoom */
   resize: vertical;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
