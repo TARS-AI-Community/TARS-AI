@@ -229,11 +229,6 @@ openai_voice = onyx
 # have their own voice configuration.
 toggle_charvoice = True
 
-# Internal state flags - do not change these manually.
-is_talking_override = False
-is_talking = False
-global_timer_paused = False
-
 
 # =============================================================================
 # EMOTION - Emotion Detection
@@ -283,10 +278,17 @@ base_url = http://192.168.2.68:5678
 
 [RAG]
 
+# Enable or disable long-term memory.
+enabled = True
+
 # How memories are searched and retrieved.
 # naive: Vector similarity search only (faster, simpler)
 # hybrid: Combines vector similarity + BM25 keyword search (more accurate, recommended)
 strategy = hybrid
+
+# Weight for vector (meaning) vs keyword search in hybrid mode.
+# 0.5 = equal weight. Higher favors meaning, lower favors keywords.
+vector_weight = 0.5
 
 # Number of memory chunks to retrieve per query. Higher values provide
 # more context but use more tokens and may include less relevant results.
@@ -320,6 +322,24 @@ enable_topic_tracking = True
 # This is the physical display on the robot, not the web interface.
 
 [UI]
+
+# Enable or disable the web-based chat interface.
+webui_enabled = True
+
+# Network port for the web interface. 80 = standard HTTP (no port needed in URL).
+webui_port = 80
+
+# Password required to access the web interface.
+webui_password = tarspass1234
+
+# Network port used by the on-device display server.
+UI_Port = 5000
+
+# Width of the on-device display in pixels (480 for 3.5" screen, 800 for 5-7" screen).
+screen_width = 480
+
+# Height of the on-device display in pixels (320 for 3.5" screen, 480 for 5" screen).
+screen_height = 320
 
 # Enable or disable the on-device graphical display entirely.
 # Disable if running headless or to save resources.
@@ -381,27 +401,6 @@ target_fps = 30
 app = terminal
 
 
-# =============================================================================
-# CHATUI - Web Interface
-# =============================================================================
-# Settings for the browser-based chat interface.
-# Access it from any device on your network.
-
-[CHATUI]
-
-# Enable or disable the web-based chat interface.
-# When enabled, access TARS from a browser at http://<pi-ip>:<port>
-enabled = True
-
-# Network port for the web interface.
-# 80 = standard HTTP (access via http://<pi-ip> without specifying port)
-# Use a different port if 80 is already in use (e.g., 8080)
-port = 80
-
-# Password required to access the web interface.
-# Change this from the default to secure your TARS instance on your network.
-password = tarspass1234
-
 
 # =============================================================================
 # CONTROLS - Game Controller
@@ -419,6 +418,9 @@ controller_name = 8BitDo
 # Enable or disable game controller support entirely.
 # When disabled, no controller input is processed.
 enabled = False
+
+# Periodically move into a ventilation pose to improve airflow through the case.
+ventilate = False
 
 # Allow voice commands to trigger physical movement (walking, turning).
 # When enabled, you can say things like "walk forward" or "turn left".
@@ -624,9 +626,13 @@ rightHandOffset = 0
 
 [BATTERY]
 
+# Enable battery monitoring (requires INA260 power sensor connected).
+battery_enabled = False
+
+# Automatically shut down the Pi when battery reaches 0%.
+battery_auto_shutdown = False
+
 # Total battery capacity in milliampere-hours (mAh).
-# Set to your battery's rated capacity.
-# Examples: 3000 for a 3Ah battery, 5600 for a 5.6Ah battery
 battery_capacity_mAh = 3000
 
 # Voltage when the battery is fully charged (in volts).
@@ -634,14 +640,8 @@ battery_capacity_mAh = 3000
 battery_initial_voltage = 12
 
 # Minimum safe voltage before the battery should stop discharging.
-# Going below this can permanently damage the battery.
 # 3S LiPo: 10.5V, 4S LiPo: 14.0V
 battery_cutoff_voltage = 10
-
-# Automatically shut down the Raspberry Pi when battery reaches 0%.
-# Protects both the Pi (from sudden power loss) and the battery
-# (from deep discharge). Strongly recommended for battery-powered builds.
-auto_shutdown = True
 
 
 # =============================================================================
@@ -649,8 +649,3 @@ auto_shutdown = True
 # =============================================================================
 
 [MISC]
-
-# Enable ventilation pose. When enabled, TARS periodically takes a pose
-# that allows better airflow through the case, helping with cooling
-# in enclosed builds.
-ventilate = False

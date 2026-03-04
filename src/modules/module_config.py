@@ -241,9 +241,9 @@ class TTSConfig:
     ttsoption: str
     toggle_charvoice: bool
     tts_voice: Optional[str]
-    is_talking_override: bool
-    is_talking: bool
-    global_timer_paused: bool
+    is_talking_override: bool = False
+    is_talking: bool = False
+    global_timer_paused: bool = False
     elevenlabs_api_key: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
     elevenlabs_model: Optional[str] = None
@@ -424,9 +424,9 @@ def load_config():
             "tts_voice": config.get('TTS', 'tts_voice', fallback=''),
             "elevenlabs_voice_id": config['TTS']['elevenlabs_voice_id'],
             "elevenlabs_model": config['TTS']['elevenlabs_model'],
-            "is_talking_override": config.getboolean('TTS', 'is_talking_override'),
-            "is_talking": config.getboolean('TTS', 'is_talking'),
-            "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
+            "is_talking_override": False,
+            "is_talking": False,
+            "global_timer_paused": False,
             "openai_voice" : config['TTS']['openai_voice'],            
         }),
         "RAG": {
