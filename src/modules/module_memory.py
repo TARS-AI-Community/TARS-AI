@@ -507,12 +507,15 @@ class MemoryManager:
                 if llm_backend == "deepinfra":
                     enc = tiktoken.get_encoding(override_encoding_model)
                 else:
-                    openai_model = self.config['LLM'].get('openai_model', None)
+                    if llm_backend == "other":
+                        model_name = self.config['LLM'].get('other_model', None) or self.config['LLM'].get('openai_model', None)
+                    else:
+                        model_name = self.config['LLM'].get('openai_model', None)
                     try:
-                        enc = tiktoken.encoding_for_model(openai_model)
+                        enc = tiktoken.encoding_for_model(model_name)
                     except KeyError:
                         if not self._fallback_warning_logged:
-                            queue_message(f"INFO: Automatic mapping failed '{openai_model}'. Using '{override_encoding_model}'.")
+                            queue_message(f"INFO: Automatic mapping failed '{model_name}'. Using '{override_encoding_model}'.")
                             self._fallback_warning_logged = True
                         enc = tiktoken.get_encoding(override_encoding_model)
 
