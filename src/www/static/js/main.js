@@ -672,14 +672,16 @@ function executeAction() {
     'VISION':'bi-eye-fill','EMOTION':'bi-emoji-smile-fill','TTS':'bi-volume-up-fill',
     'UI':'bi-display-fill','RAG':'bi-database-fill',
     'HOME_ASSISTANT':'bi-house-fill','DISCORD':'bi-discord',
-    'STABLE_DIFFUSION':'bi-image-fill','MISC':'bi-wrench-adjustable'
+    'STABLE_DIFFUSION':'bi-image-fill','SERVO':'bi-sliders',
+    'MISC':'bi-wrench-adjustable'
   };
   const SECTION_LABELS = {
     'DEVICE':'Device','CHAR':'Character','CONTROLS':'Controls',
     'STT':'Speech','LLM':'AI Model','VISION':'Vision','EMOTION':'Emotion',
     'TTS':'Voice','UI':'Display','RAG':'Memory',
     'HOME_ASSISTANT':'Home Asst','DISCORD':'Discord',
-    'STABLE_DIFFUSION':'Img Gen','MISC':'Misc'
+    'STABLE_DIFFUSION':'Img Gen','SERVO':'Servos',
+    'MISC':'Misc'
   };
 
   const SECTION_ORDER = [
@@ -687,7 +689,7 @@ function executeAction() {
     'STT', 'TTS',
     'EMOTION', 'VISION', 'RAG',
     'UI',
-    'CONTROLS',
+    'CONTROLS', 'SERVO',
     'HOME_ASSISTANT', 'DISCORD',
     'STABLE_DIFFUSION',
     'MISC'

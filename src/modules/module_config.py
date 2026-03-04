@@ -1019,6 +1019,120 @@ CONFIG_METADATA = {
             'description': 'A list of things you do NOT want in the generated images. The AI will try to avoid these. The default list helps prevent common ugly artifacts like deformed body parts, extra limbs, and bad anatomy. You can add your own terms if you notice recurring problems. For example, add "blurry" if images keep coming out unfocused, or "watermark" to avoid watermark-like artifacts.'
         },
     },
+    'SERVO': {
+        '__description__': 'Fine-tune servo positions and calibration for legs and arms',
+        'arms_present': {
+            'description': 'Set to True if your TARS build has arm servos physically installed. This changes movement calculations to account for the extra weight. Only enable if arms are actually built and wired up.'
+        },
+        'leftUpHeight': {
+            'description': 'PWM value for the left leg at its highest position. Lower values = higher position for most servos. Adjust if the left leg does not reach high enough or goes too high.'
+        },
+        'leftDownHeight': {
+            'description': 'PWM value for the left leg at its lowest position. Higher values = lower position for most servos.'
+        },
+        'perfectLeftHeightOffset': {
+            'description': 'Fine-tune offset for the left leg height. Positive values shift the entire left leg range up, negative shifts it down. Use this to level TARS if one side sits higher than the other.'
+        },
+        'rightUpHeight': {
+            'description': 'PWM value for the right leg at its highest position.'
+        },
+        'rightDownHeight': {
+            'description': 'PWM value for the right leg at its lowest position.'
+        },
+        'perfectRightHeightOffset': {
+            'description': 'Fine-tune offset for the right leg height. Use this alongside perfectLeftHeightOffset to make sure TARS stands level.'
+        },
+        'forwardLeftLeg': {
+            'description': 'PWM value for the left leg swung fully forward (for walking).'
+        },
+        'backLeftLeg': {
+            'description': 'PWM value for the left leg swung fully backward (for walking).'
+        },
+        'perfectLeftLegOffset': {
+            'description': 'Fine-tune offset for the left leg swing. Adjusts the neutral standing position of the left leg forward or backward.'
+        },
+        'forwardRightLeg': {
+            'description': 'PWM value for the right leg swung fully forward (for walking).'
+        },
+        'backRightLeg': {
+            'description': 'PWM value for the right leg swung fully backward (for walking).'
+        },
+        'perfectRightLegOffset': {
+            'description': 'Fine-tune offset for the right leg swing. Adjusts the neutral standing position of the right leg forward or backward.'
+        },
+        'leftMainMin': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM minimum for the left shoulder (main arm joint).'
+        },
+        'leftMainMax': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM maximum for the left shoulder (main arm joint).'
+        },
+        'leftMainOffset': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'Fine-tune offset for the left shoulder position.'
+        },
+        'leftForarmMin': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM minimum for the left forearm (elbow joint).'
+        },
+        'leftForarmMax': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM maximum for the left forearm (elbow joint).'
+        },
+        'leftForearmOffset': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'Fine-tune offset for the left forearm position.'
+        },
+        'leftHandMin': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM minimum for the left hand (wrist joint).'
+        },
+        'leftHandMax': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM maximum for the left hand (wrist joint).'
+        },
+        'leftHandOffset': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'Fine-tune offset for the left hand position.'
+        },
+        'rightMainMin': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM minimum for the right shoulder (main arm joint).'
+        },
+        'rightMainMax': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM maximum for the right shoulder (main arm joint).'
+        },
+        'rightMainOffset': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'Fine-tune offset for the right shoulder position.'
+        },
+        'rightForarmMin': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM minimum for the right forearm (elbow joint).'
+        },
+        'rightForarmMax': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM maximum for the right forearm (elbow joint).'
+        },
+        'rightForearmOffset': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'Fine-tune offset for the right forearm position.'
+        },
+        'rightHandMin': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM minimum for the right hand (wrist joint).'
+        },
+        'rightHandMax': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'PWM maximum for the right hand (wrist joint).'
+        },
+        'rightHandOffset': {
+            'depends_on': [{'field': 'arms_present', 'values': ['True', 'true']}],
+            'description': 'Fine-tune offset for the right hand position.'
+        },
+    },
     'MISC': {
         '__description__': 'Other settings that do not fit in the categories above',
         'battery_enabled': {
