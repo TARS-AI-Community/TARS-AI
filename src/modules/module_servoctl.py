@@ -253,7 +253,9 @@ def set_servo_pwm(channel, pwm_value):
 
 def initialize_servos():
     if pca is None:
-        queue_message("WARNING: Cannot initialize servos - PCA9685 not available")
+        controls = config.get('CONTROLS', {})
+        if controls.get('enabled', False) or controls.get('voicemovement', False):
+            queue_message("WARNING: Cannot initialize servos - PCA9685 not available")
         return
     
     try:
