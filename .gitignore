@@ -211,3 +211,6 @@ character/
 
 /src/modules/UI/pictures/*
 dashboard.ini
+
+#claude ignore
+.claude
