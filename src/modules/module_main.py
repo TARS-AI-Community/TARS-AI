@@ -64,6 +64,9 @@ def start_bt_controller_thread():
     """
     Wrapper to start the BT Controller functionality in a thread.
     """
+    config = load_config()
+    if not config['CONTROLS'].get('enabled', False):
+        return
     if start_controls is None:
         queue_message("WARNING: BT Controller not available")
         return

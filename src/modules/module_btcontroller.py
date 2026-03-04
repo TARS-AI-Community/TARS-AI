@@ -71,7 +71,8 @@ def find_controller(controller_name):
         queue_message("LOAD: No suitable controller found (no device with button support)")
         return None
     if not controller_search_notified:
-        queue_message(f"LOAD: {controller_name} not found, waiting for connection...")
+        if config["CONTROLS"].get("enabled", False):
+            queue_message(f"LOAD: {controller_name} not found, waiting for connection...")
         controller_search_notified = True
     return None
 

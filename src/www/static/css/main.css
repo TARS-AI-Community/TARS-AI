@@ -2873,7 +2873,7 @@ body::after {
   color: var(--text);
   border: 1px solid var(--border);
   font-family: var(--font-mono);
-  font-size: 16px; /* ≥16px prevents iOS auto-zoom */
+  font-size: 12px;
 }
 
 .chared-selector:focus {
@@ -3004,7 +3004,7 @@ body::after {
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-sm) !important;
   font-family: var(--font-mono) !important;
-  font-size: 16px !important; /* ≥16px prevents iOS auto-zoom */
+  font-size: 12px !important;
   resize: vertical;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -3100,11 +3100,6 @@ body::after {
   .chared-header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .chared-header-right { width: 100%; }
   .chared-selector { flex: 1; }
-  .chared-traits-grid { grid-template-columns: 1fr; }
-  .chared-panel { padding: 10px; }
-  .chared-inner-tab { padding: 8px 10px 10px; font-size: 9px; }
-  /* Larger touch targets for trait sliders on mobile */
-  .chared-trait-slider { height: 6px; }
-  .chared-trait-slider::-webkit-slider-thumb { width: 22px; height: 22px; }
-  .chared-trait-slider::-moz-range-thumb { width: 22px; height: 22px; }
+  .chared-traits-grid { grid-template-columns: 1fr 1fr; }
+  .chared-panel { padding: 12px; }
 }

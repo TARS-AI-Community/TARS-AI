@@ -145,7 +145,19 @@ def _prepare_request_data(llm_backend, prompt):
             "response_format": {"type": "json_object"}
         }
     else:
-        raise ValueError(f"Unsupported LLM backend: {llm_backend}")
+        # "other" and any unknown backend: treat as OpenAI-compatible with custom base_url
+        url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
+        data = {
+            "model": CONFIG['LLM']['openai_model'],
+            "messages": [
+                {"role": "system", "content": CONFIG['LLM']['systemprompt']},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": CONFIG['LLM']['max_tokens'],
+            "temperature": CONFIG['LLM']['temperature'],
+            "top_p": CONFIG['LLM']['top_p'],
+            "response_format": {"type": "json_object"}
+        }
 
     return url, data
 
@@ -155,7 +167,7 @@ def _extract_text(response_json, istext):
         if 'choices' in response_json:
             return (
                 response_json['choices'][0]['message']['content']
-                if llm_backend in ["openai", "grok", "deepinfra"]
+                if llm_backend in ["openai", "grok", "deepinfra", "other"]
                 else response_json['choices'][0]['text']
             ).strip()
         else:

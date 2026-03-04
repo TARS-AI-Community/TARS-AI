@@ -499,7 +499,7 @@ class MemoryManager:
             estimated_tokens = int(word_count / 0.75)
             return {"length": estimated_tokens}
 
-        elif llm_backend in ["openai", "deepinfra"]:
+        elif llm_backend in ["openai", "deepinfra", "other"]:
             try:
                 import tiktoken
                 override_encoding_model = self.config['LLM'].get('override_encoding_model', "cl100k_base")
