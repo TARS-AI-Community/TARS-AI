@@ -595,6 +595,7 @@ CONFIG_METADATA = {
     'CHAR': {
         '__description__': 'Set up who TARS is, who you are, and what TARS says when you talk to it',
         'character_card_path': {
+            'label': 'Character',
             'description': 'This points to a file that tells TARS who it is - its name, personality, backstory, and how it should act. Think of it like a character sheet for a role-playing game. The default is the TARS character from the movie Interstellar. If you want to make your own character, create a new folder inside "character/" and put a .json file in it following the same format as the TARS one.'
         },
         'location_name': {

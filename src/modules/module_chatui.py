@@ -947,6 +947,22 @@ def get_config():
                     if 'label' in field_def:
                         field_options[field_key]['label'] = field_def['label']
         
+        # Populate character_card_path options from character directory
+        char_key = 'CHAR.character_card_path'
+        if char_key in field_options:
+            char_dir = os.path.join(BASE_DIR, 'character')
+            char_options = []
+            if os.path.isdir(char_dir):
+                for entry in sorted(os.listdir(char_dir)):
+                    json_path = os.path.join(char_dir, entry, f'{entry}.json')
+                    if os.path.isfile(json_path):
+                        char_options.append(f'character/{entry}/{entry}.json')
+            if char_options:
+                field_options[char_key]['options'] = char_options
+                field_options[char_key]['option_labels'] = {
+                    p: p.split('/')[1] for p in char_options
+                }
+
         return jsonify({
             "config": filtered_config,
             "field_options": field_options
@@ -1198,6 +1214,79 @@ def console_logs():
     since = request.args.get('since', 0, type=int)
     lines, head = get_recent_logs(since)
     return jsonify({'lines': lines, 'head': head})
+
+
+@flask_app.route('/api/characters', methods=['GET'])
+def list_characters():
+    """Return a list of available character names."""
+    char_dir = os.path.join(BASE_DIR, 'character')
+    names = []
+    if os.path.isdir(char_dir):
+        for entry in sorted(os.listdir(char_dir)):
+            if os.path.isfile(os.path.join(char_dir, entry, f'{entry}.json')):
+                names.append(entry)
+    return jsonify({'characters': names})
+
+
+@flask_app.route('/api/character/<name>', methods=['GET'])
+def get_character(name):
+    """Return character JSON data and persona traits."""
+    import configparser
+    char_dir = os.path.join(BASE_DIR, 'character', name)
+    json_path = os.path.join(char_dir, f'{name}.json')
+    persona_path = os.path.join(char_dir, 'persona.ini')
+
+    if not os.path.isfile(json_path):
+        return jsonify({'error': 'Character not found'}), 404
+
+    with open(json_path, 'r', encoding='utf-8') as f:
+        char_data = json.load(f)
+
+    traits = {}
+    if os.path.isfile(persona_path):
+        p = configparser.ConfigParser()
+        p.read(persona_path)
+        if 'PERSONA' in p:
+            traits = {k: int(v) for k, v in p['PERSONA'].items() if v.strip().isdigit()}
+
+    return jsonify({'character': char_data, 'traits': traits})
+
+
+@flask_app.route('/api/character/<name>/save', methods=['POST'])
+def save_character(name):
+    """Save character JSON and persona traits to disk."""
+    import configparser
+    import time as _time
+
+    data = request.get_json(force=True)
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    char_dir = os.path.join(BASE_DIR, 'character', name)
+    json_path = os.path.join(char_dir, f'{name}.json')
+    persona_path = os.path.join(char_dir, 'persona.ini')
+
+    if not os.path.isdir(char_dir):
+        return jsonify({'error': 'Character directory not found'}), 404
+
+    char_data = data.get('character', {})
+    traits = data.get('traits', {})
+
+    # Update modified timestamp
+    if 'metadata' not in char_data:
+        char_data['metadata'] = {}
+    char_data['metadata']['modified'] = int(_time.time() * 1000)
+
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(char_data, f, indent=4, ensure_ascii=False)
+
+    if traits:
+        p = configparser.ConfigParser()
+        p['PERSONA'] = {k: str(int(v)) for k, v in traits.items()}
+        with open(persona_path, 'w', encoding='utf-8') as f:
+            p.write(f)
+
+    return jsonify({'success': True})
 
 
 def start_flask_app(port=None):
