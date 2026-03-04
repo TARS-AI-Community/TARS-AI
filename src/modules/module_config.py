@@ -56,10 +56,10 @@ class DeviceCapabilities:
 DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PI5: DeviceCapabilities(
         profile=DeviceProfile.PI5,
-        allowed_stt={"fastrtc", "silero", "openai", "external"},
+        allowed_stt={"fastrtc", "silero", "openai", "external", "sherpa-onnx"},
         allowed_tts={"espeak", "piper", "silero", "elevenlabs", "openai"},
         allowed_vad={"silero", "rms"},
-        allowed_wake={"fastrtc", "atomik"},
+        allowed_wake={"fastrtc", "atomik", "sherpa-onnx"},
         can_use_embeddings=True,
         can_use_ui=True,
         can_use_vision=True,
@@ -74,10 +74,10 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     ),
     DeviceProfile.PI4: DeviceCapabilities(
         profile=DeviceProfile.PI4,
-        allowed_stt={"openai", "external"},
+        allowed_stt={"openai", "external", "sherpa-onnx"},
         allowed_tts={"espeak", "piper", "elevenlabs", "openai"},
         allowed_vad={"silero", "rms"},
-        allowed_wake={"atomik"},
+        allowed_wake={"atomik", "sherpa-onnx"},
         can_use_embeddings=True,
         can_use_ui=True,
         can_use_vision=False,

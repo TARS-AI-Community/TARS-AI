@@ -55,16 +55,18 @@ override_encoding_model = cl100k_base
 language = english
 # Activation phrase — 2–3 syllables works best
 wake_word = hey tars
-# Wake word engine: atomik (built-in, recommended) | fastrtc
+# Wake word engine: atomik (built-in, recommended) | fastrtc | sherpa-onnx
 wake_word_processor = atomik
 # Wake word strictness 1–10 (atomik only; 1 = lenient, 10 = strict)
 sensitivity = 7
-# Speech-to-text engine: silero (offline) | fastrtc (cloud) | openai | external
+# Speech-to-text engine: silero (offline) | fastrtc (cloud) | openai | external | sherpa-onnx
 stt_processor = fastrtc
 # Play beep when listening starts and stops
 use_indicators = True
 # External STT server URL (stt_processor = external only)
 external_url = http://192.168.1.100:5678
+# Path to sherpa-onnx SenseVoiceTiny model directory (stt_processor = sherpa-onnx only)
+sherpa_onnx_model_path = stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17
 # End-of-speech detection: rms (lightweight) | silero (accurate, Pi5 only)
 vad_method = rms
 # Silence before processing in tenths of a second (20 = 2s)

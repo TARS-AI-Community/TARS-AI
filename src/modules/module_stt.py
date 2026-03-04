@@ -10,12 +10,14 @@ detecting speech or specific keywords.
 """
 
 import os
+import re
 import random
 import threading
 import time
 import wave
 import json
 import sys
+from difflib import SequenceMatcher
 from io import BytesIO
 from typing import Callable, Optional
 
@@ -81,6 +83,18 @@ if CAPABILITIES is None or (CAPABILITIES.allowed_wake and "atomik" in CAPABILITI
         WakeWordSystem = _WakeWordSystem
     except ImportError:
         pass
+
+# Sherpa-ONNX (Pi5, Pi4)
+sherpa_onnx = None
+if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "sherpa-onnx" in CAPABILITIES.allowed_stt):
+    try:
+        import sherpa_onnx as _sherpa_onnx
+        sherpa_onnx = _sherpa_onnx
+    except ImportError:
+        pass
+
+# Pre-compiled regex for stripping SenseVoice tags (language: <|en|>, emotion: <|HAPPY|>, event: <|Speech|>, etc.)
+_SENSEVOICE_TAG_RE = re.compile(r'<\|[A-Za-z]+\|>')
 
 # Suppress parallelism warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -165,10 +179,15 @@ class STTManager:
         self.silero_model = None  # For Silero STT (if used)
         self.silero_vad_model = None
         self.get_speech_timestamps = None
+        self.sherpa_recognizer = None
 
         self._initialize_models()
         self.vadmethod = CONFIG['STT']['vad_method']
         self.DEBUG = False
+
+        # Cache progress bar and threshold margin so they aren't recreated per frame
+        self._progress_bar_funcs = None
+        self.silence_threshold_margin = None
 
     def _initialize_models(self):
         """Measure background noise and load the selected STT model."""
@@ -179,13 +198,17 @@ class STTManager:
             self._load_fastrtc_model()
         elif stt_processor == "silero":
             self._load_silero_model()
+        elif stt_processor == "sherpa-onnx":
+            self._load_sherpa_onnx_model()
 
         # Wake word processor initialization
         wake_word_processor = self.config["STT"].get("wake_word_processor", "atomik")
         if wake_word_processor == "fastrtc" and not self.fastrtc_model:
-            self._load_fastrtc_model() 
+            self._load_fastrtc_model()
         elif wake_word_processor == "atomik":
-            self._load_atomik_model() 
+            self._load_atomik_model()
+        elif wake_word_processor == "sherpa-onnx" and not self.sherpa_recognizer:
+            self._load_sherpa_onnx_model()
 
         if self.config["STT"].get("vad_enabled", False):
             self._load_silero_vad()
@@ -324,6 +347,43 @@ class STTManager:
             queue_message(f"ERROR: Failed to load FastRTC STT model: {e}")
             self.fastrtc_model = None
     
+    def _load_sherpa_onnx_model(self):
+        """Load sherpa-onnx SenseVoiceTiny model for STT."""
+        if sherpa_onnx is None:
+            queue_message("WARNING: sherpa-onnx not available (not installed)")
+            return
+
+        try:
+            model_path = self.config.get("STT", {}).get(
+                "sherpa_onnx_model_path", "stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
+            )
+            if not os.path.isabs(model_path):
+                model_path = os.path.join(os.path.dirname(os.getcwd()), model_path)
+
+            model_file = os.path.join(model_path, "model.int8.onnx")
+            tokens_file = os.path.join(model_path, "tokens.txt")
+
+            if not os.path.exists(model_file):
+                queue_message(f"ERROR: SenseVoiceTiny model not found at {model_file}")
+                queue_message("INFO: Download from https://github.com/k2-fsa/sherpa-onnx/releases (sherpa-onnx-sense-voice)")
+                return
+
+            # Use more threads on Pi5 (4 cores) vs Pi4 (4 cores but less headroom)
+            pi_version = self.config.get("_device", {}).get("raspberry_version", "pi5")
+            threads = 4 if pi_version == "pi5" else 2
+
+            self.sherpa_recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
+                model=model_file,
+                tokens=tokens_file,
+                num_threads=threads,
+                use_itn=True,
+                debug=False,
+            )
+            queue_message("INFO: sherpa-onnx SenseVoiceTiny model loaded successfully.")
+        except Exception as e:
+            queue_message(f"ERROR: Failed to load sherpa-onnx model: {e}")
+            self.sherpa_recognizer = None
+
     # === Transcription Methods ===
 
     def _transcribe_utterance(self):
@@ -344,6 +404,8 @@ class STTManager:
                 result = self._transcribe_with_server()
             elif processor == "openai":
                 result = self._transcribe_with_openAi()
+            elif processor == "sherpa-onnx":
+                result = self._transcribe_with_sherpa_onnx()
             else:
                 queue_message(f"WARNING: Unknown STT processor '{processor}', falling back to FastRTC")
                 result = self._transcribe_with_fastrtc()
@@ -436,6 +498,82 @@ class STTManager:
             return None
         
         
+    def _transcribe_with_sherpa_onnx(self):
+        """Transcribe audio using sherpa-onnx SenseVoiceTiny."""
+        if not self.sherpa_recognizer:
+            queue_message("ERROR: sherpa-onnx recognizer not loaded.")
+            return None
+
+        SHERPA_RATE = 16000
+        detected_speech = False
+        silent_frames = 0
+        speech_frames = 0
+        pre_roll_buffer = []
+        audio_chunks = []
+        PRE_ROLL_FRAMES = 10
+        MIN_SPEECH_FRAMES = 5
+        MAX_SILENT_FRAMES = 20
+
+        with sd.InputStream(
+            samplerate=SHERPA_RATE, channels=1, dtype="int16"
+        ) as stream:
+            for frame_idx in range(self.MAX_RECORDING_FRAMES):
+                data, _ = stream.read(4000)
+
+                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(
+                    data, detected_speech, silent_frames
+                )
+                silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
+
+                if is_silence:
+                    if not detected_speech:
+                        return None
+                    if speech_frames >= MIN_SPEECH_FRAMES and silent_frames >= MAX_SILENT_FRAMES:
+                        break
+
+                if not detected_speech:
+                    pre_roll_buffer.append(data)
+                    if len(pre_roll_buffer) > PRE_ROLL_FRAMES:
+                        pre_roll_buffer.pop(0)
+                else:
+                    if speech_frames == 0:
+                        audio_chunks.extend(pre_roll_buffer)
+                        pre_roll_buffer = []
+
+                    audio_chunks.append(data)
+
+                    if not is_silence:
+                        speech_frames += 1
+
+            if speech_frames < MIN_SPEECH_FRAMES:
+                return None
+
+        if not audio_chunks:
+            return None
+
+        # Convert directly to float32 — no WAV roundtrip needed
+        audio_data = np.concatenate(audio_chunks).astype(np.float32) / 32768.0
+        audio_data = audio_data.flatten()
+
+        try:
+            s = self.sherpa_recognizer.create_stream()
+            s.accept_waveform(SHERPA_RATE, audio_data)
+            self.sherpa_recognizer.decode_stream(s)
+            transcript = s.result.text.strip()
+            # Strip SenseVoice language tags like <|en|>, <|zh|>, etc.
+            transcript = _SENSEVOICE_TAG_RE.sub('', transcript).strip()
+        except Exception as e:
+            queue_message(f"ERROR: sherpa-onnx transcription failed: {e}")
+            return None
+
+        if transcript:
+            formatted_result = {"text": transcript}
+            if self.utterance_callback:
+                self.utterance_callback(json.dumps(formatted_result))
+            return formatted_result
+        else:
+            return None
+
     def _transcribe_with_openAi(self):
         """Transcribe and translate audio using OpenAI's Whisper API."""
 
@@ -668,6 +806,8 @@ class STTManager:
         wake_word_processor = self.config["STT"].get("wake_word_processor", "atomik")
         if wake_word_processor == "fastrtc":
             return self._detect_wake_word_fastrtc()
+        elif wake_word_processor == "sherpa-onnx":
+            return self._detect_wake_word_sherpa_onnx()
         else:
             return self._detect_wake_word_atomik()
 
@@ -772,27 +912,139 @@ class STTManager:
             return True
         
 
-    def _init_progress_bar(self):
-        """Initialize progress bar settings and functions"""
-        bar_length = 10
-        # Skip console progress bar on lite devices — the UI shows status instead.
-        show_console = not self.ui_manager.__class__.__name__ == 'UIManagerLite'
+    @staticmethod
+    def _fuzzy_wake_word_match(transcript: str, wake_word: str, threshold: float = 0.6) -> bool:
+        """Check if transcript contains a fuzzy match for the wake word."""
+        wake_words = wake_word.split()
+        transcript_words = transcript.split()
 
-        def update_progress_bar(frames, max_frames):
-            self.ui_manager.silence(frames)
-            if show_console:
-                progress = int((frames / max_frames) * bar_length)
-                filled = "#" * progress
-                empty = "-" * (bar_length - progress)
-                sys.stdout.write(f"\r[SILENCE: {filled}{empty}] {frames}/{max_frames}")
-                sys.stdout.flush()
+        if len(transcript_words) < len(wake_words):
+            return False
 
-        def clear_progress_bar():
-            self.ui_manager.silence(0)
-            if show_console:
-                sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
-                sys.stdout.flush()
-        return update_progress_bar, clear_progress_bar
+        # Slide a window of wake_word length across transcript words
+        for i in range(len(transcript_words) - len(wake_words) + 1):
+            window = transcript_words[i:i + len(wake_words)]
+            matches = 0
+            for tw, ww in zip(window, wake_words):
+                ratio = SequenceMatcher(None, tw, ww).ratio()
+                if ratio >= threshold:
+                    matches += 1
+            if matches == len(wake_words):
+                return True
+
+        return False
+
+    @staticmethod
+    def _fire_and_forget_get(url):
+        """Non-blocking HTTP GET — runs in a daemon thread."""
+        threading.Thread(target=lambda: requests.get(url, timeout=1), daemon=True).start()
+
+    def _detect_wake_word_sherpa_onnx(self) -> bool:
+        """Detect wake word using sherpa-onnx by transcribing overlapping audio chunks."""
+        if not self.sherpa_recognizer:
+            queue_message("ERROR: sherpa-onnx recognizer not loaded for wake word detection.")
+            return False
+
+        try:
+            self._fire_and_forget_get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/stop_talking")
+        except Exception:
+            pass
+
+        SHERPA_RATE = 16000
+        chunk_duration = 2.0
+        overlap_duration = 0.5
+        frames_per_chunk = int(SHERPA_RATE * chunk_duration)
+        overlap_frames = int(SHERPA_RATE * overlap_duration)
+        read_frames = frames_per_chunk - overlap_frames
+        silent_frames = 0
+        max_iterations = 100
+        prev_audio = None
+
+        with sd.InputStream(samplerate=SHERPA_RATE, channels=1, dtype="int16") as stream:
+            for iteration in range(max_iterations):
+                if not self.running or self.shutdown_event.is_set():
+                    break
+
+                # First iteration reads full chunk, subsequent reads partial + overlap from previous
+                if prev_audio is None:
+                    data, _ = stream.read(frames_per_chunk)
+                else:
+                    new_data, _ = stream.read(read_frames)
+                    data = np.concatenate([prev_audio, new_data])
+
+                # Keep last overlap_frames for next iteration (raw, before amplification)
+                prev_audio = data[-overlap_frames:]
+
+                is_silence, _, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
+                if is_silence:
+                    silent_frames += 1
+                    if silent_frames > self.MAX_SILENT_FRAMES:
+                        break
+                    continue
+                else:
+                    silent_frames = 0
+
+                # Amplify for transcription only (VAD already handles its own amplification)
+                data = self.amplify_audio(data)
+                audio_data = data.astype(np.float32) / 32768.0
+                audio_data = audio_data.flatten()
+
+                try:
+                    s = self.sherpa_recognizer.create_stream()
+                    s.accept_waveform(SHERPA_RATE, audio_data)
+                    self.sherpa_recognizer.decode_stream(s)
+                    transcript = s.result.text.strip().lower()
+                    # Strip SenseVoice language tags
+                    transcript = _SENSEVOICE_TAG_RE.sub('', transcript).strip()
+                except Exception as e:
+                    queue_message(f"ERROR: sherpa-onnx STT failed: {e}")
+                    continue
+
+                if self.DEBUG:
+                    queue_message(f"DEBUG: Sherpa Wake Word Transcript: '{transcript}'")
+
+                if self.WAKE_WORD in transcript or self._fuzzy_wake_word_match(transcript, self.WAKE_WORD):
+                    if self.config["STT"].get("use_indicators"):
+                        self.play_wav("../stt/beep_on.wav")
+                    try:
+                        self._fire_and_forget_get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking")
+                    except Exception:
+                        pass
+                    if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
+                        wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                        character_name = os.path.splitext(os.path.basename(
+                            self.config.get("CHAR", {}).get("character_card_path", "TARS")
+                        ))[0]
+                        queue_message(f"{character_name}: {wake_response}", stream=True)
+                        if self.wake_word_callback:
+                            self.wake_word_callback(wake_response)
+                    return True
+
+        return False
+
+    def _get_progress_bar(self):
+        """Get cached progress bar functions (created once, reused per frame)."""
+        if self._progress_bar_funcs is None:
+            bar_length = 10
+            show_console = not self.ui_manager.__class__.__name__ == 'UIManagerLite'
+
+            def update_progress_bar(frames, max_frames):
+                self.ui_manager.silence(frames)
+                if show_console:
+                    progress = int((frames / max_frames) * bar_length)
+                    filled = "#" * progress
+                    empty = "-" * (bar_length - progress)
+                    sys.stdout.write(f"\r[SILENCE: {filled}{empty}] {frames}/{max_frames}")
+                    sys.stdout.flush()
+
+            def clear_progress_bar():
+                self.ui_manager.silence(0)
+                if show_console:
+                    sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
+                    sys.stdout.flush()
+
+            self._progress_bar_funcs = (update_progress_bar, clear_progress_bar)
+        return self._progress_bar_funcs
     
     # === VAD Methods ===
 
@@ -816,8 +1068,7 @@ class STTManager:
         Check if the provided audio data represents silence using VAD.
         Always returns a tuple of (is_silence, detected_speech, silent_frames).
         """
-        update_bar, clear_bar = self._init_progress_bar()
-        self.DEBUG = False
+        update_bar, clear_bar = self._get_progress_bar()
 
         try:
             # Silero VAD-based detection
@@ -877,10 +1128,10 @@ class STTManager:
     def _is_silence_detected_rms(self, data, detected_speech, silent_frames):
         """RMS-based silence detection with visual progress bar"""
         try:
-            update_bar, clear_bar = self._init_progress_bar()
-            self.DEBUG = False
+            update_bar, clear_bar = self._get_progress_bar()
             rms = self.prepare_audio_data(self.amplify_audio(data))
-            self.silence_threshold_margin = self.silence_threshold * self.silence_margin
+            if self.silence_threshold_margin is None:
+                self.silence_threshold_margin = self.silence_threshold * self.silence_margin
 
             if rms is None:
                 # Even if RMS calculation fails, return proper tuple
@@ -945,6 +1196,7 @@ class STTManager:
             filtered = background_rms[(background_rms >= lower_bound) & (background_rms <= upper_bound)]
             self.wake_silence_threshold = np.max(filtered)
             self.silence_threshold = self.wake_silence_threshold * self.silence_margin
+            self.silence_threshold_margin = self.silence_threshold * self.silence_margin
 
             db = 20 * np.log10(self.silence_threshold)
             queue_message(f"INFO: Silence threshold: {db:.2f} dB and {self.silence_threshold}")

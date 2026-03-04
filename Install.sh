@@ -591,6 +591,15 @@ flashrank                       # Lightweight re-ranker
 EMBEDDINGS
     fi
 
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        cat >> "$req_file" << 'SHERPA'
+
+# === SHERPA-ONNX STT (Pi4/Pi5) ===
+sherpa-onnx                     # Offline speech recognition (SenseVoiceTiny)
+
+SHERPA
+    fi
+
     cat >> "$req_file" << 'LOCALTTS'
 
 # === LOCAL TTS (All Pi versions) ===
@@ -602,7 +611,7 @@ LOCALTTS
         cat >> "$req_file" << 'HEAVY'
 
 # === HEAVY PROCESSING (Pi5 only) ===
-faster-whisper                  # Local STT using Faster Whisper
+sherpa-onnx                     # Local STT using sherpa-onnx
 silero-vad                      # Voice Activity Detection (VAD) using Silero
 omegaconf                       # Required for silero speech
 fastrtc[vad, stt, tts]          # FastRTC for real-time communication
@@ -1027,7 +1036,28 @@ main() {
     
     cd src
     echo ""
-    
+
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        if [ ! -d "stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17" ]; then
+            echo ""
+            read -p "| Download sherpa-onnx SenseVoiceTiny model (~40MB)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading SenseVoiceTiny model..." "info"
+                mkdir -p stt
+                cd stt
+                if wget -q --show-progress https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2; then
+rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2                    tar xjf sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+                    
+                    echo "|  [OK] SenseVoiceTiny model installed"
+                else
+                    echo "| [!] Failed to download SenseVoiceTiny model"
+                fi
+                cd ..
+            fi
+        fi
+    fi
+
     if [ -z "$DISPLAY" ]; then
         export DISPLAY=:0
         echo "|  Display configuration set: $DISPLAY"
