@@ -710,8 +710,18 @@ CONFIG_METADATA = {
         },
         'ttsoption': {
             'label': 'TTS Engine',
-            'options': ['espeak', 'piper', 'silero', 'elevenlabs', 'openai'],
-            'description': 'Choose how TARS speaks out loud. This is the most important voice setting. FREE options that work without internet: "piper" sounds natural and is the best free option (recommended for Pi 5 and Pi 4). "espeak" is a basic robotic-sounding voice but works on any Pi, even very weak ones. "silero" is another good-sounding option but only works on Pi 5. PAID cloud options (need internet + API key in .env file): "elevenlabs" has the most natural, human-like voices. "openai" is good quality and works well in many languages.'
+            'options': ['espeak', 'piper', 'silero', 'elevenlabs', 'openai', 'other'],
+            'description': 'Choose how TARS speaks out loud. This is the most important voice setting. FREE options that work without internet: "piper" sounds natural and is the best free option (recommended for Pi 5 and Pi 4). "espeak" is a basic robotic-sounding voice but works on any Pi, even very weak ones. "silero" is another good-sounding option but only works on Pi 5. PAID cloud options (need internet + API key in .env file): "elevenlabs" has the most natural, human-like voices. "openai" is good quality and works well in many languages. "other" lets you point to any external TTS server using a custom URL.'
+        },
+        'ttsurl': {
+            'label': 'TTS Server URL',
+            'depends_on': [{'field': 'ttsoption', 'values': ['other']}],
+            'description': 'The URL of your external TTS server. Only used when TTS Engine is set to "other". Format: http://IP-ADDRESS:PORT (for example: http://192.168.1.100:5002). The server must accept text and return audio compatible with TARS.'
+        },
+        'tts_voice': {
+            'label': 'TTS Voice',
+            'depends_on': [{'field': 'ttsoption', 'values': ['other']}],
+            'description': 'The voice name or ID to use on your external TTS server. Only used when TTS Engine is set to "other". Leave blank if your server does not require a voice parameter.'
         },
         'elevenlabs_voice_id': {
             'depends_on': [{'field': 'ttsoption', 'values': ['elevenlabs']}],
