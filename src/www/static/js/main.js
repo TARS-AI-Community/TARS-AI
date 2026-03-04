@@ -1045,10 +1045,20 @@ function executeAction() {
     const backendEl = document.getElementById('cfg_LLM_llm_backend');
     const urlEl = document.getElementById('cfg_LLM_base_url');
     if (!backendEl || !urlEl) return;
-    backendEl.addEventListener('change', () => {
+    // Remember the saved "other" URL so switching away and back restores it
+    let savedOtherUrl = backendEl.value === 'other' ? urlEl.value : '';
+    backendEl.addEventListener('change', (e) => {
+      const prev = e.target._prevValue || backendEl.value;
+      if (prev === 'other') savedOtherUrl = urlEl.value;
       const url = BACKEND_URLS[backendEl.value];
-      if (url) urlEl.value = url;
+      if (url) {
+        urlEl.value = url;
+      } else if (backendEl.value === 'other') {
+        urlEl.value = savedOtherUrl;
+      }
+      e.target._prevValue = backendEl.value;
     });
+    backendEl._prevValue = backendEl.value;
   }
 
   function saveConfiguration() {

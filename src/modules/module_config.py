@@ -758,6 +758,10 @@ CONFIG_METADATA = {
         'enabled': {
             'description': 'Master switch for TARS long-term memory. When ON, TARS saves conversations and recalls relevant past interactions to give more personal, context-aware responses over time. Turn OFF if you want TARS to have no memory of past conversations, or if you are running low on storage/resources.'
         },
+        'enable_topic_tracking': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'description': 'When ON, TARS creates summaries of conversation topics over time. This is like TARS writing notes in a journal about what you have been talking about. These topic summaries help TARS remember broad themes from weeks or months ago, even when the individual conversation details have faded. This gives TARS a much better long-term memory. Recommended to leave ON.'
+        },
         'strategy': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'options': ['naive', 'hybrid'],
@@ -766,10 +770,6 @@ CONFIG_METADATA = {
         'vector_weight': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'strategy', 'values': ['hybrid']}],
             'description': 'When using hybrid search, this controls how much weight goes to meaning-based search (vectors) vs keyword search. 0.5 = equal weight to both. Higher (0.7-0.9) = favors meaning and context. Lower (0.1-0.3) = favors exact keyword matches. Most people should leave this at 0.5.'
-        },
-        'enable_topic_tracking': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'description': 'When ON, TARS creates summaries of conversation topics over time. This is like TARS writing notes in a journal about what you have been talking about. These topic summaries help TARS remember broad themes from weeks or months ago, even when the individual conversation details have faded. This gives TARS a much better long-term memory. Recommended to leave ON.'
         },
         'context_window': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
@@ -982,28 +982,6 @@ CONFIG_METADATA = {
             'description': 'A list of things you do NOT want in the generated images. The AI will try to avoid these. The default list helps prevent common ugly artifacts like deformed body parts, extra limbs, and bad anatomy. You can add your own terms if you notice recurring problems. For example, add "blurry" if images keep coming out unfocused, or "watermark" to avoid watermark-like artifacts.'
         },
     },
-    'MISC': {
-        '__description__': 'Other settings that do not fit in the categories above',
-        'battery_enabled': {
-            'description': 'Master switch for battery monitoring. Turn ON if your TARS has an INA260 power sensor connected. When enabled, TARS tracks battery voltage and percentage, displays it on the dashboard, and can optionally shut down safely when the battery runs low. Leave OFF if you are running from a wall adapter or do not have the INA260 sensor.'
-        },
-        'battery_auto_shutdown': {
-            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
-            'description': 'VERY IMPORTANT for battery-powered builds. When ON, TARS will automatically and safely shut down the Raspberry Pi when the battery gets critically low (near 0%). This protects your Pi from suddenly losing power mid-operation (which can corrupt the SD card) and protects your battery from being over-drained (which can permanently kill it). STRONGLY recommended to leave this ON if you are running on battery.'
-        },
-        'battery_capacity_mAh': {
-            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
-            'description': 'How much charge your battery can hold, measured in milliampere-hours (mAh). This number is printed on your battery. Common examples: a small battery might be 3000 mAh (3Ah), a medium one 5600 mAh (5.6Ah). TARS uses this to calculate the remaining battery percentage. If the percentage seems wrong, double-check this number against your battery label.'
-        },
-        'battery_initial_voltage': {
-            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
-            'description': 'The voltage of your battery when it is fully charged. This depends on your battery type. Most common for TARS builds is a 3S LiPo at 12.6V when full, or 12V for simplicity. If you are using a USB power bank, it would be 5V. Check your battery label or charger to find the full-charge voltage. TARS uses this as the "100%" reference point.'
-        },
-        'battery_cutoff_voltage': {
-            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
-            'description': 'The lowest voltage your battery should EVER reach. Draining a battery below this point can permanently damage it or even make it dangerous. For a 3S LiPo battery, this is about 10.5V. For a 4S LiPo, about 14V. TARS uses this as the "0%" reference point. If battery_auto_shutdown is ON, TARS will turn off the Pi before reaching this voltage to protect your battery.'
-        },
-    }
 }
 
 
