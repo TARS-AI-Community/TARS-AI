@@ -380,11 +380,12 @@ def load_config():
     config_dict = {
         "BASE_DIR": base_dir,
         "CONTROLS": {
-            "controller_name": config['CONTROLS']['controller_name'],
             "enabled": config.getboolean('CONTROLS', 'enabled'),
+            "ventilate": config.getboolean('CONTROLS', 'ventilate', fallback=False),
             "voicemovement": config.getboolean('CONTROLS', 'voicemovement'),
             "swap_turn_directions": config.getboolean('CONTROLS', 'swap_turn_directions', fallback=False),
             "invert_y": config.getboolean('CONTROLS', 'invert_y', fallback=False),
+            "controller_name": config['CONTROLS']['controller_name'],
         },
         "STT": {
             "use_indicators": config.getboolean('STT', 'use_indicators'),
@@ -545,7 +546,6 @@ def load_config():
             "screensaver_list": _parse_screensaver_list(config.get('UI', 'screensaver_list', fallback='random')),
         },
         "MISC": {
-            "ventilate": config.getboolean('MISC', 'ventilate', fallback=False),
             "battery_enabled": config.getboolean('MISC', 'battery_enabled', fallback=False),
             "battery_auto_shutdown": config.getboolean('MISC', 'battery_auto_shutdown', fallback=False),
             "battery_capacity_mAh": int(config.get('MISC', 'battery_capacity_mAh', fallback='3000')),
@@ -910,12 +910,11 @@ CONFIG_METADATA = {
     },
     'CONTROLS': {
         '__description__': 'Connect a Bluetooth or USB game controller to physically steer TARS around',
-        'controller_name': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'description': 'The name of your Bluetooth or USB game controller. TARS looks for this text in the names of all connected controllers. For example, if you have an "8BitDo Pro 2" controller, just putting "8BitDo" here is enough. For Xbox controllers, put "Xbox". For PlayStation, put "PS4" or "DualSense". It just needs to match part of the controller name.'
-        },
         'enabled': {
             'description': 'Master switch for game controller support. Turn ON if you have a Bluetooth or USB controller paired to your Pi and want to use it to control TARS movement and actions. Leave OFF if you do not have a controller or do not want to use one.'
+        },
+        'ventilate': {
+            'description': 'When ON, TARS will periodically shift its body into a position that lets more air flow through the case. This helps keep the electronics cool, especially if your TARS is in a sealed or enclosed case where heat can build up. If your Pi is running hot (check with show_cpu_temp in the UI section), try turning this ON.'
         },
         'voicemovement': {
             'description': 'When ON, you can tell TARS to move by voice, like saying "walk forward", "turn left", or "stop". This works even without a controller connected. When OFF, TARS can only be moved with a physical game controller.'
@@ -927,6 +926,10 @@ CONFIG_METADATA = {
         'invert_y': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'If pressing up on the controller D-pad makes TARS go backward (or vice versa), turn this ON to fix it. Some controllers report the Y axis in the opposite direction.'
+        },
+        'controller_name': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'description': 'The name of your Bluetooth or USB game controller. TARS looks for this text in the names of all connected controllers. For example, if you have an "8BitDo Pro 2" controller, just putting "8BitDo" here is enough. For Xbox controllers, put "Xbox". For PlayStation, put "PS4" or "DualSense". It just needs to match part of the controller name.'
         },
     },
     'HOME_ASSISTANT': {
@@ -1018,9 +1021,6 @@ CONFIG_METADATA = {
     },
     'MISC': {
         '__description__': 'Other settings that do not fit in the categories above',
-        'ventilate': {
-            'description': 'When ON, TARS will periodically shift its body into a position that lets more air flow through the case. This helps keep the electronics cool, especially if your TARS is in a sealed or enclosed case where heat can build up. If your Pi is running hot (check with show_cpu_temp in the UI section), try turning this ON.'
-        },
         'battery_enabled': {
             'description': 'Master switch for battery monitoring. Turn ON if your TARS has an INA260 power sensor connected. When enabled, TARS tracks battery voltage and percentage, displays it on the dashboard, and can optionally shut down safely when the battery runs low. Leave OFF if you are running from a wall adapter or do not have the INA260 sensor.'
         },

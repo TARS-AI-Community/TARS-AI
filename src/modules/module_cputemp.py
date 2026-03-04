@@ -64,7 +64,7 @@ _last_movement_time = 0
 _movement_cooldown = 10
 
 CONFIG = load_config()
-_ventilate_enabled = CONFIG['MISC']['ventilate']
+_ventilate_enabled = CONFIG['CONTROLS']['ventilate']
 
 
 def set_cpu_temp_instance(instance):
