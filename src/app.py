@@ -232,9 +232,12 @@ if __name__ == "__main__":
     # Shutdown event
     shutdown_event = threading.Event()
 
-    # Battery module (lightweight)
-    battery = BatteryModule()
-    battery.start()
+    # Battery module (only if enabled in config)
+    if CONFIG['MISC'].get('battery_enabled', False):
+        battery = BatteryModule()
+        battery.start()
+    else:
+        battery = None
 
     # CPU temperature (lightweight)
     cpu_temp = CPUTempModule()
