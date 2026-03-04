@@ -15,7 +15,7 @@ user_name = Pyrater
 # Brief description of yourself (e.g., "Species: Human. Gender: Male.")
 user_details = Species: Human. Gender: Male.
 # Human-readable location name (e.g., "City, State, Country")
-location_name = El Paso,Texas,USA
+location_name = El Paso, Texas, USA
 # GPS coordinates for location-aware responses
 latitude = 31.7874
 longitude = -106.4206
@@ -124,7 +124,7 @@ webui_enabled = True
 # Web interface port (80 = no port needed in browser URL)
 webui_port = 80
 # Web interface login password
-webui_password = tarspass1234
+webui_password = tarspassword
 # On-device display width in pixels (3.5" = 480, 5–7" = 800)
 screen_width = 480
 # On-device display height in pixels (3.5" = 320, 5" = 480)
@@ -192,7 +192,7 @@ url = http://192.168.1.1:8123
 # Enable Discord bot (requires DISCORD_TOKEN in .env)
 enabled = False
 # Discord channel ID (right-click channel > Copy Channel ID in Developer Mode)
-channel_id = 811470553139249186
+channel_id = 23434653456345
 
 [STABLE_DIFFUSION]
 # Enable image generation
