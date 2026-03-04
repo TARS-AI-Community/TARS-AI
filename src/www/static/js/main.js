@@ -673,6 +673,7 @@ function executeAction() {
     'UI':'bi-display-fill','RAG':'bi-database-fill',
     'HOME_ASSISTANT':'bi-house-fill','DISCORD':'bi-discord',
     'STABLE_DIFFUSION':'bi-image-fill',
+    'BATTERY':'bi-battery-half',
     'MISC':'bi-wrench-adjustable',
     'CHARACTER_EDITOR':'bi-person-lines-fill'
   };
@@ -682,6 +683,7 @@ function executeAction() {
     'TTS':'Voice','UI':'Display','RAG':'Memory',
     'HOME_ASSISTANT':'Home Asst','DISCORD':'Discord',
     'STABLE_DIFFUSION':'Img Gen',
+    'BATTERY':'Battery',
     'MISC':'Misc',
     'CHARACTER_EDITOR':'Character'
   };
@@ -692,9 +694,9 @@ function executeAction() {
     'EMOTION', 'VISION', 'RAG',
     'UI',
     'CONTROLS',
+    'BATTERY',
     'HOME_ASSISTANT', 'DISCORD',
-    'STABLE_DIFFUSION',
-    'MISC'
+    'STABLE_DIFFUSION'
   ];
 
   // Character editor tile is appended after config sections

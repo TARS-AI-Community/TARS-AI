@@ -27,10 +27,10 @@ CONFIG = load_config()
 
 class BatteryModule:
     def __init__(self, 
-                 battery_capacity_mAh=CONFIG['MISC']['battery_capacity_mAh'],
-                 battery_initial_voltage=CONFIG['MISC']['battery_initial_voltage'],
-                 battery_cutoff_voltage=CONFIG['MISC']['battery_cutoff_voltage'],
-                 auto_shutdown=CONFIG['MISC']['battery_auto_shutdown'],
+                 battery_capacity_mAh=CONFIG['BATTERY']['battery_capacity_mAh'],
+                 battery_initial_voltage=CONFIG['BATTERY']['battery_initial_voltage'],
+                 battery_cutoff_voltage=CONFIG['BATTERY']['battery_cutoff_voltage'],
+                 auto_shutdown=CONFIG['BATTERY']['battery_auto_shutdown'],
                  smoothing_window=10):
         self.battery_capacity_mAh = battery_capacity_mAh
         self.battery_initial_voltage = battery_initial_voltage

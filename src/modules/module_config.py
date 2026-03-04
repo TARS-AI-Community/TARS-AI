@@ -520,12 +520,12 @@ def load_config():
             "screensaver_cycle_interval": config.getint('UI', 'screensaver_cycle_interval', fallback=300),
             "screensaver_list": _parse_screensaver_list(config.get('UI', 'screensaver_list', fallback='random')),
         },
-        "MISC": {
-            "battery_enabled": config.getboolean('MISC', 'battery_enabled', fallback=False),
-            "battery_auto_shutdown": config.getboolean('MISC', 'battery_auto_shutdown', fallback=False),
-            "battery_capacity_mAh": int(config.get('MISC', 'battery_capacity_mAh', fallback='3000')),
-            "battery_initial_voltage": float(config.get('MISC', 'battery_initial_voltage', fallback='12')),
-            "battery_cutoff_voltage": float(config.get('MISC', 'battery_cutoff_voltage', fallback='10')),
+        "BATTERY": {
+            "battery_enabled": config.getboolean('BATTERY', 'battery_enabled', fallback=False),
+            "battery_auto_shutdown": config.getboolean('BATTERY', 'battery_auto_shutdown', fallback=False),
+            "battery_capacity_mAh": int(config.get('BATTERY', 'battery_capacity_mAh', fallback='3000')),
+            "battery_initial_voltage": float(config.get('BATTERY', 'battery_initial_voltage', fallback='12')),
+            "battery_cutoff_voltage": float(config.get('BATTERY', 'battery_cutoff_voltage', fallback='10')),
         }
     }
 
@@ -801,9 +801,6 @@ CONFIG_METADATA = {
             'depends_on': [{'field': 'webui_enabled', 'values': ['True', 'true']}],
             'description': 'The password needed to log into this web interface. Anyone on your local network could potentially access it, so change this from the default to something only you know. This is NOT stored securely - it is a simple access barrier, not bank-level security.'
         },
-        'UI_Port': {
-            'description': 'The network port used by the on-device display server. Most people should not change this.'
-        },
         'UI_enabled': {
             'label': 'Enabled',
             'description': 'Master switch for the physical screen attached to your TARS robot. Turn this OFF if your TARS does not have a screen, or if you want to save resources by running "headless" (no display). When OFF, TARS still works - you just interact through the web interface or voice only.'
@@ -892,6 +889,28 @@ CONFIG_METADATA = {
         'controller_name': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'The name of your Bluetooth or USB game controller. TARS looks for this text in the names of all connected controllers. For example, if you have an "8BitDo Pro 2" controller, just putting "8BitDo" here is enough. For Xbox controllers, put "Xbox". For PlayStation, put "PS4" or "DualSense". It just needs to match part of the controller name.'
+        },
+    },
+    'BATTERY': {
+        '__description__': 'Monitor battery level and protect against over-discharge (requires INA260 sensor)',
+        'battery_enabled': {
+            'description': 'Master switch for battery monitoring. Turn ON if your TARS has an INA260 power sensor connected. When enabled, TARS tracks battery voltage and percentage and displays it on the dashboard. Leave OFF if you are running from a wall adapter or do not have the INA260 sensor.'
+        },
+        'battery_auto_shutdown': {
+            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
+            'description': 'When ON, TARS will automatically and safely shut down the Raspberry Pi when the battery gets critically low (near 0%). This protects your Pi from sudden power loss (which can corrupt the SD card) and protects your battery from being over-drained. Strongly recommended if running on battery.'
+        },
+        'battery_capacity_mAh': {
+            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
+            'description': 'How much charge your battery can hold in milliampere-hours (mAh). This number is printed on your battery. Examples: 3000 for a 3Ah battery, 5600 for a 5.6Ah battery. TARS uses this to calculate the remaining battery percentage.'
+        },
+        'battery_initial_voltage': {
+            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
+            'description': 'The voltage of your battery when fully charged. 3S LiPo = 12.6V, 4S LiPo = 16.8V, USB power bank = 5V. TARS uses this as the 100% reference point.'
+        },
+        'battery_cutoff_voltage': {
+            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
+            'description': 'The lowest voltage your battery should ever reach. Going below this can permanently damage it. 3S LiPo = 10.5V, 4S LiPo = 14V. TARS uses this as the 0% reference point and will shut down before reaching it if auto_shutdown is ON.'
         },
     },
     'HOME_ASSISTANT': {

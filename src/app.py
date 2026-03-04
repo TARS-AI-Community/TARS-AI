@@ -233,7 +233,7 @@ if __name__ == "__main__":
     shutdown_event = threading.Event()
 
     # Battery module (only if enabled in config)
-    if CONFIG['MISC'].get('battery_enabled', False):
+    if CONFIG['BATTERY'].get('battery_enabled', False):
         battery = BatteryModule()
         battery.start()
     else:
