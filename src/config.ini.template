@@ -201,26 +201,10 @@ speechdelay = 20
 # espeak: Basic robotic voice, very lightweight (works on all Pi models)
 # piper: High-quality neural voice, runs locally (recommended for Pi5/Pi4)
 # silero: Neural TTS, good quality (Pi5 only)
-# --- Self-Hosted Server ---
-# alltalk: AllTalk TTS server (run on a separate PC for high quality)
 # --- Cloud Services (require API keys in .env) ---
 # elevenlabs: Premium voice cloning, very natural (paid)
-# minimax: High-quality multilingual voices (paid)
 # openai: OpenAI TTS, good quality (paid, good for non-English)
-# azure: Microsoft Azure TTS, many voice options (paid)
 ttsoption = piper
-
-# Azure region for Azure TTS. Must match your Azure Speech Services resource region.
-# Common options: eastus, eastus2, westus, westus2, centralus, northeurope, westeurope
-azure_region = eastus
-
-# URL of your AllTalk TTS server. Only used when ttsoption = alltalk.
-ttsurl = http://192.168.2.57:7852
-
-# Voice name for AllTalk or Azure TTS.
-# AllTalk: Name of the cloned voice file (e.g., TARS2)
-# Azure: Voice ID (e.g., en-US-Steffan:DragonHDLatestNeural)
-tts_voice = en-US-Steffan:DragonHDLatestNeural
 
 # ElevenLabs voice ID. Find voice IDs in your ElevenLabs dashboard.
 # Default JBFqnCBsd6RMkjVDRZzb is the "George" voice.
@@ -230,15 +214,6 @@ elevenlabs_voice_id = JBFqnCBsd6RMkjVDRZzb
 # eleven_monolingual_v1: English only, slightly faster
 # eleven_turbo_v2: Fastest, lower quality
 elevenlabs_model = eleven_multilingual_v2
-
-# Minimax voice ID. Browse available voices at https://www.minimax.chat/
-# Example voices: English_CaptivatingStoryteller, English_Male_Narrator
-minimax_voice_id = English_CaptivatingStoryteller
-
-# Minimax TTS model. Higher versions are newer and generally better.
-# speech-2.6-turbo / speech-2.8-turbo: Fast, good quality
-# speech-2.6-hd / speech-2.8-hd: Higher quality, slightly slower
-minimax_model = speech-2.8-turbo
 
 # OpenAI TTS voice. Only used when ttsoption = openai.
 # alloy: Neutral, balanced

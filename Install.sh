@@ -635,7 +635,6 @@ UI
 
 # === CLOUD TTS OPTIONS (Pi4/Pi5) ===
 elevenlabs                      # External TTS using 11Labs API
-azure-cognitiveservices-speech  # Azure TTS API
 
 CLOUDTTS
     fi

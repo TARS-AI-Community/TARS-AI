@@ -4,7 +4,6 @@ module_tts.py
 Text-to-Speech (TTS) module for TARS-AI application.
 
 Handles TTS functionality to convert text into audio using:
-- Azure Speech SDK
 - Local tools (e.g., espeak-ng)
 - Server-based TTS systems
 
@@ -29,11 +28,8 @@ CONFIG = load_config()
 text_to_speech_with_pipelining_piper = None
 text_to_speech_with_pipelining_silero = None
 text_to_speech_with_pipelining_espeak = None
-text_to_speech_with_pipelining_alltalk = None
 text_to_speech_with_pipelining_elevenlabs = None
-text_to_speech_with_pipelining_azure = None
 text_to_speech_with_pipelining_openai = None
-text_to_speech_with_pipelining_minimax = None
 
 try:
     from modules.module_piper import text_to_speech_with_pipelining_piper as _piper
@@ -54,32 +50,14 @@ except ImportError:
     pass
 
 try:
-    from modules.module_alltalk import text_to_speech_with_pipelining_alltalk as _alltalk
-    text_to_speech_with_pipelining_alltalk = _alltalk
-except ImportError:
-    pass
-
-try:
     from modules.module_elevenlabs import text_to_speech_with_pipelining_elevenlabs as _elevenlabs
     text_to_speech_with_pipelining_elevenlabs = _elevenlabs
 except ImportError:
     pass
 
 try:
-    from modules.module_azure import text_to_speech_with_pipelining_azure as _azure
-    text_to_speech_with_pipelining_azure = _azure
-except ImportError:
-    pass
-
-try:
     from modules.module_openai import text_to_speech_with_pipelining_openai as _openai
     text_to_speech_with_pipelining_openai = _openai
-except ImportError:
-    pass
-
-try:
-    from modules.module_minimax import text_to_speech_with_pipelining_minimax as _minimax
-    text_to_speech_with_pipelining_minimax = _minimax
 except ImportError:
     pass
 
@@ -131,30 +109,18 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
         queue_message(f"ERROR: Error during audio playback: {e}")
 
 
-async def generate_tts_audio(text, ttsoption, is_wakeword=False, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
+async def generate_tts_audio(text, ttsoption, is_wakeword=False, ttsurl=None, toggle_charvoice=True, tts_voice=None):
     try:
-        if ttsoption == "azure" and text_to_speech_with_pipelining_azure:
-           async for chunk in text_to_speech_with_pipelining_azure(text):
-                yield chunk
-
-        elif ttsoption == "espeak" and text_to_speech_with_pipelining_espeak:
+        if ttsoption == "espeak" and text_to_speech_with_pipelining_espeak:
             async for chunk in text_to_speech_with_pipelining_espeak(text):
                 yield chunk
 
-        elif ttsoption == "alltalk" and text_to_speech_with_pipelining_alltalk:
-            async for chunk in text_to_speech_with_pipelining_alltalk(text):
-                yield chunk
-                
         elif ttsoption == "piper" and text_to_speech_with_pipelining_piper:
             async for chunk in text_to_speech_with_pipelining_piper(text):
                 yield chunk  
 
         elif ttsoption == "elevenlabs" and text_to_speech_with_pipelining_elevenlabs:
             async for chunk in text_to_speech_with_pipelining_elevenlabs(text, is_wakeword):
-                yield chunk
-
-        elif ttsoption == "minimax" and text_to_speech_with_pipelining_minimax:
-            async for chunk in text_to_speech_with_pipelining_minimax(text, is_wakeword):
                 yield chunk
 
         elif ttsoption == "silero" and text_to_speech_with_pipelining_silero:
@@ -177,7 +143,7 @@ async def generate_tts_audio(text, ttsoption, is_wakeword=False, azure_api_key=N
             for name, func in fallback_order:
                 if func is not None:
                     queue_message(f"WARNING: TTS '{ttsoption}' not available, falling back to '{name}'")
-                    if name in ["openai", "elevenlabs", "minimax"]:
+                    if name in ["openai", "elevenlabs"]:
                         async for chunk in func(text, is_wakeword):
                             yield chunk
                     else:

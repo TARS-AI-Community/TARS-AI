@@ -57,7 +57,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PI5: DeviceCapabilities(
         profile=DeviceProfile.PI5,
         allowed_stt={"fastrtc", "silero", "openai", "external"},
-        allowed_tts={"espeak", "piper", "silero", "alltalk", "elevenlabs", "minimax", "openai", "azure"},
+        allowed_tts={"espeak", "piper", "silero", "elevenlabs", "openai"},
         allowed_vad={"silero", "rms"},
         allowed_wake={"fastrtc", "atomik"},
         can_use_embeddings=True,
@@ -75,7 +75,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PI4: DeviceCapabilities(
         profile=DeviceProfile.PI4,
         allowed_stt={"openai", "external"},
-        allowed_tts={"espeak", "piper", "alltalk", "elevenlabs", "minimax", "openai", "azure"},
+        allowed_tts={"espeak", "piper", "elevenlabs", "openai"},
         allowed_vad={"silero", "rms"},
         allowed_wake={"atomik"},
         can_use_embeddings=True,
@@ -93,7 +93,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PI3: DeviceCapabilities(
         profile=DeviceProfile.PI3,
         allowed_stt={"openai", "external"},
-        allowed_tts={"espeak", "elevenlabs", "minimax", "openai", "azure"},
+        allowed_tts={"espeak", "elevenlabs", "openai"},
         allowed_vad={"rms"},
         allowed_wake={"atomik"},
         can_use_embeddings=False,
@@ -111,7 +111,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PIZERO2: DeviceCapabilities(
         profile=DeviceProfile.PIZERO2,
         allowed_stt={"openai"},
-        allowed_tts={"elevenlabs", "minimax", "openai", "azure"},
+        allowed_tts={"elevenlabs", "openai"},
         allowed_vad={"rms"},
         allowed_wake={"atomik"},
         can_use_embeddings=False,
@@ -244,33 +244,20 @@ class TTSConfig:
     is_talking_override: bool
     is_talking: bool
     global_timer_paused: bool
-    azure_api_key: Optional[str] = None
-    azure_region: Optional[str] = None
     elevenlabs_api_key: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
     elevenlabs_model: Optional[str] = None
     ttsurl: Optional[str] = None
     openai_voice: Optional[str] = None
     openai_api_key: Optional[str] = None
-    minimax_api_key: Optional[str] = None
-    minimax_voice_id: Optional[str] = None
-    minimax_model: Optional[str] = None
 
     def __getitem__(self, key):
         return getattr(self, key)
 
     def validate(self) -> bool:
-        if self.ttsoption == "azure":
-            if not (self.azure_api_key and self.azure_region):
-                queue_message("ERROR: Azure API key and region are required for Azure TTS")
-                return False
-        elif self.ttsoption == "elevenlabs":
+        if self.ttsoption == "elevenlabs":
             if not self.elevenlabs_api_key:
                 queue_message("ERROR: ElevenLabs API key is required for ElevenLabs TTS")
-                return False
-        elif self.ttsoption in ["xttsv2", "alltalk"]:
-            if not self.ttsurl:
-                queue_message("ERROR: TTS URL is required for server-based TTS")
                 return False
         return True
 
@@ -283,17 +270,12 @@ class TTSConfig:
             is_talking_override=config_dict['is_talking_override'],
             is_talking=config_dict['is_talking'],
             global_timer_paused=config_dict['global_timer_paused'],
-            azure_api_key=config_dict.get('azure_api_key'),
-            azure_region=config_dict.get('azure_region'),
             elevenlabs_api_key=config_dict.get('elevenlabs_api_key'),
             elevenlabs_voice_id=config_dict.get('elevenlabs_voice_id'),
             elevenlabs_model=config_dict.get('elevenlabs_model'),
             ttsurl=config_dict.get('ttsurl'),
             openai_voice=config_dict.get('openai_voice'),
             openai_api_key=config_dict.get('openai_api_key'),
-            minimax_api_key=config_dict.get('minimax_api_key'),
-            minimax_voice_id=config_dict.get('minimax_voice_id'),
-            minimax_model=config_dict.get('minimax_model'),
         )
 
 
@@ -435,18 +417,13 @@ def load_config():
         },
         "TTS": TTSConfig.from_config_dict({
             "ttsoption": config['TTS']['ttsoption'],
-            "azure_api_key": os.getenv('AZURE_API_KEY'),
             "elevenlabs_api_key": os.getenv('ELEVENLABS_API_KEY'),
-            "azure_region": config['TTS']['azure_region'],
-            'minimax_api_key': os.getenv('MINIMAX_API_KEY'),
             "openai_api_key": os.getenv('OPENAI_API_KEY'),
             "ttsurl": config['TTS']['ttsurl'],
             "toggle_charvoice": config.getboolean('TTS', 'toggle_charvoice'),
             "tts_voice": config['TTS']['tts_voice'],
             "elevenlabs_voice_id": config['TTS']['elevenlabs_voice_id'],
             "elevenlabs_model": config['TTS']['elevenlabs_model'],
-            "minimax_voice_id": config['TTS']['minimax_voice_id'],
-            "minimax_model": config['TTS']['minimax_model'],
             "is_talking_override": config.getboolean('TTS', 'is_talking_override'),
             "is_talking": config.getboolean('TTS', 'is_talking'),
             "global_timer_paused": config.getboolean('TTS', 'global_timer_paused'),
@@ -731,22 +708,8 @@ CONFIG_METADATA = {
         },
         'ttsoption': {
             'label': 'TTS Engine',
-            'options': ['espeak', 'piper', 'silero', 'alltalk', 'elevenlabs', 'minimax', 'openai', 'azure'],
-            'description': 'Choose how TARS speaks out loud. This is the most important voice setting. FREE options that work without internet: "piper" sounds natural and is the best free option (recommended for Pi 5 and Pi 4). "espeak" is a basic robotic-sounding voice but works on any Pi, even very weak ones. "silero" is another good-sounding option but only works on Pi 5. If you have a separate PC, "alltalk" lets you run a high-quality voice server on it. PAID cloud options (need internet + API key in .env file): "elevenlabs" has the most natural, human-like voices. "openai" is good quality and works well in many languages. "minimax" and "azure" are other cloud options with different voice styles.'
-        },
-        'ttsurl': {
-            'label': 'TTS URL',
-            'depends_on': [{'field': 'ttsoption', 'values': ['alltalk']}],
-            'description': 'If you picked "alltalk" above, put the web address of your AllTalk server here. AllTalk is a voice synthesis program you run on a separate, more powerful computer (like a gaming PC). Format: http://IP-ADDRESS:PORT (for example: http://192.168.1.100:7852). If you are not using alltalk, this setting is ignored.'
-        },
-        'tts_voice': {
-            'depends_on': [{'field': 'ttsoption', 'values': ['alltalk', 'azure']}],
-            'description': 'The specific voice to use, but this only applies to "alltalk" or "azure" TTS options. For AllTalk: enter the name of a cloned voice you set up in AllTalk (like "TARS2"). For Azure: enter the full voice ID from Microsoft (like "en-US-Steffan:DragonHDLatestNeural"). If you are using piper, espeak, elevenlabs, or other engines, they have their own voice settings below.'
-        },
-        'azure_region': {
-            'depends_on': [{'field': 'ttsoption', 'values': ['azure']}],
-            'options': ['eastus', 'eastus2', 'westus', 'westus2', 'centralus', 'northeurope', 'westeurope'],
-            'description': 'Only matters if you are using "azure" as your TTS engine. This must match the region you selected when you created your Azure Speech Services account. If you are in the US, "eastus" is a common choice. Pick the region closest to you for the fastest response. If you are not using Azure, ignore this.'
+            'options': ['espeak', 'piper', 'silero', 'elevenlabs', 'openai'],
+            'description': 'Choose how TARS speaks out loud. This is the most important voice setting. FREE options that work without internet: "piper" sounds natural and is the best free option (recommended for Pi 5 and Pi 4). "espeak" is a basic robotic-sounding voice but works on any Pi, even very weak ones. "silero" is another good-sounding option but only works on Pi 5. PAID cloud options (need internet + API key in .env file): "elevenlabs" has the most natural, human-like voices. "openai" is good quality and works well in many languages.'
         },
         'elevenlabs_voice_id': {
             'depends_on': [{'field': 'ttsoption', 'values': ['elevenlabs']}],
@@ -756,15 +719,6 @@ CONFIG_METADATA = {
             'depends_on': [{'field': 'ttsoption', 'values': ['elevenlabs']}],
             'options': ['eleven_multilingual_v2', 'eleven_monolingual_v1', 'eleven_turbo_v2'],
             'description': 'Only matters if you are using "elevenlabs" as your TTS engine. "eleven_multilingual_v2" can speak in 29 different languages and is the recommended choice. "eleven_monolingual_v1" only speaks English but is slightly faster. "eleven_turbo_v2" is the fastest but sounds slightly lower quality.'
-        },
-        'minimax_voice_id': {
-            'depends_on': [{'field': 'ttsoption', 'values': ['minimax']}],
-            'description': 'Only matters if you are using "minimax" as your TTS engine. This is the name of the Minimax voice to use. You can browse available voices on the Minimax website. "English_CaptivatingStoryteller" is a good default for an engaging male voice.'
-        },
-        'minimax_model': {
-            'depends_on': [{'field': 'ttsoption', 'values': ['minimax']}],
-            'options': ['speech-2.6-turbo', 'speech-2.8-turbo', 'speech-2.6-hd', 'speech-2.8-hd'],
-            'description': 'Only matters if you are using "minimax" as your TTS engine. The "turbo" versions are faster (less delay before TARS speaks). The "hd" versions sound better quality but take slightly longer. Higher numbers (2.8) are newer and generally better than lower numbers (2.6).'
         },
         'openai_voice': {
             'depends_on': [{'field': 'ttsoption', 'values': ['openai']}],
