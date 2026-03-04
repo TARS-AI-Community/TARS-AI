@@ -396,6 +396,7 @@ def load_config():
             "llm_backend": config['LLM']['llm_backend'],
             "base_url": config['LLM']['base_url'],
             "openai_model": config['LLM']['openai_model'],
+            "other_model": config.get('LLM', 'other_model', fallback=''),
             "grok_model": config['LLM']['grok_model'],
             "systemprompt": config['LLM']['systemprompt'],
             "contextsize": int(config['LLM']['contextsize']),
@@ -625,7 +626,7 @@ CONFIG_METADATA = {
         'llm_backend': {
             'label': 'AI Backend',
             'options': ['openai', 'grok', 'deepinfra', 'other'],
-            'description': 'Choose which AI service TARS talks to for generating its responses. "openai" uses OpenAI (ChatGPT) and auto-fills the URL. "grok" uses xAI and auto-fills the URL. "deepinfra" uses DeepInfra and auto-fills the URL. "other" is for any OpenAI-compatible API (Featherless, Ollama, LM Studio, etc.) - set your own URL and it will never be overwritten. If you are not sure, start with "openai".'
+            'description': 'Choose which AI service TARS uses to generate responses. "openai" uses OpenAI (GPT models) — auto-fills the URL, requires OPENAI_API_KEY in .env. "grok" uses xAI\'s Grok — auto-fills the URL, requires XAI_API_KEY in .env. "deepinfra" uses DeepInfra (cheap hosted models) — auto-fills the URL, requires DEEPINFRA_API_KEY in .env. "other" is for any OpenAI-compatible API — you set the URL yourself and it is preserved when switching backends. Use "other" for Featherless.ai, Ollama (local), LM Studio (local), OpenRouter, or any self-hosted model server. Switching backends auto-updates the URL field except for "other", which always restores your saved URL.'
         },
         'base_url': {
             'label': 'Base URL',
@@ -634,18 +635,23 @@ CONFIG_METADATA = {
         },
         'openai_model': {
             'label': 'model',
-            'depends_on': [{'field': 'llm_backend', 'values': ['openai', 'deepinfra', 'other']}],
-            'description': 'The specific AI model to use when your backend is set to "openai". Different models have different capabilities and costs. "gpt-4o-mini" is cheap and fast (good starting point). "gpt-4o" is smarter but costs more per message. If you are using Ollama on your own computer, put the model name you downloaded there, like "llama3.1:8b" or "qwen2.5:3b". This setting is ignored if you picked a different backend above.'
+            'depends_on': [{'field': 'llm_backend', 'values': ['openai', 'deepinfra']}],
+            'description': 'The model identifier sent to the OpenAI or DeepInfra API. For OpenAI: "gpt-4o-mini" is the cheapest capable model (good default), "gpt-4o" is more powerful but costs more per request, "o1-mini" is a reasoning model good for complex questions. For DeepInfra: use the full model path like "meta-llama/Meta-Llama-3.1-70B-Instruct". If you type a model name that does not exist, the API will return an error - check the provider dashboard for a list of available models.'
+        },
+        'other_model': {
+            'label': 'model',
+            'depends_on': [{'field': 'llm_backend', 'values': ['other']}],
+            'description': 'The model identifier sent to your custom OpenAI-compatible endpoint. The exact format depends on the service you are using. Featherless.ai: use the full HuggingFace path like "meta-llama/Meta-Llama-3.1-8B-Instruct". Ollama: use just the model name you pulled, like "llama3.1:8b" or "qwen2.5:3b". LM Studio: use the model name shown in the app. OpenRouter: use the provider/model format like "mistralai/mistral-7b-instruct". If you get a 404 or "model not found" error, check that the model name exactly matches what your server expects.'
         },
         'grok_model': {
             'depends_on': [{'field': 'llm_backend', 'values': ['grok']}],
-            'description': 'The specific Grok model to use when your backend is set to "grok". "grok-4-1-fast-non-reasoning" is fast and good for casual conversation. Only matters if you picked "grok" as your backend above.'
+            'description': 'The Grok model to use when your backend is set to "grok". Current options: "grok-4-1-fast-non-reasoning" is the fastest option and works well for casual conversation. "grok-4-1-fast-reasoning" is a reasoning model that thinks through problems step-by-step (slower but better for complex questions). "grok-3-mini" is a smaller, cheaper model. Check xAI docs for the latest available model names as new ones are added regularly.'
         },
         'systemprompt': {
             'description': 'Hidden instructions that TARS reads before every conversation. This tells the AI HOW to behave in general - like being helpful, conversational, staying in character, etc. This is different from the character card: the character card defines WHO TARS is, while this prompt defines the general RULES for how it should respond. Most people can leave the default as-is.'
         },
         'contextsize': {
-            'description': 'How much conversation history TARS remembers in a single chat session. Measured in "tokens" (roughly: 1 token = about 1 word). A higher number means TARS can remember more of what you talked about, but it costs more money per message (if using a paid service) and can be slower. 4000 is a good default. If TARS seems to forget what you just said, try increasing this. If responses are slow or expensive, try lowering it. Most AI models have a maximum they support (check your model\'s docs).'
+            'description': 'How much conversation history TARS remembers in a single chat session. Measured in "tokens" (roughly: 1 token = about 1 word). A higher number means TARS can remember more of what you talked about, but it costs more money per message (if using a paid service) and can be slower. 4000 is a good default for most models. Common model limits: GPT-4o supports up to 128,000 tokens, GPT-4o-mini supports 128,000, Llama 3.1 8B supports 128,000, older models may cap at 4,096 or 8,192. Setting contextsize higher than the model supports will cause errors. If TARS seems to forget what you just said, try increasing this. If responses are slow or expensive, try lowering it to 2000.'
         },
         'max_tokens': {
             'description': 'The maximum length of TARS responses, measured in tokens (roughly 1 token = 1 word). If set to 200, TARS can say about 200 words max per response. Set this lower (200-300) for quick conversational replies, or higher (500-1000) if you want TARS to give long, detailed explanations. Setting it very high does not mean every response will be long - it just allows longer responses when needed.'
@@ -661,13 +667,13 @@ CONFIG_METADATA = {
         },
         'override_encoding_model': {
             'options': ['cl100k_base', 'p50k_base', 'r50k_base', 'gpt2'],
-            'description': 'DO NOT CHANGE THIS unless TARS is crashing with token counting errors. This controls how TARS counts the size of messages before sending them to the AI. "cl100k_base" works for almost all modern AI models. Only change this if you see errors in the logs about token encoding failing.'
+            'description': 'Controls how TARS counts tokens (message size) before sending to the AI. DO NOT change this unless you see token-counting errors in the logs. "cl100k_base" is the correct encoding for GPT-4, GPT-3.5-turbo, and most modern models — leave this as-is for 99% of setups. "p50k_base" was used for older InstructGPT/Codex models. "r50k_base" is for legacy GPT-3. "gpt2" is for very old models. If TARS logs say something like "KeyError: encoding not found for model X", try leaving the model name fallback alone first — TARS already falls back to this encoding automatically when the model name is not recognized.'
         },
     },
     'STT': {
         '__description__': 'Configure how TARS listens to you - wake word, speech recognition, and when to stop listening',
         'use_indicators': {
-            'description': 'When this is on, TARS will play a short beep sound when it starts listening to you (after the wake word) and another beep when it stops listening. This is really helpful so you know when to start and stop talking. Turn this off if the beeps annoy you.'
+            'description': 'When ON, TARS plays a short high beep when it starts recording your voice (after the wake word triggers) and a lower beep when it stops. These audio cues are very useful for knowing exactly when to speak and when TARS has finished listening. Without them, it can be hard to tell when TARS is ready for your command. Turn OFF if the beeps are annoying or if you are running TARS somewhere where sound is disruptive.'
         },
         'stt_processor': {
             'label': 'STT Engine',
@@ -696,7 +702,7 @@ CONFIG_METADATA = {
             'description': 'If you set stt_processor to "external", put the web address of your speech-to-text server here. This is for advanced users who run their own Whisper or other STT server on a separate machine. If you are not using "external" mode, this setting is ignored. Format: http://IP-ADDRESS:PORT'
         },
         'speechdelay': {
-            'description': 'After you stop talking, TARS waits this long before it decides you are done and starts processing your message. The number is in tenths of a second, so 20 = 2 seconds. If this is too short (like 5 = half a second), TARS will cut you off mid-sentence every time you pause to think. If it is too long (like 40 = 4 seconds), there will be an awkward silence after every sentence before TARS responds. 15-25 (1.5 to 2.5 seconds) works well for most people.'
+            'description': 'After you stop talking, TARS waits this long before deciding you are done and processing your message. The number is in tenths of a second — so 10 = 1 second, 20 = 2 seconds. If set too short (5–8), TARS cuts you off whenever you pause mid-thought. If set too long (35+), there is an awkward gap after every sentence. 15–25 works well for most people and speaking styles. If you speak slowly or tend to pause between sentences, try 25–30. If you speak quickly and want snappy responses, try 12–15. This setting interacts with the VAD method: with "silero" VAD you can often use a lower value because it is better at detecting true silence.'
         },
         'language': {
             'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
@@ -716,12 +722,12 @@ CONFIG_METADATA = {
         'ttsurl': {
             'label': 'TTS Server URL',
             'depends_on': [{'field': 'ttsoption', 'values': ['other']}],
-            'description': 'The URL of your external TTS server. Only used when TTS Engine is set to "other". Format: http://IP-ADDRESS:PORT (for example: http://192.168.1.100:5002). The server must accept text and return audio compatible with TARS.'
+            'description': 'The URL of your external TTS server. Only used when TTS Engine is set to "other". Format: http://IP-ADDRESS:PORT. Compatible servers include Coqui TTS (default port 5002), Piper server mode, AllTalk TTS, and any server that accepts a text parameter and returns audio. Example: http://192.168.1.100:5002. TARS sends a POST request with the text to synthesize and expects audio back.'
         },
         'tts_voice': {
             'label': 'TTS Voice',
             'depends_on': [{'field': 'ttsoption', 'values': ['other']}],
-            'description': 'The voice name or ID to use on your external TTS server. Only used when TTS Engine is set to "other". Leave blank if your server does not require a voice parameter.'
+            'description': 'The voice name or ID to request from your external TTS server. Leave blank if your server uses a default voice or does not support voice selection. For Coqui TTS this might be a speaker name. For AllTalk it might be a voice file name. Check your TTS server\'s documentation for what voice identifiers it accepts.'
         },
         'elevenlabs_voice_id': {
             'depends_on': [{'field': 'ttsoption', 'values': ['elevenlabs']}],
@@ -849,8 +855,8 @@ CONFIG_METADATA = {
         },
         'app': {
             'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
-            'options': ['terminal', 'dashboard', 'clock'],
-            'description': 'What shows on the TARS display when it first starts up. "terminal" shows a chat-style interface where you can see the conversation. "dashboard" shows a system status overview with various stats. "clock" shows a big clock display. You can always switch between these later.'
+            'options': ['terminal', 'dashboard', 'clock', 'eyes'],
+            'description': 'What shows on the TARS display when it first starts up. "terminal" shows a scrolling chat-style interface where you can read the conversation in real time. "dashboard" shows a system status overview with battery, CPU, memory, and other stats. "clock" shows a large clean clock display — good if TARS lives on a desk. "eyes" shows an animated eye display that reacts to TARS speaking. You can always switch between modes at runtime.'
         },
         'target_fps': {
             'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
