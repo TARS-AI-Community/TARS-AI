@@ -180,6 +180,9 @@ class STTManager:
         self.silero_vad_model = None
         self.get_speech_timestamps = None
         self.sherpa_recognizer = None
+        self.sherpa_vad = None
+        self.sherpa_denoiser = None
+        self.sherpa_punctuator = None
 
         self._initialize_models()
         self.vadmethod = CONFIG['STT']['vad_method']
@@ -212,7 +215,20 @@ class STTManager:
 
         if self.config["STT"].get("vad_enabled", False):
             self._load_silero_vad()
-        
+
+        # Load sherpa-onnx VAD if selected
+        vad_method = CONFIG['STT'].get('vad_method', 'rms')
+        if vad_method == "sherpa-onnx":
+            self._load_sherpa_vad()
+
+        # Load optional sherpa-onnx denoiser
+        if self.config["STT"].get("sherpa_onnx_denoise", "False").lower() == "true":
+            self._load_sherpa_denoiser()
+
+        # Load optional sherpa-onnx punctuation
+        if self.config["STT"].get("sherpa_onnx_punctuation", "False").lower() == "true":
+            self._load_sherpa_punctuation()
+
     def start(self):
         """Start the STT processing loop in a separate thread."""
         self.running = True
@@ -383,6 +399,106 @@ class STTManager:
         except Exception as e:
             queue_message(f"ERROR: Failed to load sherpa-onnx model: {e}")
             self.sherpa_recognizer = None
+
+    def _load_sherpa_vad(self):
+        """Load sherpa-onnx Silero VAD model (no torch required)."""
+        if sherpa_onnx is None:
+            queue_message("WARNING: sherpa-onnx not available for VAD")
+            return
+
+        try:
+            # Look for silero_vad.onnx in the stt directory
+            stt_dir = os.path.join(os.path.dirname(os.getcwd()), "stt")
+            model_path = os.path.join(stt_dir, "silero_vad.onnx")
+
+            if not os.path.exists(model_path):
+                queue_message(f"ERROR: Silero VAD ONNX model not found at {model_path}")
+                queue_message("INFO: Download from https://github.com/k2-fsa/sherpa-onnx/releases (silero_vad.onnx)")
+                return
+
+            vad_config = sherpa_onnx.VadModelConfig()
+            vad_config.silero_vad.model = model_path
+            vad_config.silero_vad.threshold = 0.3
+            vad_config.silero_vad.min_speech_duration = 0.1
+            vad_config.silero_vad.min_silence_duration = 0.3
+            vad_config.sample_rate = 16000
+
+            self.sherpa_vad = sherpa_onnx.VoiceActivityDetector(vad_config, buffer_size_in_seconds=30)
+            queue_message("INFO: sherpa-onnx Silero VAD loaded successfully.")
+        except Exception as e:
+            queue_message(f"ERROR: Failed to load sherpa-onnx VAD: {e}")
+            self.sherpa_vad = None
+
+    def _load_sherpa_denoiser(self):
+        """Load sherpa-onnx speech denoiser (GTCRN model)."""
+        if sherpa_onnx is None:
+            queue_message("WARNING: sherpa-onnx not available for denoising")
+            return
+
+        try:
+            stt_dir = os.path.join(os.path.dirname(os.getcwd()), "stt")
+            model_path = os.path.join(stt_dir, "gtcrn_simple.onnx")
+
+            if not os.path.exists(model_path):
+                queue_message(f"ERROR: Denoiser model not found at {model_path}")
+                queue_message("INFO: Download gtcrn_simple.onnx from sherpa-onnx releases")
+                return
+
+            gtcrn_config = sherpa_onnx.OfflineSpeechDenoiserGtcrnModelConfig(model=model_path)
+            model_config = sherpa_onnx.OfflineSpeechDenoiserModelConfig(gtcrn=gtcrn_config)
+            denoiser_config = sherpa_onnx.OfflineSpeechDenoiserConfig(model=model_config)
+            self.sherpa_denoiser = sherpa_onnx.OfflineSpeechDenoiser(config=denoiser_config)
+            queue_message("INFO: sherpa-onnx speech denoiser loaded successfully.")
+        except Exception as e:
+            queue_message(f"ERROR: Failed to load sherpa-onnx denoiser: {e}")
+            self.sherpa_denoiser = None
+
+    def _load_sherpa_punctuation(self):
+        """Load sherpa-onnx punctuation restoration model."""
+        if sherpa_onnx is None:
+            queue_message("WARNING: sherpa-onnx not available for punctuation")
+            return
+
+        try:
+            stt_dir = os.path.join(os.path.dirname(os.getcwd()), "stt")
+            model_dir = os.path.join(stt_dir, "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12")
+
+            if not os.path.isdir(model_dir):
+                queue_message(f"ERROR: Punctuation model not found at {model_dir}")
+                queue_message("INFO: Download from sherpa-onnx releases (punct-ct-transformer)")
+                return
+
+            model_path = os.path.join(model_dir, "model.onnx")
+            config = sherpa_onnx.OfflinePunctuationModelConfig(
+                ct_transformer=model_path
+            )
+            punct_config = sherpa_onnx.OfflinePunctuationConfig(model=config)
+            self.sherpa_punctuator = sherpa_onnx.OfflinePunctuation(punct_config)
+            queue_message("INFO: sherpa-onnx punctuation model loaded successfully.")
+        except Exception as e:
+            queue_message(f"ERROR: Failed to load sherpa-onnx punctuation: {e}")
+            self.sherpa_punctuator = None
+
+    def _denoise_audio(self, audio_data, sample_rate=16000):
+        """Denoise audio using sherpa-onnx GTCRN model. Input: float32 array. Returns: float32 array."""
+        if self.sherpa_denoiser is None:
+            return audio_data
+        try:
+            result = self.sherpa_denoiser.run(audio_data.tolist(), sample_rate)
+            return np.array(result.samples, dtype=np.float32)
+        except Exception as e:
+            queue_message(f"WARNING: Denoising failed, using original audio: {e}")
+            return audio_data
+
+    def _add_punctuation(self, text):
+        """Add punctuation to transcribed text using sherpa-onnx."""
+        if self.sherpa_punctuator is None or not text:
+            return text
+        try:
+            return self.sherpa_punctuator.add_punctuation(text)
+        except Exception as e:
+            queue_message(f"WARNING: Punctuation restoration failed: {e}")
+            return text
 
     # === Transcription Methods ===
 
@@ -555,6 +671,9 @@ class STTManager:
         audio_data = np.concatenate(audio_chunks).astype(np.float32) / 32768.0
         audio_data = audio_data.flatten()
 
+        # Denoise if enabled
+        audio_data = self._denoise_audio(audio_data, SHERPA_RATE)
+
         try:
             s = self.sherpa_recognizer.create_stream()
             s.accept_waveform(SHERPA_RATE, audio_data)
@@ -562,6 +681,8 @@ class STTManager:
             transcript = s.result.text.strip()
             # Strip SenseVoice language tags like <|en|>, <|zh|>, etc.
             transcript = _SENSEVOICE_TAG_RE.sub('', transcript).strip()
+            # Add punctuation if enabled
+            transcript = self._add_punctuation(transcript)
         except Exception as e:
             queue_message(f"ERROR: sherpa-onnx transcription failed: {e}")
             return None
@@ -989,6 +1110,9 @@ class STTManager:
                 audio_data = data.astype(np.float32) / 32768.0
                 audio_data = audio_data.flatten()
 
+                # Denoise for better wake word detection
+                audio_data = self._denoise_audio(audio_data, SHERPA_RATE)
+
                 try:
                     s = self.sherpa_recognizer.create_stream()
                     s.accept_waveform(SHERPA_RATE, audio_data)
@@ -1058,6 +1182,8 @@ class STTManager:
     
         if self.vadmethod == "silero":
             return self._is_silence_detected_silero(data, detected_speech, silent_frames)
+        elif self.vadmethod == "sherpa-onnx":
+            return self._is_silence_detected_sherpa_onnx(data, detected_speech, silent_frames)
         elif self.vadmethod == "rms":
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
         else:
@@ -1165,6 +1291,40 @@ class STTManager:
             # Return safe default values
             return False, detected_speech, silent_frames
   
+    def _is_silence_detected_sherpa_onnx(self, data, detected_speech, silent_frames):
+        """Sherpa-onnx Silero VAD-based silence detection (no torch required)."""
+        update_bar, clear_bar = self._get_progress_bar()
+
+        try:
+            if self.sherpa_vad is None:
+                return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+
+            audio_float = data.astype(np.float32).flatten() / 32768.0
+
+            self.sherpa_vad.accept_waveform(audio_float)
+
+            if self.sherpa_vad.is_speech_detected():
+                detected_speech = True
+                silent_frames = 0
+                clear_bar()
+                # Flush detected segments to prevent buffer buildup
+                while not self.sherpa_vad.empty():
+                    self.sherpa_vad.pop()
+            else:
+                silent_frames += 1
+                update_bar(silent_frames, self.MAX_SILENT_FRAMES)
+
+            if silent_frames > self.MAX_SILENT_FRAMES:
+                clear_bar()
+                self.sherpa_vad.reset()
+                return True, detected_speech, silent_frames
+
+            return False, detected_speech, silent_frames
+
+        except Exception as e:
+            queue_message(f"WARNING: sherpa-onnx VAD error, falling back to RMS: {e}")
+            return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+
     # === Audio adjustments ===
     
     def _measure_background_noise(self):

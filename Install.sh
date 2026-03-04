@@ -1058,6 +1058,86 @@ rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2                   
         fi
     fi
 
+    # Sherpa-onnx Silero VAD model (~2MB, enables sherpa-onnx VAD without torch)
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" || "$PI_VERSION" == "pi3" ]]; then
+        if [ ! -f "stt/silero_vad.onnx" ]; then
+            echo ""
+            read -p "| Download sherpa-onnx Silero VAD model (~2MB)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading Silero VAD model..." "info"
+                mkdir -p stt
+                if wget -q --show-progress -O stt/silero_vad.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx; then
+                    echo "|  [OK] Silero VAD model installed"
+                else
+                    echo "| [!] Failed to download Silero VAD model"
+                fi
+            fi
+        fi
+    fi
+
+    # Sherpa-onnx GTCRN denoiser model (~5MB, optional audio denoising)
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        if [ ! -f "stt/gtcrn_simple.onnx" ]; then
+            echo ""
+            read -p "| Download sherpa-onnx speech denoiser model (~5MB)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading GTCRN denoiser model..." "info"
+                mkdir -p stt
+                if wget -q --show-progress -O stt/gtcrn_simple.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-denoiser-models/gtcrn_simple.onnx; then
+                    echo "|  [OK] GTCRN denoiser model installed"
+                else
+                    echo "| [!] Failed to download GTCRN denoiser model"
+                fi
+            fi
+        fi
+    fi
+
+    # Sherpa-onnx punctuation model (~200MB, optional punctuation restoration)
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        if [ ! -d "stt/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12" ]; then
+            echo ""
+            read -p "| Download sherpa-onnx punctuation model (~200MB)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading punctuation model..." "info"
+                mkdir -p stt
+                cd stt
+                if wget -q --show-progress https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2; then
+                    tar xjf sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2
+                    rm sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2
+                    echo "|  [OK] Punctuation model installed"
+                else
+                    echo "| [!] Failed to download punctuation model"
+                fi
+                cd ..
+            fi
+        fi
+    fi
+
+    # Sherpa-onnx Kokoro TTS model (~100MB, optional offline TTS)
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        if ! ls tts/kokoro-* 1>/dev/null 2>&1; then
+            echo ""
+            read -p "| Download sherpa-onnx Kokoro TTS model (~100MB)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading Kokoro TTS model..." "info"
+                mkdir -p tts
+                cd tts
+                if wget -q --show-progress https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-en-v0_19.tar.bz2; then
+                    tar xjf kokoro-en-v0_19.tar.bz2
+                    rm kokoro-en-v0_19.tar.bz2
+                    echo "|  [OK] Kokoro TTS model installed"
+                else
+                    echo "| [!] Failed to download Kokoro TTS model"
+                fi
+                cd ..
+            fi
+        fi
+    fi
+
     if [ -z "$DISPLAY" ]; then
         export DISPLAY=:0
         echo "|  Display configuration set: $DISPLAY"
@@ -1065,7 +1145,7 @@ rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2                   
         echo "|  Display configuration preserved: $DISPLAY"
     fi
     echo ""
-    
+
     tars_say "Final system verification..." "info"
     cd ..
     
