@@ -387,45 +387,45 @@ def load_config():
             "invert_y": config.getboolean('CONTROLS', 'invert_y', fallback=False),
         },
         "STT": {
-            "language" : config['STT']['language'],
-            "wake_word": config['STT']['wake_word'],
-            "sensitivity": config['STT']['sensitivity'],
+            "use_indicators": config.getboolean('STT', 'use_indicators'),
             "stt_processor": config['STT']['stt_processor'],
+            "wake_word_processor": config['STT']['wake_word_processor'],
+            "wake_word": config['STT']['wake_word'],
+            "vad_method": config['STT']['vad_method'],
+            "sensitivity": config['STT']['sensitivity'],
             "external_url": config['STT']['external_url'],
             "whisper_model": config['STT']['whisper_model'],
             "vosk_model": config['STT']['vosk_model'],
-            "use_indicators": config.getboolean('STT', 'use_indicators'),
-            "vad_method": config['STT']['vad_method'],
             "speechdelay": int(config['STT']['speechdelay']),
             "picovoice_keyword_path": config['STT']['picovoice_keyword_path'],
-            "wake_word_processor": config['STT']['wake_word_processor'],
+            "language": config['STT']['language'],
             "picovoice_api_key": os.getenv('PICOVOICE_API_KEY')
         },
         "CHAR": {
             "character_name": character_name,
             "character_card_path": config['CHAR']['character_card_path'],
-            "user_name": config['CHAR']['user_name'],
-            "user_details": config['CHAR']['user_details'],
-            "traits": persona_traits,
-            "responses": config['CHAR']['responses'],
-            "thinking_responses": config['CHAR']['thinking_responses'],
+            "location_name": config.get('CHAR', 'location_name', fallback=''),
             "latitude": config.get('CHAR', 'latitude', fallback=''),
             "longitude": config.get('CHAR', 'longitude', fallback=''),
-            "location_name": config.get('CHAR', 'location_name', fallback=''),
+            "user_name": config['CHAR']['user_name'],
+            "user_details": config['CHAR']['user_details'],
+            "thinking_responses": config['CHAR']['thinking_responses'],
+            "responses": config['CHAR']['responses'],
+            "traits": persona_traits,
         },
         "LLM": {
             "llm_backend": config['LLM']['llm_backend'],
             "base_url": config['LLM']['base_url'],
-            "api_key": get_api_key(config['LLM']['llm_backend']),
             "openai_model": config['LLM']['openai_model'],
             "grok_model": config['LLM']['grok_model'],
-            "override_encoding_model": config['LLM']['override_encoding_model'],
+            "systemprompt": config['LLM']['systemprompt'],
             "contextsize": int(config['LLM']['contextsize']),
             "max_tokens": int(config['LLM']['max_tokens']),
+            "seed": int(config['LLM']['seed']),
             "temperature": float(config['LLM']['temperature']),
             "top_p": float(config['LLM']['top_p']),
-            "seed": int(config['LLM']['seed']),
-            "systemprompt": config['LLM']['systemprompt'],
+            "override_encoding_model": config['LLM']['override_encoding_model'],
+            "api_key": get_api_key(config['LLM']['llm_backend']),
         },
         "VISION": {
             "enabled": config.getboolean('VISION', 'enabled'),
@@ -458,9 +458,9 @@ def load_config():
         "RAG": {
             "enabled": config.getboolean('RAG', 'enabled', fallback=True),
             "enable_topic_tracking": config.getboolean('RAG', 'enable_topic_tracking'),
+            "strategy": config.get('RAG', 'strategy', fallback='naive'),
             "context_window": config.getint('RAG', 'context_window', fallback=2),
             "max_memories": config.getint('RAG', 'max_memories', fallback=3),
-            "strategy": config.get('RAG', 'strategy', fallback='naive'),
             "vector_weight": config.getfloat('RAG', 'vector_weight', fallback=0.5),
             "top_k": config.getint('RAG', 'top_k', fallback=5),
             "recency_boost_days": config.getint('RAG', 'recency_boost_days', fallback=7),
@@ -514,17 +514,17 @@ def load_config():
             "url": config['STABLE_DIFFUSION']['url'],
             "comfyui_workflow": config.get('STABLE_DIFFUSION', 'comfyui_workflow', fallback='Documentation/Comfy_UI_SD.json'),
             "comfyui_img2img_workflow": config.get('STABLE_DIFFUSION', 'comfyui_img2img_workflow', fallback='Documentation/Comfy_UI_IMG2IMG.json'),
-            "prompt_prefix": config['STABLE_DIFFUSION']['prompt_prefix'],
-            "prompt_postfix": config['STABLE_DIFFUSION']['prompt_postfix'],
             "seed": int(config['STABLE_DIFFUSION']['seed']),
-            "sampler_name": config['STABLE_DIFFUSION']['sampler_name'].strip('"'),
             "denoising_strength": float(config['STABLE_DIFFUSION']['denoising_strength']),
             "steps": int(config['STABLE_DIFFUSION']['steps']),
             "cfg_scale": float(config['STABLE_DIFFUSION']['cfg_scale']),
+            "sampler_name": config['STABLE_DIFFUSION']['sampler_name'].strip('"'),
+            "prompt_prefix": config['STABLE_DIFFUSION']['prompt_prefix'],
+            "prompt_postfix": config['STABLE_DIFFUSION']['prompt_postfix'],
+            "negative_prompt": config['STABLE_DIFFUSION']['negative_prompt'],
             "width": int(config['STABLE_DIFFUSION']['width']),
             "height": int(config['STABLE_DIFFUSION']['height']),
             "restore_faces": config.getboolean('STABLE_DIFFUSION', 'restore_faces'),
-            "negative_prompt": config['STABLE_DIFFUSION']['negative_prompt'],
         },
         "UI": {
             "webui_enabled": config.getboolean('UI', 'webui_enabled', fallback=True),
@@ -544,14 +544,13 @@ def load_config():
             "screensaver_cycle_interval": config.getint('UI', 'screensaver_cycle_interval', fallback=300),
             "screensaver_list": _parse_screensaver_list(config.get('UI', 'screensaver_list', fallback='random')),
         },
-        "BATTERY": {
-            "battery_capacity_mAh":  int(config['BATTERY']['battery_capacity_mAh']),
-            "battery_initial_voltage":  float(config['BATTERY']['battery_initial_voltage']),
-            "battery_cutoff_voltage":  float(config['BATTERY']['battery_cutoff_voltage']),
-            "auto_shutdown": config.getboolean('BATTERY', 'auto_shutdown')     
-        },
         "MISC": {
-            "ventilate": config.getboolean('MISC', 'ventilate', fallback=False), 
+            "ventilate": config.getboolean('MISC', 'ventilate', fallback=False),
+            "battery_enabled": config.getboolean('MISC', 'battery_enabled', fallback=False),
+            "battery_auto_shutdown": config.getboolean('MISC', 'battery_auto_shutdown', fallback=False),
+            "battery_capacity_mAh": int(config.get('MISC', 'battery_capacity_mAh', fallback='3000')),
+            "battery_initial_voltage": float(config.get('MISC', 'battery_initial_voltage', fallback='12')),
+            "battery_cutoff_voltage": float(config.get('MISC', 'battery_cutoff_voltage', fallback='10')),
         }
     }
 
@@ -633,11 +632,11 @@ CONFIG_METADATA = {
         'longitude': {
             'description': 'Your longitude coordinate (the east/west part of your GPS location). This works together with latitude to pinpoint your location. For example, New York City is about -74.0060. West of the Prime Meridian is negative. Search "my coordinates" on Google to find yours.'
         },
-        'user_details': {
-            'description': 'Tell TARS a little about yourself so it can personalize its responses. This info gets fed to the AI so it knows who it is talking to. For example: "Species: Human. Gender: Female. Likes: gardening and cooking." You can put whatever you want here, or leave it blank.'
-        },
         'user_name': {
             'description': 'Type your name here. This is how TARS will call you when it talks to you. For example, if you put "Sarah", TARS might say "Hey Sarah, what do you need?"'
+        },
+        'user_details': {
+            'description': 'Tell TARS a little about yourself so it can personalize its responses. This info gets fed to the AI so it knows who it is talking to. For example: "Species: Human. Gender: Female. Likes: gardening and cooking." You can put whatever you want here, or leave it blank.'
         },
         'thinking_responses': {
             'description': 'After TARS hears your question, it takes a moment to think of an answer (the AI needs time to generate a response). During that pause, TARS will say one of these filler phrases so you know it is working and did not freeze. Things like "Let me think..." or "One moment..." You can customize these the same way as the responses above. Set to [] (empty brackets) if you want silence while it thinks.'
@@ -649,12 +648,16 @@ CONFIG_METADATA = {
     'LLM': {
         '__description__': 'Configure the AI brain that generates TARS responses',
         'llm_backend': {
-            'options': ['openai', 'grok', 'ooba', 'tabby', 'deepinfra', 'openai_compatible'],
-            'description': 'Choose which AI service TARS talks to for generating its responses. "openai" uses OpenAI (ChatGPT) and auto-fills the URL. "grok" uses xAI and auto-fills the URL. "deepinfra" uses DeepInfra and auto-fills the URL. "ooba" and "tabby" are for self-hosted models - set your own URL. "openai_compatible" is for any OpenAI-compatible API (Featherless, Ollama, LM Studio, etc.) - set your own URL and it will never be overwritten. If you are not sure, start with "openai".'
+            'options': ['openai', 'grok', 'ooba', 'tabby', 'deepinfra', 'other'],
+            'description': 'Choose which AI service TARS talks to for generating its responses. "openai" uses OpenAI (ChatGPT) and auto-fills the URL. "grok" uses xAI and auto-fills the URL. "deepinfra" uses DeepInfra and auto-fills the URL. "ooba" and "tabby" are for self-hosted models - set your own URL. "other" is for any OpenAI-compatible API (Featherless, Ollama, LM Studio, etc.) - set your own URL and it will never be overwritten. If you are not sure, start with "openai".'
+        },
+        'base_url': {
+            'depends_on': [{'field': 'llm_backend', 'values': ['ooba', 'tabby', 'other']}],
+            'description': 'The API endpoint for your AI service. For "ooba", "tabby", and "other" backends, set your server address here (e.g. http://192.168.1.100:11434/v1 for Ollama, or https://api.featherless.ai/v1 for Featherless). For "openai", "grok", and "deepinfra" this is handled automatically.'
         },
         'openai_model': {
             'label': 'model',
-            'depends_on': [{'field': 'llm_backend', 'values': ['openai', 'ooba', 'tabby', 'deepinfra', 'openai_compatible']}],
+            'depends_on': [{'field': 'llm_backend', 'values': ['openai', 'ooba', 'tabby', 'deepinfra', 'other']}],
             'description': 'The specific AI model to use when your backend is set to "openai". Different models have different capabilities and costs. "gpt-4o-mini" is cheap and fast (good starting point). "gpt-4o" is smarter but costs more per message. If you are using Ollama on your own computer, put the model name you downloaded there, like "llama3.1:8b" or "qwen2.5:3b". This setting is ignored if you picked a different backend above.'
         },
         'grok_model': {
@@ -683,9 +686,6 @@ CONFIG_METADATA = {
             'options': ['cl100k_base', 'p50k_base', 'r50k_base', 'gpt2'],
             'description': 'DO NOT CHANGE THIS unless TARS is crashing with token counting errors. This controls how TARS counts the size of messages before sending them to the AI. "cl100k_base" works for almost all modern AI models. Only change this if you see errors in the logs about token encoding failing.'
         },
-        'base_url': {
-            'description': 'The API endpoint for your AI service. For "openai", "grok", and "deepinfra" backends this is auto-filled when you change the backend. For "openai_compatible" this is never overwritten - set it to your custom endpoint (e.g. http://192.168.1.100:11434/v1 for Ollama, or https://api.featherless.ai/v1 for Featherless).'
-        },
     },
     'STT': {
         '__description__': 'Configure how TARS listens to you - wake word, speech recognition, and when to stop listening',
@@ -696,10 +696,6 @@ CONFIG_METADATA = {
             'options': ['vosk', 'faster-whisper', 'silero', 'fastrtc', 'openai', 'external'],
             'description': 'After TARS hears the wake word, this is the software that converts your actual speech into text. Think of it as the "ears" of TARS. "fastrtc" sends your audio to the cloud for fast, accurate transcription (recommended if you have internet). "vosk" runs entirely on your Pi with no internet needed, but is less accurate. "faster-whisper" also runs on your Pi and is more accurate than vosk but needs a Pi 5. "openai" uses OpenAI\'s Whisper service (best for non-English languages, needs API key and internet). "external" lets you point to your own speech-to-text server running elsewhere.'
         },
-        'vad_method': {
-            'options': ['silero', 'rms'],
-            'description': 'VAD stands for "Voice Activity Detection" - this is how TARS figures out when you have STOPPED talking so it can process your message. "rms" simply listens for silence (when the volume drops below a threshold). It is lightweight and works on any Pi. "silero" uses a small AI model to detect speech vs silence, which is more accurate (it won\'t be fooled by background noise as easily) but uses more processing power - only recommended for Pi 5.'
-        },
         'wake_word_processor': {
             'options': ['picovoice', 'fastrtc', 'atomik'],
             'description': 'The software that listens for your wake word. "atomik" is built right into TARS, completely free, and works offline - this is the recommended choice for most people. You can adjust how sensitive it is with the "sensitivity" setting below. "fastrtc" uses an internet-based service for detection. "picovoice" is a professional wake word service that is very accurate but requires you to sign up for a free API key at picovoice.ai and put it in your .env file.'
@@ -707,9 +703,9 @@ CONFIG_METADATA = {
         'wake_word': {
             'description': 'The magic phrase you say to get TARS attention, like saying "Hey Siri" or "OK Google". TARS is always listening in the background for this specific phrase. When it hears it, it "wakes up" and starts recording whatever you say next. You can change this to anything you want, but shorter phrases (2-3 syllables) work best. For example: "hey tars", "ok robot", "computer". Avoid very common words that might trigger accidentally.'
         },
-        'language': {
-            'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
-            'description': 'What language are you speaking to TARS? Set this to your spoken language. IMPORTANT: If you pick anything other than English, you should also change the "stt_processor" setting below to "openai", because most of the local (on-device) speech recognition options only work well in English.'
+        'vad_method': {
+            'options': ['silero', 'rms'],
+            'description': 'VAD stands for "Voice Activity Detection" - this is how TARS figures out when you have STOPPED talking so it can process your message. "rms" simply listens for silence (when the volume drops below a threshold). It is lightweight and works on any Pi. "silero" uses a small AI model to detect speech vs silence, which is more accurate (it won\'t be fooled by background noise as easily) but uses more processing power - only recommended for Pi 5.'
         },
         'sensitivity': {
             'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],
@@ -734,6 +730,10 @@ CONFIG_METADATA = {
         'picovoice_keyword_path': {
             'depends_on': [{'field': 'wake_word_processor', 'values': ['picovoice']}],
             'description': 'Only matters if you are using "picovoice" as your wake_word_processor. This is the path to a special file (.ppn) that Picovoice uses to recognize your wake word. You can create custom wake word files for free at console.picovoice.ai. If you are not using picovoice, ignore this setting.'
+        },
+        'language': {
+            'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
+            'description': 'What language are you speaking to TARS? Set this to your spoken language. IMPORTANT: If you pick anything other than English, you should also change the "stt_processor" setting below to "openai", because most of the local (on-device) speech recognition options only work well in English.'
         },
     },
     'TTS': {
@@ -811,6 +811,11 @@ CONFIG_METADATA = {
         'enabled': {
             'description': 'Master switch for TARS long-term memory. When ON, TARS saves conversations and recalls relevant past interactions to give more personal, context-aware responses over time. Turn OFF if you want TARS to have no memory of past conversations, or if you are running low on storage/resources.'
         },
+        'strategy': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'options': ['naive', 'hybrid'],
+            'description': 'How TARS searches through its memories. "hybrid" (recommended) uses two different search methods together - it looks for memories that are similar in meaning AND memories that contain matching keywords. This gives the best results. "naive" only uses meaning-based search, which is faster but might miss some relevant memories. Unless you are having performance issues, stick with "hybrid".'
+        },
         'enable_topic_tracking': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'When ON, TARS creates summaries of conversation topics over time. This is like TARS writing notes in a journal about what you have been talking about. These topic summaries help TARS remember broad themes from weeks or months ago, even when the individual conversation details have faded. This gives TARS a much better long-term memory. Recommended to leave ON.'
@@ -822,11 +827,6 @@ CONFIG_METADATA = {
         'max_memories': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'Out of all the memories TARS finds (controlled by top_k above), only this many "best" results get the full context expansion (the context_window setting). So if top_k is 5 and max_memories is 3, TARS finds 5 relevant memories but only the 3 most relevant ones get surrounding context included. This keeps things from getting too large. 2-5 works well.'
-        },
-        'strategy': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'options': ['naive', 'hybrid'],
-            'description': 'How TARS searches through its memories. "hybrid" (recommended) uses two different search methods together - it looks for memories that are similar in meaning AND memories that contain matching keywords. This gives the best results. "naive" only uses meaning-based search, which is faster but might miss some relevant memories. Unless you are having performance issues, stick with "hybrid".'
         },
         'top_k': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
@@ -971,21 +971,9 @@ CONFIG_METADATA = {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['comfyui']}],
             'description': 'Same as above but for image-to-image generation (where TARS modifies an existing image instead of creating one from scratch). Only used with ComfyUI.'
         },
-        'prompt_prefix': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'description': 'Text that gets automatically added to the BEGINNING of every image prompt. Use this to set a consistent art style for all generated images. For example, "in the style of midjourney" makes images look polished and artistic. You could also use "photorealistic" or "oil painting style" or "anime style". Leave empty if you do not want a default style.'
-        },
-        'prompt_postfix': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'description': 'Text that gets automatically added to the END of every image prompt. Use this to ensure consistent quality. The default adds terms like "high def" and "highly detailed" which help produce better-looking images. You can customize this to match your preferences.'
-        },
         'seed': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'Controls randomness in generated images. Leave at -1 for normal use - each image will be unique and different. If you set this to a specific number (like 12345), the EXACT same image will be generated every time you use the same prompt. This is useful for testing or if you found an image you like and want to reproduce it.'
-        },
-        'sampler_name': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111']}],
-            'description': 'The algorithm used to create the image. Different samplers produce slightly different artistic results. "Euler a" is fast and produces good results (recommended default). You generally do not need to change this unless you are experienced with Stable Diffusion and want to experiment with different visual styles.'
         },
         'denoising_strength': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
@@ -999,6 +987,10 @@ CONFIG_METADATA = {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
             'description': 'How closely the generated image follows your text description. Think of it as a "creativity vs accuracy" slider. At low values (1-5), the AI takes a lot of creative freedom and the image might not match your description well but could look artistic. At medium values (7-9), there is a good balance (recommended). At high values (10-20), the AI tries very hard to match your exact words, but the image can start looking artificial or over-processed.'
         },
+        'sampler_name': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
+            'description': 'The algorithm used to create the image. Different samplers produce slightly different artistic results. "Euler a" is fast and produces good results (recommended default). You generally do not need to change this unless you are experienced with Stable Diffusion and want to experiment with different visual styles.'
+        },
         'width': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111']}],
             'description': 'Width of the generated image in pixels. Bigger images have more detail but take longer to generate. For the standard TARS display, 480 pixels wide works well. For Stable Diffusion 1.5, the native resolution is 512x512. For SDXL, it is 1024x1024. Try to match your model\'s native resolution for best results.'
@@ -1011,30 +1003,42 @@ CONFIG_METADATA = {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111']}],
             'description': 'When ON, the image generator runs an extra step to fix faces in the generated image. AI image generators often struggle with faces - they might look distorted, have extra eyes, or weird features. This post-processing step detects faces and cleans them up. Turn ON if you are generating images of people or characters.'
         },
+        'prompt_prefix': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'description': 'Text that gets automatically added to the BEGINNING of every image prompt. Use this to set a consistent art style for all generated images. For example, "in the style of midjourney" makes images look polished and artistic. You could also use "photorealistic" or "oil painting style" or "anime style". Leave empty if you do not want a default style.'
+        },
+        'prompt_postfix': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'description': 'Text that gets automatically added to the END of every image prompt. Use this to ensure consistent quality. The default adds terms like "high def" and "highly detailed" which help produce better-looking images. You can customize this to match your preferences.'
+        },
         'negative_prompt': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'A list of things you do NOT want in the generated images. The AI will try to avoid these. The default list helps prevent common ugly artifacts like deformed body parts, extra limbs, and bad anatomy. You can add your own terms if you notice recurring problems. For example, add "blurry" if images keep coming out unfocused, or "watermark" to avoid watermark-like artifacts.'
-        },
-    },
-    'BATTERY': {
-        '__description__': 'Monitor your robot battery level (only if you have an INA260 power sensor connected)',
-        'battery_capacity_mAh': {
-            'description': 'How much charge your battery can hold, measured in milliampere-hours (mAh). This number is printed on your battery. Common examples: a small battery might be 3000 mAh (3Ah), a medium one 5600 mAh (5.6Ah). TARS uses this to calculate the remaining battery percentage. If the percentage seems wrong, double-check this number against your battery label.'
-        },
-        'battery_initial_voltage': {
-            'description': 'The voltage of your battery when it is fully charged. This depends on your battery type. Most common for TARS builds is a 3S LiPo at 12.6V when full, or 12V for simplicity. If you are using a USB power bank, it would be 5V. Check your battery label or charger to find the full-charge voltage. TARS uses this as the "100%" reference point.'
-        },
-        'battery_cutoff_voltage': {
-            'description': 'The lowest voltage your battery should EVER reach. Draining a battery below this point can permanently damage it or even make it dangerous. For a 3S LiPo battery, this is about 10.5V. For a 4S LiPo, about 14V. TARS uses this as the "0%" reference point. If auto_shutdown is ON, TARS will turn off the Pi before reaching this voltage to protect your battery.'
-        },
-        'auto_shutdown': {
-            'description': 'VERY IMPORTANT for battery-powered builds. When ON, TARS will automatically and safely shut down the Raspberry Pi when the battery gets critically low (near 0%). This protects your Pi from suddenly losing power mid-operation (which can corrupt the SD card) and protects your battery from being over-drained (which can permanently kill it). STRONGLY recommended to leave this ON if you are running on battery.'
         },
     },
     'MISC': {
         '__description__': 'Other settings that do not fit in the categories above',
         'ventilate': {
             'description': 'When ON, TARS will periodically shift its body into a position that lets more air flow through the case. This helps keep the electronics cool, especially if your TARS is in a sealed or enclosed case where heat can build up. If your Pi is running hot (check with show_cpu_temp in the UI section), try turning this ON.'
+        },
+        'battery_enabled': {
+            'description': 'Master switch for battery monitoring. Turn ON if your TARS has an INA260 power sensor connected. When enabled, TARS tracks battery voltage and percentage, displays it on the dashboard, and can optionally shut down safely when the battery runs low. Leave OFF if you are running from a wall adapter or do not have the INA260 sensor.'
+        },
+        'battery_auto_shutdown': {
+            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
+            'description': 'VERY IMPORTANT for battery-powered builds. When ON, TARS will automatically and safely shut down the Raspberry Pi when the battery gets critically low (near 0%). This protects your Pi from suddenly losing power mid-operation (which can corrupt the SD card) and protects your battery from being over-drained (which can permanently kill it). STRONGLY recommended to leave this ON if you are running on battery.'
+        },
+        'battery_capacity_mAh': {
+            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
+            'description': 'How much charge your battery can hold, measured in milliampere-hours (mAh). This number is printed on your battery. Common examples: a small battery might be 3000 mAh (3Ah), a medium one 5600 mAh (5.6Ah). TARS uses this to calculate the remaining battery percentage. If the percentage seems wrong, double-check this number against your battery label.'
+        },
+        'battery_initial_voltage': {
+            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
+            'description': 'The voltage of your battery when it is fully charged. This depends on your battery type. Most common for TARS builds is a 3S LiPo at 12.6V when full, or 12V for simplicity. If you are using a USB power bank, it would be 5V. Check your battery label or charger to find the full-charge voltage. TARS uses this as the "100%" reference point.'
+        },
+        'battery_cutoff_voltage': {
+            'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
+            'description': 'The lowest voltage your battery should EVER reach. Draining a battery below this point can permanently damage it or even make it dangerous. For a 3S LiPo battery, this is about 10.5V. For a 4S LiPo, about 14V. TARS uses this as the "0%" reference point. If battery_auto_shutdown is ON, TARS will turn off the Pi before reaching this voltage to protect your battery.'
         },
     }
 }

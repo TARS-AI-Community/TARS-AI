@@ -670,14 +670,14 @@ function executeAction() {
     'DEVICE':'bi-cpu-fill','CHAR':'bi-person-fill',
     'CONTROLS':'bi-controller','STT':'bi-mic-fill','LLM':'bi-robot',
     'VISION':'bi-eye-fill','EMOTION':'bi-emoji-smile-fill','TTS':'bi-volume-up-fill',
-    'UI':'bi-display-fill','RAG':'bi-database-fill','BATTERY':'bi-battery-half',
+    'UI':'bi-display-fill','RAG':'bi-database-fill',
     'HOME_ASSISTANT':'bi-house-fill','DISCORD':'bi-discord',
     'STABLE_DIFFUSION':'bi-image-fill','MISC':'bi-wrench-adjustable'
   };
   const SECTION_LABELS = {
     'DEVICE':'Device','CHAR':'Character','CONTROLS':'Controls',
     'STT':'Speech','LLM':'AI Model','VISION':'Vision','EMOTION':'Emotion',
-    'TTS':'Voice','UI':'Display','RAG':'Memory','BATTERY':'Battery',
+    'TTS':'Voice','UI':'Display','RAG':'Memory',
     'HOME_ASSISTANT':'Home Asst','DISCORD':'Discord',
     'STABLE_DIFFUSION':'Img Gen','MISC':'Misc'
   };
@@ -690,7 +690,7 @@ function executeAction() {
     'CONTROLS',
     'HOME_ASSISTANT', 'DISCORD',
     'STABLE_DIFFUSION',
-    'BATTERY', 'MISC'
+    'MISC'
   ];
 
   let activeConfigSection = null;
