@@ -602,369 +602,369 @@ def update_character_setting(trait: str, value: int):
 
 CONFIG_METADATA = {
     'DEVICE': {
-        '__description__': 'Device profile configuration',
+        '__description__': 'Tell TARS which Raspberry Pi you have so it knows what it can do',
         'raspberry_version': {
             'options': ['pi5', 'pi4', 'pi3', 'pizero2'],
-            'description': 'Raspberry Pi model for capability detection'
-        },
-    },
-    'CHATUI': {
-        '__description__': 'Chat UI Settings',
-        'enabled': {
-            'description': 'Enable the Chat UI'
-        },
-        'port': {
-            'description': 'Port for the Chat UI'
-        },
-        'password': {
-            'description': 'Password for the Chat UI (default: tars)'
+            'description': 'Select which Raspberry Pi you have. This is important because different Pi models have different amounts of processing power. TARS uses this to automatically turn off features that would be too heavy for your Pi. For example, a Pi 5 can run everything, but a Pi Zero 2 can only use cloud services because it is too weak to process speech or AI locally. If you pick the wrong one, TARS may crash or run extremely slowly.'
         },
     },
     'CHAR': {
-        '__description__': 'Character and user settings',
+        '__description__': 'Set up who TARS is, who you are, and what TARS says when you talk to it',
         'character_card_path': {
-            'description': 'Path to character card file'
+            'description': 'This points to a file that tells TARS who it is - its name, personality, backstory, and how it should act. Think of it like a character sheet for a role-playing game. The default is the TARS character from the movie Interstellar. If you want to make your own character, create a new folder inside "character/" and put a .json file in it following the same format as the TARS one.'
         },
         'user_name': {
-            'description': 'Your name (how TARS addresses you)'
+            'description': 'Type your name here. This is how TARS will call you when it talks to you. For example, if you put "Sarah", TARS might say "Hey Sarah, what do you need?"'
         },
         'user_details': {
-            'description': 'Details about you for context'
+            'description': 'Tell TARS a little about yourself so it can personalize its responses. This info gets fed to the AI so it knows who it is talking to. For example: "Species: Human. Gender: Female. Likes: gardening and cooking." You can put whatever you want here, or leave it blank.'
         },
         'responses': {
-            'description': 'Random idle responses (JSON array)'
+            'description': 'When you say the wake word (like "Hey TARS"), TARS will immediately say one of these short phrases to let you know it heard you. This happens BEFORE it actually processes what you say next. Think of it like saying "Yeah?" when someone calls your name. You can change these to whatever you want, add new ones, or remove ones you do not like. The format is a list in square brackets with each phrase in quotes separated by commas. Set to [] (empty brackets) if you do not want any response.'
         },
         'thinking_responses': {
-            'description': 'Thinking filler responses (JSON array)'
+            'description': 'After TARS hears your question, it takes a moment to think of an answer (the AI needs time to generate a response). During that pause, TARS will say one of these filler phrases so you know it is working and did not freeze. Things like "Let me think..." or "One moment..." You can customize these the same way as the responses above. Set to [] (empty brackets) if you want silence while it thinks.'
         },
         'latitude': {
-            'description': 'TARS latitude (e.g. 45.5017)'
+            'description': 'Your latitude coordinate (the north/south part of your GPS location). TARS uses this to know where you are in the world so it can answer questions about your local weather, time zone, nearby places, etc. You can find your coordinates by searching "my coordinates" on Google. For example, New York City is about 40.7128. Just put the number here, no letters or symbols.'
         },
         'longitude': {
-            'description': 'TARS longitude (e.g. -73.5673)'
+            'description': 'Your longitude coordinate (the east/west part of your GPS location). This works together with latitude to pinpoint your location. For example, New York City is about -74.0060. West of the Prime Meridian is negative. Search "my coordinates" on Google to find yours.'
         },
         'location_name': {
-            'description': 'TARS location name (e.g. Montreal, Quebec, Canada)'
-        },
-    },
-    'CONTROLS': {
-        '__description__': 'Controller settings for physical input devices',
-        'controller_name': {
-            'description': 'Name of the connected controller'
-        },
-        'enabled': {
-            'description': 'Enable controller input'
-        },
-        'voicemovement': {
-            'description': 'Enable voice-controlled movement'
-        },
-        'swap_turn_directions': {
-            'description': 'Swap left/right turn directions'
-        },
-        'invert_y': {
-            'description': 'Invert Y-axis for D-pad/joystick (fix for controllers that report up as positive)'
-        },
-    },
-    'STT': {
-        '__description__': 'Speech-to-Text configuration',
-        'language': {
-            'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
-            'description': 'Speech recognition language'
-        },
-        'wake_word': {
-            'description': 'Phrase to activate listening'
-        },
-        'wake_word_processor': {
-            'options': ['picovoice', 'fastrtc', 'atomik'],
-            'description': 'Wake word detection engine'
-        },
-        'sensitivity': {
-            'description': 'Wake word sensitivity (1-10)'
-        },
-        'stt_processor': {
-            'options': ['vosk', 'faster-whisper', 'silero', 'fastrtc', 'openai', 'external'],
-            'description': 'Speech-to-text engine'
-        },
-        'external_url': {
-            'description': 'URL for external STT server'
-        },
-        'whisper_model': {
-            'options': ['tiny', 'base', 'small', 'medium', 'large'],
-            'description': 'Whisper model size'
-        },
-        'vosk_model': {
-            'description': 'Vosk model name'
-        },
-        'use_indicators': {
-            'description': 'Play audio indicators for listening state'
-        },
-        'vad_method': {
-            'options': ['silero', 'rms'],
-            'description': 'Voice Activity Detection method'
-        },
-        'speechdelay': {
-            'description': 'Silence duration before processing (tenths of seconds)'
-        },
-        'picovoice_keyword_path': {
-            'description': 'Path to Picovoice keyword file (.ppn)'
+            'description': 'The name of your city/area in plain text. TARS shows this to the AI alongside the coordinates so it has a human-readable name for where you are. Format it like: "City, State/Province, Country". For example: "Los Angeles, California, USA"'
         },
     },
     'LLM': {
-        '__description__': 'Large Language Model configuration',
+        '__description__': 'Configure the AI brain that generates TARS responses',
         'llm_backend': {
             'options': ['openai', 'grok', 'ooba', 'tabby', 'deepinfra'],
-            'description': 'LLM backend service'
+            'description': 'Choose which AI service TARS talks to for generating its responses. Think of this like choosing which brain to plug in. "openai" is the most common choice - it works with ChatGPT (OpenAI) but ALSO works with free alternatives like Ollama or LM Studio running on your own computer. "grok" uses Elon Musk\'s xAI service. "ooba" and "tabby" are for people who run AI models on their own gaming PC or server. "deepinfra" is another cloud AI service. If you are not sure, start with "openai".'
         },
         'base_url': {
-            'description': 'API base URL'
+            'description': 'The web address where your AI service is running. This tells TARS where to send your questions to get answers. If you are using ChatGPT/OpenAI, use: https://api.openai.com. If you are using Grok, use: https://api.x.ai. If you are running a local AI on your own computer using Ollama, use: http://YOUR-COMPUTER-IP:11434 (replace YOUR-COMPUTER-IP with your computer\'s IP address on your network, like 192.168.1.100). If you are unsure of your computer\'s IP, search "what is my local IP" on that computer.'
         },
         'openai_model': {
-            'description': 'OpenAI model name'
+            'description': 'The specific AI model to use when your backend is set to "openai". Different models have different capabilities and costs. "gpt-4o-mini" is cheap and fast (good starting point). "gpt-4o" is smarter but costs more per message. If you are using Ollama on your own computer, put the model name you downloaded there, like "llama3.1:8b" or "qwen2.5:3b". This setting is ignored if you picked a different backend above.'
         },
         'grok_model': {
-            'description': 'Grok model name'
+            'description': 'The specific Grok model to use when your backend is set to "grok". "grok-4-1-fast-non-reasoning" is fast and good for casual conversation. Only matters if you picked "grok" as your backend above.'
         },
         'override_encoding_model': {
             'options': ['cl100k_base', 'p50k_base', 'r50k_base', 'gpt2'],
-            'description': 'Token encoding model override'
+            'description': 'DO NOT CHANGE THIS unless TARS is crashing with token counting errors. This controls how TARS counts the size of messages before sending them to the AI. "cl100k_base" works for almost all modern AI models. Only change this if you see errors in the logs about token encoding failing.'
         },
         'contextsize': {
-            'description': 'Maximum token context size'
+            'description': 'How much conversation history TARS remembers in a single chat session. Measured in "tokens" (roughly: 1 token = about 1 word). A higher number means TARS can remember more of what you talked about, but it costs more money per message (if using a paid service) and can be slower. 4000 is a good default. If TARS seems to forget what you just said, try increasing this. If responses are slow or expensive, try lowering it. Most AI models have a maximum they support (check your model\'s docs).'
         },
         'max_tokens': {
-            'description': 'Maximum tokens per response'
+            'description': 'The maximum length of TARS responses, measured in tokens (roughly 1 token = 1 word). If set to 200, TARS can say about 200 words max per response. Set this lower (200-300) for quick conversational replies, or higher (500-1000) if you want TARS to give long, detailed explanations. Setting it very high does not mean every response will be long - it just allows longer responses when needed.'
         },
         'temperature': {
-            'description': 'Randomness (0.0-1.0, higher = more random)'
+            'description': 'Controls how creative vs predictable TARS is. Think of it like a "creativity dial". At 0.1, TARS gives very safe, predictable, repetitive answers (good for factual questions). At 0.7-0.8, TARS is natural and conversational (recommended for most people). At 1.5+, TARS gets very creative and random, which can be fun but also nonsensical. Most people should leave this between 0.5 and 0.9.'
         },
         'top_p': {
-            'description': 'Nucleus sampling threshold'
+            'description': 'Another way to control how creative TARS is (works alongside temperature). At 0.9 (the default), TARS considers many possible words when forming a sentence, giving natural-sounding responses. At 0.5, it only picks from the most obvious words, making responses more focused but potentially robotic. Most people should leave this at 0.9 and just adjust temperature instead.'
         },
         'seed': {
-            'description': 'Random seed (-1 for random)'
+            'description': 'Leave this at -1 for normal use. If you set it to a specific number (like 42), TARS will try to give the exact same answer every time you ask the same question. This is only useful for testing or debugging. -1 means every response is unique.'
         },
         'systemprompt': {
-            'description': 'System prompt defining LLM behavior'
+            'description': 'Hidden instructions that TARS reads before every conversation. This tells the AI HOW to behave in general - like being helpful, conversational, staying in character, etc. This is different from the character card: the character card defines WHO TARS is, while this prompt defines the general RULES for how it should respond. Most people can leave the default as-is.'
         },
     },
-    'VISION': {
-        '__description__': 'Vision/image recognition configuration',
-        'enabled': {
-            'description': 'Enable vision module'
+    'STT': {
+        '__description__': 'Configure how TARS listens to you - wake word, speech recognition, and when to stop listening',
+        'language': {
+            'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
+            'description': 'What language are you speaking to TARS? Set this to your spoken language. IMPORTANT: If you pick anything other than English, you should also change the "stt_processor" setting below to "openai", because most of the local (on-device) speech recognition options only work well in English.'
         },
-        'server_hosted': {
-            'description': 'Vision server is hosted locally'
+        'wake_word': {
+            'description': 'The magic phrase you say to get TARS attention, like saying "Hey Siri" or "OK Google". TARS is always listening in the background for this specific phrase. When it hears it, it "wakes up" and starts recording whatever you say next. You can change this to anything you want, but shorter phrases (2-3 syllables) work best. For example: "hey tars", "ok robot", "computer". Avoid very common words that might trigger accidentally.'
         },
-        'base_url': {
-            'description': 'Vision server API URL'
+        'wake_word_processor': {
+            'options': ['picovoice', 'fastrtc', 'atomik'],
+            'description': 'The software that listens for your wake word. "atomik" is built right into TARS, completely free, and works offline - this is the recommended choice for most people. You can adjust how sensitive it is with the "sensitivity" setting below. "fastrtc" uses an internet-based service for detection. "picovoice" is a professional wake word service that is very accurate but requires you to sign up for a free API key at picovoice.ai and put it in your .env file.'
         },
-    },
-    'EMOTION': {
-        '__description__': 'Emotion detection for avatars',
-        'enabled': {
-            'description': 'Enable emotion detection'
+        'sensitivity': {
+            'description': 'How carefully TARS listens for the wake word (only works with the "atomik" wake word processor). Scale of 1 to 10. At 1, TARS triggers very easily - even similar-sounding words might activate it (annoying but you will never miss a command). At 10, you need to say the wake word very clearly and precisely for it to work (fewer accidental activations but you might have to repeat yourself). Start at 5 and adjust from there. If TARS keeps activating randomly, increase this number. If TARS never hears you, decrease it.'
         },
-        'emotion_model': {
-            'description': 'HuggingFace model for emotion analysis'
+        'stt_processor': {
+            'options': ['vosk', 'faster-whisper', 'silero', 'fastrtc', 'openai', 'external'],
+            'description': 'After TARS hears the wake word, this is the software that converts your actual speech into text. Think of it as the "ears" of TARS. "fastrtc" sends your audio to the cloud for fast, accurate transcription (recommended if you have internet). "vosk" runs entirely on your Pi with no internet needed, but is less accurate. "faster-whisper" also runs on your Pi and is more accurate than vosk but needs a Pi 5. "openai" uses OpenAI\'s Whisper service (best for non-English languages, needs API key and internet). "external" lets you point to your own speech-to-text server running elsewhere.'
+        },
+        'external_url': {
+            'description': 'If you set stt_processor to "external", put the web address of your speech-to-text server here. This is for advanced users who run their own Whisper or other STT server on a separate machine. If you are not using "external" mode, this setting is ignored. Format: http://IP-ADDRESS:PORT'
+        },
+        'whisper_model': {
+            'options': ['tiny', 'base', 'small', 'medium', 'large'],
+            'description': 'If you are using "faster-whisper" as your stt_processor, this controls the size of the AI model used to understand your speech. Bigger models understand you better but use more of your Pi\'s memory and are slower. "tiny" is the fastest and uses least memory (~1GB) - good enough for clear speech in a quiet room. "base" is a good middle ground. "small" is noticeably more accurate but uses ~2GB of RAM. "medium" and "large" are too heavy for a Raspberry Pi and will likely crash. If you are not using faster-whisper, this setting is ignored.'
+        },
+        'vosk_model': {
+            'description': 'If you are using "vosk" as your stt_processor, this is the name of the language model it uses. The default "vosk-model-small-en-us-0.15" is small and fast. You can download other models from alphacephei.com/vosk/models for different languages or better accuracy. "vosk-model-en-us-0.22" is a larger, more accurate English model. If you are not using vosk, this setting is ignored.'
+        },
+        'use_indicators': {
+            'description': 'When this is on, TARS will play a short beep sound when it starts listening to you (after the wake word) and another beep when it stops listening. This is really helpful so you know when to start and stop talking. Turn this off if the beeps annoy you.'
+        },
+        'vad_method': {
+            'options': ['silero', 'rms'],
+            'description': 'VAD stands for "Voice Activity Detection" - this is how TARS figures out when you have STOPPED talking so it can process your message. "rms" simply listens for silence (when the volume drops below a threshold). It is lightweight and works on any Pi. "silero" uses a small AI model to detect speech vs silence, which is more accurate (it won\'t be fooled by background noise as easily) but uses more processing power - only recommended for Pi 5.'
+        },
+        'speechdelay': {
+            'description': 'After you stop talking, TARS waits this long before it decides you are done and starts processing your message. The number is in tenths of a second, so 20 = 2 seconds. If this is too short (like 5 = half a second), TARS will cut you off mid-sentence every time you pause to think. If it is too long (like 40 = 4 seconds), there will be an awkward silence after every sentence before TARS responds. 15-25 (1.5 to 2.5 seconds) works well for most people.'
+        },
+        'picovoice_keyword_path': {
+            'description': 'Only matters if you are using "picovoice" as your wake_word_processor. This is the path to a special file (.ppn) that Picovoice uses to recognize your wake word. You can create custom wake word files for free at console.picovoice.ai. If you are not using picovoice, ignore this setting.'
         },
     },
     'TTS': {
-        '__description__': 'Text-to-Speech configuration',
+        '__description__': 'Configure how TARS speaks - choose a voice engine and customize how it sounds',
         'ttsoption': {
             'options': ['espeak', 'piper', 'silero', 'alltalk', 'elevenlabs', 'minimax', 'openai', 'azure'],
-            'description': 'TTS engine'
+            'description': 'Choose how TARS speaks out loud. This is the most important voice setting. FREE options that work without internet: "piper" sounds natural and is the best free option (recommended for Pi 5 and Pi 4). "espeak" is a basic robotic-sounding voice but works on any Pi, even very weak ones. "silero" is another good-sounding option but only works on Pi 5. If you have a separate PC, "alltalk" lets you run a high-quality voice server on it. PAID cloud options (need internet + API key in .env file): "elevenlabs" has the most natural, human-like voices. "openai" is good quality and works well in many languages. "minimax" and "azure" are other cloud options with different voice styles.'
         },
         'ttsurl': {
-            'description': 'TTS server URL (for alltalk)'
+            'description': 'If you picked "alltalk" above, put the web address of your AllTalk server here. AllTalk is a voice synthesis program you run on a separate, more powerful computer (like a gaming PC). Format: http://IP-ADDRESS:PORT (for example: http://192.168.1.100:7852). If you are not using alltalk, this setting is ignored.'
         },
         'tts_voice': {
-            'description': 'Voice name (for azure/alltalk)'
+            'description': 'The specific voice to use, but this only applies to "alltalk" or "azure" TTS options. For AllTalk: enter the name of a cloned voice you set up in AllTalk (like "TARS2"). For Azure: enter the full voice ID from Microsoft (like "en-US-Steffan:DragonHDLatestNeural"). If you are using piper, espeak, elevenlabs, or other engines, they have their own voice settings below.'
         },
         'azure_region': {
             'options': ['eastus', 'eastus2', 'westus', 'westus2', 'centralus', 'northeurope', 'westeurope'],
-            'description': 'Azure region'
+            'description': 'Only matters if you are using "azure" as your TTS engine. This must match the region you selected when you created your Azure Speech Services account. If you are in the US, "eastus" is a common choice. Pick the region closest to you for the fastest response. If you are not using Azure, ignore this.'
         },
         'elevenlabs_voice_id': {
-            'description': 'ElevenLabs voice ID'
+            'description': 'Only matters if you are using "elevenlabs" as your TTS engine. This is the unique ID of the voice you want to use. Log in to elevenlabs.io, go to the Voices section, click on a voice, and copy its Voice ID. The default ID is for a voice called "George". You can also clone your own voice on ElevenLabs and use that ID here.'
         },
         'elevenlabs_model': {
             'options': ['eleven_multilingual_v2', 'eleven_monolingual_v1', 'eleven_turbo_v2'],
-            'description': 'ElevenLabs model'
+            'description': 'Only matters if you are using "elevenlabs" as your TTS engine. "eleven_multilingual_v2" can speak in 29 different languages and is the recommended choice. "eleven_monolingual_v1" only speaks English but is slightly faster. "eleven_turbo_v2" is the fastest but sounds slightly lower quality.'
         },
         'minimax_voice_id': {
-            'description': 'Minimax voice ID'
+            'description': 'Only matters if you are using "minimax" as your TTS engine. This is the name of the Minimax voice to use. You can browse available voices on the Minimax website. "English_CaptivatingStoryteller" is a good default for an engaging male voice.'
         },
         'minimax_model': {
             'options': ['speech-2.6-turbo', 'speech-2.8-turbo', 'speech-2.6-hd', 'speech-2.8-hd'],
-            'description': 'Minimax model'
+            'description': 'Only matters if you are using "minimax" as your TTS engine. The "turbo" versions are faster (less delay before TARS speaks). The "hd" versions sound better quality but take slightly longer. Higher numbers (2.8) are newer and generally better than lower numbers (2.6).'
         },
         'openai_voice': {
             'options': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
-            'description': 'OpenAI TTS voice'
+            'description': 'Only matters if you are using "openai" as your TTS engine. Each voice has a different personality: "alloy" is neutral and balanced. "echo" is warm and conversational. "fable" has a British accent and is expressive. "onyx" is deep and authoritative (the best match for TARS from the movie). "nova" is friendly and upbeat. "shimmer" is clear and gentle. Try a few and see which one you like!'
         },
         'toggle_charvoice': {
-            'description': 'Use character-specific voice settings'
+            'description': 'When this is ON, TARS will use voice settings stored in the character card file instead of the settings on this page. This is useful if you have multiple characters (like TARS, a pirate, a wizard, etc.) and each one should have a different voice. When OFF, the voice settings on this page are always used regardless of which character is loaded.'
+        },
+    },
+    'EMOTION': {
+        '__description__': 'Controls whether TARS shows emotions on its face/display based on what it says',
+        'enabled': {
+            'description': 'When ON, TARS analyzes its own responses to figure out the emotion behind them (happy, sad, angry, surprised, etc.) and then shows matching facial expressions on its screen. This makes TARS feel more alive and expressive. Turn this OFF if you are not using the TARS display screen, or if you want to save processing power on weaker Pi models. The emotion detection runs a small AI model that uses some RAM and CPU.'
+        },
+        'emotion_model': {
+            'description': 'The name of the AI model used to detect emotions in text. The default model can recognize 28 different emotions like joy, sadness, anger, surprise, fear, and more. It gets downloaded automatically the first time you enable emotion detection (about 500MB download). You should not need to change this unless you want to experiment with a different emotion model from HuggingFace.'
+        },
+    },
+    'VISION': {
+        '__description__': 'Let TARS see the world through a camera and describe what it sees',
+        'enabled': {
+            'description': 'When ON, TARS can use a camera to see and describe what is in front of it. You can ask "what do you see?" and TARS will take a picture and tell you. This loads an image recognition AI model into memory which uses about 1GB+ of RAM, so turn this OFF if you do not have a camera connected or if your Pi is running low on memory.'
+        },
+        'server_hosted': {
+            'description': 'When OFF (default), the camera image processing happens directly on your Raspberry Pi. When ON, the image is sent to a separate, more powerful computer to be processed. Turn this ON if your Pi is too weak to handle vision (Pi 3 or Pi 4), and then set up the vision server on another computer. If you have a Pi 5, you can leave this OFF to process everything locally.'
+        },
+        'base_url': {
+            'description': 'Only matters if "server_hosted" is ON. Enter the web address of the computer running the vision server. Format: http://IP-ADDRESS:PORT (for example: http://192.168.1.100:5678). The vision server script is included in the TARS project and you run it on a more powerful computer that handles the image processing.'
+        },
+    },
+    'RAG': {
+        '__description__': 'TARS long-term memory - lets TARS remember past conversations and bring up relevant info',
+        'strategy': {
+            'options': ['naive', 'hybrid'],
+            'description': 'How TARS searches through its memories. "hybrid" (recommended) uses two different search methods together - it looks for memories that are similar in meaning AND memories that contain matching keywords. This gives the best results. "naive" only uses meaning-based search, which is faster but might miss some relevant memories. Unless you are having performance issues, stick with "hybrid".'
+        },
+        'top_k': {
+            'description': 'When TARS is looking for relevant memories, this is how many memory chunks it pulls up. Think of it like asking TARS to look through its diary and pull out the 5 most relevant pages. Higher numbers mean more memories are considered (TARS has more context) but it also means longer processing time and more data sent to the AI. 3-7 is the sweet spot for most people.'
+        },
+        'context_window': {
+            'description': 'When TARS finds a relevant memory, it also grabs nearby memories for additional context. For example, if set to 2, and TARS finds a relevant memory from last Tuesday, it will also grab the 2 conversation entries before AND 2 entries after that memory. This helps TARS understand the full context of past conversations, not just isolated snippets.'
+        },
+        'max_memories': {
+            'description': 'Out of all the memories TARS finds (controlled by top_k above), only this many "best" results get the full context expansion (the context_window setting). So if top_k is 5 and max_memories is 3, TARS finds 5 relevant memories but only the 3 most relevant ones get surrounding context included. This keeps things from getting too large. 2-5 works well.'
+        },
+        'recency_boost_days': {
+            'description': 'Makes TARS prioritize recent conversations in its memory. If set to 7, any conversation from the last 7 days gets a boost in search results, making TARS more likely to reference things you talked about recently. This feels natural because in real life, recent conversations are usually more relevant. Set to 0 if you want all memories treated equally regardless of when they happened.'
+        },
+        'enable_topic_tracking': {
+            'description': 'When ON, TARS creates summaries of conversation topics over time. This is like TARS writing notes in a journal about what you have been talking about. These topic summaries help TARS remember broad themes from weeks or months ago, even when the individual conversation details have faded. This gives TARS a much better long-term memory. Recommended to leave ON.'
         },
     },
     'UI': {
-        '__description__': 'Graphical interface settings',
+        '__description__': 'Settings for the physical screen attached to your TARS robot (HDMI display), NOT the web browser page',
         'UI_Port': {
-            'description': 'Define port for the WEB UI'
+            'description': 'The network port used by the on-device display server. Most people should not change this.'
         },
         'UI_enabled': {
-            'description': 'Enable the visual UI'
+            'description': 'Master switch for the physical screen attached to your TARS robot. Turn this OFF if your TARS does not have a screen, or if you want to save resources by running "headless" (no display). When OFF, TARS still works - you just interact through the web interface or voice only.'
         },
         'use_camera_module': {
-            'description': 'Enable camera'
+            'description': 'Turn this ON if you have a Raspberry Pi camera module plugged into the flat ribbon cable connector on your Pi (called the CSI port). This lets the display show camera feeds and enables vision features. Leave OFF if you do not have a camera connected, otherwise TARS might show errors trying to access a camera that is not there.'
         },
         'show_mouse': {
-            'description': 'Show software mouse cursor'
+            'description': 'Shows a mouse cursor arrow on the TARS display. This is useful when you are setting things up or debugging, because you can see where you are clicking. For normal everyday use, you probably want this OFF for a cleaner look on the display.'
         },
         'fullscreen': {
-            'description': 'Run in fullscreen mode'
+            'description': 'When ON, the TARS display takes up the entire screen with no window borders or title bar - this is what you want for a finished robot. When OFF, it runs in a regular window that you can move and resize, which is useful during development or if you are also using the Pi desktop for other things.'
         },
         'font_size': {
-            'description': 'Font size (9-20)'
+            'description': 'How big the text is on the TARS display. If you have a small screen (like a 3.5 inch screen), use a small number (9-12) so text fits. For a medium screen (5 to 7 inches), try 12-16. For a large screen (10 inches or bigger), use 16-20. If text looks too small or too big, just adjust this number.'
         },
         'screensaver_timer': {
-            'description': 'Seconds before screensaver (0 = disabled)'
+            'description': 'After this many seconds of nobody talking to TARS, a screensaver animation will start playing on the display. Set to 0 to never show a screensaver. 300 = 5 minutes of inactivity before the screensaver kicks in. The screensaver stops automatically when you talk to TARS again.'
         },
         'screensaver_cycle_interval': {
-            'description': 'Seconds between screensaver changes'
+            'description': 'If you have multiple screensavers selected below, this is how many seconds each one plays before switching to the next one. 300 = each screensaver plays for 5 minutes before changing. Only matters if you have more than one screensaver selected.'
         },
         'screensaver_list': {
             'type': 'screensaver_select',
             'options': ['random', 'blackhole', 'waves', 'matrix', 'starfield', 'hyperspace', 'terminal', 'face', 'fractal', 'pacman', 'nebulas', 'pictures', 'dashboard', 'defrag', 'bounce', 'endurance'],
-            'description': 'Select "random" for all, or pick specific screensavers'
+            'description': 'Pick which screensaver animations play on the TARS display when idle. Select "random" to cycle through all of them, or pick specific ones you like. Each one is a different cool animation - try them out and see which ones you enjoy!'
         },
         'show_time': {
-            'description': 'Show time on screensaver'
+            'description': 'When ON, shows the current time on top of the screensaver animations. Nice if you want TARS to double as a clock when idle.'
         },
         'ampm_format': {
-            'description': 'Use AM/PM time format'
+            'description': 'Controls how the clock is displayed. ON = 12-hour format with AM/PM (like 2:30 PM). OFF = 24-hour military time (like 14:30). Pick whichever you are used to reading.'
         },
         'show_cpu_temp': {
-            'description': 'Show CPU temperature'
+            'description': 'Shows the Raspberry Pi CPU temperature on the display. Useful if your TARS is in an enclosed case and you want to keep an eye on overheating. The Pi can throttle (slow down) if it gets too hot. Normal is around 40-60 C, and above 80 C means you might need better cooling.'
         },
         'target_fps': {
-            'description': 'UI refresh rate (FPS)'
+            'description': 'How many times per second the display updates (frames per second). Higher = smoother animations but uses more CPU power. 30 is a good balance between smooth visuals and low CPU usage. If animations look choppy, try increasing it. If your Pi is running hot or slow, try lowering it to 15-20.'
         },
         'app': {
             'options': ['terminal', 'dashboard', 'clock'],
-            'description': 'Default app on startup'
+            'description': 'What shows on the TARS display when it first starts up. "terminal" shows a chat-style interface where you can see the conversation. "dashboard" shows a system status overview with various stats. "clock" shows a big clock display. You can always switch between these later.'
         },
     },
-    'RAG': {
-        '__description__': 'Retrieval Augmented Generation (Memory)',
-        'strategy': {
-            'options': ['naive', 'hybrid'],
-            'description': 'Retrieval strategy (naive=vector-only, hybrid=vector+BM25)'
+    'CHATUI': {
+        '__description__': 'Settings for the web page you use to chat with TARS from your phone/computer browser',
+        'enabled': {
+            'description': 'Master switch for the web-based chat interface. When ON, you can open a web browser on any device connected to the same WiFi/network and go to your Pi\'s IP address to chat with TARS, change settings, and more. This is the page you are probably looking at right now! Turn OFF if you only want to interact with TARS by voice.'
         },
-        'top_k': {
-            'description': 'Number of documents to retrieve'
+        'port': {
+            'description': 'The network port number for the web interface. Port 80 is the standard for websites, which means you can just type your Pi\'s IP address in the browser (like http://192.168.1.50) without adding a port number. If something else on your Pi is already using port 80, change this to something like 8080, and then you would access it at http://192.168.1.50:8080.'
         },
-        'context_window': {
-            'description': 'Memories before/after each match'
-        },
-        'max_memories': {
-            'description': 'Max results to expand'
-        },
-        'recency_boost_days': {
-            'description': 'Days to boost recent chats'
-        },
-        'enable_topic_tracking': {
-            'description': 'Enable long-term memory'
+        'password': {
+            'description': 'The password needed to log into this web interface. Anyone on your local network could potentially access it, so change this from the default to something only you know. This is NOT stored securely - it is a simple access barrier, not bank-level security.'
         },
     },
-    'BATTERY': {
-        '__description__': 'Battery monitoring configuration',
-        'battery_capacity_mAh': {
-            'description': 'Battery capacity (mAh)'
+    'CONTROLS': {
+        '__description__': 'Connect a Bluetooth or USB game controller to physically steer TARS around',
+        'controller_name': {
+            'description': 'The name of your Bluetooth or USB game controller. TARS looks for this text in the names of all connected controllers. For example, if you have an "8BitDo Pro 2" controller, just putting "8BitDo" here is enough. For Xbox controllers, put "Xbox". For PlayStation, put "PS4" or "DualSense". It just needs to match part of the controller name.'
         },
-        'battery_initial_voltage': {
-            'description': 'Fully charged voltage (e.g. 12.6)'
+        'enabled': {
+            'description': 'Master switch for game controller support. Turn ON if you have a Bluetooth or USB controller paired to your Pi and want to use it to control TARS movement and actions. Leave OFF if you do not have a controller or do not want to use one.'
         },
-        'battery_cutoff_voltage': {
-            'description': 'Minimum safe voltage (e.g. 10.0)'
+        'voicemovement': {
+            'description': 'When ON, you can tell TARS to move by voice, like saying "walk forward", "turn left", or "stop". This works even without a controller connected. When OFF, TARS can only be moved with a physical game controller.'
         },
-        'auto_shutdown': {
-            'description': 'Shutdown system when battery is critical'
+        'swap_turn_directions': {
+            'description': 'If TARS turns left when you press right on the controller (or vice versa), turn this ON to fix it. This can happen depending on how your servos are oriented.'
+        },
+        'invert_y': {
+            'description': 'If pressing up on the controller D-pad makes TARS go backward (or vice versa), turn this ON to fix it. Some controllers report the Y axis in the opposite direction.'
         },
     },
     'HOME_ASSISTANT': {
-        '__description__': 'Home Assistant integration',
+        '__description__': 'Let TARS control your smart home lights, switches, and devices through voice',
         'enabled': {
-            'description': 'Enable Home Assistant module'
+            'description': 'Turn ON to connect TARS to your Home Assistant smart home system. Once connected, you can say things like "turn off the living room lights" or "what temperature is the bedroom?" and TARS will control your smart home devices. You need a Home Assistant server already running on your network, and you need to create a Long-Lived Access Token in Home Assistant (go to your HA profile page > scroll to bottom > create token) and paste it into your .env file as HOME_ASSISTANT_TOKEN.'
         },
         'url': {
-            'description': 'Home Assistant server URL'
+            'description': 'The web address of your Home Assistant server. This is usually your HA server\'s IP address followed by port 8123. For example: http://192.168.1.50:8123. You can find this in your Home Assistant settings, or just try typing your HA server\'s IP with :8123 at the end. IMPORTANT: The access token goes in the .env file, NOT here.'
         },
     },
     'DISCORD': {
-        '__description__': 'Discord bot integration',
+        '__description__': 'Let TARS chat in a Discord server as a bot',
         'enabled': {
-            'description': 'Enable Discord integration'
+            'description': 'Turn ON to have TARS run as a Discord bot. TARS will join a specific Discord channel and respond to messages there. To set this up: 1) Go to discord.com/developers, create a new Application, go to Bot tab, create a bot, and copy the token. 2) Put that token in your .env file as DISCORD_TOKEN. 3) Invite the bot to your Discord server using the OAuth2 URL generator. 4) Set the channel_id below to the channel you want TARS to chat in.'
         },
         'channel_id': {
-            'description': 'Discord channel ID for bot messages'
+            'description': 'The ID number of the Discord channel where TARS should listen and respond. To get this: Open Discord, go to Settings > Advanced > turn on "Developer Mode". Then right-click the channel you want TARS in and click "Copy Channel ID". Paste that number here. It will be a long number like 811470553139249186.'
         },
     },
     'STABLE_DIFFUSION': {
-        '__description__': 'Image generation configuration',
+        '__description__': 'Let TARS create images from text descriptions (requires a separate computer running an image generator)',
         'enabled': {
-            'description': 'Enable image generation module'
+            'description': 'Turn ON to let TARS generate images during conversation. When someone asks TARS to draw or create an image, it will send the request to an image generation server (running on a separate computer - your Pi is not powerful enough for this). You need to have AUTOMATIC1111, ComfyUI, or an OpenAI account set up first. If you do not have any of these, leave this OFF.'
         },
         'service': {
             'options': ['automatic1111', 'comfyui', 'openai'],
-            'description': 'Image generation service'
+            'description': 'Which image generation program you are running on your other computer. "automatic1111" is the most popular free option - it is a web interface for Stable Diffusion. "comfyui" is a more advanced, node-based alternative (harder to set up but more flexible). "openai" uses OpenAI\'s DALL-E to generate images in the cloud (no separate computer needed, but costs money per image and requires an OpenAI API key).'
         },
         'url': {
-            'description': 'Image generation server URL'
+            'description': 'The web address of your image generation server on your network. Format: http://IP-ADDRESS:PORT. For AUTOMATIC1111, the default port is usually 7860 (like http://192.168.1.100:7860). For ComfyUI, the default port is usually 8188. This is ignored if you are using the "openai" service.'
         },
         'prompt_prefix': {
-            'description': 'Style prefix for image prompts'
+            'description': 'Text that gets automatically added to the BEGINNING of every image prompt. Use this to set a consistent art style for all generated images. For example, "in the style of midjourney" makes images look polished and artistic. You could also use "photorealistic" or "oil painting style" or "anime style". Leave empty if you do not want a default style.'
         },
         'prompt_postfix': {
-            'description': 'Quality postfix for image prompts'
+            'description': 'Text that gets automatically added to the END of every image prompt. Use this to ensure consistent quality. The default adds terms like "high def" and "highly detailed" which help produce better-looking images. You can customize this to match your preferences.'
         },
         'seed': {
-            'description': 'Random seed (-1 for random)'
+            'description': 'Controls randomness in generated images. Leave at -1 for normal use - each image will be unique and different. If you set this to a specific number (like 12345), the EXACT same image will be generated every time you use the same prompt. This is useful for testing or if you found an image you like and want to reproduce it.'
         },
         'sampler_name': {
-            'description': 'Diffusion sampler name'
+            'description': 'The algorithm used to create the image. Different samplers produce slightly different artistic results. "Euler a" is fast and produces good results (recommended default). You generally do not need to change this unless you are experienced with Stable Diffusion and want to experiment with different visual styles.'
         },
         'denoising_strength': {
-            'description': 'Denoising strength (0.0-1.0)'
+            'description': 'A number between 0.0 and 1.0 that controls how much creative freedom the image generator has. At lower values (0.3-0.5), images have more creative variation but may have some imperfections. At higher values (0.5-0.7), images are cleaner but more generic. When using image-to-image mode (modifying an existing image), lower values keep the original image more intact, while higher values change it more dramatically. 0.5 is a good starting point.'
         },
         'steps': {
-            'description': 'Number of diffusion steps'
+            'description': 'How many passes the AI makes over the image while creating it. More steps = better quality but takes longer to generate. 20 is a good starting point that balances speed and quality. Going above 30-40 usually does not improve the image much but makes it take noticeably longer. Going below 15 can make images look blurry or unfinished.'
         },
         'cfg_scale': {
-            'description': 'Classifier-free guidance scale'
+            'description': 'How closely the generated image follows your text description. Think of it as a "creativity vs accuracy" slider. At low values (1-5), the AI takes a lot of creative freedom and the image might not match your description well but could look artistic. At medium values (7-9), there is a good balance (recommended). At high values (10-20), the AI tries very hard to match your exact words, but the image can start looking artificial or over-processed.'
         },
         'width': {
-            'description': 'Generated image width (px)'
+            'description': 'Width of the generated image in pixels. Bigger images have more detail but take longer to generate. For the standard TARS display, 480 pixels wide works well. For Stable Diffusion 1.5, the native resolution is 512x512. For SDXL, it is 1024x1024. Try to match your model\'s native resolution for best results.'
         },
         'height': {
-            'description': 'Generated image height (px)'
+            'description': 'Height of the generated image in pixels. Works the same as width. For the TARS display, 320 pixels tall matches the screen well. Together with width, this determines the aspect ratio (shape) of the image - 480x320 gives a wide/landscape image, 320x480 gives a tall/portrait image.'
         },
         'restore_faces': {
-            'description': 'Enable face restoration'
+            'description': 'When ON, the image generator runs an extra step to fix faces in the generated image. AI image generators often struggle with faces - they might look distorted, have extra eyes, or weird features. This post-processing step detects faces and cleans them up. Turn ON if you are generating images of people or characters.'
         },
         'negative_prompt': {
-            'description': 'Negative prompt to avoid unwanted elements'
+            'description': 'A list of things you do NOT want in the generated images. The AI will try to avoid these. The default list helps prevent common ugly artifacts like deformed body parts, extra limbs, and bad anatomy. You can add your own terms if you notice recurring problems. For example, add "blurry" if images keep coming out unfocused, or "watermark" to avoid watermark-like artifacts.'
         },
         'comfyui_workflow': {
-            'description': 'ComfyUI workflow JSON path for txt2img'
+            'description': 'Only used if your service is set to "comfyui". This is the path to a workflow file (a JSON file that tells ComfyUI exactly how to generate an image). The default workflow is included in the Documentation folder. Advanced users can create custom workflows in ComfyUI and point to them here.'
         },
         'comfyui_img2img_workflow': {
-            'description': 'ComfyUI workflow JSON path for img2img'
+            'description': 'Same as above but for image-to-image generation (where TARS modifies an existing image instead of creating one from scratch). Only used with ComfyUI.'
+        },
+    },
+    'BATTERY': {
+        '__description__': 'Monitor your robot battery level (only if you have an INA260 power sensor connected)',
+        'battery_capacity_mAh': {
+            'description': 'How much charge your battery can hold, measured in milliampere-hours (mAh). This number is printed on your battery. Common examples: a small battery might be 3000 mAh (3Ah), a medium one 5600 mAh (5.6Ah). TARS uses this to calculate the remaining battery percentage. If the percentage seems wrong, double-check this number against your battery label.'
+        },
+        'battery_initial_voltage': {
+            'description': 'The voltage of your battery when it is fully charged. This depends on your battery type. Most common for TARS builds is a 3S LiPo at 12.6V when full, or 12V for simplicity. If you are using a USB power bank, it would be 5V. Check your battery label or charger to find the full-charge voltage. TARS uses this as the "100%" reference point.'
+        },
+        'battery_cutoff_voltage': {
+            'description': 'The lowest voltage your battery should EVER reach. Draining a battery below this point can permanently damage it or even make it dangerous. For a 3S LiPo battery, this is about 10.5V. For a 4S LiPo, about 14V. TARS uses this as the "0%" reference point. If auto_shutdown is ON, TARS will turn off the Pi before reaching this voltage to protect your battery.'
+        },
+        'auto_shutdown': {
+            'description': 'VERY IMPORTANT for battery-powered builds. When ON, TARS will automatically and safely shut down the Raspberry Pi when the battery gets critically low (near 0%). This protects your Pi from suddenly losing power mid-operation (which can corrupt the SD card) and protects your battery from being over-drained (which can permanently kill it). STRONGLY recommended to leave this ON if you are running on battery.'
         },
     },
     'MISC': {
-        '__description__': 'Miscellaneous settings',
+        '__description__': 'Other settings that do not fit in the categories above',
         'ventilate': {
-            'description': 'Enable fan/ventilation control'
+            'description': 'When ON, TARS will periodically shift its body into a position that lets more air flow through the case. This helps keep the electronics cool, especially if your TARS is in a sealed or enclosed case where heat can build up. If your Pi is running hot (check with show_cpu_temp in the UI section), try turning this ON.'
         },
     }
 }

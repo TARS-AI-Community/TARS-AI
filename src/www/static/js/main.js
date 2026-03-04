@@ -683,13 +683,13 @@ function executeAction() {
   };
 
   const SECTION_ORDER = [
-    'DEVICE', 'UI', 'CHATUI',
+    'DEVICE', 'CHAR', 'LLM',
     'STT', 'TTS',
-    'LLM', 'CHAR', 'EMOTION',
-    'VISION', 'STABLE_DIFFUSION',
-    'RAG',
+    'EMOTION', 'VISION', 'RAG',
+    'UI', 'CHATUI',
     'CONTROLS',
     'HOME_ASSISTANT', 'DISCORD',
+    'STABLE_DIFFUSION',
     'BATTERY', 'MISC'
   ];
 
@@ -737,6 +737,7 @@ function executeAction() {
           const fid = `cfg_${section}_${key}`, fi = data.field_options[`${section}.${key}`], desc2 = fi?.description||'';
           html += `<div class="col-md-6 col-lg-4"><div class="field-wrapper">
             <label for="${fid}" class="form-label d-flex align-items-center gap-1"><span>${key}</span>`;
+          if (desc2) html += `<span class="config-tooltip-wrap" data-tip="${esc(desc2)}"><i class="bi bi-info-circle config-tooltip-icon"></i></span>`;
 
           if (fi?.type==='screensaver_select') {
             html += `</label>${screensaverHtml(fid,section,key,value,fi.options||[])}`;
@@ -758,7 +759,6 @@ function executeAction() {
             }
           }
 
-          if (desc2) html += `<div class="config-hint mt-1"><i class="bi bi-info-circle"></i><small>${desc2}</small></div>`;
           html += '</div></div>';
         }
         html += '</div></div></div>';
@@ -810,9 +810,55 @@ function executeAction() {
           if (lbl) lbl.textContent = this.checked ? 'Enabled' : 'Disabled';
         });
       });
-      initTagInputs(); initScreensaverSelects();
+      initTagInputs(); initScreensaverSelects(); initConfigTooltips();
     }).catch(err => {
       $('configForm').innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error: ${err.message}</div>`;
+    });
+  }
+
+  /* ── Fixed-position tooltips (escape overflow:hidden) ──────────── */
+  function initConfigTooltips() {
+    let activeTip = null;
+    function removeTip() { if (activeTip) { activeTip.remove(); activeTip = null; } }
+
+    document.querySelectorAll('.config-tooltip-wrap[data-tip]').forEach(wrap => {
+      wrap.addEventListener('mouseenter', function () {
+        removeTip();
+        const text = this.dataset.tip;
+        if (!text) return;
+        const tip = document.createElement('div');
+        tip.className = 'config-tooltip-popup';
+        tip.textContent = text;
+        document.body.appendChild(tip);
+        activeTip = tip;
+
+        const iconRect = this.getBoundingClientRect();
+        const tipW = tip.offsetWidth, tipH = tip.offsetHeight;
+        const pad = 10;
+
+        // Horizontal: center on the icon, clamp to viewport
+        let left = iconRect.left + iconRect.width / 2 - tipW / 2;
+        left = Math.max(pad, Math.min(left, window.innerWidth - tipW - pad));
+
+        // Arrow points at the icon center
+        const arrowX = iconRect.left + iconRect.width / 2 - left;
+        tip.style.setProperty('--arrow-x', arrowX + 'px');
+
+        // Vertical: prefer above, fall below if no room
+        if (iconRect.top - tipH - pad > 0) {
+          tip.style.top = (iconRect.top - tipH - pad) + 'px';
+          tip.classList.add('arrow-bottom');
+        } else {
+          tip.style.top = (iconRect.bottom + pad) + 'px';
+          tip.classList.add('arrow-top');
+        }
+        tip.style.left = left + 'px';
+      });
+      wrap.addEventListener('mouseleave', removeTip);
+    });
+    // Clean up if user scrolls away
+    document.querySelectorAll('.config-panel-body, .tab-content, .config-wrap').forEach(el => {
+      el.addEventListener('scroll', removeTip);
     });
   }
 
