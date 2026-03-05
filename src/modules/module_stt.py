@@ -1064,6 +1064,7 @@ class STTManager:
                 continue
             
             if self._detect_wake_word():
+                STTManager._last_status_was_sleeping = False
                 # Reset sherpa VAD state to prevent heap corruption from stale native buffers
                 if self.sherpa_vad is not None:
                     self.sherpa_vad.reset()
@@ -1072,13 +1073,17 @@ class STTManager:
                     self._transcribe_utterance()
         queue_message("INFO: STT Manager stopped.")
 
+    _last_status_was_sleeping = False  # Class-level flag to deduplicate "Sleeping..." messages
+
     def _detect_wake_word(self) -> bool:
         if self.config["STT"]["use_indicators"]:
             self.play_wav("../stt/beep_off.wav")
 
         character_path = self.config.get("CHAR", {}).get("character_card_path")
         character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
-        queue_message(f"{character_name}: Sleeping...")
+        if not STTManager._last_status_was_sleeping:
+            queue_message(f"{character_name}: Sleeping...")
+            STTManager._last_status_was_sleeping = True
 
         wake_word_processor = self.config["STT"].get("wake_word_processor", "atomik")
         if wake_word_processor == "fastrtc":
