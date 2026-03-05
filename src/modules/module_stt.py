@@ -567,6 +567,11 @@ class STTManager:
                 queue_message(f"WARNING: Unknown STT processor '{processor}', falling back to FastRTC")
                 result = self._transcribe_with_fastrtc()
 
+            # Filter out non-speech noise before processing
+            if result and not self._is_meaningful_text(result.get("text", "")):
+                queue_message(f"INFO: STT filtered non-speech noise: '{result.get('text', '')}'")
+                return None
+
             if self.post_utterance_callback and result:
                 self.post_utterance_callback()
             return result
@@ -1130,9 +1135,11 @@ class STTManager:
                 data, _ = stream.read(frames_per_chunk)
                 data = self.amplify_audio(data)  # Apply amplification
 
-                # Check for silence — let VAD manage silent_frames and detected_speech
-                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
-                if is_silence or (not detected_speech and silent_frames >= self.MAX_SILENT_FRAMES):
+                # Simple RMS silence gate — skip transcription when quiet to save CPU.
+                # Do NOT use VAD methods here (they display progress bars meant for transcription).
+                rms = self.prepare_audio_data(data)
+                threshold = self.silence_threshold_margin or (self.silence_threshold * self.silence_margin if self.silence_threshold else None)
+                if rms is not None and threshold is not None and rms <= threshold:
                     continue
 
                 # Convert to format expected by FastRTC (float32)
@@ -1253,13 +1260,11 @@ class STTManager:
             audio_buffer[:] = data.flatten()
 
             while self.running and not self.shutdown_event.is_set():
-                # Use RMS for silence gating during wake word detection to avoid
-                # concurrent sherpa-onnx native calls (VAD + recognizer) which
-                # cause heap corruption.
-                is_silence, _, silent_frames = self._is_silence_detected_rms(audio_buffer, False, silent_frames)
-                if is_silence:
-                    # Don't break on silence — wake word detection should listen indefinitely
-                    # Just skip transcription to save CPU
+                # Simple RMS silence gate — skip transcription when quiet to save CPU.
+                # Do NOT use VAD methods here (they display progress bars meant for transcription).
+                rms = self.prepare_audio_data(self.amplify_audio(audio_buffer))
+                threshold = self.silence_threshold_margin or (self.silence_threshold * self.silence_margin if self.silence_threshold else None)
+                if rms is not None and threshold is not None and rms <= threshold:
                     audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
                     new_data, _ = stream.read(read_frames)
                     audio_buffer[overlap_frames:] = new_data.flatten()
@@ -1680,6 +1685,29 @@ class STTManager:
 
     def set_wake_word_callback(self, callback: Callable[[str], None]):
         self.wake_word_callback = callback
+
+    @staticmethod
+    def _is_meaningful_text(text: str) -> bool:
+        """Check if transcribed text contains actual words, not just noise artifacts.
+
+        Filters out transcriptions that are only punctuation, symbols, single letters,
+        or common STT noise artifacts (e.g. coughs transcribed as '.' or 'uh').
+        """
+        if not text:
+            return False
+        # Strip punctuation, symbols, and whitespace
+        cleaned = re.sub(r'[^\w]', '', text, flags=re.UNICODE)
+        # Must have at least 2 alphanumeric characters to be meaningful
+        if len(cleaned) < 2:
+            return False
+        # Filter common noise artifacts from STT models
+        noise_artifacts = {
+            'uh', 'um', 'hm', 'hmm', 'mm', 'mhm', 'ah', 'oh', 'eh',
+            'huh', 'ha', 'sh', 'shh', 'ss', 'tt', 'ts',
+        }
+        if cleaned.lower() in noise_artifacts:
+            return False
+        return True
 
     def set_utterance_callback(self, callback: Callable[[str], None]):
         self.utterance_callback = callback
