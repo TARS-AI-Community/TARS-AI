@@ -58,7 +58,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         profile=DeviceProfile.PI5,
         allowed_stt={"fastrtc", "silero", "openai", "external", "sherpa-onnx"},
         allowed_tts={"espeak", "piper", "silero", "elevenlabs", "openai"},
-        allowed_vad={"silero", "rms", "sherpa-onnx"},
+        allowed_vad={"silero", "rms", "sherpa-onnx", "smart-turn"},
         allowed_wake={"fastrtc", "atomik", "sherpa-onnx"},
         can_use_embeddings=True,
         can_use_ui=True,
@@ -76,7 +76,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         profile=DeviceProfile.PI4,
         allowed_stt={"openai", "external", "sherpa-onnx"},
         allowed_tts={"espeak", "piper", "elevenlabs", "openai"},
-        allowed_vad={"silero", "rms", "sherpa-onnx"},
+        allowed_vad={"silero", "rms", "sherpa-onnx", "smart-turn"},
         allowed_wake={"atomik", "sherpa-onnx"},
         can_use_embeddings=True,
         can_use_ui=True,
@@ -693,8 +693,8 @@ CONFIG_METADATA = {
         },
         'vad_method': {
             'label': 'VAD Method',
-            'options': ['silero', 'rms', 'sherpa-onnx'],
-            'description': 'VAD stands for "Voice Activity Detection" - this is how TARS figures out when you have STOPPED talking so it can process your message. "rms" simply listens for silence (when the volume drops below a threshold). It is lightweight and works on any Pi. "silero" uses a small AI model to detect speech vs silence, which is more accurate but requires torch - only recommended for Pi 5. "sherpa-onnx" uses the same Silero VAD model but via ONNX runtime (no torch needed), so it works on Pi4 and Pi3 too.'
+            'options': ['silero', 'rms', 'sherpa-onnx', 'smart-turn'],
+            'description': 'VAD stands for "Voice Activity Detection" - this is how TARS figures out when you have STOPPED talking so it can process your message. "rms" simply listens for silence (when the volume drops below a threshold). It is lightweight and works on any Pi. "silero" uses a small AI model to detect speech vs silence, which is more accurate but requires torch - only recommended for Pi 5. "sherpa-onnx" uses the same Silero VAD model but via ONNX runtime (no torch needed), so it works on Pi4 and Pi3 too. "smart-turn" uses Pipecat Smart Turn v3.2 for semantic turn detection - instead of just detecting silence, it predicts whether you have actually finished your sentence based on speech patterns and intonation, so it won\'t cut you off during mid-sentence pauses (Pi5/Pi4 only).'
         },
         'sensitivity': {
             'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],

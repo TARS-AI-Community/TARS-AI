@@ -67,7 +67,7 @@ use_indicators = True
 external_url = http://192.168.1.100:5678
 # Path to sherpa-onnx SenseVoiceTiny model directory (stt_processor = sherpa-onnx only)
 sherpa_onnx_model_path = stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17
-# End-of-speech detection: rms (lightweight) | silero (accurate, Pi5 only) | sherpa-onnx (accurate, no torch)
+# End-of-speech detection: rms (lightweight) | silero (accurate, Pi5 only) | sherpa-onnx (accurate, no torch) | smart-turn (semantic, Pi5/Pi4)
 vad_method = rms
 # Denoise audio before transcription (requires sherpa-onnx): True | False
 sherpa_onnx_denoise = False

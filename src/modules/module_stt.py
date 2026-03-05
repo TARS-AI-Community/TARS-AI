@@ -184,6 +184,11 @@ class STTManager:
         self.sherpa_denoiser = None
         self.sherpa_punctuator = None
 
+        # Smart Turn semantic turn detection
+        self.smart_turn_session = None
+        self.smart_turn_extractor = None
+        self.smart_turn_audio_buffer = []
+
         self._initialize_models()
         self.vadmethod = CONFIG['STT']['vad_method']
         self.DEBUG = False
@@ -216,10 +221,12 @@ class STTManager:
         if self.config["STT"].get("vad_enabled", False):
             self._load_silero_vad()
 
-        # Load sherpa-onnx VAD if selected
+        # Load VAD model if needed
         vad_method = CONFIG['STT'].get('vad_method', 'rms')
         if vad_method == "sherpa-onnx":
             self._load_sherpa_vad()
+        elif vad_method == "smart-turn":
+            self._load_smart_turn()
 
         # Load optional sherpa-onnx denoiser
         if self.config["STT"].get("sherpa_onnx_denoise", "False").lower() == "true":
@@ -479,6 +486,37 @@ class STTManager:
             queue_message(f"ERROR: Failed to load sherpa-onnx punctuation: {e}")
             self.sherpa_punctuator = None
 
+    def _load_smart_turn(self):
+        """Load Pipecat Smart Turn v3.2 ONNX model for semantic turn detection."""
+        try:
+            import onnxruntime as ort
+            from transformers import WhisperFeatureExtractor
+
+            stt_dir = os.path.join(os.path.dirname(os.getcwd()), "stt")
+            model_path = os.path.join(stt_dir, "smart-turn-v3.2-cpu.onnx")
+
+            if not os.path.isfile(model_path):
+                queue_message(f"ERROR: Smart Turn model not found at {model_path}")
+                queue_message("INFO: Download from huggingface.co/pipecat-ai/smart-turn-v3")
+                return
+
+            so = ort.SessionOptions()
+            so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            so.inter_op_num_threads = 1
+            so.intra_op_num_threads = 1
+
+            self.smart_turn_session = ort.InferenceSession(model_path, sess_options=so)
+            self.smart_turn_extractor = WhisperFeatureExtractor(chunk_length=8)
+            queue_message("INFO: Smart Turn v3.2 model loaded successfully.")
+        except ImportError as e:
+            queue_message(f"ERROR: Smart Turn requires onnxruntime and transformers: {e}")
+            self.smart_turn_session = None
+            self.smart_turn_extractor = None
+        except Exception as e:
+            queue_message(f"ERROR: Failed to load Smart Turn model: {e}")
+            self.smart_turn_session = None
+            self.smart_turn_extractor = None
+
     def _denoise_audio(self, audio_data, sample_rate=16000):
         """Denoise audio using sherpa-onnx GTCRN model. Input: float32 array. Returns: float32 array."""
         if self.sherpa_denoiser is None:
@@ -683,6 +721,7 @@ class STTManager:
             transcript = _SENSEVOICE_TAG_RE.sub('', transcript).strip()
             # Add punctuation if enabled
             transcript = self._add_punctuation(transcript)
+            del s  # Free native stream to prevent heap corruption
         except Exception as e:
             queue_message(f"ERROR: sherpa-onnx transcription failed: {e}")
             return None
@@ -911,6 +950,9 @@ class STTManager:
                 continue
             
             if self._detect_wake_word():
+                # Reset sherpa VAD state to prevent heap corruption from stale native buffers
+                if self.sherpa_vad is not None:
+                    self.sherpa_vad.reset()
                 # Check again if paused before transcribing
                 if not self.is_paused():
                     self._transcribe_utterance()
@@ -1116,6 +1158,8 @@ class STTManager:
                         new_data, _ = stream.read(read_frames)
                         audio_buffer[overlap_frames:] = new_data.flatten()
                         continue
+                    finally:
+                        del s  # Free native stream to prevent heap corruption
 
                     if self.DEBUG and transcript:
                         queue_message(f"DEBUG: Sherpa Wake Word Transcript: '{transcript}'")
@@ -1183,6 +1227,8 @@ class STTManager:
             return self._is_silence_detected_silero(data, detected_speech, silent_frames)
         elif self.vadmethod == "sherpa-onnx":
             return self._is_silence_detected_sherpa_onnx(data, detected_speech, silent_frames)
+        elif self.vadmethod == "smart-turn":
+            return self._is_silence_detected_smart_turn(data, detected_speech, silent_frames)
         elif self.vadmethod == "rms":
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
         else:
@@ -1324,8 +1370,89 @@ class STTManager:
             queue_message(f"WARNING: sherpa-onnx VAD error, falling back to RMS: {e}")
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
 
+    def _is_silence_detected_smart_turn(self, data, detected_speech, silent_frames):
+        """Hybrid RMS + Smart Turn semantic turn detection.
+
+        Uses RMS to detect per-frame silence, then runs the Smart Turn model
+        on accumulated audio during pauses to determine if the speaker has
+        finished their turn (vs just pausing mid-sentence).
+        """
+        update_bar, clear_bar = self._get_progress_bar()
+
+        try:
+            if self.smart_turn_session is None or self.smart_turn_extractor is None:
+                return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+
+            # RMS check on current frame
+            rms = self.prepare_audio_data(self.amplify_audio(data))
+            if self.silence_threshold_margin is None:
+                self.silence_threshold_margin = self.silence_threshold * self.silence_margin
+
+            if rms is None:
+                return False, detected_speech, silent_frames
+
+            if rms > self.silence_threshold_margin:
+                # Speech detected — accumulate audio
+                detected_speech = True
+                silent_frames = 0
+                self.smart_turn_audio_buffer.append(data.astype(np.float32).flatten() / 32768.0)
+                clear_bar()
+                return False, detected_speech, silent_frames
+            else:
+                # Silence detected
+                silent_frames += 1
+                update_bar(silent_frames, self.MAX_SILENT_FRAMES)
+
+            # Only run Smart Turn after some silence and if we have speech buffered
+            if silent_frames >= 3 and detected_speech and len(self.smart_turn_audio_buffer) > 0:
+                try:
+                    # Concatenate buffered audio
+                    audio = np.concatenate(self.smart_turn_audio_buffer)
+
+                    # Truncate/pad to 8 seconds at 16kHz
+                    max_samples = 8 * 16000
+                    if len(audio) > max_samples:
+                        audio = audio[-max_samples:]  # Keep most recent 8s
+
+                    # Extract mel features
+                    inputs = self.smart_turn_extractor(
+                        audio, sampling_rate=16000, return_tensors="np",
+                        padding="max_length", max_length=max_samples,
+                        truncation=True, do_normalize=True
+                    )
+                    input_features = inputs.input_features.astype(np.float32)
+
+                    # Run inference
+                    outputs = self.smart_turn_session.run(None, {"input_features": input_features})
+                    probability = outputs[0][0].item()
+
+                    if self.DEBUG:
+                        queue_message(f"DEBUG: Smart Turn probability: {probability:.3f}")
+
+                    if probability > 0.5:
+                        # Turn is complete
+                        clear_bar()
+                        self.smart_turn_audio_buffer.clear()
+                        return True, detected_speech, silent_frames
+
+                except Exception as e:
+                    queue_message(f"WARNING: Smart Turn inference error: {e}")
+
+            # Safety fallback: force end if silence way too long
+            if silent_frames > self.MAX_SILENT_FRAMES * 2:
+                clear_bar()
+                self.smart_turn_audio_buffer.clear()
+                return True, detected_speech, silent_frames
+
+            return False, detected_speech, silent_frames
+
+        except Exception as e:
+            queue_message(f"WARNING: Smart Turn VAD error, falling back to RMS: {e}")
+            self.smart_turn_audio_buffer.clear()
+            return self._is_silence_detected_rms(data, detected_speech, silent_frames)
+
     # === Audio adjustments ===
-    
+
     def _measure_background_noise(self):
         """Measure background noise and set the silence threshold."""
         queue_message("INFO: Measuring background noise...")

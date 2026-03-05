@@ -1116,6 +1116,24 @@ rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2                   
         fi
     fi
 
+    # Pipecat Smart Turn v3.2 model (~9MB, semantic turn detection for VAD)
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        if [ ! -f "stt/smart-turn-v3.2-cpu.onnx" ]; then
+            echo ""
+            read -p "| Download Smart Turn v3.2 model (~9MB, semantic end-of-speech)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading Smart Turn model..." "info"
+                mkdir -p stt
+                if wget -q --show-progress -O stt/smart-turn-v3.2-cpu.onnx https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx; then
+                    echo "|  [OK] Smart Turn model installed"
+                else
+                    echo "| [!] Failed to download Smart Turn model"
+                fi
+            fi
+        fi
+    fi
+
     if [ -z "$DISPLAY" ]; then
         export DISPLAY=:0
         echo "|  Display configuration set: $DISPLAY"
