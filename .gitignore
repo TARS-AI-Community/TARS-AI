@@ -217,4 +217,4 @@ dashboard.ini
 #claude ignore
 .claude
 CLAUDE.md
-todo.md
+todo*.md
