@@ -17,6 +17,7 @@ import wave
 import json
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, Future
 from difflib import SequenceMatcher
 from io import BytesIO
 from typing import Callable, Optional
@@ -192,6 +193,8 @@ class STTManager:
         self.smart_turn_session = None
         self.smart_turn_extractor = None
         self.smart_turn_audio_buffer = []
+        self._smart_turn_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SmartTurn")
+        self._smart_turn_future = None  # pending inference Future
 
         # Barge-in monitoring
         self._bargein_active = False
@@ -265,6 +268,7 @@ class STTManager:
         self.running = False
         self.shutdown_event.set()
         self.thread.join(timeout=3)
+        self._smart_turn_executor.shutdown(wait=False)
 
     def pause(self):
         with self.pause_lock:
@@ -519,9 +523,7 @@ class STTManager:
         rms = self._compute_rms(self.amplify_audio(data))
         if rms is None:
             return True
-        threshold = self.silence_threshold_margin or (
-            self.silence_threshold * self.silence_margin if self.silence_threshold else None
-        )
+        threshold = self.silence_threshold_margin or self.silence_threshold
         return threshold is not None and rms <= threshold
 
     # === Shared Recording ===
@@ -567,9 +569,10 @@ class STTManager:
                     clear_bar()
                     break
 
-                # Smart Turn early exit
-                if (is_silence and vad_method == "smart-turn" and speech_frames >= min_speech_frames
-                        and silent_frames >= 3 and len(self.smart_turn_audio_buffer) == 0):
+                # Smart Turn early exit — buffer is empty when inference signaled turn-complete
+                active_vad = vad_method or self.vadmethod
+                if (is_silence and active_vad == "smart-turn" and speech_frames >= min_speech_frames
+                        and silent_frames >= 3 and not self.smart_turn_audio_buffer):
                     queue_message("INFO: Smart Turn detected end of turn")
                     break
 
@@ -778,33 +781,17 @@ class STTManager:
         language = CONFIG['STT']['language']
         client = OpenAI(api_key=CONFIG["TTS"]["openai_api_key"])
 
-        # Record with simple RMS VAD
-        detected_speech = False
-        silent_frames = 0
-        audio_buffer = []
-
-        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16",
-                            blocksize=4000, latency='high') as stream:
-            for _ in range(self.MAX_RECORDING_FRAMES):
-                data, _ = stream.read(4000)
-                is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(
-                    data, detected_speech, silent_frames
-                )
-                if is_silence:
-                    if not detected_speech:
-                        return None
-                    break
-                audio_buffer.append(self.amplify_audio(data))
-
-        if not audio_buffer:
+        RATE = 16000
+        chunks, speech_frames = self._record_audio_chunks(sample_rate=RATE)
+        if chunks is None:
             return None
 
-        # Combine all audio chunks
-        audio_data = np.concatenate(audio_buffer)
+        # Combine and amplify all audio chunks
+        audio_data = np.concatenate([self.amplify_audio(c) for c in chunks])
 
         # Reject near-silent recordings before sending to API
         rms = np.sqrt(np.mean(audio_data.astype(np.float64) ** 2))
-        if rms < self.silence_threshold * self.silence_margin:
+        if rms < self.silence_threshold:
             return None
 
         # Save to temporary WAV file (OpenAI requires a file)
@@ -813,7 +800,7 @@ class STTManager:
             with wave.open(tmp_path, 'wb') as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
-                wf.setframerate(self.SAMPLE_RATE)
+                wf.setframerate(RATE)
                 wf.writeframes(audio_data.tobytes())
 
         try:
@@ -1033,7 +1020,7 @@ class STTManager:
     def _detect_wake_word(self) -> bool:
         if not STTManager._last_status_was_sleeping:
             if self.config["STT"]["use_indicators"]:
-                self.play_wav("../stt/beep_off.wav")
+                self.play_wav(os.path.join(_stt_dir(), "beep_off.wav"))
             print()
             queue_message(f"{self._character_name}: Sleeping...")
             STTManager._last_status_was_sleeping = True
@@ -1048,7 +1035,7 @@ class STTManager:
     def _handle_wake_detected(self):
         """Common actions after wake word is detected: beep, notify UI, send response."""
         if self.config["STT"].get("use_indicators"):
-            self.play_wav("../stt/beep_on.wav")
+            self.play_wav(os.path.join(_stt_dir(), "beep_on.wav"))
         self._fire_and_forget_get(f"http://127.0.0.1:{self._webui_port}/start_talking")
         if self.WAKE_WORD_RESPONSES:
             wake_response = random.choice(self.WAKE_WORD_RESPONSES)
@@ -1070,6 +1057,7 @@ class STTManager:
         RATE = 16000
         frames_per_chunk = int(RATE * 2.0)
         self.smart_turn_audio_buffer.clear()
+        self._smart_turn_future = None
 
         with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
             for _ in range(100):
@@ -1321,12 +1309,28 @@ class STTManager:
             queue_message(f"WARNING: sherpa-onnx VAD error, falling back to RMS: {e}")
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
 
+    def _smart_turn_infer(self, audio):
+        """Run Smart Turn inference in background thread. Returns probability float."""
+        max_samples = 8 * 16000
+        if len(audio) > max_samples:
+            audio = audio[-max_samples:]
+        inputs = self.smart_turn_extractor(
+            audio, sampling_rate=16000, return_tensors="np",
+            padding="max_length", max_length=max_samples,
+            truncation=True, do_normalize=True
+        )
+        outputs = self.smart_turn_session.run(None, {
+            "input_features": inputs.input_features.astype(np.float32)
+        })
+        return outputs[0][0].item()
+
     def _is_silence_detected_smart_turn(self, data, detected_speech, silent_frames):
         """Hybrid RMS + Smart Turn semantic turn detection.
 
         Uses RMS to detect per-frame silence, then runs the Smart Turn model
-        on accumulated audio during pauses to determine if the speaker has
-        finished their turn (vs just pausing mid-sentence).
+        asynchronously on accumulated audio during pauses to determine if the
+        speaker has finished their turn (vs just pausing mid-sentence).
+        Inference runs in a background thread so it never blocks audio reads.
         """
         update_bar, clear_bar = self._get_progress_bar()
         try:
@@ -1341,10 +1345,11 @@ class STTManager:
                 return False, detected_speech, silent_frames
 
             if rms > self.silence_threshold_margin:
-                # Speech detected — accumulate audio
+                # Speech detected — accumulate audio and cancel any pending inference
                 detected_speech = True
                 silent_frames = 0
                 self.smart_turn_audio_buffer.append(data.astype(np.float32).flatten() / 32768.0)
+                self._smart_turn_future = None  # discard stale result if speaker resumed
                 clear_bar()
                 return False, detected_speech, silent_frames
 
@@ -1353,48 +1358,42 @@ class STTManager:
             update_bar(silent_frames, self.MAX_SILENT_FRAMES)
 
             # Safety fallback FIRST: force end if silence exceeds configured threshold
-            # This must be checked before smart-turn to prevent runaway frame counts
             if silent_frames > self.MAX_SILENT_FRAMES:
                 clear_bar()
                 self.smart_turn_audio_buffer.clear()
+                self._smart_turn_future = None
                 return True, detected_speech, silent_frames
 
-            # Only run Smart Turn after some silence and if we have speech buffered
-            if silent_frames >= 3 and detected_speech and self.smart_turn_audio_buffer:
+            # Check if a previous inference completed
+            if self._smart_turn_future is not None and self._smart_turn_future.done():
                 try:
-                    audio = np.concatenate(self.smart_turn_audio_buffer)
-                    # Truncate/pad to 8 seconds at 16kHz
-                    max_samples = 8 * 16000
-                    if len(audio) > max_samples:
-                        audio = audio[-max_samples:]  # Keep most recent 8s
-
-                    # Extract mel features
-                    inputs = self.smart_turn_extractor(
-                        audio, sampling_rate=16000, return_tensors="np",
-                        padding="max_length", max_length=max_samples,
-                        truncation=True, do_normalize=True
-                    )
-                    # Run inference
-                    outputs = self.smart_turn_session.run(None, {
-                        "input_features": inputs.input_features.astype(np.float32)
-                    })
-                    probability = outputs[0][0].item()
-
+                    probability = self._smart_turn_future.result()
+                    self._smart_turn_future = None
                     if self.DEBUG:
                         queue_message(f"DEBUG: Smart Turn probability: {probability:.3f}")
                     if probability > 0.5:
-                        # Turn is complete
                         clear_bar()
                         self.smart_turn_audio_buffer.clear()
                         return True, detected_speech, silent_frames
                 except Exception as e:
                     queue_message(f"WARNING: Smart Turn inference error: {e}")
+                    self._smart_turn_future = None
+
+            # Kick off inference if not already running
+            if (silent_frames >= 3 and detected_speech
+                    and self.smart_turn_audio_buffer
+                    and self._smart_turn_future is None):
+                audio_snapshot = np.concatenate(self.smart_turn_audio_buffer)
+                self._smart_turn_future = self._smart_turn_executor.submit(
+                    self._smart_turn_infer, audio_snapshot
+                )
 
             return False, detected_speech, silent_frames
 
         except Exception as e:
             queue_message(f"WARNING: Smart Turn VAD error, falling back to RMS: {e}")
             self.smart_turn_audio_buffer.clear()
+            self._smart_turn_future = None
             return self._is_silence_detected_rms(data, detected_speech, silent_frames)
 
     # === Background Noise Measurement ===
@@ -1407,7 +1406,7 @@ class STTManager:
         with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
             for _ in range(20):
                 data, _ = stream.read(4000)
-                rms = self._compute_rms(data)
+                rms = self._compute_rms(self.amplify_audio(data))
                 if rms is not None:
                     rms_values.append(rms)
                 time.sleep(0.1)
