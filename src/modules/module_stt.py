@@ -1130,7 +1130,10 @@ class STTManager:
             audio_buffer[:] = data.flatten()
 
             while self.running and not self.shutdown_event.is_set():
-                is_silence, _, silent_frames = self.voice_activity_detection_main(audio_buffer, False, silent_frames)
+                # Use RMS for silence gating during wake word detection to avoid
+                # concurrent sherpa-onnx native calls (VAD + recognizer) which
+                # cause heap corruption.
+                is_silence, _, silent_frames = self._is_silence_detected_rms(audio_buffer, False, silent_frames)
                 if is_silence:
                     silent_frames += 1
                     if silent_frames > self.MAX_SILENT_FRAMES:
@@ -1138,11 +1141,8 @@ class STTManager:
                 else:
                     silent_frames = 0
 
-                    # Amplify and convert for transcription
+                    # Amplify and convert for transcription (skip denoising — not needed for wake word matching)
                     transcode_data = (audio_buffer.astype(np.float32) * self.amp_gain) / 32768.0
-
-                    # Denoise for better wake word detection
-                    transcode_data = self._denoise_audio(transcode_data, SHERPA_RATE)
 
                     try:
                         s = self.sherpa_recognizer.create_stream()
