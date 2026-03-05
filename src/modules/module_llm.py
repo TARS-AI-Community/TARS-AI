@@ -961,6 +961,19 @@ def execute_function_call(func_call, bot_response, user_input):
                 else:
                     bot_response["reply"] = "I couldn't get a response from Home Assistant."
 
+        elif function_name == "identify_speaker_name":
+            from modules.module_speaker_id import get_speaker_id_manager
+            name = parameters.get("name", "").strip()
+            if name:
+                sid = get_speaker_id_manager()
+                if sid is not None:
+                    sid.rename_speaker("Unknown", name)
+                    queue_message(f"INFO: Speaker identified as '{name}' via LLM")
+                else:
+                    queue_message("WARNING: Speaker ID manager not available")
+            else:
+                queue_message("WARNING: identify_speaker_name called without a name")
+
         else:
             queue_message(f"Unknown function: {function_name}")
 

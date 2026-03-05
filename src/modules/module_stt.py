@@ -138,7 +138,7 @@ class STTManager:
     except Exception:
         pass
 
-    def __init__(self, config, shutdown_event: threading.Event, ui_manager, amp_gain: float = 4.0):
+    def __init__(self, config, shutdown_event: threading.Event, ui_manager):
         global _stt_manager_instance
         _stt_manager_instance = self
 
@@ -162,8 +162,8 @@ class STTManager:
             # If VAD is disabled, use system default
             self.SAMPLE_RATE = self._find_default_mic_sample_rate()
 
-        self.amp_gain = amp_gain  # Microphone amplification multiplier
-        self.silence_margin = 3.5  # Noise floor multiplier
+        self.amp_gain = float(CONFIG['STT'].get('mic_amp_gain', 10.0))
+        self.silence_margin = float(CONFIG['STT'].get('silence_margin', 3.0))
         self.wake_silence_threshold = None
         self.silence_threshold = None  # Updated after measuring background noise
         self.silence_threshold_margin = None
@@ -196,6 +196,9 @@ class STTManager:
         # Barge-in monitoring
         self._bargein_active = False
         self._bargein_thread = None
+
+        # Last recorded audio for speaker ID (set by transcription backends)
+        self._last_audio_float32 = None
 
         # Cache progress bar, webui port, and character name so they aren't recreated per frame
         self._progress_bar_funcs = None
@@ -589,6 +592,8 @@ class STTManager:
 
         if speech_frames < min_speech_frames or not audio_chunks:
             return None, 0
+        # Stash float32 audio for speaker ID
+        self._last_audio_float32 = self._chunks_to_float32(audio_chunks)
         return audio_chunks, speech_frames
 
     def _chunks_to_wav_buffer(self, chunks, sample_rate):
@@ -681,6 +686,16 @@ class STTManager:
             if result and not self._is_meaningful_text(result.get("text", "")):
                 queue_message(f"INFO: STT filtered non-speech noise: '{result.get('text', '')}'")
                 return None
+
+            # Submit audio to Speaker ID for passive identification
+            if result and self._last_audio_float32 is not None:
+                try:
+                    from modules.module_speaker_id import get_speaker_id_manager
+                    sid = get_speaker_id_manager()
+                    if sid is not None:
+                        sid.submit_audio(self._last_audio_float32, 16000)
+                except Exception:
+                    pass
 
             if self.post_utterance_callback and result:
                 self.post_utterance_callback()
@@ -983,6 +998,9 @@ class STTManager:
         if not audio_chunks:
             return None
 
+        # Stash float32 audio for speaker ID
+        self._last_audio_float32 = self._chunks_to_float32(audio_chunks)
+
         # Check if speculative transcription covers all audio
         if spec_thread is not None and spec_snapshot_len == len(audio_chunks):
             spec_thread.join(timeout=5)
@@ -1251,7 +1269,7 @@ class STTManager:
         update_bar, clear_bar = self._get_progress_bar()
         rms = self._compute_rms(self.amplify_audio(data))
         if self.silence_threshold_margin is None:
-            self.silence_threshold_margin = self.silence_threshold * self.silence_margin
+            self.silence_threshold_margin = self.silence_threshold
 
         if rms is None:
             return False, detected_speech, silent_frames
@@ -1318,7 +1336,7 @@ class STTManager:
             # RMS check on current frame
             rms = self._compute_rms(self.amplify_audio(data))
             if self.silence_threshold_margin is None:
-                self.silence_threshold_margin = self.silence_threshold * self.silence_margin
+                self.silence_threshold_margin = self.silence_threshold
             if rms is None:
                 return False, detected_speech, silent_frames
 
@@ -1402,9 +1420,9 @@ class STTManager:
             filtered = bg_rms[(bg_rms >= q1 - 1.5 * iqr) & (bg_rms <= q3 + 1.5 * iqr)]
             self.wake_silence_threshold = np.max(filtered) if filtered.size > 0 else np.median(bg_rms)
             self.silence_threshold = self.wake_silence_threshold * self.silence_margin
-            self.silence_threshold_margin = self.silence_threshold * self.silence_margin
-            db = 20 * np.log10(self.silence_threshold)
-            queue_message(f"INFO: Silence threshold: {db:.2f} dB and {self.silence_threshold}")
+            self.silence_threshold_margin = self.silence_threshold
+            db = 20 * np.log10(self.silence_threshold) if self.silence_threshold > 0 else -999
+            queue_message(f"INFO: Silence threshold: {db:.2f} dB (rms={self.silence_threshold:.1f}, bg_noise={self.wake_silence_threshold:.1f}, margin={self.silence_margin}x, amp_gain={self.amp_gain}x)")
         else:
             queue_message("WARNING: Background noise measurement failed; using default threshold.")
 

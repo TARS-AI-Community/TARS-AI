@@ -77,6 +77,14 @@ sherpa_onnx_punctuation = False
 enable_bargein = True
 # Silence before processing in tenths of a second (20 = 2s)
 speechdelay = 20
+# Enable speaker identification — passively identify who is speaking: True | False
+speaker_id_enabled = False
+# Speaker ID cosine similarity threshold (0.0–1.0, higher = stricter matching)
+speaker_id_threshold = 0.5
+# Microphone amplification gain — multiplies raw mic input (higher = more sensitive, default 10.0)
+mic_amp_gain = 10.0
+# Silence margin — how many times above background noise counts as speech (lower = more sensitive, default 3.0)
+silence_margin = 3.0
 
 [TTS]
 # Use voice settings from character card instead of settings above

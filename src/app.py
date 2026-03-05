@@ -299,6 +299,16 @@ if __name__ == "__main__":
     stt_manager.set_post_utterance_callback(post_utterance_callback)
     stt_manager.set_preemptive_llm_callback(process_completion)
 
+    # === Speaker ID (optional) ===
+    if CONFIG['STT'].get('speaker_id_enabled', 'False').lower() == 'true':
+        try:
+            from modules.module_speaker_id import SpeakerIDManager
+            speaker_id_manager = SpeakerIDManager(config=CONFIG)
+            speaker_id_manager.start()
+            queue_message("LOAD: Speaker ID module enabled")
+        except Exception as e:
+            queue_message(f"WARNING: Speaker ID module not available: {e}")
+
     # === Discord ===
     if CONFIG['DISCORD']['enabled']:
         start_discord_in_thread()

@@ -232,6 +232,16 @@ class MemoryManager:
             "user_input": user_input,
             "bot_response": bot_response,
         }
+        # Tag memory with current speaker if speaker ID is active
+        try:
+            from modules.module_speaker_id import get_speaker_id_manager
+            sid = get_speaker_id_manager()
+            if sid is not None:
+                speaker = sid.get_current_speaker()
+                if speaker is not None:
+                    document["speaker"] = speaker
+        except Exception:
+            pass
         self.hyper_db.add_document(document)
         self.hyper_db.save(self.memory_db_path)
 
