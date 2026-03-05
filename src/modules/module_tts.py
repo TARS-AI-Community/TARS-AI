@@ -11,7 +11,8 @@ Handles TTS functionality to convert text into audio using:
 
 
 import requests
-import os 
+import os
+import threading
 from datetime import datetime
 import numpy as np
 import sounddevice as sd
@@ -23,6 +24,22 @@ from modules.module_messageQue import queue_message
 from modules.module_config import load_config
 
 CONFIG = load_config()
+
+# Barge-in: TTS cancellation event (thread-safe)
+_tts_cancel_event = threading.Event()
+_tts_playing = threading.Event()  # Set while sd.play() is actively outputting audio
+
+def stop_tts_playback():
+    """Signal TTS to stop immediately. Safe to call from any thread."""
+    _tts_cancel_event.set()
+    try:
+        sd.stop()
+    except Exception:
+        pass
+
+def is_tts_playing():
+    """Check if TTS audio is currently being output. Used by barge-in monitor."""
+    return _tts_playing.is_set()
 
 # Conditional TTS module imports - not all are available on all devices
 text_to_speech_with_pipelining_piper = None
@@ -157,25 +174,34 @@ async def generate_tts_audio(text, ttsoption, is_wakeword=False, ttsurl=None, to
         queue_message(f"ERROR: Text-to-speech generation failed: {e}")
 
 async def play_audio_chunks(text, config, is_wakeword=False):
+    _tts_cancel_event.clear()
     audio_queue = asyncio.Queue(maxsize=3)
     synthesis_done = asyncio.Event()
-    
+    was_interrupted = False
+
     async def synthesize_chunks():
         try:
             async for audio_chunk in generate_tts_audio(text, config, is_wakeword):
+                if _tts_cancel_event.is_set():
+                    break
                 await audio_queue.put(audio_chunk)
         except Exception as e:
             queue_message(f"ERROR: Synthesis failed: {e}")
         finally:
             synthesis_done.set()
-    
+
     async def play_chunks():
+        nonlocal was_interrupted
         try:
             requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking", timeout=1)
         except:
             pass
-        
+
         while True:
+            if _tts_cancel_event.is_set():
+                was_interrupted = True
+                break
+
             try:
                 try:
                     audio_chunk = await asyncio.wait_for(audio_queue.get(), timeout=0.1)
@@ -183,29 +209,49 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                     if synthesis_done.is_set() and audio_queue.empty():
                         break
                     continue
-                
+
                 data, samplerate = sf.read(audio_chunk, dtype='float32')
                 max_val = np.max(np.abs(data))
                 if max_val > 0:
                     data = data / max_val
-                
+
                 gain = 1.5
                 data = np.clip(data * gain, -1.0, 1.0)
-                
+
                 sd.play(data, samplerate)
-                sd.wait()
-                
+                _tts_playing.set()
+
+                # Poll instead of sd.wait() so we can check for barge-in
+                while True:
+                    if _tts_cancel_event.is_set():
+                        sd.stop()
+                        was_interrupted = True
+                        break
+                    try:
+                        stream = sd.get_stream()
+                        if stream is None or not stream.active:
+                            break
+                    except Exception:
+                        break
+                    await asyncio.sleep(0.05)
+
+                _tts_playing.clear()
+
+                if was_interrupted:
+                    break
+
             except Exception as e:
                 queue_message(f"ERROR: Failed to play chunk: {e}")
                 if synthesis_done.is_set() and audio_queue.empty():
                     break
-        
+
         try:
             requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/stop_talking", timeout=1)
         except:
             pass
-    
+
     await asyncio.gather(
         synthesize_chunks(),
         play_chunks()
     )
+    return was_interrupted

@@ -190,6 +190,10 @@ class STTManager:
         self.smart_turn_extractor = None
         self.smart_turn_audio_buffer = []
 
+        # Barge-in monitoring
+        self._bargein_active = False
+        self._bargein_thread = None
+
         self._initialize_models()
         self.vadmethod = CONFIG['STT']['vad_method']
         self.DEBUG = False
@@ -378,9 +382,7 @@ class STTManager:
             return
 
         try:
-            model_path = self.config.get("STT", {}).get(
-                "sherpa_onnx_model_path", "stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
-            )
+            model_path = "stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
             if not os.path.isabs(model_path):
                 model_path = os.path.join(os.path.dirname(os.getcwd()), model_path)
 
@@ -1678,3 +1680,62 @@ class STTManager:
 
     def set_preemptive_llm_callback(self, callback: Callable[[str], object]):
         self.preemptive_llm_callback = callback
+
+    # === Barge-In Monitoring ===
+
+    def start_bargein_monitor(self):
+        """Start monitoring mic for barge-in during TTS playback.
+        Runs in a separate thread. Calls stop_tts_playback() if speech detected.
+        """
+        if self.silence_threshold is None:
+            return  # Can't monitor without a noise floor
+        self._bargein_active = True
+
+        def _monitor():
+            consecutive_speech = 0
+            SPEECH_THRESHOLD = 4  # Need 4 consecutive speech frames (~1s)
+            try:
+                with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
+                    # Measure speaker bleed level over first ~500ms
+                    bleed_samples = []
+                    for _ in range(2):
+                        data, _ = stream.read(4000)
+                        rms = self.prepare_audio_data(self.amplify_audio(data))
+                        if rms:
+                            bleed_samples.append(rms)
+
+                    # Set threshold above speaker bleed (2x bleed level, minimum 10x noise floor)
+                    if bleed_samples:
+                        bleed_level = max(bleed_samples)
+                        bargein_threshold = max(bleed_level * 2.0, self.silence_threshold * 10.0)
+                    else:
+                        bargein_threshold = self.silence_threshold * 10.0
+
+                    if self.DEBUG:
+                        queue_message(f"DEBUG: Barge-in threshold: {bargein_threshold:.1f} (bleed: {max(bleed_samples) if bleed_samples else 0:.1f}, noise: {self.silence_threshold:.1f})")
+
+                    while self._bargein_active:
+                        data, _ = stream.read(4000)  # ~250ms frame
+                        rms = self.prepare_audio_data(self.amplify_audio(data))
+
+                        if rms and rms > bargein_threshold:
+                            consecutive_speech += 1
+                            if consecutive_speech >= SPEECH_THRESHOLD:
+                                queue_message("INFO: Barge-in detected! Stopping TTS.")
+                                from modules.module_tts import stop_tts_playback
+                                stop_tts_playback()
+                                break
+                        else:
+                            consecutive_speech = 0
+            except Exception as e:
+                queue_message(f"WARN: Barge-in monitor error: {e}")
+
+        self._bargein_thread = threading.Thread(target=_monitor, daemon=True)
+        self._bargein_thread.start()
+
+    def stop_bargein_monitor(self):
+        """Stop the barge-in monitor thread."""
+        self._bargein_active = False
+        if self._bargein_thread is not None:
+            self._bargein_thread.join(timeout=2)
+            self._bargein_thread = None

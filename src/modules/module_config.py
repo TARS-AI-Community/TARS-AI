@@ -379,7 +379,6 @@ def load_config():
             "external_url": config['STT']['external_url'],
             "speechdelay": int(config['STT']['speechdelay']),
             "language": config['STT']['language'],
-            "sherpa_onnx_model_path": config.get('STT', 'sherpa_onnx_model_path', fallback='stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17'),
             "sherpa_onnx_denoise": config.get('STT', 'sherpa_onnx_denoise', fallback='False'),
             "sherpa_onnx_punctuation": config.get('STT', 'sherpa_onnx_punctuation', fallback='False'),
         },
@@ -710,10 +709,6 @@ CONFIG_METADATA = {
         'language': {
             'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
             'description': 'What language are you speaking to TARS? Set this to your spoken language. IMPORTANT: If you pick anything other than English, you should also change the "stt_processor" setting below to "openai", because most of the local (on-device) speech recognition options only work well in English.'
-        },
-        'sherpa_onnx_model_path': {
-            'depends_on': [{'field': 'stt_processor', 'values': ['sherpa-onnx']}],
-            'description': 'Path to the sherpa-onnx SenseVoiceTiny model directory (relative to the src/ folder). The default model supports Chinese, English, Japanese, Korean, and Cantonese. You should not need to change this unless you downloaded a different model.'
         },
         'sherpa_onnx_denoise': {
             'options': ['True', 'False'],

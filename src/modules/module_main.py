@@ -128,7 +128,15 @@ def wake_word_callback(wake_response):
     ui_manager.update_data(character_name, wake_response, character_name)
 
     ui_manager.set_tars_status("TALKING")
+
+    if stt_manager:
+        stt_manager.start_bargein_monitor()
+
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption'], True))
+
+    if stt_manager:
+        stt_manager.stop_bargein_monitor()
+
     ui_manager.set_tars_status("LISTENING")
 
 def utterance_callback(message):
@@ -227,8 +235,22 @@ def utterance_callback(message):
         reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
 
         ui_manager.set_tars_status("TALKING")
-        asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
-        ui_manager.set_tars_status("STANDBY")
+
+        # Start barge-in monitoring (mic listens for speech during TTS)
+        if stt_manager:
+            stt_manager.start_bargein_monitor()
+
+        was_interrupted = asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
+
+        # Stop barge-in monitoring
+        if stt_manager:
+            stt_manager.stop_bargein_monitor()
+
+        if was_interrupted:
+            queue_message("INFO: TARS was interrupted by user (barge-in)")
+            ui_manager.set_tars_status("LISTENING")
+        else:
+            ui_manager.set_tars_status("STANDBY")
 
     except json.JSONDecodeError:
         queue_message("ERROR: Invalid JSON format. Could not process user message.")
