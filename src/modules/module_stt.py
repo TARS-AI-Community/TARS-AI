@@ -1692,37 +1692,27 @@ class STTManager:
         self._bargein_active = True
 
         def _monitor():
+            from modules.module_tts import is_tts_playing, stop_tts_playback
             consecutive_speech = 0
-            SPEECH_THRESHOLD = 4  # Need 4 consecutive speech frames (~1s)
+            SPEECH_THRESHOLD = 3  # Need 3 consecutive speech frames (~750ms)
+            bargein_threshold = self.silence_threshold * self.silence_margin
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
-                    # Measure speaker bleed level over first ~500ms
-                    bleed_samples = []
-                    for _ in range(2):
-                        data, _ = stream.read(4000)
-                        rms = self.prepare_audio_data(self.amplify_audio(data))
-                        if rms:
-                            bleed_samples.append(rms)
-
-                    # Set threshold above speaker bleed (2x bleed level, minimum 10x noise floor)
-                    if bleed_samples:
-                        bleed_level = max(bleed_samples)
-                        bargein_threshold = max(bleed_level * 2.0, self.silence_threshold * 10.0)
-                    else:
-                        bargein_threshold = self.silence_threshold * 10.0
-
-                    if self.DEBUG:
-                        queue_message(f"DEBUG: Barge-in threshold: {bargein_threshold:.1f} (bleed: {max(bleed_samples) if bleed_samples else 0:.1f}, noise: {self.silence_threshold:.1f})")
-
                     while self._bargein_active:
                         data, _ = stream.read(4000)  # ~250ms frame
+
+                        # Skip RMS check while speaker is outputting audio —
+                        # the mic picks up speaker bleed which causes false triggers.
+                        if is_tts_playing():
+                            consecutive_speech = 0
+                            continue
+
                         rms = self.prepare_audio_data(self.amplify_audio(data))
 
                         if rms and rms > bargein_threshold:
                             consecutive_speech += 1
                             if consecutive_speech >= SPEECH_THRESHOLD:
                                 queue_message("INFO: Barge-in detected! Stopping TTS.")
-                                from modules.module_tts import stop_tts_playback
                                 stop_tts_playback()
                                 break
                         else:
