@@ -18,6 +18,7 @@ import json
 import time
 import threading
 import tarfile
+import collections
 import numpy as np
 from typing import Optional
 from urllib.request import urlretrieve
@@ -114,7 +115,7 @@ class SpeakerIDManager:
         )
 
         # Passive observer queue
-        self._audio_queue = []
+        self._audio_queue = collections.deque()
         self._queue_lock = threading.Lock()
         self._observer_thread = None
         self._running = False
@@ -203,27 +204,6 @@ class SpeakerIDManager:
         except Exception as e:
             queue_message(f"WARNING: Failed to load voice memory: {e}")
 
-    def _save_voice_memory(self):
-        """Save current enrolled speakers to JSON file."""
-        os.makedirs(os.path.dirname(self._memory_path), exist_ok=True)
-
-        # We need to rebuild the data from our internal tracking
-        # since SpeakerEmbeddingManager doesn't expose stored embeddings
-        try:
-            # Load existing data to preserve embeddings
-            existing = {}
-            if os.path.exists(self._memory_path):
-                with open(self._memory_path, 'r') as f:
-                    data = json.load(f)
-                for speaker in data.get("speakers", []):
-                    existing[speaker["name"]] = speaker
-
-            with open(self._memory_path, 'w') as f:
-                json.dump({"speakers": list(existing.values())}, f, indent=2)
-
-        except Exception as e:
-            queue_message(f"WARNING: Failed to save voice memory: {e}")
-
     def _add_speaker_to_memory(self, name: str, embedding: list, role: str = "guest"):
         """Add a new embedding for a speaker to voice memory JSON and manager."""
         os.makedirs(os.path.dirname(self._memory_path), exist_ok=True)
@@ -297,7 +277,7 @@ class SpeakerIDManager:
 
         try:
             stream = self._extractor.create_stream()
-            stream.accept_waveform(sample_rate, audio_float32.tolist())
+            stream.accept_waveform(sample_rate, audio_float32.flatten())
             stream.input_finished()
 
             if not self._extractor.is_ready(stream):
@@ -311,6 +291,31 @@ class SpeakerIDManager:
             return None
 
     # === Soft Identification ===
+
+    @staticmethod
+    def _cosine_similarity(a, b):
+        """Compute cosine similarity between two vectors."""
+        a = np.array(a, dtype=np.float64)
+        b = np.array(b, dtype=np.float64)
+        dot = np.dot(a, b)
+        norm = np.linalg.norm(a) * np.linalg.norm(b)
+        return float(dot / norm) if norm > 0 else 0.0
+
+    def _compute_best_score(self, embedding: list, speaker_name: str) -> float:
+        """Compute the best cosine similarity between embedding and a speaker's stored embeddings."""
+        try:
+            if not os.path.exists(self._memory_path):
+                return 0.0
+            with open(self._memory_path, 'r') as f:
+                data = json.load(f)
+            for speaker in data.get("speakers", []):
+                if speaker["name"] == speaker_name:
+                    scores = [self._cosine_similarity(embedding, stored)
+                              for stored in speaker.get("embeddings", [])]
+                    return max(scores) if scores else 0.0
+        except Exception:
+            pass
+        return 0.0
 
     def identify_speaker(self, embedding: list) -> tuple:
         """Identify speaker from embedding using cosine similarity.
@@ -329,13 +334,7 @@ class SpeakerIDManager:
         try:
             name = self._manager.search(embedding, threshold)
             if name:
-                # Get confidence score via verify
-                score = 1.0  # search matched, so it's above threshold
-                # Try to get a more precise score
-                if self._manager.verify(name, embedding, 0.0):
-                    # The verify call with threshold=0 always returns True if speaker exists,
-                    # but we know the search passed our threshold
-                    score = threshold + 0.1  # conservative estimate
+                score = self._compute_best_score(embedding, name)
                 return (name, score)
             return ("", 0.0)
 
@@ -380,7 +379,7 @@ class SpeakerIDManager:
             audio_item = None
             with self._queue_lock:
                 if self._audio_queue:
-                    audio_item = self._audio_queue.pop(0)
+                    audio_item = self._audio_queue.popleft()
 
             if audio_item is None:
                 time.sleep(0.1)
@@ -433,20 +432,24 @@ class SpeakerIDManager:
         Collects unknown samples and triggers enrollment after reaching
         the threshold count.
         """
-        self._unknown_embeddings.append(embedding)
-        self._unknown_count += 1
-
+        should_enroll = False
         with self._lock:
+            self._unknown_embeddings.append(embedding)
+            self._unknown_count += 1
             # Create a stable unknown session ID on first unknown sample
             if self._unknown_session_id is None:
                 self._unknown_session_id = f"Unknown_{int(time.time())}"
             self.current_speaker = self._unknown_session_id
             self.current_confidence = 0.0
             self.last_identified_time = time.time()
+            count = self._unknown_count
+            session_id = self._unknown_session_id
+            if self._unknown_count >= self.ENROLLMENT_SAMPLE_COUNT:
+                should_enroll = True
 
-        queue_message(f"INFO: Unknown speaker ({self._unknown_count}/{self.ENROLLMENT_SAMPLE_COUNT}) tagged as '{self._unknown_session_id}'")
+        queue_message(f"INFO: Unknown speaker ({count}/{self.ENROLLMENT_SAMPLE_COUNT}) tagged as '{session_id}'")
 
-        if self._unknown_count >= self.ENROLLMENT_SAMPLE_COUNT:
+        if should_enroll:
             self._auto_enroll()
 
     def _auto_enroll(self):

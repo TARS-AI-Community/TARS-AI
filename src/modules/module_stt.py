@@ -162,8 +162,8 @@ class STTManager:
             # If VAD is disabled, use system default
             self.SAMPLE_RATE = self._find_default_mic_sample_rate()
 
-        self.amp_gain = float(CONFIG['STT'].get('mic_amp_gain', 10.0))
-        self.silence_margin = float(CONFIG['STT'].get('silence_margin', 3.0))
+        self.amp_gain = CONFIG['STT'].get('mic_amp_gain', 10.0)
+        self.silence_margin = CONFIG['STT'].get('silence_margin', 3.0)
         self.wake_silence_threshold = None
         self.silence_threshold = None  # Updated after measuring background noise
         self.silence_threshold_margin = None

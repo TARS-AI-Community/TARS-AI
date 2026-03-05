@@ -384,8 +384,8 @@ def load_config():
             "sherpa_onnx_punctuation": config.get('STT', 'sherpa_onnx_punctuation', fallback='False'),
             "speaker_id_enabled": config.get('STT', 'speaker_id_enabled', fallback='False'),
             "speaker_id_threshold": config.get('STT', 'speaker_id_threshold', fallback='0.5'),
-            "mic_amp_gain": config.get('STT', 'mic_amp_gain', fallback='10.0'),
-            "silence_margin": config.get('STT', 'silence_margin', fallback='3.0'),
+            "mic_amp_gain": config.getfloat('STT', 'mic_amp_gain', fallback=10.0),
+            "silence_margin": config.getfloat('STT', 'silence_margin', fallback=3.0),
         },
         "CHAR": {
             "character_name": character_name,

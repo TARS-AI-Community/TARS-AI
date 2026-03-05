@@ -967,7 +967,15 @@ def execute_function_call(func_call, bot_response, user_input):
             if name:
                 sid = get_speaker_id_manager()
                 if sid is not None:
+                    # Rename the enrolled "Unknown" voice profile
                     sid.rename_speaker("Unknown", name)
+                    # Also rename any Unknown_<timestamp> session tags in memories
+                    with sid._lock:
+                        old_session = sid._unknown_session_id
+                        sid._unknown_session_id = None
+                        sid._pending_name_request = False
+                    if old_session:
+                        sid._rename_speaker_in_memories(old_session, name)
                     queue_message(f"INFO: Speaker identified as '{name}' via LLM")
                 else:
                     queue_message("WARNING: Speaker ID manager not available")

@@ -359,6 +359,14 @@ if __name__ == "__main__":
 
     finally:
         stt_manager.stop()
+        # Stop speaker ID if running
+        try:
+            from modules.module_speaker_id import get_speaker_id_manager
+            sid = get_speaker_id_manager()
+            if sid is not None:
+                sid.stop()
+        except Exception:
+            pass
         battery.stop()
         if bt_controller_thread:
             bt_controller_thread.join(timeout=2)
