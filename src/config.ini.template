@@ -57,17 +57,29 @@ override_encoding_model = cl100k_base
 language = english
 # Activation phrase — 2–3 syllables works best
 wake_word = hey tars
-# Wake word engine: atomik (built-in, recommended) | fastrtc | sherpa-onnx
+# Wake word engine (independent of stt_processor — mix freely)
+#   Pi5: sherpa-onnx | atomik | fastrtc
+#   Pi4: sherpa-onnx | atomik
+#   Pi3: sherpa-onnx | atomik
+#   PiZero2: atomik
 wake_word_processor = atomik
 # Wake word strictness 1–10 (atomik only; 1 = lenient, 10 = strict)
 sensitivity = 7
-# Speech-to-text engine: silero (offline) | fastrtc (cloud) | openai | external | sherpa-onnx
+# Speech-to-text engine (independent of wake_word_processor — mix freely)
+#   Pi5: sherpa-onnx | fastrtc | silero | openai | external
+#   Pi4: sherpa-onnx | openai | external
+#   Pi3: openai | external
+#   PiZero2: openai
 stt_processor = fastrtc
 # Play beep when listening starts and stops
 use_indicators = True
 # External STT server URL (stt_processor = external only)
 external_url = http://192.168.1.100:5678
-# End-of-speech detection: rms (lightweight) | silero (accurate, Pi5 only) | sherpa-onnx (accurate, no torch) | smart-turn (semantic, Pi5/Pi4)
+# End-of-speech detection (independent of stt/wake — mix freely)
+#   Pi5: smart-turn | sherpa-onnx | silero | rms
+#   Pi4: smart-turn | sherpa-onnx | silero | rms
+#   Pi3: sherpa-onnx | rms
+#   PiZero2: rms
 vad_method = rms
 # Denoise audio before transcription (requires sherpa-onnx): True | False
 sherpa_onnx_denoise = False
@@ -77,7 +89,7 @@ sherpa_onnx_punctuation = False
 enable_bargein = True
 # Silence before processing in tenths of a second (20 = 2s)
 speechdelay = 20
-# Enable speaker identification — passively identify who is speaking: True | False
+# Speaker identification — passively identify who is speaking (Pi5/Pi4 only)
 speaker_id_enabled = False
 # Speaker ID cosine similarity threshold (0.0–1.0, higher = stricter matching)
 speaker_id_threshold = 0.5
