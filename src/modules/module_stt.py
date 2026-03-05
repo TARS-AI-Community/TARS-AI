@@ -652,8 +652,32 @@ class STTManager:
             return None
         
         
+    def _sherpa_transcribe_audio(self, audio_chunks, sample_rate=16000):
+        """Denoise + transcribe audio chunks with sherpa-onnx. Returns transcript string or None."""
+        if not audio_chunks:
+            return None
+        audio_data = np.concatenate(audio_chunks).astype(np.float32) / 32768.0
+        audio_data = audio_data.flatten()
+        audio_data = self._denoise_audio(audio_data, sample_rate)
+        try:
+            s = self.sherpa_recognizer.create_stream()
+            s.accept_waveform(sample_rate, audio_data)
+            self.sherpa_recognizer.decode_stream(s)
+            transcript = s.result.text.strip()
+            transcript = _SENSEVOICE_TAG_RE.sub('', transcript).strip()
+            transcript = self._add_punctuation(transcript)
+            del s
+            return transcript
+        except Exception as e:
+            queue_message(f"ERROR: sherpa-onnx transcription failed: {e}")
+            return None
+
     def _transcribe_with_sherpa_onnx(self):
-        """Transcribe audio using sherpa-onnx SenseVoiceTiny."""
+        """Transcribe audio using sherpa-onnx SenseVoiceTiny with speculative pre-transcription.
+
+        Starts transcribing in a background thread as soon as silence begins,
+        so the transcript is ready the moment end-of-speech is confirmed.
+        """
         if not self.sherpa_recognizer:
             queue_message("ERROR: sherpa-onnx recognizer not loaded.")
             return None
@@ -667,6 +691,14 @@ class STTManager:
         PRE_ROLL_FRAMES = 10
         MIN_SPEECH_FRAMES = 5
         MAX_SILENT_FRAMES = 20
+
+        # Speculative transcription — kicked off when silence first starts
+        spec_thread = None
+        spec_result = [None]  # Mutable container for thread result
+        spec_snapshot_len = 0  # How many chunks were in the snapshot
+
+        def _speculative_transcribe(chunks_snapshot):
+            spec_result[0] = self._sherpa_transcribe_audio(chunks_snapshot, SHERPA_RATE)
 
         with sd.InputStream(
             samplerate=SHERPA_RATE, channels=1, dtype="int16"
@@ -700,6 +732,22 @@ class STTManager:
 
                     if not is_silence:
                         speech_frames += 1
+                        # Speech resumed — invalidate any speculative transcription
+                        if spec_thread is not None:
+                            spec_thread = None
+                            spec_result[0] = None
+                            spec_snapshot_len = 0
+
+                # Kick off speculative transcription on first silence after speech
+                if (detected_speech and silent_frames >= 3
+                        and speech_frames >= MIN_SPEECH_FRAMES
+                        and spec_thread is None and len(audio_chunks) > 0):
+                    spec_snapshot_len = len(audio_chunks)
+                    snapshot = list(audio_chunks)  # Shallow copy of chunk list
+                    spec_thread = threading.Thread(
+                        target=_speculative_transcribe, args=(snapshot,), daemon=True
+                    )
+                    spec_thread.start()
 
             if speech_frames < MIN_SPEECH_FRAMES:
                 return None
@@ -707,26 +755,15 @@ class STTManager:
         if not audio_chunks:
             return None
 
-        # Convert directly to float32 — no WAV roundtrip needed
-        audio_data = np.concatenate(audio_chunks).astype(np.float32) / 32768.0
-        audio_data = audio_data.flatten()
-
-        # Denoise if enabled
-        audio_data = self._denoise_audio(audio_data, SHERPA_RATE)
-
-        try:
-            s = self.sherpa_recognizer.create_stream()
-            s.accept_waveform(SHERPA_RATE, audio_data)
-            self.sherpa_recognizer.decode_stream(s)
-            transcript = s.result.text.strip()
-            # Strip SenseVoice language tags like <|en|>, <|zh|>, etc.
-            transcript = _SENSEVOICE_TAG_RE.sub('', transcript).strip()
-            # Add punctuation if enabled
-            transcript = self._add_punctuation(transcript)
-            del s  # Free native stream to prevent heap corruption
-        except Exception as e:
-            queue_message(f"ERROR: sherpa-onnx transcription failed: {e}")
-            return None
+        # Check if speculative transcription covers all audio
+        if spec_thread is not None and spec_snapshot_len == len(audio_chunks):
+            spec_thread.join(timeout=5)
+            transcript = spec_result[0]
+        else:
+            # More audio came after the snapshot — do a full transcription
+            if spec_thread is not None:
+                spec_thread.join(timeout=5)  # Wait for it to finish to avoid concurrent native calls
+            transcript = self._sherpa_transcribe_audio(audio_chunks, SHERPA_RATE)
 
         if transcript:
             formatted_result = {"text": transcript}
