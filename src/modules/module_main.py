@@ -129,8 +129,8 @@ def wake_word_callback(wake_response):
 
     ui_manager.set_tars_status("TALKING")
 
-    if stt_manager:
-        stt_manager.start_bargein_monitor()
+    if stt_manager and CONFIG['STT'].get('enable_bargein', True):
+        stt_manager.start_bargein_monitor(tts_text=wake_response)
 
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption'], True))
 
@@ -237,8 +237,8 @@ def utterance_callback(message):
         ui_manager.set_tars_status("TALKING")
 
         # Start barge-in monitoring (mic listens for speech during TTS)
-        if stt_manager:
-            stt_manager.start_bargein_monitor()
+        if stt_manager and CONFIG['STT'].get('enable_bargein', True):
+            stt_manager.start_bargein_monitor(tts_text=reply)
 
         was_interrupted = asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
 

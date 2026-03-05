@@ -108,16 +108,24 @@ def update_tts_settings(ttsurl):
 
 def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normalize=False):
     try:
-        with sd.OutputStream(samplerate=samplerate, channels=channels, dtype='int16', blocksize=4096) as stream:
+        target_rate = 16000
+        with sd.OutputStream(samplerate=target_rate, channels=channels, dtype='int16', blocksize=4096) as stream:
             for chunk in tts_stream:
                 if chunk:
                     audio_data = np.frombuffer(chunk, dtype='int16')
-                    
+
+                    # Resample to 16kHz if needed
+                    if samplerate != target_rate:
+                        ratio = target_rate / samplerate
+                        new_len = int(len(audio_data) * ratio)
+                        indices = np.linspace(0, len(audio_data) - 1, new_len)
+                        audio_data = np.interp(indices, np.arange(len(audio_data)), audio_data.astype(np.float32)).astype('int16')
+
                     if normalize:
                         max_value = np.max(np.abs(audio_data))
                         if max_value > 0:
                             audio_data = audio_data / max_value * 32767
-                    
+
                     audio_data = np.clip(audio_data * gain, -32768, 32767).astype('int16')
                     stream.write(audio_data)
                 else:
@@ -211,6 +219,22 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                     continue
 
                 data, samplerate = sf.read(audio_chunk, dtype='float32')
+
+                # Resample to 16kHz if needed
+                if samplerate != 16000:
+                    ratio = 16000 / samplerate
+                    new_len = int(len(data) * ratio)
+                    if data.ndim == 1:
+                        indices = np.linspace(0, len(data) - 1, new_len)
+                        data = np.interp(indices, np.arange(len(data)), data)
+                    else:
+                        indices = np.linspace(0, len(data) - 1, new_len)
+                        data = np.column_stack([
+                            np.interp(indices, np.arange(len(data)), data[:, ch])
+                            for ch in range(data.shape[1])
+                        ])
+                    samplerate = 16000
+
                 max_val = np.max(np.abs(data))
                 if max_val > 0:
                     data = data / max_val

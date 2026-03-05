@@ -1683,53 +1683,111 @@ class STTManager:
 
     # === Barge-In Monitoring ===
 
-    def start_bargein_monitor(self):
+    def start_bargein_monitor(self, tts_text=""):
         """Start monitoring mic for barge-in during TTS playback.
-        Runs in a separate thread. Calls stop_tts_playback() if speech detected.
+        Uses speech recognition to detect words NOT in the TTS response,
+        which means a human is speaking over TARS.
+
+        Args:
+            tts_text: The text TARS is currently saying, used to filter out
+                      words that are just echo/bleed from the speaker.
         """
         if self.silence_threshold is None:
             return  # Can't monitor without a noise floor
+        if self.sherpa_recognizer is None:
+            queue_message("WARN: Barge-in requires sherpa-onnx recognizer, skipping")
+            return
         self._bargein_active = True
 
+        # Build set of words TARS is saying (lowercase, stripped of punctuation)
+        tts_words = set()
+        if tts_text:
+            cleaned = re.sub(r'[^a-zA-Z0-9\s]', '', tts_text.lower())
+            tts_words = set(cleaned.split())
+
         def _monitor():
-            from modules.module_tts import is_tts_playing, stop_tts_playback
-            consecutive_speech = 0
-            # Only need 1 speech frame during a gap to trigger — user must be
-            # speaking persistently across multiple inter-chunk gaps to barge in.
-            gaps_with_speech = 0
-            GAPS_THRESHOLD = 2  # Speech detected in 2 separate inter-chunk gaps
+            from modules.module_tts import stop_tts_playback
             bargein_threshold = self.silence_threshold * self.silence_margin
+            audio_buffer = []
+            TRANSCRIBE_EVERY = 8  # Transcribe every ~1s (8 x 125ms frames)
+            frame_count = 0
 
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
                     while self._bargein_active:
-                        data, _ = stream.read(2000)  # ~125ms frame (smaller for faster response)
+                        data, _ = stream.read(2000)  # ~125ms frame
+                        frame_count += 1
 
-                        # Only check when speaker is NOT playing — avoids bleed entirely
-                        if is_tts_playing():
-                            consecutive_speech = 0
-                            continue
-
+                        # Always collect audio with speech energy
                         rms = self.prepare_audio_data(self.amplify_audio(data))
-
                         if rms and rms > bargein_threshold:
-                            consecutive_speech += 1
-                        else:
-                            # If we had speech in this gap, count it
-                            if consecutive_speech > 0:
-                                gaps_with_speech += 1
-                            consecutive_speech = 0
+                            audio_buffer.append(data.copy())
 
-                        # Trigger: sustained speech detected across multiple gaps
-                        if consecutive_speech >= 2 or gaps_with_speech >= GAPS_THRESHOLD:
-                            queue_message("INFO: Barge-in detected! Stopping TTS.")
-                            stop_tts_playback()
-                            break
+                        # Periodically transcribe what we've collected
+                        if frame_count % TRANSCRIBE_EVERY == 0 and len(audio_buffer) >= 2:
+                            transcript = self._bargein_transcribe(audio_buffer)
+                            audio_buffer.clear()
+                            if transcript:
+                                novel_words = self._find_novel_words(transcript, tts_words)
+                                if novel_words:
+                                    queue_message(f"INFO: Barge-in detected! Heard: '{transcript}' (novel: {novel_words})")
+                                    stop_tts_playback()
+                                    break
+
             except Exception as e:
                 queue_message(f"WARN: Barge-in monitor error: {e}")
 
         self._bargein_thread = threading.Thread(target=_monitor, daemon=True)
         self._bargein_thread.start()
+
+    def _bargein_transcribe(self, audio_buffer):
+        """Quick transcription of buffered audio for barge-in detection."""
+        try:
+            audio_data = np.concatenate(audio_buffer).astype(np.float32) / 32768.0
+            audio_data = audio_data.flatten()
+            s = self.sherpa_recognizer.create_stream()
+            s.accept_waveform(16000, audio_data)
+            self.sherpa_recognizer.decode_stream(s)
+            transcript = s.result.text.strip()
+            transcript = _SENSEVOICE_TAG_RE.sub('', transcript).strip()
+            del s
+            return transcript if transcript else None
+        except Exception as e:
+            queue_message(f"WARN: Barge-in transcribe error: {e}")
+            return None
+
+    def _find_novel_words(self, transcript, tts_words):
+        """Find words in transcript that are NOT in the TTS text.
+        Uses fuzzy matching to handle speaker-distorted words (e.g. "fresh" heard as "crash").
+        Returns list of novel words, or empty list if all words match TTS."""
+        cleaned = re.sub(r'[^a-zA-Z0-9\s]', '', transcript.lower())
+        heard_words = cleaned.split()
+        if not heard_words:
+            return []
+        # Filter out common filler/noise transcription artifacts and short words
+        noise_words = {'', 'a', 'i', 'uh', 'um', 'ah', 'oh', 'hm', 'hmm', 'mm',
+                       'the', 'is', 'it', 'to', 'and', 'of', 'in', 'that', 'thats'}
+        novel = []
+        for w in heard_words:
+            if w in noise_words or len(w) <= 1:
+                continue
+            # Exact match
+            if w in tts_words:
+                continue
+            # Fuzzy match — if the heard word is similar to any TTS word, skip it
+            # (speaker bleed gets mis-transcribed into similar-sounding words)
+            fuzzy_match = False
+            for tts_w in tts_words:
+                ratio = SequenceMatcher(None, w, tts_w).ratio()
+                if ratio >= 0.55:
+                    fuzzy_match = True
+                    break
+            if not fuzzy_match:
+                novel.append(w)
+        # Require at least 2 novel words to avoid single-word false positives
+        if len(novel) < 2:
+            return []
+        return novel
 
     def stop_bargein_monitor(self):
         """Stop the barge-in monitor thread."""

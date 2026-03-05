@@ -377,6 +377,7 @@ def load_config():
             "vad_method": config['STT']['vad_method'],
             "sensitivity": config['STT']['sensitivity'],
             "external_url": config['STT']['external_url'],
+            "enable_bargein": config.getboolean('STT', 'enable_bargein', fallback=True),
             "speechdelay": int(config['STT']['speechdelay']),
             "language": config['STT']['language'],
             "sherpa_onnx_denoise": config.get('STT', 'sherpa_onnx_denoise', fallback='False'),
@@ -706,6 +707,10 @@ CONFIG_METADATA = {
         'external_url': {
             'depends_on': [{'field': 'stt_processor', 'values': ['external']}],
             'description': 'If you set stt_processor to "external", put the web address of your speech-to-text server here. This is for advanced users who run their own Whisper or other STT server on a separate machine. If you are not using "external" mode, this setting is ignored. Format: http://IP-ADDRESS:PORT'
+        },
+        'enable_bargein': {
+            'options': ['True', 'False'],
+            'description': 'When ON, you can interrupt TARS while it is talking by speaking over it. TARS listens to the mic during playback and uses speech recognition to detect if you are saying something new (not just echo from the speaker). When OFF, TARS will always finish its full response before listening again.'
         },
         'speechdelay': {
             'description': 'After you stop talking, TARS waits this long before deciding you are done and processing your message. The number is in tenths of a second — so 10 = 1 second, 20 = 2 seconds. If set too short (5–8), TARS cuts you off whenever you pause mid-thought. If set too long (35+), there is an awkward gap after every sentence. 15–25 works well for most people and speaking styles. If you speak slowly or tend to pause between sentences, try 25–30. If you speak quickly and want snappy responses, try 12–15. This setting interacts with the VAD method: with "silero" VAD you can often use a lower value because it is better at detecting true silence.'
