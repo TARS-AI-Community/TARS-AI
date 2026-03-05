@@ -1726,6 +1726,8 @@ class STTManager:
                             audio_buffer.clear()
                             if transcript:
                                 novel_words = self._find_novel_words(transcript, tts_words)
+                                if self.DEBUG:
+                                    queue_message(f"DEBUG: Barge-in heard: '{transcript}' novel: {novel_words}")
                                 if novel_words:
                                     queue_message(f"INFO: Barge-in detected! Heard: '{transcript}' (novel: {novel_words})")
                                     stop_tts_playback()
@@ -1781,8 +1783,8 @@ class STTManager:
                     break
             if not fuzzy_match:
                 novel.append(w)
-        # Require at least 2 novel words to avoid single-word false positives
-        if len(novel) < 2:
+        # Require at least 1 novel word to trigger barge-in
+        if len(novel) < 1:
             return []
         return novel
 
