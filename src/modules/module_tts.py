@@ -240,6 +240,17 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 if was_interrupted:
                     break
 
+                # Brief pause between chunks for barge-in detection.
+                # Monitor checks mic RMS only when _tts_playing is clear.
+                for _ in range(6):  # 300ms window (6 x 50ms)
+                    if _tts_cancel_event.is_set():
+                        was_interrupted = True
+                        break
+                    await asyncio.sleep(0.05)
+
+                if was_interrupted:
+                    break
+
             except Exception as e:
                 queue_message(f"ERROR: Failed to play chunk: {e}")
                 if synthesis_done.is_set() and audio_queue.empty():

@@ -1694,15 +1694,18 @@ class STTManager:
         def _monitor():
             from modules.module_tts import is_tts_playing, stop_tts_playback
             consecutive_speech = 0
-            SPEECH_THRESHOLD = 3  # Need 3 consecutive speech frames (~750ms)
+            # Only need 1 speech frame during a gap to trigger — user must be
+            # speaking persistently across multiple inter-chunk gaps to barge in.
+            gaps_with_speech = 0
+            GAPS_THRESHOLD = 2  # Speech detected in 2 separate inter-chunk gaps
             bargein_threshold = self.silence_threshold * self.silence_margin
+
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
                     while self._bargein_active:
-                        data, _ = stream.read(4000)  # ~250ms frame
+                        data, _ = stream.read(2000)  # ~125ms frame (smaller for faster response)
 
-                        # Skip RMS check while speaker is outputting audio —
-                        # the mic picks up speaker bleed which causes false triggers.
+                        # Only check when speaker is NOT playing — avoids bleed entirely
                         if is_tts_playing():
                             consecutive_speech = 0
                             continue
@@ -1711,12 +1714,17 @@ class STTManager:
 
                         if rms and rms > bargein_threshold:
                             consecutive_speech += 1
-                            if consecutive_speech >= SPEECH_THRESHOLD:
-                                queue_message("INFO: Barge-in detected! Stopping TTS.")
-                                stop_tts_playback()
-                                break
                         else:
+                            # If we had speech in this gap, count it
+                            if consecutive_speech > 0:
+                                gaps_with_speech += 1
                             consecutive_speech = 0
+
+                        # Trigger: sustained speech detected across multiple gaps
+                        if consecutive_speech >= 2 or gaps_with_speech >= GAPS_THRESHOLD:
+                            queue_message("INFO: Barge-in detected! Stopping TTS.")
+                            stop_tts_playback()
+                            break
             except Exception as e:
                 queue_message(f"WARN: Barge-in monitor error: {e}")
 
