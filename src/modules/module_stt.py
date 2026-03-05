@@ -602,11 +602,14 @@ class STTManager:
 
                 # Pre-speech timeout: if no speech detected and silence exceeds threshold, exit early
                 if not detected_speech and silent_frames >= MAX_SILENT_FRAMES:
+                    _, clear_bar = self._get_progress_bar()
+                    clear_bar()
                     return None
 
                 # Post-speech: VAD signaled end of turn
                 if is_silence and detected_speech and speech_frames >= MIN_SPEECH_FRAMES:
-                    print()
+                    _, clear_bar = self._get_progress_bar()
+                    clear_bar()
                     break
 
                 if not detected_speech:
@@ -751,10 +754,14 @@ class STTManager:
                     )
                 # Pre-speech timeout: if no speech detected and silence exceeds threshold, exit early
                 if not detected_speech and silent_frames >= MAX_SILENT_FRAMES:
+                    _, clear_bar = self._get_progress_bar()
+                    clear_bar()
                     return None
 
                 if is_silence:
                     if speech_frames >= MIN_SPEECH_FRAMES and silent_frames >= MAX_SILENT_FRAMES:
+                        _, clear_bar = self._get_progress_bar()
+                        clear_bar()
                         break
                     # Smart Turn can signal turn-complete with fewer silent frames
                     # (it clears its audio buffer when prob > 0.5, so check that)
@@ -1076,12 +1083,12 @@ class STTManager:
     _last_status_was_sleeping = False  # Class-level flag to deduplicate "Sleeping..." messages
 
     def _detect_wake_word(self) -> bool:
-        if self.config["STT"]["use_indicators"]:
-            self.play_wav("../stt/beep_off.wav")
-
         character_path = self.config.get("CHAR", {}).get("character_card_path")
         character_name = os.path.splitext(os.path.basename(character_path))[0] if character_path else "TARS"
         if not STTManager._last_status_was_sleeping:
+            if self.config["STT"]["use_indicators"]:
+                self.play_wav("../stt/beep_off.wav")
+            print()  # Newline after silence progress bar
             queue_message(f"{character_name}: Sleeping...")
             STTManager._last_status_was_sleeping = True
 
@@ -1251,8 +1258,12 @@ class STTManager:
                 # cause heap corruption.
                 is_silence, _, silent_frames = self._is_silence_detected_rms(audio_buffer, False, silent_frames)
                 if is_silence:
-                    if silent_frames > self.MAX_SILENT_FRAMES:
-                        break
+                    # Don't break on silence — wake word detection should listen indefinitely
+                    # Just skip transcription to save CPU
+                    audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
+                    new_data, _ = stream.read(read_frames)
+                    audio_buffer[overlap_frames:] = new_data.flatten()
+                    continue
                 else:
                     # Amplify and convert for transcription (skip denoising — not needed for wake word matching)
                     transcode_data = (audio_buffer.astype(np.float32) * self.amp_gain) / 32768.0
@@ -1523,6 +1534,13 @@ class STTManager:
                 silent_frames += 1
                 update_bar(silent_frames, self.MAX_SILENT_FRAMES)
 
+            # Safety fallback FIRST: force end if silence exceeds configured threshold
+            # This must be checked before smart-turn to prevent runaway frame counts
+            if silent_frames > self.MAX_SILENT_FRAMES:
+                clear_bar()
+                self.smart_turn_audio_buffer.clear()
+                return True, detected_speech, silent_frames
+
             # Only run Smart Turn after some silence and if we have speech buffered
             if silent_frames >= 3 and detected_speech and len(self.smart_turn_audio_buffer) > 0:
                 try:
@@ -1557,12 +1575,6 @@ class STTManager:
 
                 except Exception as e:
                     queue_message(f"WARNING: Smart Turn inference error: {e}")
-
-            # Safety fallback: force end if silence way too long
-            if silent_frames > self.MAX_SILENT_FRAMES * 2:
-                clear_bar()
-                self.smart_turn_audio_buffer.clear()
-                return True, detected_speech, silent_frames
 
             return False, detected_speech, silent_frames
 
@@ -1685,6 +1697,9 @@ class STTManager:
         Uses speech recognition to detect words NOT in the TTS response,
         which means a human is speaking over TARS.
 
+        Uses a sliding window over the TTS text synced to estimated playback
+        position to aggressively filter out speaker bleed.
+
         Args:
             tts_text: The text TARS is currently saying, used to filter out
                       words that are just echo/bleed from the speaker.
@@ -1696,11 +1711,13 @@ class STTManager:
             return
         self._bargein_active = True
 
-        # Build set of words TARS is saying (lowercase, stripped of punctuation)
-        tts_words = set()
+        # Build ordered word list for sliding window + full set for broad matching
+        tts_word_list = []
+        tts_words_all = set()
         if tts_text:
             cleaned = re.sub(r'[^a-zA-Z0-9\s]', '', tts_text.lower())
-            tts_words = set(cleaned.split())
+            tts_word_list = cleaned.split()
+            tts_words_all = set(tts_word_list)
 
         def _monitor():
             from modules.module_tts import stop_tts_playback
@@ -1708,6 +1725,9 @@ class STTManager:
             audio_buffer = []
             TRANSCRIBE_EVERY = 8  # Transcribe every ~1s (8 x 125ms frames)
             frame_count = 0
+            start_time = time.time()
+            WORDS_PER_SEC = 3.0  # Estimated TTS speaking rate
+            WINDOW_PADDING = 4   # Extra words before/after estimated position
 
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
@@ -1725,9 +1745,16 @@ class STTManager:
                             transcript = self._bargein_transcribe(audio_buffer)
                             audio_buffer.clear()
                             if transcript:
-                                novel_words = self._find_novel_words(transcript, tts_words)
+                                # Build sliding window of TTS words near current playback position
+                                elapsed = time.time() - start_time
+                                est_word_pos = int(elapsed * WORDS_PER_SEC)
+                                win_start = max(0, est_word_pos - WINDOW_PADDING)
+                                win_end = min(len(tts_word_list), est_word_pos + WINDOW_PADDING + 1)
+                                window_words = set(tts_word_list[win_start:win_end])
+
+                                novel_words = self._find_novel_words(transcript, tts_words_all, window_words)
                                 if self.DEBUG:
-                                    queue_message(f"DEBUG: Barge-in heard: '{transcript}' novel: {novel_words}")
+                                    queue_message(f"DEBUG: Barge-in heard: '{transcript}' window: {window_words} novel: {novel_words}")
                                 if novel_words:
                                     queue_message(f"INFO: Barge-in detected! Heard: '{transcript}' (novel: {novel_words})")
                                     stop_tts_playback()
@@ -1755,36 +1782,75 @@ class STTManager:
             queue_message(f"WARN: Barge-in transcribe error: {e}")
             return None
 
-    def _find_novel_words(self, transcript, tts_words):
+    def _find_novel_words(self, transcript, tts_words_all, window_words=None):
         """Find words in transcript that are NOT in the TTS text.
-        Uses fuzzy matching to handle speaker-distorted words (e.g. "fresh" heard as "crash").
+
+        Uses a two-tier fuzzy matching approach:
+        1. Broad match against ALL TTS words (moderate threshold)
+        2. Aggressive match against the sliding window of words currently
+           being spoken (low threshold — speaker bleed is heavily distorted)
+
+        Also checks substring containment and shared-prefix matching to catch
+        common mis-transcriptions (e.g. "under" from "on your", "worries" from "warriors").
+
         Returns list of novel words, or empty list if all words match TTS."""
         cleaned = re.sub(r'[^a-zA-Z0-9\s]', '', transcript.lower())
         heard_words = cleaned.split()
         if not heard_words:
             return []
+
         # Filter out common filler/noise transcription artifacts and short words
         noise_words = {'', 'a', 'i', 'uh', 'um', 'ah', 'oh', 'hm', 'hmm', 'mm',
-                       'the', 'is', 'it', 'to', 'and', 'of', 'in', 'that', 'thats'}
+                       'the', 'is', 'it', 'to', 'and', 'of', 'in', 'that', 'thats',
+                       'an', 'or', 'so', 'do', 'no', 'my', 'me', 'we', 'he', 'she',
+                       'be', 'at', 'by', 'if', 'up', 'as', 'on', 'you', 'not', 'but',
+                       'can', 'got', 'has', 'had', 'was', 'are', 'for', 'too', 'its'}
+        if window_words is None:
+            window_words = set()
+
         novel = []
         for w in heard_words:
-            if w in noise_words or len(w) <= 1:
+            if w in noise_words or len(w) <= 2:
                 continue
-            # Exact match
-            if w in tts_words:
+            # Exact match against all TTS words
+            if w in tts_words_all:
                 continue
-            # Fuzzy match — if the heard word is similar to any TTS word, skip it
-            # (speaker bleed gets mis-transcribed into similar-sounding words)
-            fuzzy_match = False
-            for tts_w in tts_words:
-                ratio = SequenceMatcher(None, w, tts_w).ratio()
-                if ratio >= 0.55:
-                    fuzzy_match = True
+
+            matched = False
+
+            # Check substring containment (catches "under" in "underway", etc.)
+            for tts_w in tts_words_all:
+                if w in tts_w or tts_w in w:
+                    matched = True
                     break
-            if not fuzzy_match:
+
+            # Broad fuzzy match against all TTS words
+            if not matched:
+                for tts_w in tts_words_all:
+                    ratio = SequenceMatcher(None, w, tts_w).ratio()
+                    if ratio >= 0.5:
+                        matched = True
+                        break
+
+            # Aggressive fuzzy match against sliding window words (currently being spoken)
+            # Speaker bleed produces heavily distorted transcriptions
+            if not matched and window_words:
+                for tts_w in window_words:
+                    ratio = SequenceMatcher(None, w, tts_w).ratio()
+                    if ratio >= 0.35:
+                        matched = True
+                        break
+                    # Shared prefix match (3+ chars) — catches "mind"/"mine", "under"/"until"
+                    if len(w) >= 3 and len(tts_w) >= 3 and w[:3] == tts_w[:3]:
+                        matched = True
+                        break
+
+            if not matched:
                 novel.append(w)
-        # Require at least 1 novel word to trigger barge-in
-        if len(novel) < 1:
+
+        # Require at least 2 novel words — single novel words are almost always
+        # mis-transcribed speaker bleed
+        if len(novel) < 2:
             return []
         return novel
 

@@ -129,13 +129,9 @@ def wake_word_callback(wake_response):
 
     ui_manager.set_tars_status("TALKING")
 
-    if stt_manager and CONFIG['STT'].get('enable_bargein', True):
-        stt_manager.start_bargein_monitor(tts_text=wake_response)
-
+    # Don't run barge-in on wake responses — they're too short and the mic
+    # picks up TARS's own voice, causing false positives
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption'], True))
-
-    if stt_manager:
-        stt_manager.stop_bargein_monitor()
 
     ui_manager.set_tars_status("LISTENING")
 
