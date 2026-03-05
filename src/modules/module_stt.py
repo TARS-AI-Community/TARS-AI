@@ -582,7 +582,7 @@ class STTManager:
         pre_roll_buffer = []
         PRE_ROLL_FRAMES = 10
         MIN_SPEECH_FRAMES = 5
-        MAX_SILENT_FRAMES = 20
+        MAX_SILENT_FRAMES = self.MAX_SILENT_FRAMES
 
         with sd.InputStream(
             samplerate=FASTRTC_RATE, channels=1, dtype="int16"
@@ -708,7 +708,7 @@ class STTManager:
         audio_chunks = []
         PRE_ROLL_FRAMES = 10
         MIN_SPEECH_FRAMES = 5
-        MAX_SILENT_FRAMES = 20
+        MAX_SILENT_FRAMES = self.MAX_SILENT_FRAMES
 
         # Speculative transcription — kicked off when silence first starts
         spec_thread = None
