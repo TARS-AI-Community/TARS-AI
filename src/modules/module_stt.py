@@ -599,16 +599,15 @@ class STTManager:
                 is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(
                     data, detected_speech, silent_frames
                 )
-                silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
 
-                # Add the same early exit check as other functions
-                if is_silence:
-                    if not detected_speech:
-                        return None  # Exit early if silence detected before any speech
-                    # If speech was detected, check if we should stop recording
-                    if speech_frames >= MIN_SPEECH_FRAMES and silent_frames >= MAX_SILENT_FRAMES:
-                        print()
-                        break
+                # Pre-speech timeout: if no speech detected and silence exceeds threshold, exit early
+                if not detected_speech and silent_frames >= MAX_SILENT_FRAMES:
+                    return None
+
+                # Post-speech: VAD signaled end of turn
+                if is_silence and detected_speech and speech_frames >= MIN_SPEECH_FRAMES:
+                    print()
+                    break
 
                 if not detected_speech:
                     pre_roll_buffer.append(data.tobytes())
@@ -750,11 +749,11 @@ class STTManager:
                     is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(
                         data, detected_speech, silent_frames
                     )
-                silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
+                # Pre-speech timeout: if no speech detected and silence exceeds threshold, exit early
+                if not detected_speech and silent_frames >= MAX_SILENT_FRAMES:
+                    return None
 
                 if is_silence:
-                    if not detected_speech:
-                        return None
                     if speech_frames >= MIN_SPEECH_FRAMES and silent_frames >= MAX_SILENT_FRAMES:
                         break
                     # Smart Turn can signal turn-complete with fewer silent frames
@@ -1106,7 +1105,9 @@ class STTManager:
         chunk_duration = 2.0  # Process 2-second chunks
         frames_per_chunk = int(FASTRTC_RATE * chunk_duration)
         silent_frames = 0
+        detected_speech = False
         max_iterations = 100  # Prevent infinite loops
+        self.smart_turn_audio_buffer.clear()
 
         with sd.InputStream(samplerate=FASTRTC_RATE, channels=1, dtype="int16") as stream:
             for iteration in range(max_iterations):
@@ -1117,16 +1118,10 @@ class STTManager:
                 data, _ = stream.read(frames_per_chunk)
                 data = self.amplify_audio(data)  # Apply amplification
 
-                # Check for silence
-                is_silence, _, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
-                if is_silence:
-                    silent_frames += 1
-                    if silent_frames > self.MAX_SILENT_FRAMES:
-                        queue_message("DEBUG: Silence timeout reached in FastRTC wake word detection.")
-                        break
+                # Check for silence — let VAD manage silent_frames and detected_speech
+                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(data, detected_speech, silent_frames)
+                if is_silence or (not detected_speech and silent_frames >= self.MAX_SILENT_FRAMES):
                     continue
-                else:
-                    silent_frames = 0
 
                 # Convert to format expected by FastRTC (float32)
                 audio_data = data.astype(np.float32) / 32768.0
@@ -1251,12 +1246,9 @@ class STTManager:
                 # cause heap corruption.
                 is_silence, _, silent_frames = self._is_silence_detected_rms(audio_buffer, False, silent_frames)
                 if is_silence:
-                    silent_frames += 1
                     if silent_frames > self.MAX_SILENT_FRAMES:
                         break
                 else:
-                    silent_frames = 0
-
                     # Amplify and convert for transcription (skip denoising — not needed for wake word matching)
                     transcode_data = (audio_buffer.astype(np.float32) * self.amp_gain) / 32768.0
 
