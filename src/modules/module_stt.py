@@ -1459,8 +1459,8 @@ class STTManager:
         """
         if self.silence_threshold is None:
             return  # Can't monitor without a noise floor
-        if self.sherpa_recognizer is None:
-            queue_message("WARN: Barge-in requires sherpa-onnx recognizer, skipping")
+        if self.sherpa_recognizer is None and self.fastrtc_model is None:
+            queue_message("WARN: Barge-in requires sherpa-onnx or fastrtc, skipping")
             return
         self._bargein_active = True
 
@@ -1474,7 +1474,7 @@ class STTManager:
 
         def _monitor():
             from modules.module_tts import stop_tts_playback
-            bargein_threshold = self.silence_threshold * self.silence_margin
+            bargein_threshold = self.silence_threshold
             audio_buf = []
             TRANSCRIBE_EVERY = 8  # Transcribe every ~1s (8 x 125ms frames)
             frame_count = 0
@@ -1522,12 +1522,17 @@ class STTManager:
         """Quick transcription of buffered audio for barge-in detection."""
         try:
             audio_data = self._chunks_to_float32(audio_buffer)
-            s = self.sherpa_recognizer.create_stream()
-            s.accept_waveform(16000, audio_data)
-            self.sherpa_recognizer.decode_stream(s)
-            transcript = _SENSEVOICE_TAG_RE.sub('', s.result.text.strip()).strip()
-            del s
-            return transcript or None
+            if self.sherpa_recognizer is not None:
+                s = self.sherpa_recognizer.create_stream()
+                s.accept_waveform(16000, audio_data)
+                self.sherpa_recognizer.decode_stream(s)
+                transcript = _SENSEVOICE_TAG_RE.sub('', s.result.text.strip()).strip()
+                del s
+                return transcript or None
+            elif self.fastrtc_model is not None:
+                transcript = self.fastrtc_model.stt((16000, audio_data)).strip()
+                return transcript or None
+            return None
         except Exception as e:
             queue_message(f"WARN: Barge-in transcribe error: {e}")
             return None
