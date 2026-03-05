@@ -674,7 +674,9 @@ class STTManager:
             for frame_idx in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
 
-                is_silence, detected_speech, silent_frames = self.voice_activity_detection_main(
+                # Use RMS for silence gating during recording to avoid concurrent
+                # sherpa-onnx native calls (VAD + recognizer) which cause hangs.
+                is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(
                     data, detected_speech, silent_frames
                 )
                 silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
@@ -1120,6 +1122,7 @@ class STTManager:
         overlap_frames = int(SHERPA_RATE * overlap_duration)
         read_frames = frames_per_chunk - overlap_frames
         silent_frames = 0
+        wake_detected = False
 
         # Pre-allocate circular buffer to avoid np.concatenate memory fragmentation
         audio_buffer = np.zeros(frames_per_chunk, dtype=np.int16)
@@ -1165,27 +1168,34 @@ class STTManager:
                         queue_message(f"DEBUG: Sherpa Wake Word Transcript: '{transcript}'")
 
                     if self.WAKE_WORD in transcript or self._fuzzy_wake_word_match(transcript, self.WAKE_WORD):
-                        # Non-blocking indicator so user speech isn't clipped
-                        if self.config["STT"].get("use_indicators"):
-                            threading.Thread(target=lambda: self.play_wav("../stt/beep_on.wav"), daemon=True).start()
-                        try:
-                            self._fire_and_forget_get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking")
-                        except Exception:
-                            pass
-                        if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
-                            wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                            character_name = os.path.splitext(os.path.basename(
-                                self.config.get("CHAR", {}).get("character_card_path", "TARS")
-                            ))[0]
-                            queue_message(f"{character_name}: {wake_response}", stream=True)
-                            if self.wake_word_callback:
-                                self.wake_word_callback(wake_response)
-                        return True
+                        # Break out of the loop first — the wake response callback
+                        # plays TTS audio (sd.play + sd.wait) which deadlocks if
+                        # the sd.InputStream is still open.
+                        wake_detected = True
+                        break
 
                 # Roll buffer: shift overlap to front, read new frames into remainder
                 audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
                 new_data, _ = stream.read(read_frames)
                 audio_buffer[overlap_frames:] = new_data.flatten()
+
+        # InputStream is now closed — safe to play audio via sd.play
+        if wake_detected:
+            if self.config["STT"].get("use_indicators"):
+                self.play_wav("../stt/beep_on.wav")
+            try:
+                self._fire_and_forget_get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking")
+            except Exception:
+                pass
+            if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
+                wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                character_name = os.path.splitext(os.path.basename(
+                    self.config.get("CHAR", {}).get("character_card_path", "TARS")
+                ))[0]
+                queue_message(f"{character_name}: {wake_response}", stream=True)
+                if self.wake_word_callback:
+                    self.wake_word_callback(wake_response)
+            return True
 
         return False
 
