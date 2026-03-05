@@ -92,9 +92,39 @@ def get_completion(user_prompt, istext=True):
     url, data = _prepare_request_data(llm_backend, prompt)
 
     try:
-        response = requests.post(url, headers=headers, json=data)
+        response = requests.post(url, headers=headers, json=data, stream=True)
         response.raise_for_status()
-        bot_reply = _extract_text(response.json(), istext)
+
+        # Stream tokens from SSE response
+        full_content = ""
+        try:
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                line_str = line.decode('utf-8')
+                if not line_str.startswith("data: "):
+                    continue
+                data_str = line_str[6:]
+                if data_str.strip() == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    token = chunk['choices'][0]['delta'].get('content', '')
+                    full_content += token
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue
+        except Exception:
+            pass
+
+        # Fallback: if streaming yielded nothing, try non-streaming parse
+        if not full_content.strip():
+            try:
+                bot_reply = _extract_text(response.json(), istext)
+            except Exception:
+                queue_message("ERROR: LLM returned empty response")
+                return None
+        else:
+            bot_reply = full_content.strip()
 
         finalReply = llm_process(user_prompt, bot_reply)
         return finalReply
@@ -116,7 +146,8 @@ def _prepare_request_data(llm_backend, prompt):
             "max_tokens": CONFIG['LLM']['max_tokens'],
             "temperature": CONFIG['LLM']['temperature'],
             "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
+            "stream": True
         }
     elif llm_backend == "grok":
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
@@ -129,7 +160,8 @@ def _prepare_request_data(llm_backend, prompt):
             "max_tokens": CONFIG['LLM']['max_tokens'],
             "temperature": CONFIG['LLM']['temperature'],
             "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
+            "stream": True
         }
     elif llm_backend == "deepinfra":
         url = f"{CONFIG['LLM']['base_url']}/v1/openai/chat/completions"
@@ -142,7 +174,8 @@ def _prepare_request_data(llm_backend, prompt):
             "max_tokens": CONFIG['LLM']['max_tokens'],
             "temperature": CONFIG['LLM']['temperature'],
             "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
+            "stream": True
         }
     else:
         # "other" and any unknown backend: treat as OpenAI-compatible with custom base_url
@@ -156,7 +189,8 @@ def _prepare_request_data(llm_backend, prompt):
             "max_tokens": CONFIG['LLM']['max_tokens'],
             "temperature": CONFIG['LLM']['temperature'],
             "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
+            "stream": True
         }
 
     return url, data
@@ -176,7 +210,84 @@ def _extract_text(response_json, istext):
         return f"Text extraction failed: {str(error)}"
 
 def process_completion(prompt):
-    future = executor.submit(get_completion, prompt, istext=True)
+    """Run LLM completion and return parsed dict with reply + side effects deferred.
+
+    Returns a dict with 'reply', 'function_calls', 'new_memories' fields,
+    or a plain string on error.
+    """
+    def _get_parsed(prompt):
+        # Duplicate the get_completion flow but return parsed dict
+        if memory_manager is None or character_manager is None:
+            raise ValueError("Managers must be initialized")
+
+        try:
+            thinking_responses_raw = CONFIG["CHAR"].get('thinking_responses', '[]')
+            try:
+                thinking_responses = json.loads(thinking_responses_raw)
+            except (json.JSONDecodeError, TypeError):
+                thinking_responses = []
+            if not isinstance(thinking_responses, list):
+                thinking_responses = []
+
+            if thinking_responses and len(thinking_responses) > 0:
+                thinking_text = random.choice(thinking_responses)
+                if thinking_text and isinstance(thinking_text, str) and thinking_text.strip():
+                    queue_message(f"{thinking_text}")
+                    def play_thinking():
+                        try:
+                            from modules.module_tts import play_audio_chunks
+                            asyncio.run(play_audio_chunks(thinking_text, CONFIG['TTS']['ttsoption'], is_wakeword=True))
+                        except Exception as e:
+                            queue_message(f"ERROR: Failed to play thinking response: {e}")
+                    thinking_thread = threading.Thread(target=play_thinking, daemon=True)
+                    thinking_thread.start()
+                    import time
+                    time.sleep(0.1)
+        except Exception:
+            pass
+
+        built_prompt = build_prompt(prompt, character_manager, memory_manager, CONFIG, debug=False)
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
+        }
+        llm_backend = CONFIG['LLM']['llm_backend']
+        url, data = _prepare_request_data(llm_backend, built_prompt)
+
+        response = requests.post(url, headers=headers, json=data, stream=True)
+        response.raise_for_status()
+
+        full_content = ""
+        try:
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                line_str = line.decode('utf-8')
+                if not line_str.startswith("data: "):
+                    continue
+                data_str = line_str[6:]
+                if data_str.strip() == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    token = chunk['choices'][0]['delta'].get('content', '')
+                    full_content += token
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue
+        except Exception:
+            pass
+
+        if not full_content.strip():
+            try:
+                bot_reply = _extract_text(response.json(), True)
+            except Exception:
+                return None
+        else:
+            bot_reply = full_content.strip()
+
+        return llm_parse_response(bot_reply)
+
+    future = executor.submit(_get_parsed, prompt)
     return future.result()
 
 def detect_emotion(text):
@@ -215,11 +326,10 @@ def _repair_truncated_json(s):
         s += stack.pop()
     return s
 
-def llm_process(user_input, bot_response):
-    global memory_manager
+def llm_parse_response(bot_response):
+    """Parse raw LLM JSON string into structured dict. No side effects."""
     if isinstance(bot_response, str):
         try:
-
             bot_response = bot_response.strip()
 
             bot_response = re.sub(r'^```json\s*', '', bot_response)
@@ -241,14 +351,13 @@ def llm_process(user_input, bot_response):
             try:
                 bot_response = json.loads(bot_response)
             except json.JSONDecodeError:
-                # Attempt to repair truncated JSON from LLM
                 bot_response = _repair_truncated_json(bot_response)
                 bot_response = json.loads(bot_response)
 
         except json.JSONDecodeError as e:
             queue_message(f"ERROR: JSON parsing failed: {e}")
             queue_message(f"Raw response: {bot_response}")
-            return "[Error: Invalid JSON from LLM. Check logs for details.]"
+            return None
 
     if isinstance(bot_response, dict) and len(bot_response.keys()) == 1:
         sole_value = list(bot_response.values())[0]
@@ -272,29 +381,44 @@ def llm_process(user_input, bot_response):
     bot_response["new_memories"] = bot_response.get("new_memories", [])
 
     print(f"Data: {bot_response}")
+    return bot_response
 
-    if bot_response["function_calls"]:
-        for func_call in bot_response["function_calls"]:
-            execute_function_call(func_call, bot_response, user_input)
 
-    if memory_manager:
-        threading.Thread(
-            target=memory_manager.write_longterm_memory,
-            args=(user_input, bot_response["reply"])
-        ).start()
+def llm_execute_side_effects(parsed, user_input):
+    """Execute function_calls and save memories. Safe to run in a background thread."""
+    global memory_manager
+    try:
+        if parsed.get("function_calls"):
+            for func_call in parsed["function_calls"]:
+                execute_function_call(func_call, parsed, user_input)
 
-        new_memories = bot_response.get("new_memories", [])
-        if isinstance(new_memories, list) and len(new_memories) > 0:
-            def save_memories():
-                try:
-                    import json
-                    memory_manager.update_topic_index_with_ai_response(json.dumps(new_memories))
-                except Exception as e:
-                    queue_message(f"MEMORY: Failed to save: {e}")
+        if memory_manager:
+            threading.Thread(
+                target=memory_manager.write_longterm_memory,
+                args=(user_input, parsed["reply"])
+            ).start()
 
-            threading.Thread(target=save_memories).start()
+            new_memories = parsed.get("new_memories", [])
+            if isinstance(new_memories, list) and len(new_memories) > 0:
+                def save_memories():
+                    try:
+                        import json
+                        memory_manager.update_topic_index_with_ai_response(json.dumps(new_memories))
+                    except Exception as e:
+                        queue_message(f"MEMORY: Failed to save: {e}")
 
-    return _sanitize_for_tts(bot_response["reply"])
+                threading.Thread(target=save_memories).start()
+    except Exception as e:
+        queue_message(f"ERROR: Side effects execution failed: {e}")
+
+
+def llm_process(user_input, bot_response):
+    """Parse LLM response and execute side effects (legacy wrapper)."""
+    parsed = llm_parse_response(bot_response)
+    if parsed is None:
+        return "[Error: Invalid JSON from LLM. Check logs for details.]"
+    llm_execute_side_effects(parsed, user_input)
+    return _sanitize_for_tts(parsed["reply"])
 
 
 def _sanitize_for_tts(text):

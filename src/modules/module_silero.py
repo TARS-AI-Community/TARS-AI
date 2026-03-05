@@ -93,7 +93,9 @@ async def text_to_speech_with_pipelining_silero(text):
     """
     Converts text to speech using Silero TTS, applies TARS effects, and streams audio as it's generated.
     """
-    chunks = re.split(r'(?<=\.)\s', text)
+    # Split at sentence boundaries and commas for faster first-chunk playback
+    chunks = re.split(r'(?<=[.!?;])\s+|,\s+', text)
+    chunks = [c.strip() for c in chunks if len(c.strip()) >= 3]
 
     for chunk in chunks:
         if chunk.strip():

@@ -57,6 +57,7 @@ from modules.module_main import (
     start_bt_controller_thread,
     startup_initialization
 )
+from modules.module_llm import process_completion
 
 # === Conditional Memory Manager Import ===
 if USE_LITE_MEMORY:
@@ -296,6 +297,7 @@ if __name__ == "__main__":
     stt_manager.set_wake_word_callback(wake_word_callback)
     stt_manager.set_utterance_callback(utterance_callback)
     stt_manager.set_post_utterance_callback(post_utterance_callback)
+    stt_manager.set_preemptive_llm_callback(process_completion)
 
     # === Discord ===
     if CONFIG['DISCORD']['enabled']:

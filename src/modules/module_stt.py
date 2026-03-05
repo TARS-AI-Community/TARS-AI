@@ -172,6 +172,7 @@ class STTManager:
         self.wake_word_callback: Optional[Callable[[str], None]] = None
         self.utterance_callback: Optional[Callable[[str], None]] = None
         self.post_utterance_callback: Optional[Callable[[], None]] = None
+        self.preemptive_llm_callback: Optional[Callable[[str], object]] = None  # fires LLM early
 
         # Wake word and model settings
         self.WAKE_WORD = config.get("STT", {}).get("wake_word", "hey tar").lower()
@@ -652,6 +653,23 @@ class STTManager:
             return None
         
         
+    @staticmethod
+    def _looks_like_complete_sentence(text):
+        """Check if text looks like a complete sentence (for preemptive LLM firing)."""
+        if not text:
+            return False
+        text = text.strip()
+        words = text.split()
+        if len(words) < 2:
+            return False
+        # Ends with sentence-ending punctuation
+        if text[-1] in '.!?':
+            return True
+        # 5+ words even without punctuation — likely a complete thought
+        if len(words) >= 5:
+            return True
+        return False
+
     def _sherpa_transcribe_audio(self, audio_chunks, sample_rate=16000):
         """Denoise + transcribe audio chunks with sherpa-onnx. Returns transcript string or None."""
         if not audio_chunks:
@@ -697,8 +715,22 @@ class STTManager:
         spec_result = [None]  # Mutable container for thread result
         spec_snapshot_len = 0  # How many chunks were in the snapshot
 
+        # Preemptive LLM generation — fired when spec transcript looks like a complete sentence
+        preemptive_thread = None
+        preemptive_result = [None]  # Mutable container for LLM result
+        preemptive_transcript = [None]  # The transcript the LLM was fired with
+        preemptive_fired = False
+
         def _speculative_transcribe(chunks_snapshot):
             spec_result[0] = self._sherpa_transcribe_audio(chunks_snapshot, SHERPA_RATE)
+
+        def _preemptive_llm(transcript_text):
+            """Fire the LLM with the speculative transcript."""
+            try:
+                preemptive_result[0] = self.preemptive_llm_callback(transcript_text)
+            except Exception as e:
+                queue_message(f"WARN: Preemptive LLM failed: {e}")
+                preemptive_result[0] = None
 
         with sd.InputStream(
             samplerate=SHERPA_RATE, channels=1, dtype="int16"
@@ -732,11 +764,16 @@ class STTManager:
 
                     if not is_silence:
                         speech_frames += 1
-                        # Speech resumed — invalidate any speculative transcription
+                        # Speech resumed — invalidate speculative + preemptive
                         if spec_thread is not None:
                             spec_thread = None
                             spec_result[0] = None
                             spec_snapshot_len = 0
+                        if preemptive_fired:
+                            preemptive_thread = None
+                            preemptive_result[0] = None
+                            preemptive_transcript[0] = None
+                            preemptive_fired = False
 
                 # Kick off speculative transcription on first silence after speech
                 if (detected_speech and silent_frames >= 3
@@ -748,6 +785,19 @@ class STTManager:
                         target=_speculative_transcribe, args=(snapshot,), daemon=True
                     )
                     spec_thread.start()
+
+                # Check if speculative transcript is ready and fire preemptive LLM
+                if (spec_thread is not None and not preemptive_fired
+                        and self.preemptive_llm_callback is not None
+                        and spec_result[0] is not None
+                        and self._looks_like_complete_sentence(spec_result[0])):
+                    preemptive_transcript[0] = spec_result[0]
+                    preemptive_fired = True
+                    preemptive_thread = threading.Thread(
+                        target=_preemptive_llm, args=(spec_result[0],), daemon=True
+                    )
+                    preemptive_thread.start()
+                    queue_message(f"INFO: Preemptive LLM fired for: {spec_result[0][:60]}...")
 
             if speech_frames < MIN_SPEECH_FRAMES:
                 return None
@@ -767,6 +817,19 @@ class STTManager:
 
         if transcript:
             formatted_result = {"text": transcript}
+
+            # Check if preemptive LLM result is valid (transcript matches)
+            if (preemptive_fired and preemptive_transcript[0] == transcript
+                    and preemptive_thread is not None):
+                preemptive_thread.join(timeout=10)
+                if preemptive_result[0] is not None:
+                    formatted_result["preemptive_llm_result"] = preemptive_result[0]
+                    queue_message("INFO: Using preemptive LLM result (transcript matched)")
+                else:
+                    queue_message("INFO: Preemptive LLM returned None, falling back to normal")
+            elif preemptive_fired:
+                queue_message("INFO: Preemptive LLM discarded (transcript changed)")
+
             if self.utterance_callback:
                 self.utterance_callback(json.dumps(formatted_result))
             return formatted_result
@@ -1601,3 +1664,6 @@ class STTManager:
 
     def set_post_utterance_callback(self, callback: Callable[[], None]):
         self.post_utterance_callback = callback
+
+    def set_preemptive_llm_callback(self, callback: Callable[[str], object]):
+        self.preemptive_llm_callback = callback

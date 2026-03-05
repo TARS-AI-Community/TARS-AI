@@ -37,8 +37,9 @@ async def text_to_speech_with_pipelining_espeak(text):
     Yields:
     - BytesIO: Chunks of processed audio as they're generated.
     """
-    # Split text into smaller chunks at sentence boundaries
-    chunks = re.split(r'(?<=\.)\s', text)
+    # Split at sentence boundaries and commas for faster first-chunk playback
+    chunks = re.split(r'(?<=[.!?;])\s+|,\s+', text)
+    chunks = [c.strip() for c in chunks if len(c.strip()) >= 3]
 
     for chunk in chunks:
         chunk = chunk.strip()

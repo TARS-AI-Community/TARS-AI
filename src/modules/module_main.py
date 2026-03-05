@@ -15,7 +15,7 @@ import asyncio
 
 # === Custom Modules ===
 from modules.module_config import load_config, get_capabilities
-from modules.module_llm import process_completion, detect_emotion
+from modules.module_llm import process_completion, detect_emotion, llm_execute_side_effects, _sanitize_for_tts
 from modules.module_tts import play_audio_chunks
 from modules.module_messageQue import queue_message
 from modules.module_servoctl import initialize_servos
@@ -163,13 +163,38 @@ def utterance_callback(message):
             return
 
         ui_manager.set_tars_status("THINKING")
-        reply = process_completion(user_text)
+
+        # Check if preemptive LLM already fired during silence detection
+        preemptive = message_dict.get("preemptive_llm_result")
+        if preemptive is not None:
+            queue_message("INFO: Using preemptive LLM result (saved ~1-3s)")
+            parsed = preemptive
+        else:
+            parsed = process_completion(user_text)
 
         # If a movement happened during the LLM call, discard the result
         if stt_manager and stt_manager.is_cancelled():
             queue_message("INFO: LLM response discarded (movement interrupted)")
             ui_manager.set_tars_status("STANDBY")
             return
+
+        # Handle both old string returns and new parsed dict returns
+        if parsed is None:
+            queue_message("ERROR: LLM returned no response")
+            ui_manager.set_tars_status("STANDBY")
+            return
+        if isinstance(parsed, str):
+            # Legacy path or error string
+            reply = parsed
+        else:
+            reply = _sanitize_for_tts(parsed.get("reply", ""))
+
+            # Run function_calls and memory saves in background — parallel with TTS
+            if parsed.get("function_calls") or parsed.get("new_memories"):
+                threading.Thread(
+                    target=llm_execute_side_effects,
+                    args=(parsed, user_text), daemon=True
+                ).start()
 
         try:
             match = re.search(r"<think>(.*?)</think>", reply, re.DOTALL)
@@ -179,11 +204,6 @@ def utterance_callback(message):
             reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
         except Exception:
             thoughts = ""
-
-        # Debug output for thoughts
-        if thoughts:
-            #queue_message(f"DEBUG: Thoughts\n{thoughts}")
-            pass
 
         # Check again before TTS — movement could have started during post-processing
         if stt_manager and stt_manager.is_cancelled():
