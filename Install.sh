@@ -1085,7 +1085,7 @@ rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2                   
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 tars_say "Downloading GTCRN denoiser model..." "info"
                 mkdir -p stt
-                if wget -q --show-progress -O stt/gtcrn_simple.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-denoiser-models/gtcrn_simple.onnx; then
+                if wget -q --show-progress -O stt/gtcrn_simple.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-enhancement-models/gtcrn_simple.onnx; then
                     echo "|  [OK] GTCRN denoiser model installed"
                 else
                     echo "| [!] Failed to download GTCRN denoiser model"
@@ -1110,28 +1110,6 @@ rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2                   
                     echo "|  [OK] Punctuation model installed"
                 else
                     echo "| [!] Failed to download punctuation model"
-                fi
-                cd ..
-            fi
-        fi
-    fi
-
-    # Sherpa-onnx Kokoro TTS model (~100MB, optional offline TTS)
-    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
-        if ! ls tts/kokoro-* 1>/dev/null 2>&1; then
-            echo ""
-            read -p "| Download sherpa-onnx Kokoro TTS model (~100MB)? [y/N] " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                tars_say "Downloading Kokoro TTS model..." "info"
-                mkdir -p tts
-                cd tts
-                if wget -q --show-progress https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-en-v0_19.tar.bz2; then
-                    tar xjf kokoro-en-v0_19.tar.bz2
-                    rm kokoro-en-v0_19.tar.bz2
-                    echo "|  [OK] Kokoro TTS model installed"
-                else
-                    echo "| [!] Failed to download Kokoro TTS model"
                 fi
                 cd ..
             fi

@@ -30,7 +30,6 @@ text_to_speech_with_pipelining_silero = None
 text_to_speech_with_pipelining_espeak = None
 text_to_speech_with_pipelining_elevenlabs = None
 text_to_speech_with_pipelining_openai = None
-text_to_speech_with_pipelining_sherpa_tts = None
 
 try:
     from modules.module_piper import text_to_speech_with_pipelining_piper as _piper
@@ -59,12 +58,6 @@ except ImportError:
 try:
     from modules.module_openai import text_to_speech_with_pipelining_openai as _openai
     text_to_speech_with_pipelining_openai = _openai
-except ImportError:
-    pass
-
-try:
-    from modules.module_sherpa_tts import text_to_speech_with_pipelining_sherpa_tts as _sherpa_tts
-    text_to_speech_with_pipelining_sherpa_tts = _sherpa_tts
 except ImportError:
     pass
 
@@ -138,16 +131,11 @@ async def generate_tts_audio(text, ttsoption, is_wakeword=False, ttsurl=None, to
             async for chunk in text_to_speech_with_pipelining_openai(text, is_wakeword):
                 yield chunk
 
-        elif ttsoption == "sherpa-onnx" and text_to_speech_with_pipelining_sherpa_tts:
-            async for chunk in text_to_speech_with_pipelining_sherpa_tts(text):
-                yield chunk
-
         else:
             # Try fallback TTS options
             fallback_order = [
                 ("openai", text_to_speech_with_pipelining_openai),
                 ("elevenlabs", text_to_speech_with_pipelining_elevenlabs),
-                ("sherpa-onnx", text_to_speech_with_pipelining_sherpa_tts),
                 ("espeak", text_to_speech_with_pipelining_espeak),
                 ("piper", text_to_speech_with_pipelining_piper),
             ]

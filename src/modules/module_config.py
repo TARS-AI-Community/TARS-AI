@@ -57,7 +57,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PI5: DeviceCapabilities(
         profile=DeviceProfile.PI5,
         allowed_stt={"fastrtc", "silero", "openai", "external", "sherpa-onnx"},
-        allowed_tts={"espeak", "piper", "silero", "elevenlabs", "openai", "sherpa-onnx"},
+        allowed_tts={"espeak", "piper", "silero", "elevenlabs", "openai"},
         allowed_vad={"silero", "rms", "sherpa-onnx"},
         allowed_wake={"fastrtc", "atomik", "sherpa-onnx"},
         can_use_embeddings=True,
@@ -75,7 +75,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PI4: DeviceCapabilities(
         profile=DeviceProfile.PI4,
         allowed_stt={"openai", "external", "sherpa-onnx"},
-        allowed_tts={"espeak", "piper", "elevenlabs", "openai", "sherpa-onnx"},
+        allowed_tts={"espeak", "piper", "elevenlabs", "openai"},
         allowed_vad={"silero", "rms", "sherpa-onnx"},
         allowed_wake={"atomik", "sherpa-onnx"},
         can_use_embeddings=True,
@@ -95,7 +95,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
         allowed_stt={"openai", "external"},
         allowed_tts={"espeak", "elevenlabs", "openai"},
         allowed_vad={"rms", "sherpa-onnx"},
-        allowed_wake={"atomik"},
+        allowed_wake={"atomik", "sherpa-onnx"},
         can_use_embeddings=False,
         can_use_ui=True,
         can_use_vision=False,
@@ -379,6 +379,9 @@ def load_config():
             "external_url": config['STT']['external_url'],
             "speechdelay": int(config['STT']['speechdelay']),
             "language": config['STT']['language'],
+            "sherpa_onnx_model_path": config.get('STT', 'sherpa_onnx_model_path', fallback='stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17'),
+            "sherpa_onnx_denoise": config.get('STT', 'sherpa_onnx_denoise', fallback='False'),
+            "sherpa_onnx_punctuation": config.get('STT', 'sherpa_onnx_punctuation', fallback='False'),
         },
         "CHAR": {
             "character_name": character_name,
@@ -428,7 +431,7 @@ def load_config():
             "is_talking_override": False,
             "is_talking": False,
             "global_timer_paused": False,
-            "openai_voice" : config['TTS']['openai_voice'],            
+            "openai_voice" : config['TTS']['openai_voice'],
         }),
         "RAG": {
             "enabled": config.getboolean('RAG', 'enabled', fallback=True),
@@ -677,21 +680,21 @@ CONFIG_METADATA = {
         },
         'stt_processor': {
             'label': 'STT Engine',
-            'options': ['silero', 'fastrtc', 'openai', 'external'],
-            'description': 'After TARS hears the wake word, this is the software that converts your actual speech into text. Think of it as the "ears" of TARS. "fastrtc" sends your audio to the cloud for fast, accurate transcription (recommended if you have internet). "silero" runs on your Pi with no internet needed (Pi5 recommended). "openai" uses OpenAI\'s Whisper service (best for non-English languages, needs API key and internet). "external" lets you point to your own speech-to-text server running elsewhere.'
+            'options': ['silero', 'fastrtc', 'openai', 'external', 'sherpa-onnx'],
+            'description': 'After TARS hears the wake word, this is the software that converts your actual speech into text. Think of it as the "ears" of TARS. "fastrtc" sends your audio to the cloud for fast, accurate transcription (recommended if you have internet). "silero" runs on your Pi with no internet needed (Pi5 recommended). "openai" uses OpenAI\'s Whisper service (best for non-English languages, needs API key and internet). "external" lets you point to your own speech-to-text server running elsewhere. "sherpa-onnx" uses SenseVoiceTiny for fast offline multilingual transcription (Pi5/Pi4).'
         },
         'wake_word_processor': {
             'label': 'Wake Word Engine',
-            'options': ['atomik', 'fastrtc'],
-            'description': 'The software that listens for your wake word. "atomik" is built right into TARS, completely free, and works offline - this is the recommended choice for most people. You can adjust how sensitive it is with the "sensitivity" setting below. "fastrtc" uses an internet-based service for detection.'
+            'options': ['atomik', 'fastrtc', 'sherpa-onnx'],
+            'description': 'The software that listens for your wake word. "atomik" is built right into TARS, completely free, and works offline - this is the recommended choice for most people. You can adjust how sensitive it is with the "sensitivity" setting below. "fastrtc" uses an internet-based service for detection. "sherpa-onnx" uses SenseVoiceTiny to transcribe and match the wake word (Pi5/Pi4, works offline).'
         },
         'wake_word': {
             'description': 'The magic phrase you say to get TARS attention, like saying "Hey Siri" or "OK Google". TARS is always listening in the background for this specific phrase. When it hears it, it "wakes up" and starts recording whatever you say next. You can change this to anything you want, but shorter phrases (2-3 syllables) work best. For example: "hey tars", "ok robot", "computer". Avoid very common words that might trigger accidentally.'
         },
         'vad_method': {
             'label': 'VAD Method',
-            'options': ['silero', 'rms'],
-            'description': 'VAD stands for "Voice Activity Detection" - this is how TARS figures out when you have STOPPED talking so it can process your message. "rms" simply listens for silence (when the volume drops below a threshold). It is lightweight and works on any Pi. "silero" uses a small AI model to detect speech vs silence, which is more accurate (it won\'t be fooled by background noise as easily) but uses more processing power - only recommended for Pi 5.'
+            'options': ['silero', 'rms', 'sherpa-onnx'],
+            'description': 'VAD stands for "Voice Activity Detection" - this is how TARS figures out when you have STOPPED talking so it can process your message. "rms" simply listens for silence (when the volume drops below a threshold). It is lightweight and works on any Pi. "silero" uses a small AI model to detect speech vs silence, which is more accurate but requires torch - only recommended for Pi 5. "sherpa-onnx" uses the same Silero VAD model but via ONNX runtime (no torch needed), so it works on Pi4 and Pi3 too.'
         },
         'sensitivity': {
             'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],
@@ -707,6 +710,20 @@ CONFIG_METADATA = {
         'language': {
             'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
             'description': 'What language are you speaking to TARS? Set this to your spoken language. IMPORTANT: If you pick anything other than English, you should also change the "stt_processor" setting below to "openai", because most of the local (on-device) speech recognition options only work well in English.'
+        },
+        'sherpa_onnx_model_path': {
+            'depends_on': [{'field': 'stt_processor', 'values': ['sherpa-onnx']}],
+            'description': 'Path to the sherpa-onnx SenseVoiceTiny model directory (relative to the src/ folder). The default model supports Chinese, English, Japanese, Korean, and Cantonese. You should not need to change this unless you downloaded a different model.'
+        },
+        'sherpa_onnx_denoise': {
+            'options': ['True', 'False'],
+            'depends_on': [{'field': 'stt_processor', 'values': ['sherpa-onnx']}],
+            'description': 'When ON, TARS cleans up your audio before transcribing it. This removes background noise like fans, air conditioning, or other ambient sounds, which can improve transcription accuracy in noisy environments. Uses the GTCRN denoiser model (~5MB). Leave OFF if your environment is quiet or if you notice it slowing things down.'
+        },
+        'sherpa_onnx_punctuation': {
+            'options': ['True', 'False'],
+            'depends_on': [{'field': 'stt_processor', 'values': ['sherpa-onnx']}],
+            'description': 'When ON, TARS adds punctuation (periods, commas, question marks) to transcribed text. Speech-to-text normally outputs raw text without punctuation, which can look messy in the chat and give the AI less context about sentence structure. Uses the ct-transformer model (~200MB). Leave OFF if you want raw transcriptions or if the model is not downloaded.'
         },
     },
     'TTS': {

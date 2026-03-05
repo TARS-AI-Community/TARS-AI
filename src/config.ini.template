@@ -79,12 +79,8 @@ speechdelay = 20
 [TTS]
 # Use voice settings from character card instead of settings above
 toggle_charvoice = True
-# TTS engine: espeak | piper | silero | elevenlabs | openai | sherpa-onnx | other
+# TTS engine: espeak | piper | silero | elevenlabs | openai | other
 ttsoption = piper
-# Speaker ID for sherpa-onnx TTS (model-dependent, 0 = default)
-sherpa_onnx_tts_speaker = 0
-# Speech speed for sherpa-onnx TTS (1.0 = normal)
-sherpa_onnx_tts_speed = 1.0
 # External TTS server URL (ttsoption = other only)
 ttsurl =
 # Voice name/ID for external TTS server

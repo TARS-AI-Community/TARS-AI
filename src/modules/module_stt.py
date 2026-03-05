@@ -1061,7 +1061,7 @@ class STTManager:
         threading.Thread(target=lambda: requests.get(url, timeout=1), daemon=True).start()
 
     def _detect_wake_word_sherpa_onnx(self) -> bool:
-        """Detect wake word using sherpa-onnx by transcribing overlapping audio chunks."""
+        """Detect wake word using sherpa-onnx with a pre-allocated circular buffer."""
         if not self.sherpa_recognizer:
             queue_message("ERROR: sherpa-onnx recognizer not loaded for wake word detection.")
             return False
@@ -1078,71 +1078,70 @@ class STTManager:
         overlap_frames = int(SHERPA_RATE * overlap_duration)
         read_frames = frames_per_chunk - overlap_frames
         silent_frames = 0
-        max_iterations = 100
-        prev_audio = None
+
+        # Pre-allocate circular buffer to avoid np.concatenate memory fragmentation
+        audio_buffer = np.zeros(frames_per_chunk, dtype=np.int16)
 
         with sd.InputStream(samplerate=SHERPA_RATE, channels=1, dtype="int16") as stream:
-            for iteration in range(max_iterations):
-                if not self.running or self.shutdown_event.is_set():
-                    break
+            # Prime buffer with first full chunk
+            data, _ = stream.read(frames_per_chunk)
+            audio_buffer[:] = data.flatten()
 
-                # First iteration reads full chunk, subsequent reads partial + overlap from previous
-                if prev_audio is None:
-                    data, _ = stream.read(frames_per_chunk)
-                else:
-                    new_data, _ = stream.read(read_frames)
-                    data = np.concatenate([prev_audio, new_data])
-
-                # Keep last overlap_frames for next iteration (raw, before amplification)
-                prev_audio = data[-overlap_frames:]
-
-                is_silence, _, silent_frames = self.voice_activity_detection_main(data, False, silent_frames)
+            while self.running and not self.shutdown_event.is_set():
+                is_silence, _, silent_frames = self.voice_activity_detection_main(audio_buffer, False, silent_frames)
                 if is_silence:
                     silent_frames += 1
                     if silent_frames > self.MAX_SILENT_FRAMES:
                         break
-                    continue
                 else:
                     silent_frames = 0
 
-                # Amplify for transcription only (VAD already handles its own amplification)
-                data = self.amplify_audio(data)
-                audio_data = data.astype(np.float32) / 32768.0
-                audio_data = audio_data.flatten()
+                    # Amplify and convert for transcription
+                    transcode_data = (audio_buffer.astype(np.float32) * self.amp_gain) / 32768.0
 
-                # Denoise for better wake word detection
-                audio_data = self._denoise_audio(audio_data, SHERPA_RATE)
+                    # Denoise for better wake word detection
+                    transcode_data = self._denoise_audio(transcode_data, SHERPA_RATE)
 
-                try:
-                    s = self.sherpa_recognizer.create_stream()
-                    s.accept_waveform(SHERPA_RATE, audio_data)
-                    self.sherpa_recognizer.decode_stream(s)
-                    transcript = s.result.text.strip().lower()
-                    # Strip SenseVoice language tags
-                    transcript = _SENSEVOICE_TAG_RE.sub('', transcript).strip()
-                except Exception as e:
-                    queue_message(f"ERROR: sherpa-onnx STT failed: {e}")
-                    continue
-
-                if self.DEBUG:
-                    queue_message(f"DEBUG: Sherpa Wake Word Transcript: '{transcript}'")
-
-                if self.WAKE_WORD in transcript or self._fuzzy_wake_word_match(transcript, self.WAKE_WORD):
-                    if self.config["STT"].get("use_indicators"):
-                        self.play_wav("../stt/beep_on.wav")
                     try:
-                        self._fire_and_forget_get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking")
-                    except Exception:
-                        pass
-                    if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
-                        wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-                        character_name = os.path.splitext(os.path.basename(
-                            self.config.get("CHAR", {}).get("character_card_path", "TARS")
-                        ))[0]
-                        queue_message(f"{character_name}: {wake_response}", stream=True)
-                        if self.wake_word_callback:
-                            self.wake_word_callback(wake_response)
-                    return True
+                        s = self.sherpa_recognizer.create_stream()
+                        s.accept_waveform(SHERPA_RATE, transcode_data)
+                        self.sherpa_recognizer.decode_stream(s)
+                        transcript = s.result.text.strip().lower()
+                        # Strip SenseVoice language tags
+                        transcript = _SENSEVOICE_TAG_RE.sub('', transcript).strip()
+                    except Exception as e:
+                        queue_message(f"ERROR: sherpa-onnx STT failed: {e}")
+                        # Roll buffer forward and continue
+                        audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
+                        new_data, _ = stream.read(read_frames)
+                        audio_buffer[overlap_frames:] = new_data.flatten()
+                        continue
+
+                    if self.DEBUG and transcript:
+                        queue_message(f"DEBUG: Sherpa Wake Word Transcript: '{transcript}'")
+
+                    if self.WAKE_WORD in transcript or self._fuzzy_wake_word_match(transcript, self.WAKE_WORD):
+                        # Non-blocking indicator so user speech isn't clipped
+                        if self.config["STT"].get("use_indicators"):
+                            threading.Thread(target=lambda: self.play_wav("../stt/beep_on.wav"), daemon=True).start()
+                        try:
+                            self._fire_and_forget_get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking")
+                        except Exception:
+                            pass
+                        if self.WAKE_WORD_RESPONSES and len(self.WAKE_WORD_RESPONSES) > 0:
+                            wake_response = random.choice(self.WAKE_WORD_RESPONSES)
+                            character_name = os.path.splitext(os.path.basename(
+                                self.config.get("CHAR", {}).get("character_card_path", "TARS")
+                            ))[0]
+                            queue_message(f"{character_name}: {wake_response}", stream=True)
+                            if self.wake_word_callback:
+                                self.wake_word_callback(wake_response)
+                        return True
+
+                # Roll buffer: shift overlap to front, read new frames into remainder
+                audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
+                new_data, _ = stream.read(read_frames)
+                audio_buffer[overlap_frames:] = new_data.flatten()
 
         return False
 
