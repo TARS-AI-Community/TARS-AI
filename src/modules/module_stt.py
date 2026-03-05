@@ -738,17 +738,28 @@ class STTManager:
             for frame_idx in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
 
-                # Use RMS for silence gating during recording to avoid concurrent
-                # sherpa-onnx native calls (VAD + recognizer) which cause hangs.
-                is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(
-                    data, detected_speech, silent_frames
-                )
+                # Use RMS or Smart Turn for silence gating during recording.
+                # Avoid sherpa-onnx VAD here to prevent concurrent native calls (heap corruption).
+                if self.vadmethod == "smart-turn" and self.smart_turn_session is not None:
+                    is_silence, detected_speech, silent_frames = self._is_silence_detected_smart_turn(
+                        data, detected_speech, silent_frames
+                    )
+                else:
+                    is_silence, detected_speech, silent_frames = self._is_silence_detected_rms(
+                        data, detected_speech, silent_frames
+                    )
                 silent_frames = min(silent_frames, MAX_SILENT_FRAMES)
 
                 if is_silence:
                     if not detected_speech:
                         return None
                     if speech_frames >= MIN_SPEECH_FRAMES and silent_frames >= MAX_SILENT_FRAMES:
+                        break
+                    # Smart Turn can signal turn-complete with fewer silent frames
+                    # (it clears its audio buffer when prob > 0.5, so check that)
+                    if (self.vadmethod == "smart-turn" and speech_frames >= MIN_SPEECH_FRAMES
+                            and silent_frames >= 3 and len(self.smart_turn_audio_buffer) == 0):
+                        queue_message("INFO: Smart Turn detected end of turn")
                         break
 
                 if not detected_speech:
