@@ -367,7 +367,8 @@ if __name__ == "__main__":
                 sid.stop()
         except Exception:
             pass
-        battery.stop()
+        if battery is not None:
+            battery.stop()
         if bt_controller_thread:
             bt_controller_thread.join(timeout=2)
         queue_message("INFO: Shutdown complete.")

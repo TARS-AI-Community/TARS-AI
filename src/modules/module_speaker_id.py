@@ -40,8 +40,8 @@ if CAPABILITIES is None or (CAPABILITIES.allowed_stt and "sherpa-onnx" in CAPABI
 
 
 def _stt_dir():
-    """Return the path to the stt models directory."""
-    return os.path.join(os.path.dirname(os.getcwd()), "stt")
+    """Return the path to the stt models directory (src/stt/)."""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "stt")
 
 
 # Global singleton
@@ -111,7 +111,7 @@ class SpeakerIDManager:
 
         # Voice memory file path
         self._memory_path = os.path.join(
-            os.path.dirname(os.getcwd()), "memory", "voice_memory.json"
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory", "voice_memory.json"
         )
 
         # Passive observer queue

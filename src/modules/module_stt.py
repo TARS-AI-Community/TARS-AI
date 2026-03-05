@@ -116,8 +116,8 @@ def get_stt_manager():
 
 
 def _stt_dir():
-    """Return the path to the stt models directory (one level up from cwd)."""
-    return os.path.join(os.path.dirname(os.getcwd()), "stt")
+    """Return the path to the stt models directory (src/stt/)."""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "stt")
 
 
 class STTManager:
