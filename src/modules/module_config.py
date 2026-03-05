@@ -390,6 +390,7 @@ def load_config():
             "longitude": config.get('CHAR', 'longitude', fallback=''),
             "user_name": config['CHAR']['user_name'],
             "user_details": config['CHAR']['user_details'],
+            "enable_thinking_responses": config.getboolean('CHAR', 'enable_thinking_responses', fallback=True),
             "thinking_responses": config['CHAR']['thinking_responses'],
             "responses": config['CHAR']['responses'],
             "traits": persona_traits,
@@ -615,6 +616,9 @@ CONFIG_METADATA = {
         },
         'user_details': {
             'description': 'Tell TARS a little about yourself so it can personalize its responses. This info gets fed to the AI so it knows who it is talking to. For example: "Species: Human. Gender: Female. Likes: gardening and cooking." You can put whatever you want here, or leave it blank.'
+        },
+        'enable_thinking_responses': {
+            'description': 'When ON, TARS will say a random filler phrase (like "Let me think..." or "Processing...") while it waits for the AI to generate a response. When OFF, TARS stays silent while thinking.'
         },
         'thinking_responses': {
             'description': 'After TARS hears your question, it takes a moment to think of an answer (the AI needs time to generate a response). During that pause, TARS will say one of these filler phrases so you know it is working and did not freeze. Things like "Let me think..." or "One moment..." You can customize these the same way as the responses above. Set to [] (empty brackets) if you want silence while it thinks.'

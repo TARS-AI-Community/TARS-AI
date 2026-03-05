@@ -21,6 +21,8 @@ latitude = 31.7874
 longitude = -106.4206
 # Phrases said immediately after the wake word (JSON array, [] for none)
 responses = ["Hi","Yes?","hey!","What's up?","Can I help you?","What do you need?","I'm here.","You rang?","Yea?","Hey There.","You again?","Affirmative.","Ready.","Standing by.","Go ahead.","Listening.","How can I assist?","At your service.","Waiting.","What do you require?","I hear you.","Acknowledged.","State your request.","What's on your mind?","I'm all ears. Figuratively.","That's me.","Present.","Right here.","Still here.","Something wrong?","Need me?"]
+# Enable/disable filler phrases while waiting for LLM response (true/false)
+enable_thinking_responses = true
 # Filler phrases said while waiting for LLM response (JSON array, [] for none)
 thinking_responses = ["Let me think...","soooo.....","soo....","Let's seeee...","Let me seeee...","Let's see.....","One Moment...","One Moment","hum","humm","Analyzing...","Processing...","Calculating...","Computing...","Running the numbers...","Checking...","One moment...","Scanning data...","Assessing...","Evaluating...","Let me calculate...","Working on it...","Just a moment...","Reviewing...","Compiling...","Cross-referencing...","Thinking it through...","Give me a second...","Hold on..."]
 

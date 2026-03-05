@@ -57,6 +57,10 @@ def get_completion(user_prompt, istext=True):
         raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
 
     try:
+        enable_thinking = CONFIG["CHAR"].get('enable_thinking_responses', True)
+        if isinstance(enable_thinking, str):
+            enable_thinking = enable_thinking.lower() in ('true', '1', 'yes')
+
         thinking_responses_raw = CONFIG["CHAR"].get('thinking_responses', '[]')
         try:
             thinking_responses = json.loads(thinking_responses_raw)
@@ -65,7 +69,7 @@ def get_completion(user_prompt, istext=True):
         if not isinstance(thinking_responses, list):
             thinking_responses = []
 
-        if thinking_responses and len(thinking_responses) > 0:
+        if enable_thinking and thinking_responses and len(thinking_responses) > 0:
             thinking_text = random.choice(thinking_responses)
             if thinking_text and isinstance(thinking_text, str) and thinking_text.strip():
                 queue_message(f"{thinking_text}")
@@ -221,6 +225,10 @@ def process_completion(prompt):
             raise ValueError("Managers must be initialized")
 
         try:
+            enable_thinking = CONFIG["CHAR"].get('enable_thinking_responses', True)
+            if isinstance(enable_thinking, str):
+                enable_thinking = enable_thinking.lower() in ('true', '1', 'yes')
+
             thinking_responses_raw = CONFIG["CHAR"].get('thinking_responses', '[]')
             try:
                 thinking_responses = json.loads(thinking_responses_raw)
@@ -229,7 +237,7 @@ def process_completion(prompt):
             if not isinstance(thinking_responses, list):
                 thinking_responses = []
 
-            if thinking_responses and len(thinking_responses) > 0:
+            if enable_thinking and thinking_responses and len(thinking_responses) > 0:
                 thinking_text = random.choice(thinking_responses)
                 if thinking_text and isinstance(thinking_text, str) and thinking_text.strip():
                     queue_message(f"{thinking_text}")
