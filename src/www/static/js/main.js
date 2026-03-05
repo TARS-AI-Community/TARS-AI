@@ -574,7 +574,7 @@ function executeAction() {
   }
 
   function arrToVal(items, type) { return type==='json' ? JSON.stringify(items) : items.join(','); }
-  function esc(t)  { const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+  function esc(t)  { const d=document.createElement('div'); d.textContent=t; return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function escAttr(s) { return s.replace(/'/g,"&#39;"); }
 
   function tagInputHtml(fid, sec, key, items, arrType) {

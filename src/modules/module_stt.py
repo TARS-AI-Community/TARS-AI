@@ -1322,7 +1322,9 @@ class STTManager:
         outputs = self.smart_turn_session.run(None, {
             "input_features": inputs.input_features.astype(np.float32)
         })
-        return outputs[0][0].item()
+        prob = outputs[0][0].item()
+        queue_message(f"DEBUG: Smart Turn infer done: prob={prob:.3f}, audio_len={len(audio)}")
+        return prob
 
     def _is_silence_detected_smart_turn(self, data, detected_speech, silent_frames):
         """Hybrid RMS + Smart Turn semantic turn detection.
@@ -1384,6 +1386,7 @@ class STTManager:
                     and self.smart_turn_audio_buffer
                     and self._smart_turn_future is None):
                 audio_snapshot = np.concatenate(self.smart_turn_audio_buffer)
+                queue_message(f"DEBUG: Smart Turn submitting inference (silent={silent_frames}, buf_chunks={len(self.smart_turn_audio_buffer)}, samples={len(audio_snapshot)})")
                 self._smart_turn_future = self._smart_turn_executor.submit(
                     self._smart_turn_infer, audio_snapshot
                 )
