@@ -34,10 +34,10 @@ CAPABILITIES = get_capabilities()
 character_manager = None
 memory_manager = None
 
-describe_camera_view_openai = None
+process_camera_image = None
 try:
-    from modules.module_vision import describe_camera_view_openai as _dcvo
-    describe_camera_view_openai = _dcvo
+    from modules.module_vision import process_camera_image as _pci
+    process_camera_image = _pci
 except ImportError:
     pass
 
@@ -549,11 +549,11 @@ def execute_function_call(func_call, bot_response, user_input):
             # Skip camera capture when user already uploaded a photo
             if "Uploaded photo" in user_input:
                 pass
-            elif describe_camera_view_openai is None:
+            elif process_camera_image is None:
                 bot_response["reply"] = "Vision is not available on this device."
             else:
                 query = parameters.get("query", bot_response.get("question", ""))
-                description = describe_camera_view_openai(query)
+                description = process_camera_image(query)
                 if description and not description.startswith("Error:"):
                     bot_response["reply"] = description
                 else:

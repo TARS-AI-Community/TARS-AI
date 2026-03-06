@@ -127,9 +127,13 @@ emotion_model = SamLowe/roberta-base-go_emotions
 [VISION]
 # Enable camera vision (~1GB RAM when active)
 enabled = False
-# Offload image processing to external server (recommended for Pi3/Pi4)
-server_hosted = False
-# Vision server URL (server_hosted = True only)
+# Vision processor: blip | llm | openai | server_hosted
+# blip = local BLIP model (~1GB RAM), generates short captions passed to LLM
+# llm = sends image to your configured LLM backend (requires vision-capable model)
+# openai = sends image to OpenAI GPT-4o-mini vision API (requires OPENAI_API_KEY)
+# server_hosted = sends image to external BLIP server (set base_url below)
+vision_processor = blip
+# Vision server URL (vision_processor = server_hosted only)
 base_url = http://192.168.1.100:5678
 
 [RAG]
