@@ -378,6 +378,7 @@ def load_config():
             "sensitivity": config['STT']['sensitivity'],
             "external_url": config['STT']['external_url'],
             "enable_bargein": config.getboolean('STT', 'enable_bargein', fallback=True),
+            "bargein_mode": config.get('STT', 'bargein_mode', fallback='fuzzy'),
             "bargein_sensitivity": config.getint('STT', 'bargein_sensitivity', fallback=5),
             "speechdelay": int(config['STT']['speechdelay']),
             "language": config['STT']['language'],
@@ -714,7 +715,12 @@ CONFIG_METADATA = {
             'description': 'If you set stt_processor to "external", put the web address of your speech-to-text server here. This is for advanced users who run their own Whisper or other STT server on a separate machine. If you are not using "external" mode, this setting is ignored. Format: http://IP-ADDRESS:PORT'
         },
         'enable_bargein': {
-            'description': 'When ON, you can interrupt TARS while it is talking by speaking over it. TARS listens to the mic during playback and uses speech recognition to detect if you are saying something new (not just echo from the speaker). When OFF, TARS will always finish its full response before listening again.'
+            'description': 'When ON, you can interrupt TARS while it is talking by speaking over it. TARS listens to the mic during playback and detects if you are saying something. When OFF, TARS will always finish its full response before listening again.'
+        },
+        'bargein_mode': {
+            'options': ['fuzzy', 'voiceprint'],
+            'depends_on': [{'field': 'enable_bargein', 'values': ['True', 'true']}],
+            'description': 'How TARS decides if someone is interrupting vs just hearing its own speaker echo. "fuzzy" uses word matching — it transcribes what the mic picks up and checks if the words are different from what TARS is saying. Works without any setup. "voiceprint" uses speaker identification — it checks if the voice it hears matches a known user (like noise cancellation for everything except your voice). Requires Speaker ID to be enabled and at least one speaker enrolled. Best for rooms with lots of background noise or echo.'
         },
         'bargein_sensitivity': {
             'type': 'slider',
@@ -722,7 +728,7 @@ CONFIG_METADATA = {
             'max': 10,
             'step': 1,
             'depends_on': [{'field': 'enable_bargein', 'values': ['True', 'true']}],
-            'description': 'How easy it is to interrupt TARS by speaking over it. 1 = very hard to interrupt (strict matching, good for noisy rooms with TV/music). 5 = balanced default. 10 = very easy to interrupt (sensitive, good for quiet rooms). If TARS keeps getting interrupted by background noise or speaker echo, lower this number. If you have to repeat yourself loudly to get TARS to stop talking, raise it.'
+            'description': 'How easy it is to interrupt TARS. 1 = very hard to interrupt (strict, good for noisy rooms). 5 = balanced default. 10 = very easy to interrupt (good for quiet rooms). In fuzzy mode this controls how aggressively words are matched against speaker echo. In voiceprint mode this controls how closely your voice must match your enrolled voiceprint. Lower this if TARS gets falsely interrupted.'
         },
         'speechdelay': {
             'description': 'After you stop talking, TARS waits this long before deciding you are done and processing your message. The number is in tenths of a second — so 10 = 1 second, 20 = 2 seconds. If set too short (5–8), TARS cuts you off whenever you pause mid-thought. If set too long (35+), there is an awkward gap after every sentence. 15–25 works well for most people and speaking styles. If you speak slowly or tend to pause between sentences, try 25–30. If you speak quickly and want snappy responses, try 12–15. This setting interacts with the VAD method: with "silero" VAD you can often use a lower value because it is better at detecting true silence.'
