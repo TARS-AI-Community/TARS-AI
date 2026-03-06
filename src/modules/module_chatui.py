@@ -338,6 +338,18 @@ def receive_user_message():
     def _process(msg, img_b64):
         global latest_text_to_read
         try:
+            # WebUI messages always come from the configured user
+            try:
+                from modules.module_speaker_id import get_speaker_id_manager
+                sid = get_speaker_id_manager()
+                if sid and sid.enabled:
+                    import time as _time
+                    with sid._lock:
+                        sid.current_speaker = CONFIG['CHAR']['user_name']
+                        sid.current_confidence = 1.0
+                        sid.last_identified_time = _time.time()
+            except Exception:
+                pass
             if img_b64:
                 vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
@@ -406,6 +418,18 @@ def upload():
         queue_message(f"ERROR: Invalid image file: {e}")
         socketio.emit('bot_message', {'message': 'Sorry, I could not process that image.'})
         return 'Invalid image', 400
+
+    # WebUI messages always come from the configured user
+    try:
+        from modules.module_speaker_id import get_speaker_id_manager
+        sid = get_speaker_id_manager()
+        if sid and sid.enabled:
+            with sid._lock:
+                sid.current_speaker = CONFIG['CHAR']['user_name']
+                sid.current_confidence = 1.0
+                sid.last_identified_time = time.time()
+    except Exception:
+        pass
 
     vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
