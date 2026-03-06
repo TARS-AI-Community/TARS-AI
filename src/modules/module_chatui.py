@@ -946,6 +946,9 @@ def get_config():
                         field_options[field_key]['depends_on'] = field_def['depends_on']
                     if 'label' in field_def:
                         field_options[field_key]['label'] = field_def['label']
+                    for k in ('min', 'max', 'step'):
+                        if k in field_def:
+                            field_options[field_key][k] = field_def[k]
         
         # Populate character_card_path options from character directory
         char_key = 'CHAR.character_card_path'

@@ -751,7 +751,10 @@ function executeAction() {
           html += `<label for="${fid}" class="form-label d-flex align-items-center gap-1"><span>${fi?.label||key}</span>`;
           if (desc2) html += `<span class="config-tooltip-wrap" data-tip="${esc(desc2)}"><i class="bi bi-info-circle config-tooltip-icon"></i></span>`;
 
-          if (fi?.type==='screensaver_select') {
+          if (fi?.type==='slider') {
+            const mn=fi.min??0, mx=fi.max??100, st=fi.step??1, v=Number(value)||mn;
+            html += `</label><div class="d-flex align-items-center gap-2"><input type="range" class="config-slider config-input" id="${fid}" data-section="${section}" data-key="${key}" min="${mn}" max="${mx}" step="${st}" value="${v}"><span class="config-slider-val">${v}</span></div>`;
+          } else if (fi?.type==='screensaver_select') {
             html += `</label>${screensaverHtml(fid,section,key,value,fi.options||[])}`;
           } else if (fi?.options) {
             html += `</label><div class="d-flex align-items-center gap-1"><select class="form-select form-select-sm config-input" id="${fid}" data-section="${section}" data-key="${key}" style="flex:1">`;
@@ -927,6 +930,12 @@ function executeAction() {
         t.addEventListener('change', function () {
           const lbl = this.parentElement.querySelector('.form-check-label');
           if (lbl) lbl.textContent = this.checked ? 'Enabled' : 'Disabled';
+        });
+      });
+      document.querySelectorAll('input[type="range"].config-input').forEach(r => {
+        r.addEventListener('input', function () {
+          const badge = this.parentElement.querySelector('.config-slider-val');
+          if (badge) badge.textContent = this.value;
         });
       });
       initTagInputs(); initScreensaverSelects(); initConfigTooltips();

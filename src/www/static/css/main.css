@@ -1244,6 +1244,56 @@ body::after {
   transform: scale(1.1);
 }
 
+/* ── CONFIG SLIDER (mirrors body-range style) ── */
+.config-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  background: rgba(0,229,255,0.1);
+  border: 1px solid rgba(0,229,255,0.15);
+  border-radius: 10px;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.config-slider:hover {
+  background: rgba(0,229,255,0.16);
+}
+.config-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(145deg, #00e5ff, #0099bb);
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 0 10px rgba(0,229,255,0.5);
+  transition: box-shadow 0.2s, transform 0.15s;
+  cursor: pointer;
+}
+.config-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 18px rgba(0,229,255,0.8);
+  transform: scale(1.15);
+}
+.config-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(145deg, #00e5ff, #0099bb);
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 0 10px rgba(0,229,255,0.5);
+  cursor: pointer;
+}
+.config-slider-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cyan);
+  min-width: 28px;
+  text-align: center;
+}
+
 /* ── HORIZONTAL RANGE SLIDER ── */
 .body-range {
   -webkit-appearance: none;
