@@ -419,8 +419,9 @@ def load_config():
         },
         "VISION": {
             "enabled": config.getboolean('VISION', 'enabled'),
-            "server_hosted": config.getboolean('VISION', 'server_hosted'),
-            "base_url": config['VISION']['base_url'],
+            "vision_processor": config.get('VISION', 'vision_processor', fallback='blip'),
+            "server_hosted": config.get('VISION', 'vision_processor', fallback='blip') == 'server_hosted',
+            "base_url": config.get('VISION', 'base_url', fallback=''),
         },
         "EMOTION": {
             "enabled": config.getboolean('EMOTION', 'enabled'),
@@ -794,18 +795,20 @@ CONFIG_METADATA = {
         },
     },
     'VISION': {
-        '__description__': 'Let TARS see the world through a camera and describe what it sees',
+        '__description__': 'Let TARS see the world through a camera or process uploaded photos',
         'enabled': {
-            'description': 'When ON, TARS can use a camera to see and describe what is in front of it. You can ask "what do you see?" and TARS will take a picture and tell you. This loads an image recognition AI model into memory which uses about 1GB+ of RAM, so turn this OFF if you do not have a camera connected or if your Pi is running low on memory.'
+            'description': 'When ON, TARS can use a camera to see and describe what is in front of it, and can process photos uploaded through the web UI. You can ask "what do you see?" and TARS will take a picture and tell you.'
         },
-        'server_hosted': {
+        'vision_processor': {
+            'label': 'Vision Processor',
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'description': 'When OFF (default), the camera image processing happens directly on your Raspberry Pi. When ON, the image is sent to a separate, more powerful computer to be processed. Turn this ON if your Pi is too weak to handle vision (Pi 3 or Pi 4), and then set up the vision server on another computer. If you have a Pi 5, you can leave this OFF to process everything locally.'
+            'options': ['blip', 'llm', 'openai', 'server_hosted'],
+            'description': 'How TARS processes images. "blip" runs a local AI model on your Pi (~1GB RAM) and generates a short caption. "llm" sends the image to your configured LLM backend (must support vision). "openai" sends the image to OpenAI GPT-4o-mini (requires OPENAI_API_KEY). "server_hosted" sends the image to an external BLIP server you run on another computer.'
         },
         'base_url': {
-            'label': 'Base URL',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'server_hosted', 'values': ['True', 'true']}],
-            'description': 'Only matters if "server_hosted" is ON. Enter the web address of the computer running the vision server. Format: http://IP-ADDRESS:PORT (for example: http://192.168.1.100:5678). The vision server script is included in the TARS project and you run it on a more powerful computer that handles the image processing.'
+            'label': 'Vision Server URL',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['server_hosted']}],
+            'description': 'The web address of the computer running the vision server. Format: http://IP-ADDRESS:PORT (for example: http://192.168.1.100:5678). The vision server script is included in the TARS project — run it on a more powerful computer that handles the image processing.'
         },
     },
     'RAG': {

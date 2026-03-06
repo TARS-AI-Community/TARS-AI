@@ -73,7 +73,7 @@ if CONFIG['DISCORD']['enabled']:
 VISION_AVAILABLE = False
 if CONFIG['VISION']['enabled']:
     caps = DEVICE_INFO.get("capabilities")
-    if caps is None or caps.can_use_vision or CONFIG['VISION']['server_hosted']:
+    if caps is None or caps.can_use_vision or CONFIG['VISION']['vision_processor'] in ('server_hosted', 'openai', 'llm'):
         try:
             from modules.module_vision import initialize_blip
             VISION_AVAILABLE = True
@@ -152,7 +152,7 @@ class UIManagerStub:
         pass
 
     def update_data(self, source, message, category="INFO"):
-        queue_message(f"[{category}] {source}: {message}")
+        queue_message(f"{category}: {message}")
     
     def deactivate_screensaver(self):
         pass
@@ -335,7 +335,7 @@ if __name__ == "__main__":
         bt_controller_thread.start()
 
     # === Vision Initialization ===
-    if VISION_AVAILABLE and CONFIG['VISION']['server_hosted'] != "True":
+    if VISION_AVAILABLE and CONFIG['VISION'].get('vision_processor', 'blip') == 'blip':
         initialize_blip()
 
     # === Servo Initialization ===

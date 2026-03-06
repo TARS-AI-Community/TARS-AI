@@ -45,11 +45,11 @@ from modules.module_movement_registry import get_names, get_names_by_type, LEGS_
 
 # Vision is optional — only available if enabled and dependencies are installed
 try:
-    from modules.module_vision import get_image_caption_from_base64
+    from modules.module_vision import process_image
     VISION_AVAILABLE = True
 except ImportError:
     VISION_AVAILABLE = False
-    get_image_caption_from_base64 = None
+    process_image = None
     queue_message("ChatUI: Vision module not available — image captioning disabled")
 
 # WiFi manager — background-initialised to avoid blocking boot
@@ -283,8 +283,6 @@ def update_emotion(detected_emotion):
     if not detected_emotion:
         return
 
-    queue_message(f"Emotion is set: {detected_emotion}")
-
     # Look up the eye mood from the original emotion BEFORE sprite fallback
     mood_name = _EMOTION_TO_MOOD.get(detected_emotion.lower(), "NEUTRAL")
 
@@ -320,47 +318,57 @@ def set_emotion():
 
 @flask_app.route('/process_llm', methods=['POST'])
 def receive_user_message():
-    global latest_text_to_read
-
     user_message = request.form.get('message', '')
     file = request.files.get('file')
 
-    try:
-        if file:
-            buffer = BytesIO()
-            file.save(buffer)
+    # Read file data now (before request context ends)
+    base64_image = None
+    if file:
+        buffer = BytesIO()
+        file.save(buffer)
+        try:
             buffer.seek(0)
-
+            Image.open(buffer).convert('RGB')
             base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
+        except (UnidentifiedImageError, Exception) as e:
+            queue_message(f"ERROR: Invalid image file: {e}")
+            socketio.emit('bot_message', {'message': 'Sorry, I could not process that image.'})
+            return jsonify({"status": "error", "message": "Invalid image"})
 
-            try:
-                raw_image = Image.open(buffer).convert('RGB')
+    def _process(msg, img_b64):
+        global latest_text_to_read
+        try:
+            if img_b64:
                 if VISION_AVAILABLE:
-                    caption = get_image_caption_from_base64(base64_image)
+                    try:
+                        caption = process_image(img_b64, msg or "Describe this image in detail.")
+                    except Exception as e:
+                        queue_message(f"ERROR: Vision processing failed: {e}")
+                        caption = "Image uploaded but vision processing failed"
                 else:
                     caption = "Image uploaded (vision module not available)"
-            except UnidentifiedImageError as e:
-                queue_message(f"Failed to open the image: {e}")
-                caption = "Failed to process image"
 
-            cmessage = f"*The Uploaded photo has the following description {caption}* and the user sent the following message with the photo: {user_message}"
-            reply = get_completion(cmessage)
-        else:
-            reply = get_completion(user_message)
+                if msg:
+                    cmessage = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
+                else:
+                    cmessage = f"*The user uploaded a photo. Description: {caption}*"
+                reply = get_completion(cmessage)
+            else:
+                reply = get_completion(msg)
 
-        latest_text_to_read = reply
-        socketio.emit('bot_message', {'message': latest_text_to_read or ''})
+            latest_text_to_read = reply
+            socketio.emit('bot_message', {'message': reply or ''})
 
-        if CONFIG['EMOTION']['enabled'] and reply:
-            detected = detect_emotion(reply)
-            if detected:
-                update_emotion(detected)
+            if CONFIG['EMOTION']['enabled'] and reply:
+                detected = detect_emotion(reply)
+                if detected:
+                    update_emotion(detected)
 
-    except Exception as e:
-        queue_message(f"ERROR: process_llm failed: {e}")
-        socketio.emit('bot_message', {'message': f'Error processing message: {e}'})
+        except Exception as e:
+            queue_message(f"ERROR: process_llm failed: {e}")
+            socketio.emit('bot_message', {'message': f'Error processing message: {e}'})
 
+    threading.Thread(target=_process, args=(user_message, base64_image), daemon=True).start()
     return jsonify({"status": "success"})
 
 @flask_app.route('/upload', methods=['GET', 'POST'])
@@ -370,44 +378,43 @@ def upload():
     from PIL import Image, UnidentifiedImageError
 
     global start_time, latest_text_to_read
-    start_time = time.time() 
+    start_time = time.time()
 
-    # Assuming 'file' is the key in the FormData object containing the file
-    file = request.files['file']
-    if file:
-        # Convert the image to a BytesIO buffer, then to a base64 string
-        buffer = BytesIO()
-        file.save(buffer)
-        base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
-
-        img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
-        socketio.emit('user_message', {'message': img_html})
-
-        # Optionally, for further processing like getting a caption
-        try:
-            buffer.seek(0)  # Reset buffer position to the beginning
-            raw_image = Image.open(buffer).convert('RGB')
-            # Proceed with processing the image, like getting a caption
-            caption = "Image processed successfully"
-        except UnidentifiedImageError as e:
-            queue_message(f"Failed to open the image: {e}")
-            caption = "Failed to process image"
-
-
-        if VISION_AVAILABLE:
-            caption = get_image_caption_from_base64(base64_image)
-        else:
-            caption = "Image uploaded (vision module not available)"
-        cmessage = f"*Sends {CONFIG['CHAR']['user_name']} a picture of: {caption}*"
-
-        reply = get_completion(cmessage)
-        latest_text_to_read = reply
-
-        socketio.emit('bot_message', {'message': latest_text_to_read})
-
-        return 'Upload OK'
-    else:
+    file = request.files.get('file')
+    if not file:
         return 'No file part', 400
+
+    buffer = BytesIO()
+    file.save(buffer)
+    base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+    img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
+    socketio.emit('user_message', {'message': img_html})
+
+    try:
+        buffer.seek(0)
+        Image.open(buffer).convert('RGB')
+    except (UnidentifiedImageError, Exception) as e:
+        queue_message(f"ERROR: Invalid image file: {e}")
+        socketio.emit('bot_message', {'message': 'Sorry, I could not process that image.'})
+        return 'Invalid image', 400
+
+    if VISION_AVAILABLE:
+        try:
+            caption = process_image(base64_image, "Describe this image in detail.")
+        except Exception as e:
+            queue_message(f"ERROR: Vision processing failed: {e}")
+            caption = "Image uploaded but vision processing failed"
+    else:
+        caption = "Image uploaded (vision module not available)"
+
+    cmessage = f"*{CONFIG['CHAR']['user_name']} sent a photo. Description: {caption}*"
+    reply = get_completion(cmessage)
+    latest_text_to_read = reply
+
+    socketio.emit('bot_message', {'message': latest_text_to_read})
+
+    return 'Upload OK'
 
 @flask_app.route('/audio_stream')
 def audio_stream():

@@ -155,7 +155,6 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
     fresh_traits = reload_persona_settings()
     if fresh_traits:
         character_manager.traits = fresh_traits
-        queue_message(f"[PERSONA] Loaded: verbosity={fresh_traits.get('verbosity')}, sarcasm={fresh_traits.get('sarcasm')}, humor={fresh_traits.get('humor')}")
     now = datetime.now()
     user_name = _get_active_user_name(config['CHAR']['user_name'])
     char_name = character_manager.char_name

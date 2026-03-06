@@ -524,9 +524,6 @@ class MemoryManager:
                     try:
                         enc = tiktoken.encoding_for_model(model_name)
                     except KeyError:
-                        if not self._fallback_warning_logged:
-                            queue_message(f"INFO: Automatic mapping failed '{model_name}'. Using '{override_encoding_model}'.")
-                            self._fallback_warning_logged = True
                         enc = tiktoken.get_encoding(override_encoding_model)
 
                 length = {"length": len(enc.encode(text))}
