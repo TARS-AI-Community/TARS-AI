@@ -339,20 +339,28 @@ def receive_user_message():
         global latest_text_to_read
         try:
             if img_b64:
-                if VISION_AVAILABLE:
-                    try:
-                        caption = process_image(img_b64, msg or "Describe this image in detail.")
-                    except Exception as e:
-                        queue_message(f"ERROR: Vision processing failed: {e}")
-                        caption = "Image uploaded but vision processing failed"
-                else:
-                    caption = "Image uploaded (vision module not available)"
+                vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
-                if msg:
-                    cmessage = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
+                if vision_mode == 'llm':
+                    # Single call — image goes directly to LLM with full personality
+                    prompt = msg or "The user sent you a photo. Describe what you see and respond in character."
+                    reply = get_completion(prompt, image_b64=img_b64)
                 else:
-                    cmessage = f"*The user uploaded a photo. Description: {caption}*"
-                reply = get_completion(cmessage)
+                    # Two-step — get caption first, then send to LLM for conversation
+                    if VISION_AVAILABLE:
+                        try:
+                            caption = process_image(img_b64, msg or "Describe this image in detail.")
+                        except Exception as e:
+                            queue_message(f"ERROR: Vision processing failed: {e}")
+                            caption = "Image uploaded but vision processing failed"
+                    else:
+                        caption = "Image uploaded (vision module not available)"
+
+                    if msg:
+                        cmessage = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
+                    else:
+                        cmessage = f"*The user uploaded a photo. Description: {caption}*"
+                    reply = get_completion(cmessage)
             else:
                 reply = get_completion(msg)
 
@@ -368,7 +376,7 @@ def receive_user_message():
             queue_message(f"ERROR: process_llm failed: {e}")
             socketio.emit('bot_message', {'message': f'Error processing message: {e}'})
 
-    threading.Thread(target=_process, args=(user_message, base64_image), daemon=True).start()
+    socketio.start_background_task(_process, user_message, base64_image)
     return jsonify({"status": "success"})
 
 @flask_app.route('/upload', methods=['GET', 'POST'])
@@ -399,20 +407,25 @@ def upload():
         socketio.emit('bot_message', {'message': 'Sorry, I could not process that image.'})
         return 'Invalid image', 400
 
-    if VISION_AVAILABLE:
-        try:
-            caption = process_image(base64_image, "Describe this image in detail.")
-        except Exception as e:
-            queue_message(f"ERROR: Vision processing failed: {e}")
-            caption = "Image uploaded but vision processing failed"
+    vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
+
+    if vision_mode == 'llm':
+        reply = get_completion(f"{CONFIG['CHAR']['user_name']} sent you a photo. Describe what you see and respond in character.", image_b64=base64_image)
     else:
-        caption = "Image uploaded (vision module not available)"
+        if VISION_AVAILABLE:
+            try:
+                caption = process_image(base64_image, "Describe this image in detail.")
+            except Exception as e:
+                queue_message(f"ERROR: Vision processing failed: {e}")
+                caption = "Image uploaded but vision processing failed"
+        else:
+            caption = "Image uploaded (vision module not available)"
 
-    cmessage = f"*{CONFIG['CHAR']['user_name']} sent a photo. Description: {caption}*"
-    reply = get_completion(cmessage)
+        cmessage = f"*{CONFIG['CHAR']['user_name']} sent a photo. Description: {caption}*"
+        reply = get_completion(cmessage)
+
     latest_text_to_read = reply
-
-    socketio.emit('bot_message', {'message': latest_text_to_read})
+    socketio.emit('bot_message', {'message': reply or ''})
 
     return 'Upload OK'
 
