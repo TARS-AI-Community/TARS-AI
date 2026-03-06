@@ -13,6 +13,7 @@ import re
 import random
 import threading
 import time
+from collections import deque
 import wave
 import json
 import sys
@@ -195,7 +196,7 @@ class STTManager:
         # Smart Turn semantic turn detection
         self.smart_turn_session = None
         self.smart_turn_extractor = None
-        self.smart_turn_audio_buffer = []
+        self.smart_turn_audio_buffer = deque(maxlen=32)
         self._smart_turn_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SmartTurn")
         self._smart_turn_future = None  # pending inference Future
 
@@ -640,7 +641,7 @@ class STTManager:
 
     def _chunks_to_float32(self, chunks):
         """Convert list of int16 numpy chunks to a single float32 array."""
-        return np.concatenate(chunks).astype(np.float32).flatten() / 32768.0
+        return np.concatenate(chunks).astype(np.float32) / 32768.0
 
     # === Result Emission ===
 
@@ -732,7 +733,6 @@ class STTManager:
             return result
         except Exception as e:
             queue_message(f"ERROR: Transcription failed: {e}")
-            return None
             return None
 
     # === Transcription Backends ===
@@ -1380,9 +1380,6 @@ class STTManager:
                 detected_speech = True
                 silent_frames = 0
                 self.smart_turn_audio_buffer.append(data.astype(np.float32).flatten() / 32768.0)
-                # Cap buffer at ~8 seconds (32 chunks x 0.25s) — smart turn only uses the tail
-                if len(self.smart_turn_audio_buffer) > 32:
-                    self.smart_turn_audio_buffer = self.smart_turn_audio_buffer[-32:]
                 self._smart_turn_future = None  # discard stale result if speaker resumed
                 clear_bar()
                 return False, detected_speech, silent_frames
@@ -1417,7 +1414,7 @@ class STTManager:
             if (silent_frames >= 3 and detected_speech
                     and self.smart_turn_audio_buffer
                     and self._smart_turn_future is None):
-                audio_snapshot = np.concatenate(self.smart_turn_audio_buffer)
+                audio_snapshot = np.concatenate(list(self.smart_turn_audio_buffer))
                 if self.DEBUG:
                     queue_message(f"DEBUG: Smart Turn submitting inference (silent={silent_frames}, buf_chunks={len(self.smart_turn_audio_buffer)}, samples={len(audio_snapshot)})")
                 self._smart_turn_future = self._smart_turn_executor.submit(
@@ -1558,7 +1555,7 @@ class STTManager:
                         # Always collect audio with speech energy
                         rms = self._compute_rms_fast(data)
                         if rms and rms > bargein_threshold:
-                            audio_buf.append(data.copy())
+                            audio_buf.append(data)
 
                         # Periodically transcribe what we've collected
                         if frame_count % TRANSCRIBE_EVERY == 0:
@@ -1623,7 +1620,7 @@ class STTManager:
                         # Collect frames with speech energy
                         rms = self._compute_rms_fast(data)
                         if rms and rms > bargein_threshold:
-                            audio_buf.append(data.copy())
+                            audio_buf.append(data)
 
                         if frame_count % CHECK_EVERY == 0:
                             if len(audio_buf) < 4:
@@ -1638,7 +1635,7 @@ class STTManager:
                             # Convert to float32 for embedding extraction
                             audio_int16 = np.concatenate(audio_buf)
                             audio_buf.clear()
-                            audio_float32 = audio_int16.astype(np.float32).flatten() / 32768.0
+                            audio_float32 = audio_int16.astype(np.float32) / 32768.0
 
                             sid = get_speaker_id_manager()
                             if sid is None:
