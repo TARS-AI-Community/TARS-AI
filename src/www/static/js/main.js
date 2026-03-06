@@ -1040,7 +1040,10 @@ function executeAction() {
         if (!attached.has(parentId)) {
           attached.add(parentId);
           const parentEl = document.getElementById(parentId);
-          if (parentEl) parentEl.addEventListener('change', applyDependencies);
+          if (parentEl) {
+            parentEl.addEventListener('change', applyDependencies);
+            if (parentEl.type === 'range') parentEl.addEventListener('input', applyDependencies);
+          }
         }
       });
     });

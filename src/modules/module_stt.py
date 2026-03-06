@@ -202,15 +202,18 @@ class STTManager:
         # Barge-in monitoring
         self._bargein_active = False
         self._bargein_thread = None
-        # Barge-in sensitivity: map 0-10 to fuzzy matching thresholds (0 = off)
-        sensitivity = max(0, min(10, int(CONFIG['STT'].get('bargein_sensitivity', 5))))
-        self._bargein_enabled = sensitivity > 0
-        if sensitivity > 0:
-            t = (sensitivity - 1) / 9.0  # 0.0 (sens=1, hard to interrupt) to 1.0 (sens=10, easy)
-            # Higher sensitivity = LOWER threshold = fewer words matched as TTS = easier to trigger
-            # Only one threshold now — fuzzy match for 4+ char words only
-            self._bargein_broad_threshold = 0.80 - t * 0.10   # 0.80 (sens=1) to 0.70 (sens=10)
-            self._bargein_min_novel = 3 if sensitivity <= 3 else 2
+        self._bargein_enabled = CONFIG['STT'].get('enable_bargein', True)
+        if isinstance(self._bargein_enabled, str):
+            self._bargein_enabled = self._bargein_enabled.lower() in ('true', '1', 'yes')
+        self._bargein_mode = CONFIG['STT'].get('bargein_mode', 'fuzzy')
+        sensitivity = max(1, min(10, int(CONFIG['STT'].get('bargein_sensitivity', 5))))
+        t = (sensitivity - 1) / 9.0  # 0.0 (sens=1, hard to interrupt) to 1.0 (sens=10, easy)
+        # Fuzzy mode: higher sensitivity = lower threshold = fewer words matched as echo
+        self._bargein_broad_threshold = 0.80 - t * 0.10   # 0.80 (sens=1) to 0.70 (sens=10)
+        self._bargein_min_novel = 3 if sensitivity <= 3 else 2
+        # Voiceprint mode: higher sensitivity = lower confidence required to match
+        # Bleed scores 0.50-0.55, mixed voice+bleed scores 0.58-0.82
+        self._bargein_voiceprint_threshold = 0.69 - t * 0.10  # 0.69 (sens=1) to 0.59 (sens=10)
 
         # Last recorded audio for speaker ID (set by transcription backends)
         self._last_audio_float32 = None
@@ -680,6 +683,7 @@ class STTManager:
 
     def _transcribe_utterance(self):
         """Transcribe the user's utterance using the selected STT processor."""
+        result = None
         try:
             if self.is_paused():
                 return None
@@ -702,6 +706,7 @@ class STTManager:
             # Filter non-speech noise
             if result and not self._is_meaningful_text(result.get("text", "")):
                 queue_message(f"INFO: STT filtered non-speech noise: '{result.get('text', '')}'")
+                result = None
                 return None
 
             # Submit audio to Speaker ID for passive identification
@@ -714,12 +719,14 @@ class STTManager:
                 except Exception:
                     pass
 
-            if self.post_utterance_callback and result:
-                self.post_utterance_callback()
             return result
         except Exception as e:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
+        finally:
+            # Always restart listening — never let the loop die
+            if self.post_utterance_callback:
+                self.post_utterance_callback()
 
     # === Transcription Backends ===
 
@@ -1466,26 +1473,48 @@ class STTManager:
 
     def start_bargein_monitor(self, tts_text=""):
         """Start monitoring mic for barge-in during TTS playback.
-        Uses speech recognition to detect words NOT in the TTS response,
-        which means a human is speaking over TARS.
 
-        Uses a sliding window over the TTS text synced to estimated playback
-        position to aggressively filter out speaker bleed.
+        Two modes:
+        - fuzzy: Transcribes mic audio and checks for words NOT in the TTS text.
+        - voiceprint: Extracts speaker embedding and checks if it matches a known user.
 
         Args:
-            tts_text: The text TARS is currently saying, used to filter out
-                      words that are just echo/bleed from the speaker.
+            tts_text: The text TARS is currently saying (used by fuzzy mode).
         """
         if not self._bargein_enabled:
             return
         if self.silence_threshold is None:
             return  # Can't monitor without a noise floor
-        if self.sherpa_recognizer is None and self.fastrtc_model is None:
-            queue_message("WARN: Barge-in requires sherpa-onnx or fastrtc, skipping")
+
+        mode = self._bargein_mode
+
+        if mode == 'voiceprint':
+            # Voiceprint mode needs speaker ID
+            try:
+                from modules.module_speaker_id import get_speaker_id_manager
+                sid = get_speaker_id_manager()
+                if sid is None or sid._manager is None or sid._manager.num_speakers == 0:
+                    queue_message("WARN: Barge-in voiceprint mode requires Speaker ID with enrolled speakers, falling back to fuzzy")
+                    mode = 'fuzzy'
+            except Exception as e:
+                queue_message(f"WARN: Speaker ID not available ({e}), falling back to fuzzy barge-in")
+                mode = 'fuzzy'
+
+        if mode == 'fuzzy' and self.sherpa_recognizer is None and self.fastrtc_model is None:
+            queue_message("WARN: Barge-in fuzzy mode requires sherpa-onnx or fastrtc, skipping")
             return
+
         self._bargein_active = True
-        if self.DEBUG:
-            queue_message(f"DEBUG: Barge-in started (sensitivity={int(CONFIG['STT'].get('bargein_sensitivity', 5))}, broad={self._bargein_broad_threshold:.2f}, min_novel={self._bargein_min_novel})")
+        queue_message(f"INFO: Barge-in started (mode={mode})")
+
+        if mode == 'voiceprint':
+            self._start_bargein_voiceprint()
+        else:
+            self._start_bargein_fuzzy(tts_text)
+
+    def _start_bargein_fuzzy(self, tts_text):
+        """Fuzzy word-matching barge-in monitor."""
+        from modules.module_tts import stop_tts_playback
 
         # Build ordered word list for sliding window + full set for broad matching
         tts_word_list = []
@@ -1496,7 +1525,6 @@ class STTManager:
             tts_words_all = set(tts_word_list)
 
         def _monitor():
-            from modules.module_tts import stop_tts_playback
             bargein_threshold = self.silence_threshold
             audio_buf = []
             TRANSCRIBE_EVERY = 8  # Transcribe every ~1s (8 x 125ms frames)
@@ -1509,6 +1537,10 @@ class STTManager:
 
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
+                    # Flush stale audio from OS buffer (discard first ~0.5s)
+                    for _ in range(4):
+                        stream.read(2000)
+
                     while self._bargein_active:
                         data, _ = stream.read(2000)  # ~125ms frame
                         frame_count += 1
@@ -1552,6 +1584,78 @@ class STTManager:
                                     break
             except Exception as e:
                 queue_message(f"WARN: Barge-in monitor error: {e}")
+
+        self._bargein_thread = threading.Thread(target=_monitor, daemon=True)
+        self._bargein_thread.start()
+
+    def _start_bargein_voiceprint(self):
+        """Voiceprint-based barge-in monitor. Checks if detected speech matches a known speaker."""
+        from modules.module_tts import stop_tts_playback
+        from modules.module_speaker_id import get_speaker_id_manager
+
+        def _monitor():
+            bargein_threshold = self.silence_threshold
+            audio_buf = []
+            CHECK_EVERY = 12  # Check every ~1.5s (12 x 125ms) — need enough audio for embedding
+            frame_count = 0
+            recent_results = []  # Sliding window: require 2 out of 3 matches
+
+            try:
+                with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
+                    # Flush stale audio from OS buffer (discard first ~0.5s)
+                    for _ in range(4):
+                        stream.read(2000)
+
+                    while self._bargein_active:
+                        data, _ = stream.read(2000)  # ~125ms frame
+                        frame_count += 1
+
+                        # Collect frames with speech energy
+                        rms = self._compute_rms(self.amplify_audio(data))
+                        if rms and rms > bargein_threshold:
+                            audio_buf.append(data.copy())
+
+                        if frame_count % CHECK_EVERY == 0:
+                            if len(audio_buf) < 6:
+                                # Not enough speech frames for a usable embedding (~0.75s)
+                                recent_results.append(False)
+                                recent_results = recent_results[-3:]
+                                if self.DEBUG:
+                                    queue_message(f"DEBUG: Barge-in voiceprint: insufficient speech ({len(audio_buf)}/{CHECK_EVERY} frames)")
+                                audio_buf.clear()
+                                continue
+
+                            # Convert to float32 for embedding extraction
+                            audio_int16 = np.concatenate(audio_buf)
+                            audio_buf.clear()
+                            audio_float32 = audio_int16.astype(np.float32).flatten() / 32768.0
+
+                            sid = get_speaker_id_manager()
+                            if sid is None:
+                                continue
+
+                            embedding = sid.extract_embedding(audio_float32, 16000)
+                            if embedding is None:
+                                recent_results.append(False)
+                                recent_results = recent_results[-3:]
+                                if self.DEBUG:
+                                    queue_message("DEBUG: Barge-in voiceprint: embedding extraction failed")
+                                continue
+
+                            name, confidence = sid.identify_speaker(embedding)
+                            if self.DEBUG:
+                                queue_message(f"DEBUG: Barge-in voiceprint: speaker='{name}' confidence={confidence:.2f} threshold={self._bargein_voiceprint_threshold:.2f}")
+
+                            matched = bool(name and confidence >= self._bargein_voiceprint_threshold)
+                            recent_results.append(matched)
+                            recent_results = recent_results[-3:]
+
+                            if sum(recent_results) >= 2:
+                                queue_message(f"INFO: Barge-in detected! Voice matched '{name}' (confidence: {confidence:.2f})")
+                                stop_tts_playback()
+                                break
+            except Exception as e:
+                queue_message(f"WARN: Barge-in voiceprint monitor error: {e}")
 
         self._bargein_thread = threading.Thread(target=_monitor, daemon=True)
         self._bargein_thread.start()

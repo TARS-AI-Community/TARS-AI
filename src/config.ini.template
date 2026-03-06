@@ -62,7 +62,7 @@ wake_word = hey tars
 #   Pi4: sherpa-onnx | atomik
 #   Pi3: sherpa-onnx | atomik
 #   PiZero2: atomik
-wake_word_processor = atomik
+wake_word_processor = smart-turn
 # Wake word strictness 1–10 (atomik only; 1 = lenient, 10 = strict)
 sensitivity = 7
 # Speech-to-text engine (independent of wake_word_processor — mix freely)
@@ -80,19 +80,21 @@ external_url = http://192.168.1.100:5678
 #   Pi4: smart-turn | sherpa-onnx | silero | rms
 #   Pi3: sherpa-onnx | rms
 #   PiZero2: rms
-vad_method = rms
+vad_method = smart-turn
 # Denoise audio before transcription (requires sherpa-onnx): True | False
 sherpa_onnx_denoise = False
 # Add punctuation to transcriptions (requires sherpa-onnx): True | False
 sherpa_onnx_punctuation = False
 # Enable barge-in detection — interrupt TARS by speaking while it talks: True | False
 enable_bargein = True
+# Barge-in detection mode: fuzzy (word matching) | voiceprint (speaker ID matching)
+bargein_mode = voiceprint
 # Barge-in sensitivity 1–10 (1 = hard to interrupt, 10 = very sensitive)
 bargein_sensitivity = 5
 # Silence before processing in tenths of a second (20 = 2s)
 speechdelay = 20
 # Speaker identification — passively identify who is speaking (Pi5/Pi4 only)
-speaker_id_enabled = False
+speaker_id_enabled = True
 # Speaker ID cosine similarity threshold (0.0–1.0, higher = stricter matching)
 speaker_id_threshold = 0.5
 # Microphone amplification gain — multiplies raw mic input (higher = more sensitive, default 10.0)
