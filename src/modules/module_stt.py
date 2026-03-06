@@ -13,6 +13,7 @@ import re
 import random
 import threading
 import time
+from collections import deque
 import wave
 import json
 import sys
@@ -195,7 +196,7 @@ class STTManager:
         # Smart Turn semantic turn detection
         self.smart_turn_session = None
         self.smart_turn_extractor = None
-        self.smart_turn_audio_buffer = []
+        self.smart_turn_audio_buffer = deque(maxlen=32)
         self._smart_turn_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SmartTurn")
         self._smart_turn_future = None  # pending inference Future
 
@@ -223,9 +224,9 @@ class STTManager:
         self._webui_port = CONFIG['UI'].get('webui_port', 80)
         self._character_name = self._resolve_character_name()
 
+        self.DEBUG = False
         self._initialize_models()
         self.vadmethod = CONFIG['STT']['vad_method']
-        self.DEBUG = False
 
     # === Initialization ===
 
@@ -471,7 +472,10 @@ class STTManager:
 
             self.smart_turn_session = ort.InferenceSession(model_path, sess_options=so)
             self.smart_turn_extractor = WhisperFeatureExtractor(chunk_length=8)
-            queue_message("INFO: Smart Turn v3.2 model loaded successfully.")
+            # Pre-warm: run dummy inference to eliminate first-utterance latency spike
+            dummy = np.zeros(16000, dtype=np.float32)  # 1s silence
+            self._smart_turn_infer(dummy)
+            queue_message("INFO: Smart Turn v3.2 model loaded and pre-warmed.")
         except ImportError as e:
             queue_message(f"ERROR: Smart Turn requires onnxruntime and transformers: {e}")
             self.smart_turn_session = None
@@ -515,6 +519,15 @@ class STTManager:
     def amplify_audio(self, data: np.ndarray) -> np.ndarray:
         return np.clip(data * self.amp_gain, -32768, 32767).astype(np.int16)
 
+    def _compute_rms_fast(self, data):
+        """Compute RMS with amplification in one pass — no int16 round-trip."""
+        if data.size == 0:
+            return None
+        flat = data.reshape(-1).astype(np.float64) * self.amp_gain
+        if np.all(flat == 0):
+            return None
+        return np.sqrt(np.mean(np.square(flat)))
+
     def _find_default_mic_sample_rate(self):
         try:
             idx = sd.default.device[0]
@@ -535,7 +548,7 @@ class STTManager:
 
     def _is_quiet(self, data):
         """Quick RMS silence gate check. Returns True if below threshold."""
-        rms = self._compute_rms(self.amplify_audio(data))
+        rms = self._compute_rms_fast(data)
         if rms is None:
             return True
         threshold = self.silence_threshold_margin or self.silence_threshold
@@ -557,15 +570,15 @@ class STTManager:
         audio_chunks = []
         max_silent = self.MAX_SILENT_FRAMES
 
-        # Select VAD method
+        # Select VAD method — resolve once, not per frame
         if vad_method is None:
-            vad_func = self.voice_activity_detection_main
-        elif vad_method == "rms":
-            vad_func = self._is_silence_detected_rms
-        elif vad_method == "smart-turn" and self.smart_turn_session is not None:
-            vad_func = self._is_silence_detected_smart_turn
-        else:
-            vad_func = self._is_silence_detected_rms
+            vad_method = self.vadmethod
+        vad_dispatch = {
+            "silero": self._is_silence_detected_silero,
+            "sherpa-onnx": self._is_silence_detected_sherpa_onnx,
+            "smart-turn": self._is_silence_detected_smart_turn if self.smart_turn_session is not None else self._is_silence_detected_rms,
+        }
+        vad_func = vad_dispatch.get(vad_method, self._is_silence_detected_rms)
 
         with sd.InputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
             for _ in range(self.MAX_RECORDING_FRAMES):
@@ -720,7 +733,6 @@ class STTManager:
             return result
         except Exception as e:
             queue_message(f"ERROR: Transcription failed: {e}")
-            return None
             return None
 
     # === Transcription Backends ===
@@ -1271,7 +1283,7 @@ class STTManager:
     def _is_silence_detected_rms(self, data, detected_speech, silent_frames):
         """RMS-based silence detection with visual progress bar."""
         update_bar, clear_bar = self._get_progress_bar()
-        rms = self._compute_rms(self.amplify_audio(data))
+        rms = self._compute_rms_fast(data)
         if self.silence_threshold_margin is None:
             self.silence_threshold_margin = self.silence_threshold
 
@@ -1357,7 +1369,7 @@ class STTManager:
                 return self._is_silence_detected_rms(data, detected_speech, silent_frames)
 
             # RMS check on current frame
-            rms = self._compute_rms(self.amplify_audio(data))
+            rms = self._compute_rms_fast(data)
             if self.silence_threshold_margin is None:
                 self.silence_threshold_margin = self.silence_threshold
             if rms is None:
@@ -1402,7 +1414,7 @@ class STTManager:
             if (silent_frames >= 3 and detected_speech
                     and self.smart_turn_audio_buffer
                     and self._smart_turn_future is None):
-                audio_snapshot = np.concatenate(self.smart_turn_audio_buffer)
+                audio_snapshot = np.concatenate(list(self.smart_turn_audio_buffer))
                 if self.DEBUG:
                     queue_message(f"DEBUG: Smart Turn submitting inference (silent={silent_frames}, buf_chunks={len(self.smart_turn_audio_buffer)}, samples={len(audio_snapshot)})")
                 self._smart_turn_future = self._smart_turn_executor.submit(
@@ -1427,7 +1439,7 @@ class STTManager:
         with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
             for _ in range(20):
                 data, _ = stream.read(4000)
-                rms = self._compute_rms(self.amplify_audio(data))
+                rms = self._compute_rms_fast(data)
                 if rms is not None:
                     rms_values.append(rms)
                 time.sleep(0.1)
@@ -1541,9 +1553,9 @@ class STTManager:
                         frame_count += 1
 
                         # Always collect audio with speech energy
-                        rms = self._compute_rms(self.amplify_audio(data))
+                        rms = self._compute_rms_fast(data)
                         if rms and rms > bargein_threshold:
-                            audio_buf.append(data.copy())
+                            audio_buf.append(data)
 
                         # Periodically transcribe what we've collected
                         if frame_count % TRANSCRIBE_EVERY == 0:
@@ -1606,9 +1618,9 @@ class STTManager:
                         frame_count += 1
 
                         # Collect frames with speech energy
-                        rms = self._compute_rms(self.amplify_audio(data))
+                        rms = self._compute_rms_fast(data)
                         if rms and rms > bargein_threshold:
-                            audio_buf.append(data.copy())
+                            audio_buf.append(data)
 
                         if frame_count % CHECK_EVERY == 0:
                             if len(audio_buf) < 4:
