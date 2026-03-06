@@ -188,6 +188,80 @@ _on_movement_start = None
 _on_movement_end = None
 _is_ventilate_operation = False
 
+
+def refresh_config():
+    """Re-read config and update all offset-dependent servo variables without reinitializing PCA."""
+    global leftMainMin, leftMainMax, leftForarmMin, leftForarmMax, leftHandMin, leftHandMax
+    global rightMainMin, rightMainMax, rightForarmMin, rightForarmMax, rightHandMin, rightHandMax
+    global leftMainOffset, leftForearmOffset, leftHandOffset
+    global rightMainOffset, rightForearmOffset, rightHandOffset
+    global perfectLeftHeightOffset, leftUpHeight, leftNeutralHeight, leftDownHeight
+    global perfectRightHeightOffset, rightUpHeight, rightNeutralHeight, rightDownHeight
+    global perfectLeftLegOffset, forwardLeftLeg, neutralLeftLeg, backLeftLeg
+    global perfectRightLegOffset, forwardRightLeg, neutralRightLeg, backRightLeg
+    global ARMS_PRESENT
+
+    cfg = load_config()
+    servo = cfg["SERVO"]
+
+    # Arm base values
+    leftMainMin = int(servo["leftMainMin"])
+    leftMainMax = int(servo["leftMainMax"])
+    leftForarmMin = int(servo["leftForarmMin"])
+    leftForarmMax = int(servo["leftForarmMax"])
+    leftHandMin = int(servo["leftHandMin"])
+    leftHandMax = int(servo["leftHandMax"])
+    rightMainMin = int(servo["rightMainMin"])
+    rightMainMax = int(servo["rightMainMax"])
+    rightForarmMin = int(servo["rightForarmMin"])
+    rightForarmMax = int(servo["rightForarmMax"])
+    rightHandMin = int(servo["rightHandMin"])
+    rightHandMax = int(servo["rightHandMax"])
+
+    # Arm offsets
+    leftMainOffset = int(servo["leftMainOffset"])
+    leftMainMin += leftMainOffset
+    leftMainMax += leftMainOffset
+    leftForearmOffset = int(servo["leftForearmOffset"])
+    leftForarmMin += leftForearmOffset
+    leftForarmMax += leftForearmOffset
+    leftHandOffset = int(servo["leftHandOffset"])
+    leftHandMin += leftHandOffset
+    leftHandMax += leftHandOffset
+    rightMainOffset = int(servo["rightMainOffset"])
+    rightMainMin += rightMainOffset
+    rightMainMax += rightMainOffset
+    rightForearmOffset = int(servo["rightForearmOffset"])
+    rightForarmMin += rightForearmOffset
+    rightForarmMax += rightForearmOffset
+    rightHandOffset = int(servo["rightHandOffset"])
+    rightHandMin += rightHandOffset
+    rightHandMax += rightHandOffset
+
+    # Leg offsets
+    perfectLeftHeightOffset = int(servo["perfectLeftHeightOffset"])
+    leftUpHeight = int(servo["leftUpHeight"]) + perfectLeftHeightOffset
+    leftNeutralHeight = NEUTRAL_LEFT_HEIGHT + perfectLeftHeightOffset
+    leftDownHeight = int(servo["leftDownHeight"]) + perfectLeftHeightOffset
+
+    perfectRightHeightOffset = int(servo["perfectRightHeightOffset"])
+    rightUpHeight = int(servo["rightUpHeight"]) - perfectRightHeightOffset
+    rightNeutralHeight = NEUTRAL_RIGHT_HEIGHT - perfectRightHeightOffset
+    rightDownHeight = int(servo["rightDownHeight"]) - perfectRightHeightOffset
+
+    perfectLeftLegOffset = int(servo["perfectLeftLegOffset"])
+    forwardLeftLeg = int(servo["forwardLeftLeg"]) + perfectLeftLegOffset
+    neutralLeftLeg = NEUTRAL_LEFT_LEG + perfectLeftLegOffset
+    backLeftLeg = int(servo["backLeftLeg"]) + perfectLeftLegOffset
+
+    perfectRightLegOffset = int(servo["perfectRightLegOffset"])
+    forwardRightLeg = int(servo["forwardRightLeg"]) + perfectRightLegOffset
+    neutralRightLeg = NEUTRAL_RIGHT_LEG + perfectRightLegOffset
+    backRightLeg = int(servo["backRightLeg"]) + perfectRightLegOffset
+
+    ARMS_PRESENT = servo["arms_present"]
+
+
 def set_movement_callbacks(on_start=None, on_end=None):
     
     global _on_movement_start, _on_movement_end

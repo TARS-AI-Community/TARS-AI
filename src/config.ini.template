@@ -62,7 +62,7 @@ wake_word = hey tars
 #   Pi4: sherpa-onnx | atomik
 #   Pi3: sherpa-onnx | atomik
 #   PiZero2: atomik
-wake_word_processor = smart-turn
+wake_word_processor = atomik
 # Wake word strictness 1–10 (atomik only; 1 = lenient, 10 = strict)
 sensitivity = 7
 # Speech-to-text engine (independent of wake_word_processor — mix freely)
@@ -198,7 +198,7 @@ font_size = 12
 screensaver_timer = 300
 # Seconds per screensaver when using multiple animations
 screensaver_cycle_interval = 300
-# Screensaver animations: random, or names like face,matrix,starfield
+# Screensaver animations: random, or names like face,matrix,starfield (Available animations: blackhole, waves, matrix, starfield, hyperspace, terminal, face, fractal, pacman, nebulas, pictures, dashboard, defrag, bounce, endurance, toasters, aquarium)
 screensaver_list = random
 
 [CONTROLS]
