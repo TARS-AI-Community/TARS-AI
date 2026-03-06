@@ -419,12 +419,13 @@ def load_config():
         },
         "VISION": {
             "enabled": config.getboolean('VISION', 'enabled'),
-            "vision_processor": config.get('VISION', 'vision_processor', fallback='blip'),
             "camera_rotation": config.getint('VISION', 'camera_rotation', fallback=0),
+            "vision_processor": config.get('VISION', 'vision_processor', fallback='blip'),
+            "use_llm_backend": config.getboolean('VISION', 'use_llm_backend', fallback=True),
             "server_hosted": config.get('VISION', 'vision_processor', fallback='blip') == 'server_hosted',
+            "base_url": config.get('VISION', 'base_url', fallback=''),
             "vision_model": config.get('VISION', 'vision_model', fallback=''),
             "vision_max_tokens": config.getint('VISION', 'vision_max_tokens', fallback=150),
-            "base_url": config.get('VISION', 'base_url', fallback=''),
         },
         "EMOTION": {
             "enabled": config.getboolean('EMOTION', 'enabled'),
@@ -802,32 +803,37 @@ CONFIG_METADATA = {
         'enabled': {
             'description': 'When ON, TARS can use a camera to see and describe what is in front of it, and can process photos uploaded through the web UI. You can ask "what do you see?" and TARS will take a picture and tell you.'
         },
-        'vision_processor': {
-            'label': 'Vision Processor',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'options': ['blip', 'llm', 'openai', 'server_hosted'],
-            'description': 'How TARS processes images. "blip" runs a local AI model on your Pi (~1GB RAM) and generates a short caption. "llm" sends the image to your configured LLM backend (must support vision). "openai" sends the image to OpenAI GPT-4o-mini (requires OPENAI_API_KEY). "server_hosted" sends the image to an external BLIP server you run on another computer.'
-        },
         'camera_rotation': {
             'label': 'Camera Rotation',
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'options': ['0', '90', '180', '270'],
             'description': 'Rotate the camera image by this many degrees. Use this if your camera is mounted sideways or upside down. 0 = no rotation, 90 = rotated right, 180 = upside down, 270 = rotated left.'
         },
+        'vision_processor': {
+            'label': 'Vision Processor',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'options': ['blip', 'llm', 'openai', 'server_hosted'],
+            'description': 'How TARS processes images. "blip" runs a local AI model on your Pi (~1GB RAM) and generates a short caption. "llm" sends the image to your configured LLM backend (must support vision). "openai" sends the image to OpenAI GPT-4o-mini (requires OPENAI_API_KEY). "server_hosted" sends the image to an external BLIP server you run on another computer.'
+        },
+        'use_llm_backend': {
+            'label': 'Use Same as LLM',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm']}],
+            'description': 'When ON, vision uses the same model and API settings as your main LLM backend. Turn OFF to configure a separate model and URL for vision processing.'
+        },
+        'base_url': {
+            'label': 'Vision API URL',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'use_llm_backend', 'values': ['False', 'false']}],
+            'description': 'The API base URL for vision processing. For server_hosted: the BLIP server (e.g. http://192.168.1.100:5678). For llm/openai: the API endpoint (e.g. https://api.openai.com). Leave blank to use the default for your provider.'
+        },
         'vision_model': {
             'label': 'Vision Model',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm']}],
-            'description': 'The model name to use for vision processing. Leave blank to use your LLM backend default model. For OpenAI mode, defaults to gpt-4o-mini. Only applies to openai and llm vision processors.'
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'use_llm_backend', 'values': ['False', 'false']}, {'field': 'vision_processor', 'values': ['openai', 'llm']}],
+            'description': 'The model name for vision. For OpenAI, defaults to gpt-4o-mini if blank.'
         },
         'vision_max_tokens': {
             'label': 'Vision Max Tokens',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm']}],
-            'description': 'Maximum number of tokens in the vision response. Higher values give more detailed descriptions but cost more. Only applies to openai and llm vision processors.'
-        },
-        'base_url': {
-            'label': 'Vision Server URL',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['server_hosted']}],
-            'description': 'The web address of the computer running the vision server. Format: http://IP-ADDRESS:PORT (for example: http://192.168.1.100:5678). The vision server script is included in the TARS project — run it on a more powerful computer that handles the image processing.'
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm', 'server_hosted']}],
+            'description': 'Maximum number of tokens in the vision response. Higher values give more detailed descriptions but cost more.'
         },
     },
     'RAG': {
@@ -964,6 +970,7 @@ CONFIG_METADATA = {
             'description': 'If pressing up on the controller D-pad makes TARS go backward (or vice versa), turn this ON to fix it. Some controllers report the Y axis in the opposite direction.'
         },
         'controller_name': {
+            'label': 'BT_Controller',
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'The name of your Bluetooth or USB game controller. TARS looks for this text in the names of all connected controllers. For example, if you have an "8BitDo Pro 2" controller, just putting "8BitDo" here is enough. For Xbox controllers, put "Xbox". For PlayStation, put "PS4" or "DualSense". It just needs to match part of the controller name.'
         },

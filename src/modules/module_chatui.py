@@ -353,12 +353,12 @@ def receive_user_message():
             if img_b64:
                 vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
-                if vision_mode == 'llm':
-                    # Single call — image goes directly to LLM with full personality
+                if vision_mode in ('llm', 'openai'):
+                    # Single pass — image goes directly to LLM with full personality
                     prompt = msg or "The user sent you a photo. Describe what you see and respond in character."
                     reply = get_completion(prompt, image_b64=img_b64)
                 else:
-                    # Two-step — get caption first, then send to LLM for conversation
+                    # Two-pass — get caption first, then send to LLM for conversation
                     if VISION_AVAILABLE:
                         try:
                             caption = process_image(img_b64, msg or "Describe this image in detail.")
@@ -433,7 +433,7 @@ def upload():
 
     vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
-    if vision_mode == 'llm':
+    if vision_mode in ('llm', 'openai'):
         reply = get_completion(f"{CONFIG['CHAR']['user_name']} sent you a photo. Describe what you see and respond in character.", image_b64=base64_image)
     else:
         if VISION_AVAILABLE:

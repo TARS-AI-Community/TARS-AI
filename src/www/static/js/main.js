@@ -500,7 +500,8 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch('/robot_move', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ direction: dir })
-    }).catch(console.error);
+    }).then(r => { if (!r.ok) r.json().then(d => console.error('Move failed:', d)); })
+     .catch(console.error);
   }
 
   btnUp.addEventListener('click',    () => move(getSpeed() === 'fast' ? 'forward'  : 'forward_slow'));
@@ -547,10 +548,13 @@ function loadMovements() {
 document.addEventListener('DOMContentLoaded', loadMovements);
 
 function executeAction() {
+  const action = $('actionSelect').value;
+  if (!action) return;
   fetch('/execute_action', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ action: $('actionSelect').value })
-  }).catch(console.error);
+    body: JSON.stringify({ action: action })
+  }).then(r => { if (!r.ok) r.json().then(d => console.error('Action failed:', d)); })
+   .catch(console.error);
 }
 
 

@@ -530,31 +530,52 @@ def execute_function_call(func_call, bot_response, user_input):
                 bot_response["reply"] = "Vision is not available on this device."
             else:
                 query = parameters.get("query", bot_response.get("question", ""))
+                vision_processor = CONFIG['VISION'].get('vision_processor', 'blip')
+
                 # Pull detection context from UI if available
-                detection_context = None
+                detection_context = ""
                 try:
                     from modules.module_main import ui_manager
                     if ui_manager and hasattr(ui_manager, 'detection_manager'):
-                        detection_context = ui_manager.detection_manager.get_detection_summary() or None
+                        detection_context = ui_manager.detection_manager.get_detection_summary() or ""
                 except Exception:
                     pass
-                description = process_camera_image(query, detection_context=detection_context)
-                if description and not description.startswith("Error:"):
-                    # Feed vision result back through LLM with full personality
-                    vision_prompt = f"*You just looked through your camera and saw the following: {description}* Now respond to the user in character about what you see."
-                    if query:
-                        vision_prompt += f" The user asked: {query}"
+
+                # Single-pass for multimodal backends — send image directly to LLM with personality
+                if vision_processor in ("llm", "openai"):
                     try:
-                        reply = get_completion(vision_prompt)
+                        from modules.module_vision import CameraModule, _to_base64
+                        camera = CameraModule(1920, 1080)
+                        image_bytes = camera.capture_bytes()
+                        b64 = _to_base64(image_bytes)
+                        prompt = query or "Describe what you see."
+                        if detection_context:
+                            prompt = f"{detection_context}\n\n{prompt}"
+                        reply = get_completion(prompt, image_b64=b64)
                         if reply:
                             bot_response["reply"] = reply
                         else:
-                            bot_response["reply"] = description
+                            bot_response["reply"] = "I tried to look but couldn't process the image."
                     except Exception as e:
-                        queue_message(f"WARN: Vision follow-up LLM call failed: {e}")
-                        bot_response["reply"] = description
+                        queue_message(f"ERROR: Single-pass vision failed: {e}")
+                        bot_response["reply"] = "I tried to look but encountered an error."
                 else:
-                    bot_response["reply"] = "I tried to look but couldn't process the image."
+                    # Two-pass for caption-only backends (blip, server_hosted)
+                    description = process_camera_image(query, detection_context=detection_context or None)
+                    if description and not description.startswith("Error:"):
+                        vision_prompt = f"*You looked through your camera and saw: {description}*"
+                        if detection_context:
+                            vision_prompt += f" {detection_context}"
+                        if query:
+                            vision_prompt += f" The user asked: {query}"
+                        try:
+                            reply = get_completion(vision_prompt)
+                            bot_response["reply"] = reply if reply else description
+                        except Exception as e:
+                            queue_message(f"WARN: Vision follow-up LLM call failed: {e}")
+                            bot_response["reply"] = description
+                    else:
+                        bot_response["reply"] = "I tried to look but couldn't process the image."
 
         elif function_name == "web_search":
             from modules.module_websearch import search_google
