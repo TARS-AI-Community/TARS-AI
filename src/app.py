@@ -57,6 +57,7 @@ from modules.module_main import (
     start_bt_controller_thread,
     startup_initialization
 )
+from modules.module_llm import process_completion
 
 # === Conditional Memory Manager Import ===
 if USE_LITE_MEMORY:
@@ -102,7 +103,7 @@ if CONFIG["UI"]["UI_enabled"]:
 
 # === Conditional ChatUI Import ===
 CHATUI_AVAILABLE = False
-if CONFIG['CHATUI']['enabled']:
+if CONFIG['UI']['webui_enabled']:
     try:
         import modules.module_chatui
         CHATUI_AVAILABLE = True
@@ -232,9 +233,12 @@ if __name__ == "__main__":
     # Shutdown event
     shutdown_event = threading.Event()
 
-    # Battery module (lightweight)
-    battery = BatteryModule()
-    battery.start()
+    # Battery module (only if enabled in config)
+    if CONFIG['BATTERY'].get('battery_enabled', False):
+        battery = BatteryModule()
+        battery.start()
+    else:
+        battery = None
 
     # CPU temperature (lightweight)
     cpu_temp = CPUTempModule()
@@ -252,8 +256,8 @@ if __name__ == "__main__":
         queue_message(f"LOAD: {'Lite' if _use_lite_ui else 'Full'} UI manager started")
 
     # === ChatUI Thread (starts early so webui is available during model loading) ===
-    if CONFIG['CHATUI']['enabled'] and CHATUI_AVAILABLE:
-        chatui_port = CONFIG['CHATUI'].get('port', 5012)
+    if CONFIG['UI']['webui_enabled'] and CHATUI_AVAILABLE:
+        chatui_port = CONFIG['UI'].get('webui_port', 80)
         queue_message(f"LOAD: ChatUI starting on port {chatui_port}...")
         flask_thread = threading.Thread(
             target=modules.module_chatui.start_flask_app,
@@ -273,7 +277,7 @@ if __name__ == "__main__":
         else:
             queue_message("LOAD: UI disabled in config")
 
-    ui_manager.update_data("System", "Initializing application...", "DEBUG")
+    ui_manager.update_data("System", "Initializing application...", "LOAD")
 
     # === Character and Memory Managers ===
     char_manager = CharacterManager(config=CONFIG)
@@ -293,6 +297,17 @@ if __name__ == "__main__":
     stt_manager.set_wake_word_callback(wake_word_callback)
     stt_manager.set_utterance_callback(utterance_callback)
     stt_manager.set_post_utterance_callback(post_utterance_callback)
+    stt_manager.set_preemptive_llm_callback(process_completion)
+
+    # === Speaker ID (optional) ===
+    if CONFIG['STT'].get('speaker_id_enabled', 'False').lower() == 'true':
+        try:
+            from modules.module_speaker_id import SpeakerIDManager
+            speaker_id_manager = SpeakerIDManager(config=CONFIG)
+            speaker_id_manager.start()
+            queue_message("LOAD: Speaker ID module enabled")
+        except Exception as e:
+            queue_message(f"WARNING: Speaker ID module not available: {e}")
 
     # === Discord ===
     if CONFIG['DISCORD']['enabled']:
@@ -344,7 +359,16 @@ if __name__ == "__main__":
 
     finally:
         stt_manager.stop()
-        battery.stop()
+        # Stop speaker ID if running
+        try:
+            from modules.module_speaker_id import get_speaker_id_manager
+            sid = get_speaker_id_manager()
+            if sid is not None:
+                sid.stop()
+        except Exception:
+            pass
+        if battery is not None:
+            battery.stop()
         if bt_controller_thread:
             bt_controller_thread.join(timeout=2)
         queue_message("INFO: Shutdown complete.")

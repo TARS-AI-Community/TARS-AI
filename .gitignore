@@ -175,6 +175,8 @@ character/persona.ini
 stt/
 !stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 
+src/tts/kokoro*
+
 # Ignore everything inside "character" by default
 character/
 # Unignore specific directories for TARS, KIPP, CASE, and PLEX
@@ -211,3 +213,9 @@ character/
 
 /src/modules/UI/pictures/*
 dashboard.ini
+
+#claude ignore
+.claude
+CLAUDE.md
+todo*.md
+voice_memory.json

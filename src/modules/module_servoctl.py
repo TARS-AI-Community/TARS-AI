@@ -98,8 +98,14 @@ def initialize_pca9685():
         queue_message(f"ERROR: Failed to initialize PCA9685: {e}")
         return False
 
-if not initialize_pca9685():
-    queue_message("WARNING: PCA9685 initialization failed - check hardware")
+controls = config.get('CONTROLS', {})
+_movement_enabled = controls.get('enabled', False) or controls.get('voicemovement', False)
+
+if _movement_enabled:
+    if not initialize_pca9685():
+        queue_message("WARNING: PCA9685 initialization failed - check hardware")
+else:
+    pca = None
 
 leftMainMin = int(config["SERVO"]["leftMainMin"])
 leftMainMax = int(config["SERVO"]["leftMainMax"])
@@ -253,7 +259,9 @@ def set_servo_pwm(channel, pwm_value):
 
 def initialize_servos():
     if pca is None:
-        queue_message("WARNING: Cannot initialize servos - PCA9685 not available")
+        controls = config.get('CONTROLS', {})
+        if controls.get('enabled', False) or controls.get('voicemovement', False):
+            queue_message("WARNING: Cannot initialize servos - PCA9685 not available")
         return
     
     try:

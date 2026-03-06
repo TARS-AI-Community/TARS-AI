@@ -7,641 +7,273 @@
 # After making changes, restart TARS for them to take effect.
 # =============================================================================
 
-
-# =============================================================================
-# DEVICE - Hardware Profile
-# =============================================================================
-# Determines which features are available based on your Raspberry Pi model.
-# The system automatically disables features your hardware can't support.
-
-[DEVICE]
-
-# Which Raspberry Pi model you are running. This controls which STT, TTS,
-# and other features are available. Set this to match your actual hardware.
-# pi5: Full features, all local processing enabled
-# pi4: Most features, no FastRTC, no vision
-# pi3: Limited local processing, cloud STT/TTS recommended
-# pizero2: Cloud-only mode (STT: OpenAI, TTS: cloud, no UI, lite memory)
-raspberry_version = pi5
-
-
-# =============================================================================
-# CHARACTER - Identity & Personality
-# =============================================================================
-# Who TARS is, who you are, and how TARS responds.
-
 [CHAR]
-
-# Path to the character card JSON file that defines TARS's personality,
-# backstory, and behavior. Relative to the src/ directory.
-# You can create custom characters in the character/ folder.
+# Path to character JSON file (relative to src/)
 character_card_path = character/TARS/TARS.json
-
-# Your name. This is how TARS will address you in conversation.
-user_name = Joe
-
-# A brief description of yourself that gives TARS context about who
-# it is talking to. Used in the system prompt for more personalized responses.
-# Example: "Species: Human. Gender: Male. Likes: sci-fi, coffee."
+# Your name — used in conversation
+user_name = Pyrater
+# Brief description of yourself (e.g., "Species: Human. Gender: Male.")
 user_details = Species: Human. Gender: Male.
-
-# Quick responses TARS says immediately after hearing the wake word,
-# before processing your request. Gives instant feedback that TARS heard you.
-# JSON array of strings. Use [] for no responses.
-responses = ["Hi", "Yes?", "hey!", "What's up?", "Can I help you?", "What do you need?", "I'm here.", "You rang?", "Yea?", "Hey There.", "You again?", "Affirmative.", "Ready.", "Standing by.", "Go ahead.", "Listening.", "How can I assist?", "At your service.", "Waiting.", "What do you require?", "I hear you.", "Acknowledged.", "State your request.", "What's on your mind?", "I'm all ears. Figuratively.", "That's me.", "Present.", "Right here.", "Still here.", "Something wrong?", "Need me?"]
-
-# Filler phrases TARS says while waiting for the LLM to generate a response.
-# Plays after the wake word response while the AI is "thinking".
-# JSON array of strings. Use [] for no responses.
-thinking_responses = ["Let me think...", "soooo.....", "soo....", "Let's seeee...", "Let me seeee...", "Let's see.....", "One Moment...", "One Moment", "hum", "humm", "Analyzing...", "Processing...", "Calculating...", "Computing...", "Running the numbers...", "Checking...", "One moment...", "Scanning data...", "Assessing...", "Evaluating...", "Let me calculate...", "Working on it...", "Just a moment...", "Reviewing...", "Compiling...", "Cross-referencing...", "Thinking it through...", "Give me a second...", "Hold on..."]
-
-# Your geographic coordinates and location name. Used by the LLM to provide
-# location-aware responses (weather, time zones, local info).
-# Set these to your actual location.
-latitude = 45.5017
-longitude = -73.5673
-location_name = Montreal, Quebec, Canada
-
-
-# =============================================================================
-# LLM - AI Model Configuration
-# =============================================================================
-# Controls which AI model TARS uses for generating responses.
-# This is the "brain" of TARS.
+# Human-readable location name (e.g., "City, State, Country")
+location_name = El Paso, Texas, USA
+# GPS coordinates for location-aware responses
+latitude = 31.7874
+longitude = -106.4206
+# Phrases said immediately after the wake word (JSON array, [] for none)
+responses = ["Hi","Yes?","hey!","What's up?","Can I help you?","What do you need?","I'm here.","You rang?","Yea?","Hey There.","You again?","Affirmative.","Ready.","Standing by.","Go ahead.","Listening.","How can I assist?","At your service.","Waiting.","What do you require?","I hear you.","Acknowledged.","State your request.","What's on your mind?","I'm all ears. Figuratively.","That's me.","Present.","Right here.","Still here.","Something wrong?","Need me?"]
+# Enable/disable filler phrases while waiting for LLM response (true/false)
+enable_thinking_responses = true
+# Filler phrases said while waiting for LLM response (JSON array, [] for none)
+thinking_responses = ["Let me think...","soooo.....","soo....","Let's seeee...","Let me seeee...","Let's see.....","One Moment...","One Moment","hum","humm","Analyzing...","Processing...","Calculating...","Computing...","Running the numbers...","Checking...","One moment...","Scanning data...","Assessing...","Evaluating...","Let me calculate...","Working on it...","Just a moment...","Reviewing...","Compiling...","Cross-referencing...","Thinking it through...","Give me a second...","Hold on..."]
 
 [LLM]
-
-# Which API backend to use for AI responses.
-# openai: OpenAI API (GPT models) or any OpenAI-compatible API (Ollama, LM Studio, etc.)
-# grok: xAI's Grok API
-# tabby: TabbyAPI local server
-# ooba: Oobabooga text-generation-webui
-# deepinfra: DeepInfra API
-llm_backend = openai
-
-# The API endpoint URL for your chosen backend.
-# OpenAI: https://api.openai.com
-# Grok: https://api.x.ai
-# Ollama: http://localhost:11434
-# LM Studio: http://localhost:1234
-# For self-hosted models, use your server's IP and port.
-base_url = https://api.openai.com
-
-# Model name when using the openai backend. This is sent as the model parameter
-# in API requests. Works with any OpenAI-compatible API.
-# Examples: gpt-4o-mini, gpt-4o, llama3.1:8b (Ollama), qwen2.5:3b
+# AI backend: openai | grok | deepinfra | other
+llm_backend = other
+# API endpoint URL (used when llm_backend = other)
+base_url = https://api.featherless.ai
+# Model name for openai / deepinfra backend (e.g., gpt-4o-mini)
 openai_model = gpt-4o-mini
-
-# Model name when using the grok backend.
-# Examples: grok-4-1-fast-non-reasoning, grok-4-1-fast-reasoning, grok-3-mini
+# Model name for grok backend
 grok_model = grok-4-1-fast-non-reasoning
-
-# Token counting model override. Only change this if automatic token counting
-# fails with your model. Most users should leave this as cl100k_base.
-# cl100k_base: GPT-4, GPT-3.5-turbo (recommended default)
-# p50k_base: Older InstructGPT/Codex models
-# r50k_base: Legacy GPT-3 models
-# gpt2: Very old GPT-2 models
+# Model name for other (custom) backend
+other_model = meta-llama/Meta-Llama-3.1-8B-Instruct
+# System instructions prepended to every conversation (keep general; personality goes in character card)
+systemprompt = You are to responding naturally and helpfully within the scenario. Be informative and conversational while maintaining your personality.
+# Max conversation history in tokens (2000–8000, check model docs)
+contextsize = 4000
+# Max tokens per LLM response (200–300 conversational, 500–1000 for detailed)
+max_tokens = 1000
+# Random seed (-1 = unique each time, fixed number = reproducible)
+seed = -1
+# Creativity: 0.0–2.0 (0.7–0.9 recommended for conversation)
+temperature = 0.8
+# Token diversity: 0.0–1.0 (0.9 recommended, leave as-is)
+top_p = 0.9
+# Token counting encoding — only change if token errors occur (cl100k_base works for most models)
 override_encoding_model = cl100k_base
 
-# Maximum number of tokens in the conversation context sent to the LLM.
-# Higher = more conversation history but more expensive and slower.
-# Recommended: 2000-4000 for most models. Check your model's max context limit.
-contextsize = 4000
-
-# Maximum number of tokens the LLM can generate in a single response.
-# Higher = longer responses allowed. Most conversational responses use 100-300.
-# Set higher (500-1000) if you want detailed explanations.
-max_tokens = 1000
-
-# Controls randomness in responses. Range: 0.0 to 2.0
-# Lower (0.1-0.3): More focused and deterministic
-# Medium (0.5-0.8): Balanced creativity (recommended for conversation)
-# Higher (0.9-1.5): More creative but less predictable
-temperature = 0.8
-
-# Nucleus sampling threshold. Range: 0.0 to 1.0
-# Controls diversity by limiting token selection to the top cumulative probability.
-# Lower (0.5): More focused, only considers most likely tokens
-# Higher (0.9-1.0): Considers more tokens, more diverse output
-top_p = 0.9
-
-# Random seed for response reproducibility. Set to a specific number to get
-# the same response for the same input (useful for testing).
-# -1 = random seed each time (normal operation)
-seed = -1
-
-# The system prompt that defines how TARS should behave. This is prepended
-# to every conversation. The character card personality is added separately.
-# Keep this general - specific personality goes in the character card JSON.
-systemprompt = You are to responding naturally and helpfully within the scenario. Be informative and conversational while maintaining your personality.
-
-
-# =============================================================================
-# STT - Speech-to-Text (How TARS Hears You)
-# =============================================================================
-# Controls wake word detection, speech recognition, and voice activity detection.
-
 [STT]
-
-# The spoken language for speech recognition. If not using English,
-# set stt_processor to "openai" for best accuracy with other languages.
+# Spoken language (use openai stt_processor for non-English)
 language = english
-
-# The phrase you say to activate TARS. TARS continuously listens for this
-# phrase and starts recording your command when it hears it.
-# Keep it 2-3 syllables for best detection accuracy.
+# Activation phrase — 2–3 syllables works best
 wake_word = hey tars
-
-# Engine used to detect the wake word in ambient audio.
-# atomik: Built-in detector (recommended, no API key needed, adjustable sensitivity)
-# fastrtc: Uses FastRTC real-time communication framework for detection
-# picovoice: Picovoice Porcupine (requires API key in .env, very accurate)
+# Wake word engine (independent of stt_processor — mix freely)
+#   Pi5: sherpa-onnx | atomik | fastrtc
+#   Pi4: sherpa-onnx | atomik
+#   Pi3: sherpa-onnx | atomik
+#   PiZero2: atomik
 wake_word_processor = atomik
-
-# Wake word detection strictness (1-10). Only applies to the Atomik processor.
-# 1 = Very lenient (triggers easily, more false positives)
-# 5 = Balanced
-# 10 = Very strict (harder to trigger, fewer false positives)
+# Wake word strictness 1–10 (atomik only; 1 = lenient, 10 = strict)
 sensitivity = 7
-
-# Engine used to convert your speech to text after the wake word is detected.
-# vosk: Offline, lightweight, English-focused (runs on Pi)
-# faster-whisper: Offline, accurate, uses more resources (Pi5 recommended)
-# silero: Offline speech recognition
-# fastrtc: Real-time cloud-based transcription (fast, accurate)
-# openai: OpenAI Whisper API (cloud, best for non-English, requires API key)
-# external: Use a separate STT server (set external_url below)
+# Speech-to-text engine (independent of wake_word_processor — mix freely)
+#   Pi5: sherpa-onnx | fastrtc | silero | openai | external
+#   Pi4: sherpa-onnx | openai | external
+#   Pi3: openai | external
+#   PiZero2: openai
 stt_processor = fastrtc
-
-# Play audio beep indicators when TARS starts and stops listening.
-# Helpful to know when TARS is ready for your command.
+# Play beep when listening starts and stops
 use_indicators = True
-
-# URL of an external STT server. Only used when stt_processor = external.
-# Point this to your self-hosted Whisper or other STT service.
-external_url = http://192.168.2.57:5678
-
-# Whisper model size for on-device transcription (faster-whisper processor).
-# Larger models are more accurate but use more RAM and are slower.
-# tiny: ~1GB RAM, fastest, least accurate
-# base: ~1GB RAM, good balance for Pi5
-# small: ~2GB RAM, better accuracy
-# medium: ~5GB RAM, high accuracy (not recommended for Pi)
-# large: ~10GB RAM, highest accuracy (not feasible on Pi)
-whisper_model = tiny
-
-# Vosk model name for on-device STT. Download from https://alphacephei.com/vosk/models
-# vosk-model-small-en-us-0.15: Small, fast, good accuracy (recommended)
-# vosk-model-en-us-0.22: Larger, more accurate, slower
-vosk_model = vosk-model-small-en-us-0.15
-
-# Voice Activity Detection method. Determines when you have stopped speaking.
-# rms: Simple volume-based detection (lightweight, works on all Pi models)
-# silero: AI-based detection (more accurate, uses more resources, Pi5 recommended)
+# External STT server URL (stt_processor = external only)
+external_url = http://192.168.1.100:5678
+# End-of-speech detection (independent of stt/wake — mix freely)
+#   Pi5: smart-turn | sherpa-onnx | silero | rms
+#   Pi4: smart-turn | sherpa-onnx | silero | rms
+#   Pi3: sherpa-onnx | rms
+#   PiZero2: rms
 vad_method = rms
-
-# How long TARS waits after you stop speaking before processing your input.
-# Measured in tenths of a second (10 = 1 second, 20 = 2 seconds).
-# Too short: Cuts you off mid-sentence. Too long: Feels slow to respond.
-# Recommended: 15-25 (1.5 to 2.5 seconds)
+# Denoise audio before transcription (requires sherpa-onnx): True | False
+sherpa_onnx_denoise = False
+# Add punctuation to transcriptions (requires sherpa-onnx): True | False
+sherpa_onnx_punctuation = False
+# Enable barge-in detection — interrupt TARS by speaking while it talks: True | False
+enable_bargein = True
+# Silence before processing in tenths of a second (20 = 2s)
 speechdelay = 20
-
-# Path to the Picovoice Porcupine wake word model file (.ppn).
-# Only used when wake_word_processor = picovoice.
-# Generate custom keyword files at https://console.picovoice.ai/
-picovoice_keyword_path = ../stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
-
-
-# =============================================================================
-# TTS - Text-to-Speech (How TARS Talks)
-# =============================================================================
-# Controls how TARS converts text responses into spoken audio.
+# Speaker identification — passively identify who is speaking (Pi5/Pi4 only)
+speaker_id_enabled = False
+# Speaker ID cosine similarity threshold (0.0–1.0, higher = stricter matching)
+speaker_id_threshold = 0.5
+# Microphone amplification gain — multiplies raw mic input (higher = more sensitive, default 10.0)
+mic_amp_gain = 10.0
+# Silence margin — how many times above background noise counts as speech (lower = more sensitive, default 3.0)
+silence_margin = 3.0
 
 [TTS]
-
-# Which TTS engine to use for generating speech.
-# --- On-Device (free, no internet needed) ---
-# espeak: Basic robotic voice, very lightweight (works on all Pi models)
-# piper: High-quality neural voice, runs locally (recommended for Pi5/Pi4)
-# silero: Neural TTS, good quality (Pi5 only)
-# --- Self-Hosted Server ---
-# alltalk: AllTalk TTS server (run on a separate PC for high quality)
-# --- Cloud Services (require API keys in .env) ---
-# elevenlabs: Premium voice cloning, very natural (paid)
-# minimax: High-quality multilingual voices (paid)
-# openai: OpenAI TTS, good quality (paid, good for non-English)
-# azure: Microsoft Azure TTS, many voice options (paid)
+# Use voice settings from character card instead of settings above
+toggle_charvoice = True
+# TTS engine: espeak | piper | silero | elevenlabs | openai | other
 ttsoption = piper
-
-# Azure region for Azure TTS. Must match your Azure Speech Services resource region.
-# Common options: eastus, eastus2, westus, westus2, centralus, northeurope, westeurope
-azure_region = eastus
-
-# URL of your AllTalk TTS server. Only used when ttsoption = alltalk.
-ttsurl = http://192.168.2.57:7852
-
-# Voice name for AllTalk or Azure TTS.
-# AllTalk: Name of the cloned voice file (e.g., TARS2)
-# Azure: Voice ID (e.g., en-US-Steffan:DragonHDLatestNeural)
-tts_voice = en-US-Steffan:DragonHDLatestNeural
-
-# ElevenLabs voice ID. Find voice IDs in your ElevenLabs dashboard.
-# Default JBFqnCBsd6RMkjVDRZzb is the "George" voice.
+# External TTS server URL (ttsoption = other only)
+ttsurl =
+# Voice name/ID for external TTS server
+tts_voice =
+# ElevenLabs voice ID (find in elevenlabs.io dashboard)
 elevenlabs_voice_id = JBFqnCBsd6RMkjVDRZzb
-
-# ElevenLabs model. eleven_multilingual_v2 supports 29 languages.
-# eleven_monolingual_v1: English only, slightly faster
-# eleven_turbo_v2: Fastest, lower quality
+# ElevenLabs model: eleven_multilingual_v2 | eleven_monolingual_v1 | eleven_turbo_v2
 elevenlabs_model = eleven_multilingual_v2
-
-# Minimax voice ID. Browse available voices at https://www.minimax.chat/
-# Example voices: English_CaptivatingStoryteller, English_Male_Narrator
-minimax_voice_id = English_CaptivatingStoryteller
-
-# Minimax TTS model. Higher versions are newer and generally better.
-# speech-2.6-turbo / speech-2.8-turbo: Fast, good quality
-# speech-2.6-hd / speech-2.8-hd: Higher quality, slightly slower
-minimax_model = speech-2.8-turbo
-
-# OpenAI TTS voice. Only used when ttsoption = openai.
-# alloy: Neutral, balanced
-# echo: Warm, conversational
-# fable: Expressive, British accent
-# onyx: Deep, authoritative (good for TARS)
-# nova: Friendly, upbeat
-# shimmer: Clear, gentle
+# OpenAI TTS voice: alloy | echo | fable | onyx | nova | shimmer
 openai_voice = onyx
 
-# Use voice settings from the character card JSON file instead of the global
-# TTS settings above. Useful when switching between characters that each
-# have their own voice configuration.
-toggle_charvoice = True
-
-# Internal state flags - do not change these manually.
-is_talking_override = False
-is_talking = False
-global_timer_paused = False
-
-
-# =============================================================================
-# EMOTION - Emotion Detection
-# =============================================================================
-# Analyzes TARS's text responses to detect emotions, which drive
-# facial expressions and avatar animations on the display.
-
 [EMOTION]
-
-# Enable or disable emotion detection. When disabled, TARS will not show
-# emotional expressions on the display. Disable to save resources if not
-# using the on-device screen.
-enabled = false
-
-# HuggingFace model used for emotion analysis. The default model detects
-# 28 emotion categories (joy, sadness, anger, surprise, etc.).
-# Downloaded automatically on first use (~500MB).
+# Enable emotion detection for facial expressions on display
+enabled = False
+# HuggingFace model for emotion analysis (~500MB download on first use)
 emotion_model = SamLowe/roberta-base-go_emotions
 
-
-# =============================================================================
-# VISION - Camera & Image Recognition
-# =============================================================================
-# Allows TARS to see and describe what is in front of it using a camera.
-
 [VISION]
-
-# Enable or disable the vision module. When disabled, the BLIP image
-# captioning model will not be loaded, saving significant RAM.
-enabled = True
-
-# If True, image processing runs on a separate server instead of locally.
-# Use this if your Pi cannot handle the vision model (recommended for Pi3/Pi4).
-# Set base_url below to point to your vision server.
+# Enable camera vision (~1GB RAM when active)
+enabled = False
+# Offload image processing to external server (recommended for Pi3/Pi4)
 server_hosted = False
-
-# URL of the vision server API. Only used when server_hosted = True.
-# Run the vision server script on a more powerful machine.
-base_url = http://192.168.2.68:5678
-
-
-# =============================================================================
-# RAG - Memory & Retrieval
-# =============================================================================
-# Controls TARS's long-term memory system. TARS stores conversations and
-# retrieves relevant memories to maintain context across sessions.
+# Vision server URL (server_hosted = True only)
+base_url = http://192.168.1.100:5678
 
 [RAG]
-
-# How memories are searched and retrieved.
-# naive: Vector similarity search only (faster, simpler)
-# hybrid: Combines vector similarity + BM25 keyword search (more accurate, recommended)
+# Enable long-term memory
+enabled = True
+# Create periodic topic summaries for extended memory
+enable_topic_tracking = True
+# Search method: naive (vector only) | hybrid (vector + keyword, recommended)
 strategy = hybrid
-
-# Number of memory chunks to retrieve per query. Higher values provide
-# more context but use more tokens and may include less relevant results.
-# Recommended: 3-7
-top_k = 5
-
-# Number of surrounding memory entries to include with each retrieved match.
-# For example, 2 means include 2 entries before and 2 after each match,
-# giving TARS more context around each retrieved memory.
+# Meaning vs keyword weight in hybrid mode (0.5 = equal)
+vector_weight = 0.5
+# Surrounding entries to include with each retrieved memory
 context_window = 2
-
-# Maximum number of top results to expand with surrounding context.
-# Only the top N results (ranked by relevance) get the context_window expansion.
-# Recommended: 2-5
+# Top N memories that get context window expansion
 max_memories = 3
-
-# Number of days to boost recent memories in search results.
-# Memories from the last N days are ranked higher, so TARS is more likely
-# to reference recent conversations. Set to 0 to disable recency bias.
+# Number of memories to retrieve per query (3–7 recommended)
+top_k = 5
+# Boost memories within N days in results (0 = disabled)
 recency_boost_days = 7
 
-# Enable topic tracking for very long-term memory summaries.
-# Creates periodic topic summaries that persist beyond individual conversation recall.
-enable_topic_tracking = True
-
-
-# =============================================================================
-# UI - On-Device Display
-# =============================================================================
-# Controls the graphical interface shown on TARS's built-in screen (HDMI).
-# This is the physical display on the robot, not the web interface.
-
 [UI]
-
-# Enable or disable the on-device graphical display entirely.
-# Disable if running headless or to save resources.
+# Enable web interface
+webui_enabled = True
+# Web interface port (80 = no port needed in browser URL)
+webui_port = 80
+# Web interface login password
+webui_password = tarspassword
+# On-device display width in pixels (3.5" = 480, 5–7" = 800)
+screen_width = 480
+# On-device display height in pixels (3.5" = 320, 5" = 480)
+screen_height = 320
+# Enable on-device display (False = headless / no screen)
 UI_enabled = True
-
-# Enable the Pi camera module for vision features through the UI.
-# Requires a compatible camera connected to the Pi's CSI port.
+# Enable Pi CSI camera module
 use_camera_module = True
-
-# Show a software mouse cursor on the display.
-# Useful for development/debugging. Can be hidden for a cleaner look.
-show_mouse = True
-
-# Run the display in fullscreen mode. Set to False for a windowed display
-# (useful during development or when using a desktop environment).
+# Show mouse cursor on display (useful during dev/debug)
+show_mouse = False
+# Run display in fullscreen mode
 fullscreen = True
-
-# Font size for text on the display. Adjust based on your screen resolution.
-# Small screens (3.5 inch): 9-12
-# Medium screens (5-7 inch): 12-16
-# Large screens (10+ inch): 16-20
+# Show clock on screensaver
+show_time = True
+# Show CPU temperature on display
+show_cpu_temp = False
+# True = 12hr AM/PM, False = 24hr
+ampm_format = True
+# Default display app: terminal | dashboard | clock | eyes
+app = terminal
+# Display frame rate (30 = balanced; lower saves CPU)
+target_fps = 30
+# Display font size (3.5": 9–12, 5–7": 12–16, 10"+: 16–20)
 font_size = 12
-
-# Seconds of inactivity before the screensaver activates.
-# 0 = screensaver disabled, 60 = 1 minute, 300 = 5 minutes (recommended)
+# Seconds of inactivity before screensaver (0 = disabled)
 screensaver_timer = 300
-
-# Seconds between screensaver animation changes when multiple are selected.
-# Only applies when screensaver_list includes multiple animations.
+# Seconds per screensaver when using multiple animations
 screensaver_cycle_interval = 300
-
-# Which screensaver animations to use.
-# "random": Randomly cycles through all available animations
-# Single: Use one animation name like "starfield" or "matrix"
-# Multiple: Comma-separated like "blackhole,waves,matrix"
-# Available: blackhole, waves, matrix, starfield, hyperspace, terminal,
-#            face, fractal, pacman, nebulas, pictures, dashboard, defrag,
-#            bounce, endurance, toasters
+# Screensaver animations: random, or names like face,matrix,starfield
 screensaver_list = random
 
-# Display the current time on screensaver animations.
-show_time = True
-
-# Time display format. True = 12-hour AM/PM, False = 24-hour military time.
-ampm_format = True
-
-# Display the CPU temperature on the UI. Useful for monitoring thermal
-# performance, especially in enclosed robot builds.
-show_cpu_temp = False
-
-# Maximum frames per second for UI rendering. Higher = smoother animations
-# but uses more CPU. 30 is a good balance for most setups.
-target_fps = 30
-
-# Default app shown on the display when TARS starts.
-# terminal: Command-line style chat interface
-# dashboard: System status overview
-# clock: Large clock display
-app = terminal
-
-
-# =============================================================================
-# CHATUI - Web Interface
-# =============================================================================
-# Settings for the browser-based chat interface.
-# Access it from any device on your network.
-
-[CHATUI]
-
-# Enable or disable the web-based chat interface.
-# When enabled, access TARS from a browser at http://<pi-ip>:<port>
-enabled = True
-
-# Network port for the web interface.
-# 80 = standard HTTP (access via http://<pi-ip> without specifying port)
-# Use a different port if 80 is already in use (e.g., 8080)
-port = 80
-
-# Password required to access the web interface.
-# Change this from the default to secure your TARS instance on your network.
-password = tarspass1234
-
-
-# =============================================================================
-# CONTROLS - Game Controller
-# =============================================================================
-# Configure a Bluetooth or USB game controller to control TARS's movement
-# and trigger actions with physical buttons.
-
 [CONTROLS]
-
-# Name (or partial name) of your Bluetooth/USB controller.
-# TARS searches for this string in connected device names.
-# Common values: 8BitDo, Xbox, PS4, Pro Controller
+# Enable game controller support
+enabled = False
+# Periodically shift to ventilation pose to improve airflow
+ventilate = False
+# Allow voice commands to trigger physical movement
+voicemovement = False
+# Swap left/right turn directions if reversed
+swap_turn_directions = False
+# Invert Y-axis if up/down is reversed
+invert_y = False
+# Controller partial name to match (e.g., 8BitDo, Xbox, PS4)
 controller_name = 8BitDo
 
-# Enable or disable game controller support entirely.
-# When disabled, no controller input is processed.
-enabled = False
-
-# Allow voice commands to trigger physical movement (walking, turning).
-# When enabled, you can say things like "walk forward" or "turn left".
-voicemovement = True
-
-# Swap the left and right turn directions on the controller.
-# Enable this if your controller's turn directions feel reversed.
-swap_turn_directions = False
-
-# Invert the Y-axis on the D-pad or joystick.
-# Enable if up/down feels reversed on your controller.
-invert_y = False
-
-
-# =============================================================================
-# HOME ASSISTANT - Smart Home Integration
-# =============================================================================
-# Connect TARS to your Home Assistant instance to control smart home devices
-# through voice commands (lights, switches, sensors, etc.).
+[BATTERY]
+# Enable battery monitoring (requires INA260 sensor)
+battery_enabled = False
+# Auto-shutdown at low battery to protect SD card and battery
+battery_auto_shutdown = False
+# Battery capacity in mAh (check battery label)
+battery_capacity_mAh = 3000
+# Full charge voltage (3S LiPo: 12.6V, 4S: 16.8V, USB: 5V)
+battery_initial_voltage = 12
+# Minimum safe discharge voltage (3S LiPo: 10.5V, 4S: 14V)
+battery_cutoff_voltage = 10
 
 [HOME_ASSISTANT]
-
-# Enable or disable Home Assistant integration.
-# Requires a Home Assistant server and a long-lived access token in .env
+# Enable Home Assistant integration (requires HOME_ASSISTANT_TOKEN in .env)
 enabled = False
-
-# URL of your Home Assistant server including the port (default: 8123).
-# Set your HA long-lived access token in the .env file as HOME_ASSISTANT_TOKEN.
-url = http://192.168.2.5:8123
-
-
-# =============================================================================
-# DISCORD - Discord Bot
-# =============================================================================
-# Run TARS as a Discord bot that can chat in a specific channel.
-# Requires a Discord bot token in your .env file.
+# Home Assistant server URL (e.g., http://192.168.1.50:8123)
+url = http://192.168.1.1:8123
 
 [DISCORD]
-
-# Enable or disable the Discord bot integration.
-# Requires DISCORD_TOKEN set in your .env file.
+# Enable Discord bot (requires DISCORD_TOKEN in .env)
 enabled = False
-
-# The Discord channel ID where TARS will listen and respond.
-# Right-click a channel in Discord > Copy Channel ID (requires developer mode).
-channel_id = 811470553139249186
-
-
-# =============================================================================
-# STABLE DIFFUSION - Image Generation
-# =============================================================================
-# Generate images from text descriptions using Stable Diffusion.
-# Requires a separate image generation server (not run on the Pi).
+# Discord channel ID (right-click channel > Copy Channel ID in Developer Mode)
+channel_id = 23434653456345
 
 [STABLE_DIFFUSION]
-
-# Enable or disable image generation. When enabled, TARS can create images
-# from text descriptions during conversation.
+# Enable image generation
 enabled = False
-
-# Which image generation backend to use.
-# automatic1111: AUTOMATIC1111 Stable Diffusion Web UI (most popular)
-# comfyui: ComfyUI node-based workflow (more flexible)
-# openai: OpenAI DALL-E API (cloud-based, requires paid account)
+# Backend: automatic1111 | comfyui | openai
 service = automatic1111
-
-# URL of your image generation server running on another machine.
-url = http://192.168.2.57:5002
-
-# Text prepended to every image prompt to set an overall style.
-# Example: "in the style of midjourney" or "photorealistic, cinematic lighting"
+# Image generation server URL (automatic1111 default: :7860, comfyui default: :8188)
+url = http://192.168.1.100:7860
+# Text added before every image prompt (sets overall style)
 prompt_prefix = in the style of midjourney
-
-# Text appended to every image prompt to define quality characteristics.
-prompt_postfix = clearly defined, high def, (detailed scene and background), key visual, vibrant, highly detailed
-
-# Random seed for image generation. -1 = random (unique images each time).
-# Set to a specific number to reproduce the exact same image.
+# Text added after every image prompt (sets quality terms)
+prompt_postfix = clearly defined,high def,(detailed scene and background),key visual,vibrant,highly detailed
+# Random seed (-1 = random, fixed = reproducible)
 seed = -1
-
-# Diffusion sampler algorithm. Different samplers produce different styles.
-# Common: "Euler a" (fast, good quality), "DPM++ 2M Karras" (detailed), "DDIM" (smooth)
+# Diffusion sampler (Euler a = fast + quality; DPM++ 2M Karras = detailed)
 sampler_name = Euler a
-
-# How much noise to remove during generation. Range: 0.0 to 1.0
-# Lower (0.3-0.5): More creative, more variation
-# Higher (0.5-0.7): Cleaner image, less variation
-# For img2img: controls how much the output differs from the input image
+# Noise reduction strength 0.0–1.0 (img2img: how much image changes)
 denoising_strength = 0.5
-
-# Number of diffusion steps. More steps = better quality but slower.
-# 20-30: Good balance of speed and quality
-# 50+: Diminishing returns, much slower generation
+# Diffusion steps (20–30 = good balance; 50+ = diminishing returns)
 steps = 20
-
-# Classifier-Free Guidance scale. Controls how closely the image follows the prompt.
-# Low (1-5): More creative freedom, may ignore parts of prompt
-# Medium (7-9): Good balance (recommended)
-# High (10-20): Strictly follows prompt, can look over-processed
+# CFG scale: prompt adherence (1–5 = loose, 7–9 = balanced, 10+ = strict)
 cfg_scale = 7
-
-# Output image dimensions in pixels. Larger = more detail but slower.
-# SD 1.5: 512x512 native, SDXL: 1024x1024 native
-# For TARS display: 480x320 matches the screen aspect ratio
+# Output image size (SD 1.5 native: 512x512, SDXL: 1024x1024)
 width = 480
 height = 320
-
-# Enable face restoration post-processing to improve facial details.
-# Useful for portraits and character images.
+# Enable face restoration post-processing (useful for portraits)
 restore_faces = False
-
-# Terms the model should avoid when generating images.
-# Helps prevent common artifacts and unwanted visual elements.
-negative_prompt = deformed, black and white, disfigured, low contrast, extra limbs, bad anatomy, bad hands
-
-# Path to ComfyUI workflow JSON for text-to-image generation.
-# Only used when service = comfyui. Relative to project root.
+# Terms to avoid in generated images
+negative_prompt = deformed,black and white,disfigured,low contrast,extra limbs,bad anatomy,bad hands
+# ComfyUI text-to-image workflow JSON path
 comfyui_workflow = Documentation/Comfy_UI_SD.json
-
-# Path to ComfyUI workflow JSON for image-to-image generation.
-# Only used when service = comfyui. Relative to project root.
+# ComfyUI image-to-image workflow JSON path
 comfyui_img2img_workflow = Documentation/Comfy_UI_IMG2IMG.json
 
-
-# =============================================================================
-# SERVO - Robot Movement & Arms
-# =============================================================================
-# Servo motor calibration for TARS's legs and optional arms.
-# Use the servo tester app (app-servotester) to calibrate these values.
-# Do NOT modify these manually unless you know what you are doing.
-
 [SERVO]
-
-# Whether arm servos are physically installed on your build.
-# Setting this to True changes movement calculations to account for
-# the extra weight of the arms. Only enable if arms are actually built.
+# True if arm servos are physically installed (affects movement calculations)
 arms_present = False
-
-# --- Leg Height Servos (Servos 0 & 1) ---
-# These servos raise and lower the legs for walking.
-# UpHeight = servo position when leg is raised
-# DownHeight = servo position when leg is lowered
-# PerfectOffset = fine-tune calibration offset
-
 # Servo 0 - Left leg height
 leftUpHeight = 220
 leftDownHeight = 460
 perfectLeftHeightOffset = 0
-
 # Servo 1 - Right leg height
 rightUpHeight = 460
 rightDownHeight = 220
 perfectRightHeightOffset = 0
-
-# --- Leg Swing Servos (Servos 2 & 3) ---
-# These servos swing the legs forward and backward for stepping.
-# ForwardLeg = servo position when stepping forward
-# BackLeg = servo position when stepping backward
-
 # Servo 2 - Left leg swing
 forwardLeftLeg = 160
 backLeftLeg = 460
 perfectLeftLegOffset = 0
-
 # Servo 3 - Right leg swing
 forwardRightLeg = 460
 backRightLeg = 160
 perfectRightLegOffset = 0
-
-# --- Arm Servos (Optional) ---
-# Only used when arms_present = True.
-# Min/Max values control range of motion. Avoid setting values that cause
-# the servo to push against the case - the servo must never be under strain.
-
 # Left Arm
 leftMainMin = 550
 leftMainMax = 50
@@ -652,7 +284,6 @@ leftForearmOffset = 0
 leftHandMin = 420
 leftHandMax = 300
 leftHandOffset = 0
-
 # Right Arm
 rightMainMin = 50
 rightMainMax = 550
@@ -663,43 +294,3 @@ rightForearmOffset = 0
 rightHandMin = 300
 rightHandMax = 420
 rightHandOffset = 0
-
-
-# =============================================================================
-# BATTERY - Power Monitoring
-# =============================================================================
-# Battery monitoring via INA260 Current + Voltage + Power sensor.
-# Only needed if your build has a battery with an INA260 sensor connected.
-
-[BATTERY]
-
-# Total battery capacity in milliampere-hours (mAh).
-# Set to your battery's rated capacity.
-# Examples: 3000 for a 3Ah battery, 5600 for a 5.6Ah battery
-battery_capacity_mAh = 3000
-
-# Voltage when the battery is fully charged (in volts).
-# 3S LiPo: 12.6V, 4S LiPo: 16.8V, USB power bank: 5.0V
-battery_initial_voltage = 12
-
-# Minimum safe voltage before the battery should stop discharging.
-# Going below this can permanently damage the battery.
-# 3S LiPo: 10.5V, 4S LiPo: 14.0V
-battery_cutoff_voltage = 10
-
-# Automatically shut down the Raspberry Pi when battery reaches 0%.
-# Protects both the Pi (from sudden power loss) and the battery
-# (from deep discharge). Strongly recommended for battery-powered builds.
-auto_shutdown = True
-
-
-# =============================================================================
-# MISC - Miscellaneous
-# =============================================================================
-
-[MISC]
-
-# Enable ventilation pose. When enabled, TARS periodically takes a pose
-# that allows better airflow through the case, helping with cooling
-# in enclosed builds.
-ventilate = False

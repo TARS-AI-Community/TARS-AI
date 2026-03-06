@@ -114,6 +114,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "www", "static")
 
 # Initialize Flask app with absolute paths
 flask_app = Flask(__name__, template_folder=CHARACTER_DIR, static_url_path='/static', static_folder=STATIC_DIR)
+flask_app.json.sort_keys = False
 
 # Track previous arm positions to determine movement direction
 previous_arm_positions = {
@@ -131,7 +132,7 @@ flask_app.secret_key = os.getenv("FLASK_SECRET_KEY", "tars_default_secret_key_88
 @flask_app.before_request
 def check_auth():
     # Public routes that don't require login
-    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path in ('/login', '/emotion', '/start_talking', '/stop_talking') or not CONFIG['CHATUI'].get('enabled', True):
+    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path in ('/login', '/emotion', '/start_talking', '/stop_talking') or not CONFIG['UI'].get('webui_enabled', True):
         return
         
     # Check if user is logged in
@@ -166,13 +167,13 @@ def index():
                            char_name=character_name,
                            char_greeting='Welcome back',
                            talkinghead_base_url=ipadd,
-                           port=CONFIG['CHATUI'].get('port', 5012))
+                           port=CONFIG['UI'].get('webui_port', 80))
 
 @flask_app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         password = request.form.get('password')
-        correct_password = CONFIG['CHATUI'].get('password', 'tars')
+        correct_password = CONFIG['UI'].get('webui_password', 'tarspass1234')
         
         if password == correct_password:
             session['logged_in'] = True
@@ -203,8 +204,8 @@ def get_config_variable():
     except Exception as e:
         return f"Error: {e}"
     
-    #queue_message(jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['CHATUI'].get('port', 5012)}"}))
-    return jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['CHATUI'].get('port', 5012)}"})
+    #queue_message(jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['UI'].get('webui_port', 80)}"}))
+    return jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['UI'].get('webui_port', 80)}"})
 
 @flask_app.route('/avatar_sprites')
 def avatar_sprites():
@@ -941,7 +942,27 @@ def get_config():
                         field_options[field_key]['description'] = field_def['description']
                     if 'type' in field_def:
                         field_options[field_key]['type'] = field_def['type']
+                    if 'depends_on' in field_def:
+                        field_options[field_key]['depends_on'] = field_def['depends_on']
+                    if 'label' in field_def:
+                        field_options[field_key]['label'] = field_def['label']
         
+        # Populate character_card_path options from character directory
+        char_key = 'CHAR.character_card_path'
+        if char_key in field_options:
+            char_dir = os.path.join(BASE_DIR, 'character')
+            char_options = []
+            if os.path.isdir(char_dir):
+                for entry in sorted(os.listdir(char_dir)):
+                    json_path = os.path.join(char_dir, entry, f'{entry}.json')
+                    if os.path.isfile(json_path):
+                        char_options.append(f'character/{entry}/{entry}.json')
+            if char_options:
+                field_options[char_key]['options'] = char_options
+                field_options[char_key]['option_labels'] = {
+                    p: p.split('/')[1] for p in char_options
+                }
+
         return jsonify({
             "config": filtered_config,
             "field_options": field_options
@@ -1195,9 +1216,82 @@ def console_logs():
     return jsonify({'lines': lines, 'head': head})
 
 
+@flask_app.route('/api/characters', methods=['GET'])
+def list_characters():
+    """Return a list of available character names."""
+    char_dir = os.path.join(BASE_DIR, 'character')
+    names = []
+    if os.path.isdir(char_dir):
+        for entry in sorted(os.listdir(char_dir)):
+            if os.path.isfile(os.path.join(char_dir, entry, f'{entry}.json')):
+                names.append(entry)
+    return jsonify({'characters': names})
+
+
+@flask_app.route('/api/character/<name>', methods=['GET'])
+def get_character(name):
+    """Return character JSON data and persona traits."""
+    import configparser
+    char_dir = os.path.join(BASE_DIR, 'character', name)
+    json_path = os.path.join(char_dir, f'{name}.json')
+    persona_path = os.path.join(char_dir, 'persona.ini')
+
+    if not os.path.isfile(json_path):
+        return jsonify({'error': 'Character not found'}), 404
+
+    with open(json_path, 'r', encoding='utf-8') as f:
+        char_data = json.load(f)
+
+    traits = {}
+    if os.path.isfile(persona_path):
+        p = configparser.ConfigParser()
+        p.read(persona_path)
+        if 'PERSONA' in p:
+            traits = {k: int(v) for k, v in p['PERSONA'].items() if v.strip().isdigit()}
+
+    return jsonify({'character': char_data, 'traits': traits})
+
+
+@flask_app.route('/api/character/<name>/save', methods=['POST'])
+def save_character(name):
+    """Save character JSON and persona traits to disk."""
+    import configparser
+    import time as _time
+
+    data = request.get_json(force=True)
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    char_dir = os.path.join(BASE_DIR, 'character', name)
+    json_path = os.path.join(char_dir, f'{name}.json')
+    persona_path = os.path.join(char_dir, 'persona.ini')
+
+    if not os.path.isdir(char_dir):
+        return jsonify({'error': 'Character directory not found'}), 404
+
+    char_data = data.get('character', {})
+    traits = data.get('traits', {})
+
+    # Update modified timestamp
+    if 'metadata' not in char_data:
+        char_data['metadata'] = {}
+    char_data['metadata']['modified'] = int(_time.time() * 1000)
+
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(char_data, f, indent=4, ensure_ascii=False)
+
+    if traits:
+        p = configparser.ConfigParser()
+        p['PERSONA'] = {k: str(int(v)) for k, v in traits.items()}
+        with open(persona_path, 'w', encoding='utf-8') as f:
+            p.write(f)
+
+    return jsonify({'success': True})
+
+
 def start_flask_app(port=None):
     if port is None:
-        port = CONFIG['CHATUI'].get('port', 5012)
+        port = CONFIG['UI'].get('webui_port', 80)
     import eventlet
     import eventlet.wsgi
     queue_message(f"INFO: Starting Flask app on port {port} with Eventlet...")

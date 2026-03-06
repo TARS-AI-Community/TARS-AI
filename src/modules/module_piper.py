@@ -66,7 +66,9 @@ async def text_to_speech_with_pipelining_piper(text):
     Converts text to speech using the Piper model and streams audio as it's generated.
     """
     # Split text into smaller chunks
-    chunks = re.split(r'(?<=\.)\s', text)  # Split at sentence boundaries
+    # Split at sentence boundaries and commas for faster first-chunk playback
+    chunks = re.split(r'(?<=[.!?;])\s+|,\s+', text)
+    chunks = [c.strip() for c in chunks if len(c.strip()) >= 3]
 
     # Yield each audio chunk as soon as it's ready
     for chunk in chunks:

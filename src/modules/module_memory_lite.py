@@ -269,6 +269,16 @@ class MemoryManagerLite:
             "timestamp": current_time,
             "keywords": keywords
         }
+        # Tag memory with current speaker if speaker ID is active
+        try:
+            from modules.module_speaker_id import get_speaker_id_manager
+            sid = get_speaker_id_manager()
+            if sid is not None:
+                speaker = sid.get_current_speaker()
+                if speaker is not None:
+                    document["speaker"] = speaker
+        except Exception:
+            pass
         self.documents.append(document)
         self._save_memory()
 

@@ -15,7 +15,7 @@ import asyncio
 
 # === Custom Modules ===
 from modules.module_config import load_config, get_capabilities
-from modules.module_llm import process_completion, detect_emotion
+from modules.module_llm import process_completion, detect_emotion, llm_execute_side_effects, _sanitize_for_tts
 from modules.module_tts import play_audio_chunks
 from modules.module_messageQue import queue_message
 from modules.module_servoctl import initialize_servos
@@ -64,6 +64,9 @@ def start_bt_controller_thread():
     """
     Wrapper to start the BT Controller functionality in a thread.
     """
+    config = load_config()
+    if not config['CONTROLS'].get('enabled', False):
+        return
     if start_controls is None:
         queue_message("WARNING: BT Controller not available")
         return
@@ -125,7 +128,11 @@ def wake_word_callback(wake_response):
     ui_manager.update_data(character_name, wake_response, character_name)
 
     ui_manager.set_tars_status("TALKING")
+
+    # Don't run barge-in on wake responses — they're too short and the mic
+    # picks up TARS's own voice, causing false positives
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption'], True))
+
     ui_manager.set_tars_status("LISTENING")
 
 def utterance_callback(message):
@@ -160,13 +167,38 @@ def utterance_callback(message):
             return
 
         ui_manager.set_tars_status("THINKING")
-        reply = process_completion(user_text)
+
+        # Check if preemptive LLM already fired during silence detection
+        preemptive = message_dict.get("preemptive_llm_result")
+        if preemptive is not None:
+            queue_message("INFO: Using preemptive LLM result (saved ~1-3s)")
+            parsed = preemptive
+        else:
+            parsed = process_completion(user_text)
 
         # If a movement happened during the LLM call, discard the result
         if stt_manager and stt_manager.is_cancelled():
             queue_message("INFO: LLM response discarded (movement interrupted)")
             ui_manager.set_tars_status("STANDBY")
             return
+
+        # Handle both old string returns and new parsed dict returns
+        if parsed is None:
+            queue_message("ERROR: LLM returned no response")
+            ui_manager.set_tars_status("STANDBY")
+            return
+        if isinstance(parsed, str):
+            # Legacy path or error string
+            reply = parsed
+        else:
+            reply = _sanitize_for_tts(parsed.get("reply", ""))
+
+            # Run function_calls and memory saves in background — parallel with TTS
+            if parsed.get("function_calls") or parsed.get("new_memories"):
+                threading.Thread(
+                    target=llm_execute_side_effects,
+                    args=(parsed, user_text), daemon=True
+                ).start()
 
         try:
             match = re.search(r"<think>(.*?)</think>", reply, re.DOTALL)
@@ -176,11 +208,6 @@ def utterance_callback(message):
             reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
         except Exception:
             thoughts = ""
-
-        # Debug output for thoughts
-        if thoughts:
-            #queue_message(f"DEBUG: Thoughts\n{thoughts}")
-            pass
 
         # Check again before TTS — movement could have started during post-processing
         if stt_manager and stt_manager.is_cancelled():
@@ -204,8 +231,22 @@ def utterance_callback(message):
         reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
 
         ui_manager.set_tars_status("TALKING")
-        asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
-        ui_manager.set_tars_status("STANDBY")
+
+        # Start barge-in monitoring (mic listens for speech during TTS)
+        if stt_manager and CONFIG['STT'].get('enable_bargein', True):
+            stt_manager.start_bargein_monitor(tts_text=reply)
+
+        was_interrupted = asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
+
+        # Stop barge-in monitoring
+        if stt_manager:
+            stt_manager.stop_bargein_monitor()
+
+        if was_interrupted:
+            queue_message("INFO: TARS was interrupted by user (barge-in)")
+            ui_manager.set_tars_status("LISTENING")
+        else:
+            ui_manager.set_tars_status("STANDBY")
 
     except json.JSONDecodeError:
         queue_message("ERROR: Invalid JSON format. Could not process user message.")

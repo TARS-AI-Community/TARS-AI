@@ -124,6 +124,32 @@ def _check_patterns(short_term_memory, char_name):
     return simile_count >= 2, bounce_count >= 3
 
 
+def _get_speaker_context():
+    """Get current speaker identification for prompt injection."""
+    try:
+        from modules.module_speaker_id import get_speaker_id_manager
+        sid = get_speaker_id_manager()
+        if sid is not None:
+            return sid.get_speaker_context()
+    except Exception:
+        pass
+    return ""
+
+
+def _get_active_user_name(config_user_name: str) -> str:
+    """Return the speaker-identified name if available, otherwise the config user_name."""
+    try:
+        from modules.module_speaker_id import get_speaker_id_manager
+        sid = get_speaker_id_manager()
+        if sid is not None and sid.enabled:
+            speaker = sid.get_current_speaker()
+            if speaker is not None:
+                return speaker
+    except Exception:
+        pass
+    return config_user_name
+
+
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
     from modules.module_config import reload_persona_settings
     fresh_traits = reload_persona_settings()
@@ -131,7 +157,7 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
         character_manager.traits = fresh_traits
         queue_message(f"[PERSONA] Loaded: verbosity={fresh_traits.get('verbosity')}, sarcasm={fresh_traits.get('sarcasm')}, humor={fresh_traits.get('humor')}")
     now = datetime.now()
-    user_name = config['CHAR']['user_name']
+    user_name = _get_active_user_name(config['CHAR']['user_name'])
     char_name = character_manager.char_name
     persona_display = "\n".join([f"{trait}: {value}" for trait, value in character_manager.traits.items()])
 
@@ -265,7 +291,15 @@ When user requests match these patterns, you MUST call the function:
     Parameters: {{"prompt": "detailed description of the image to generate"}}
     Example: {{"function": "generate_image", "parameters": {{"prompt": "a cute puppy playing in a sunny meadow"}}}}
 
-13. new_memories (REQUIRED field)
+13. identify_speaker_name
+    Triggers: ONLY when the current speaker is UNKNOWN and they tell you their name.
+      * The system prompt will say "Current speaker: UNKNOWN" when this applies.
+      * When you ask "what's your name?" and they answer, call this function.
+    Do NOT call this if the speaker is already identified.
+    Parameters: {{"name": "the speaker's name"}}
+    Example: {{"function": "identify_speaker_name", "parameters": {{"name": "Joe"}}}}
+
+14. new_memories (REQUIRED field)
    Extract ONLY high-level, persistent facts about the user from this conversation
    Focus on stable information that won't change conversation-to-conversation
    Write as short statements (3-6 words)
@@ -534,6 +568,7 @@ Response: {{"question": "Make me a picture of a sunset over the ocean", "reply":
 Current Date: {now.strftime('%m/%d/%Y')}
 Current Time: {now.strftime('%H:%M:%S')}
 {location_line}
+{_get_speaker_context()}
 """
 
     final_prompt = append_memory_and_examples(
@@ -571,7 +606,7 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
 
     total_base_prompt = "".join([
         base_prompt,
-        f"\n### User: {config['CHAR']['user_name']}\n### Character: {character_manager.char_name}\n",
+        f"\n### User: {_get_active_user_name(config['CHAR']['user_name'])}\n### Character: {character_manager.char_name}\n",
         f"\nUser: {user_prompt}\n\nResponse: "
     ])
 
@@ -697,7 +732,7 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         f"RECENT CONTEXT: {recent_context_preview if recent_context_preview else 'First message'}\n"
         f"-> Only reference recent topics if the user's message directly relates. Otherwise, respond fresh.\n"
         f"-> Read your last few replies above. Make sure this one sounds different.\n\n"
-        f"User ({config['CHAR']['user_name']}): {user_prompt}\n\n"
+        f"User ({_get_active_user_name(config['CHAR']['user_name'])}): {user_prompt}\n\n"
         f"Response ({character_manager.char_name}):"
     )
 

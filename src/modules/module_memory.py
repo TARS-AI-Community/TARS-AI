@@ -232,6 +232,16 @@ class MemoryManager:
             "user_input": user_input,
             "bot_response": bot_response,
         }
+        # Tag memory with current speaker if speaker ID is active
+        try:
+            from modules.module_speaker_id import get_speaker_id_manager
+            sid = get_speaker_id_manager()
+            if sid is not None:
+                speaker = sid.get_current_speaker()
+                if speaker is not None:
+                    document["speaker"] = speaker
+        except Exception:
+            pass
         self.hyper_db.add_document(document)
         self.hyper_db.save(self.memory_db_path)
 
@@ -499,7 +509,7 @@ class MemoryManager:
             estimated_tokens = int(word_count / 0.75)
             return {"length": estimated_tokens}
 
-        elif llm_backend in ["openai", "deepinfra"]:
+        elif llm_backend in ["openai", "deepinfra", "other"]:
             try:
                 import tiktoken
                 override_encoding_model = self.config['LLM'].get('override_encoding_model', "cl100k_base")
@@ -507,12 +517,15 @@ class MemoryManager:
                 if llm_backend == "deepinfra":
                     enc = tiktoken.get_encoding(override_encoding_model)
                 else:
-                    openai_model = self.config['LLM'].get('openai_model', None)
+                    if llm_backend == "other":
+                        model_name = self.config['LLM'].get('other_model', None) or self.config['LLM'].get('openai_model', None)
+                    else:
+                        model_name = self.config['LLM'].get('openai_model', None)
                     try:
-                        enc = tiktoken.encoding_for_model(openai_model)
+                        enc = tiktoken.encoding_for_model(model_name)
                     except KeyError:
                         if not self._fallback_warning_logged:
-                            queue_message(f"INFO: Automatic mapping failed '{openai_model}'. Using '{override_encoding_model}'.")
+                            queue_message(f"INFO: Automatic mapping failed '{model_name}'. Using '{override_encoding_model}'.")
                             self._fallback_warning_logged = True
                         enc = tiktoken.get_encoding(override_encoding_model)
 
@@ -525,21 +538,6 @@ class MemoryManager:
                     self._token_error_logged = True
                 return {"length": 0}
 
-        elif llm_backend in ["ooba", "tabby"]:
-            url = f"{self.config['LLM']['base_url']}/v1/internal/token-count" if llm_backend == "ooba" else f"{self.config['LLM']['base_url']}/v1/token/encode"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.config['LLM']['api_key']}"
-            }
-            data = {"text": text}
-
-            try:
-                response = requests.post(url, headers=headers, json=data)
-                response.raise_for_status()
-                return response.json()
-            except requests.exceptions.RequestException as e:
-                queue_message(f"ERROR: Request to {llm_backend} token count API failed: {e}")
-                return {"length": 0}
         else:
             queue_message(f"ERROR: Unsupported LLM backend: {llm_backend}")
             return {"length": 0}

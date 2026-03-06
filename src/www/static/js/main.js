@@ -574,7 +574,7 @@ function executeAction() {
   }
 
   function arrToVal(items, type) { return type==='json' ? JSON.stringify(items) : items.join(','); }
-  function esc(t)  { const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+  function esc(t)  { const d=document.createElement('div'); d.textContent=t; return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function escAttr(s) { return s.replace(/'/g,"&#39;"); }
 
   function tagInputHtml(fid, sec, key, items, arrType) {
@@ -667,31 +667,40 @@ function executeAction() {
   }
 
   const SECTION_ICONS = {
-    'DEVICE':'bi-cpu-fill','CHATUI':'bi-chat-dots-fill','CHAR':'bi-person-fill',
+    'CHAR':'bi-person-fill',
     'CONTROLS':'bi-controller','STT':'bi-mic-fill','LLM':'bi-robot',
     'VISION':'bi-eye-fill','EMOTION':'bi-emoji-smile-fill','TTS':'bi-volume-up-fill',
-    'UI':'bi-display-fill','RAG':'bi-database-fill','BATTERY':'bi-battery-half',
+    'UI':'bi-display-fill','RAG':'bi-database-fill',
     'HOME_ASSISTANT':'bi-house-fill','DISCORD':'bi-discord',
-    'STABLE_DIFFUSION':'bi-image-fill','MISC':'bi-wrench-adjustable'
+    'STABLE_DIFFUSION':'bi-image-fill',
+    'BATTERY':'bi-battery-half',
+    'MISC':'bi-wrench-adjustable',
+    'CHARACTER_EDITOR':'bi-person-lines-fill'
   };
   const SECTION_LABELS = {
-    'DEVICE':'Device','CHATUI':'Chat UI','CHAR':'Character','CONTROLS':'Controls',
+    'CHAR':'System','CONTROLS':'Controls',
     'STT':'Speech','LLM':'AI Model','VISION':'Vision','EMOTION':'Emotion',
-    'TTS':'Voice','UI':'Display','RAG':'Memory','BATTERY':'Battery',
+    'TTS':'Voice','UI':'Display','RAG':'Memory',
     'HOME_ASSISTANT':'Home Asst','DISCORD':'Discord',
-    'STABLE_DIFFUSION':'Img Gen','MISC':'Misc'
+    'STABLE_DIFFUSION':'Img Gen',
+    'BATTERY':'Battery',
+    'MISC':'Misc',
+    'CHARACTER_EDITOR':'Character'
   };
 
   const SECTION_ORDER = [
-    'DEVICE', 'CHAR', 'LLM',
+    'CHAR', 'LLM',
     'STT', 'TTS',
     'EMOTION', 'VISION', 'RAG',
-    'UI', 'CHATUI',
+    'UI',
     'CONTROLS',
+    'BATTERY',
     'HOME_ASSISTANT', 'DISCORD',
-    'STABLE_DIFFUSION',
-    'BATTERY', 'MISC'
+    'STABLE_DIFFUSION'
   ];
+
+  // Character editor tile is appended after config sections
+  const CHARACTER_EDITOR_ID = 'CHARACTER_EDITOR';
 
   let activeConfigSection = null;
 
@@ -735,16 +744,24 @@ function executeAction() {
 
         for (const [key, value] of Object.entries(fields)) {
           const fid = `cfg_${section}_${key}`, fi = data.field_options[`${section}.${key}`], desc2 = fi?.description||'';
-          html += `<div class="col-md-6 col-lg-4"><div class="field-wrapper">
-            <label for="${fid}" class="form-label d-flex align-items-center gap-1"><span>${key}</span>`;
+          const depData = fi?.depends_on ? JSON.stringify(Array.isArray(fi.depends_on) ? fi.depends_on : [fi.depends_on]) : null;
+          html += depData
+            ? `<div class="col-md-6 col-lg-4" data-dep-conds='${depData}' data-dep-section="${section}"><div class="field-wrapper">`
+            : `<div class="col-md-6 col-lg-4"><div class="field-wrapper">`;
+          html += `<label for="${fid}" class="form-label d-flex align-items-center gap-1"><span>${fi?.label||key}</span>`;
           if (desc2) html += `<span class="config-tooltip-wrap" data-tip="${esc(desc2)}"><i class="bi bi-info-circle config-tooltip-icon"></i></span>`;
 
           if (fi?.type==='screensaver_select') {
             html += `</label>${screensaverHtml(fid,section,key,value,fi.options||[])}`;
           } else if (fi?.options) {
-            html += `</label><select class="form-select form-select-sm config-input" id="${fid}" data-section="${section}" data-key="${key}">`;
-            fi.options.forEach(opt => { html += `<option value="${opt}"${String(value)===String(opt)?' selected':''}>${opt}</option>`; });
+            html += `</label><div class="d-flex align-items-center gap-1"><select class="form-select form-select-sm config-input" id="${fid}" data-section="${section}" data-key="${key}" style="flex:1">`;
+            const optLabels = fi.option_labels || {};
+            fi.options.forEach(opt => { html += `<option value="${opt}"${String(value)===String(opt)?' selected':''}>${optLabels[opt]||opt}</option>`; });
             html += '</select>';
+            if (key === 'character_card_path') {
+              html += `<button class="hud-btn hud-btn-sm hud-btn-primary config-char-edit-btn" type="button" title="Edit character"><i class="bi bi-pencil-square"></i></button>`;
+            }
+            html += '</div>';
           } else if (typeof value==='boolean'||['True','False','true','false'].includes(value)) {
             const chk = (value===true||value==='True'||value==='true') ? 'checked' : '';
             html += `</label><div class="form-check form-switch mt-1"><input class="form-check-input config-toggle" type="checkbox" id="${fid}" data-section="${section}" data-key="${key}" ${chk}><label class="form-check-label small" for="${fid}">${chk?'Enabled':'Disabled'}</label></div>`;
@@ -764,8 +781,99 @@ function executeAction() {
         html += '</div></div></div>';
       }
 
+      // Character Editor panel (same pattern as config-panel)
+      html += `<div class="config-panel" id="configPanel_${CHARACTER_EDITOR_ID}">
+        <div class="config-panel-header">
+          <button class="config-panel-back" data-section="${CHARACTER_EDITOR_ID}"><i class="bi bi-chevron-left"></i></button>
+          <div class="config-panel-title">
+            <i class="bi bi-person-lines-fill"></i><span>Character Editor</span>
+            <small>Edit character JSON and personality traits</small>
+          </div>
+        </div>
+        <div class="config-panel-body" style="padding:0">
+          <div class="chared-wrap">
+            <div class="chared-header">
+              <div class="chared-header-right" style="width:100%">
+                <select id="charedSelect" class="form-select form-select-sm chared-selector">
+                  <option value="">— select character —</option>
+                </select>
+                <button class="hud-btn hud-btn-primary" id="saveCharBtn">
+                  <i class="bi bi-save"></i> SAVE
+                </button>
+              </div>
+            </div>
+            <div class="chared-loading" id="charedLoading" style="display:none">
+              <div class="hud-spinner"></div><span>Loading…</span>
+            </div>
+            <div class="chared-empty" id="charedEmpty">
+              <i class="bi bi-person-lines-fill"></i>
+              <span>Select a character above to begin editing</span>
+            </div>
+            <div class="chared-body" id="charedBody" style="display:none">
+              <div class="chared-tabs">
+                <button class="chared-inner-tab active" data-chared-tab="identity">IDENTITY</button>
+                <button class="chared-inner-tab" data-chared-tab="persona">PERSONA</button>
+                <button class="chared-inner-tab" data-chared-tab="dialogue">DIALOGUE</button>
+                <button class="chared-inner-tab" data-chared-tab="traits">TRAITS</button>
+              </div>
+              <div class="chared-panel active" id="charedPanel_identity">
+                <div class="chared-fields">
+                  <div class="chared-field-row">
+                    <label class="chared-label" for="ched_char_name">NAME</label>
+                    <input type="text" id="ched_char_name" class="form-control form-control-sm chared-input" placeholder="Character name">
+                  </div>
+                  <div class="chared-field-row">
+                    <label class="chared-label" for="ched_description">DESCRIPTION <span class="chared-tip">Physical appearance and basic identity</span></label>
+                    <textarea id="ched_description" class="form-control chared-textarea" rows="3" placeholder="Physical description…"></textarea>
+                  </div>
+                  <div class="chared-field-row">
+                    <label class="chared-label" for="ched_personality">PERSONALITY <span class="chared-tip">Core personality traits and behavioral tendencies</span></label>
+                    <textarea id="ched_personality" class="form-control chared-textarea" rows="3" placeholder="Personality traits…"></textarea>
+                  </div>
+                  <div class="chared-field-row">
+                    <label class="chared-label" for="ched_scenario">SCENARIO <span class="chared-tip">Context and setting the character exists in</span></label>
+                    <textarea id="ched_scenario" class="form-control chared-textarea" rows="3" placeholder="Setting and context…"></textarea>
+                  </div>
+                </div>
+              </div>
+              <div class="chared-panel" id="charedPanel_persona">
+                <div class="chared-fields">
+                  <div class="chared-field-row">
+                    <label class="chared-label" for="ched_char_persona">CHARACTER PERSONA <span class="chared-tip">Full persona description fed directly to the AI</span></label>
+                    <textarea id="ched_char_persona" class="form-control chared-textarea" rows="6" placeholder="Full persona for the LLM system prompt…"></textarea>
+                  </div>
+                  <div class="chared-field-row">
+                    <label class="chared-label" for="ched_world_scenario">WORLD SCENARIO <span class="chared-tip">World or operational context</span></label>
+                    <textarea id="ched_world_scenario" class="form-control chared-textarea" rows="4" placeholder="World and operational context…"></textarea>
+                  </div>
+                </div>
+              </div>
+              <div class="chared-panel" id="charedPanel_dialogue">
+                <div class="chared-fields">
+                  <div class="chared-field-row">
+                    <label class="chared-label" for="ched_first_mes">GREETING MESSAGE <span class="chared-tip">First message shown when a conversation starts</span></label>
+                    <textarea id="ched_first_mes" class="form-control chared-textarea" rows="4" placeholder="Opening greeting…"></textarea>
+                  </div>
+                  <div class="chared-field-row">
+                    <label class="chared-label" for="ched_mes_example">EXAMPLE DIALOGUE <span class="chared-tip">Sample conversations that shape the character voice</span></label>
+                    <textarea id="ched_mes_example" class="form-control chared-textarea chared-textarea-xl" rows="10" placeholder="User: …&#10;Character: …"></textarea>
+                  </div>
+                </div>
+              </div>
+              <div class="chared-panel" id="charedPanel_traits">
+                <div class="chared-traits-intro">Personality trait values (0 = minimal · 100 = maximum)</div>
+                <div class="chared-traits-grid" id="charedTraitsGrid"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
       form.innerHTML = html;
       activeConfigSection = null;
+
+      // Wire up character editor events
+      initCharacterEditor();
 
       // Icon tile click handlers
       document.querySelectorAll('.config-icon-tile').forEach(tile => {
@@ -785,6 +893,7 @@ function executeAction() {
             this.classList.add('active');
             grid.classList.add('has-active');
             activeConfigSection = target;
+            if (target === 'CHARACTER_EDITOR' && window.onCharacterEditorOpen) window.onCharacterEditorOpen();
             setTimeout(() => panel.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
           }
         });
@@ -798,9 +907,19 @@ function executeAction() {
           document.getElementById(`configPanel_${sec}`).classList.remove('open');
           const tile = document.querySelector(`.config-icon-tile[data-section-target="${sec}"]`);
           if (tile) tile.classList.remove('active');
-          document.querySelector('.config-icon-grid').classList.remove('has-active');
-          activeConfigSection = null;
-          document.querySelector('.config-icon-grid').scrollIntoView({ behavior:'smooth', block:'start' });
+
+          if (sec === CHARACTER_EDITOR_ID) {
+            // Go back to System (CHAR) panel instead of blank grid
+            const charPanel = document.getElementById('configPanel_CHAR');
+            const charTile = document.querySelector('.config-icon-tile[data-section-target="CHAR"]');
+            if (charPanel) { charPanel.classList.add('open'); charPanel.scrollIntoView({ behavior:'smooth', block:'start' }); }
+            if (charTile) charTile.classList.add('active');
+            activeConfigSection = 'CHAR';
+          } else {
+            document.querySelector('.config-icon-grid').classList.remove('has-active');
+            activeConfigSection = null;
+            document.querySelector('.config-icon-grid').scrollIntoView({ behavior:'smooth', block:'start' });
+          }
         });
       });
 
@@ -811,6 +930,30 @@ function executeAction() {
         });
       });
       initTagInputs(); initScreensaverSelects(); initConfigTooltips();
+      applyDependencies(); attachDependencyHandlers(); attachBackendUrlAutoFill();
+
+      // Character edit button → open CHARACTER_EDITOR panel with the selected character
+      document.querySelectorAll('.config-char-edit-btn').forEach(btn => {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          // Extract character name from the selected path (e.g. "character/TARS/TARS.json" → "TARS")
+          const sel = document.getElementById('cfg_CHAR_character_card_path');
+          const selectedPath = sel ? sel.value : '';
+          const charName = selectedPath ? selectedPath.split('/')[1] : '';
+
+          // Open the CHARACTER_EDITOR panel
+          const editorPanel = document.getElementById(`configPanel_${CHARACTER_EDITOR_ID}`);
+          const grid = document.querySelector('.config-icon-grid');
+          document.querySelectorAll('.config-panel.open').forEach(p => p.classList.remove('open'));
+          document.querySelectorAll('.config-icon-tile.active').forEach(t => t.classList.remove('active'));
+          if (editorPanel) editorPanel.classList.add('open');
+          if (grid) grid.classList.add('has-active');
+          activeConfigSection = CHARACTER_EDITOR_ID;
+
+          if (window.onCharacterEditorOpen) window.onCharacterEditorOpen(charName);
+          setTimeout(() => editorPanel && editorPanel.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
+        });
+      });
     }).catch(err => {
       $('configForm').innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error: ${err.message}</div>`;
     });
@@ -860,6 +1003,64 @@ function executeAction() {
     document.querySelectorAll('.config-panel-body, .tab-content, .config-wrap').forEach(el => {
       el.addEventListener('scroll', removeTip);
     });
+  }
+
+  function applyDependencies() {
+    document.querySelectorAll('[data-dep-conds]').forEach(wrapper => {
+      const conds = JSON.parse(wrapper.dataset.depConds);
+      const section = wrapper.dataset.depSection;
+      const visible = conds.every(cond => {
+        const parentEl = document.getElementById(`cfg_${section}_${cond.field}`);
+        if (!parentEl) return true;
+        const val = parentEl.type === 'checkbox'
+          ? (parentEl.checked ? 'true' : 'false')
+          : parentEl.value.toLowerCase();
+        return cond.values.map(v => v.toLowerCase()).includes(val);
+      });
+      wrapper.style.display = visible ? '' : 'none';
+    });
+  }
+
+  function attachDependencyHandlers() {
+    const attached = new Set();
+    document.querySelectorAll('[data-dep-conds]').forEach(wrapper => {
+      const conds = JSON.parse(wrapper.dataset.depConds);
+      const section = wrapper.dataset.depSection;
+      conds.forEach(cond => {
+        const parentId = `cfg_${section}_${cond.field}`;
+        if (!attached.has(parentId)) {
+          attached.add(parentId);
+          const parentEl = document.getElementById(parentId);
+          if (parentEl) parentEl.addEventListener('change', applyDependencies);
+        }
+      });
+    });
+  }
+
+  const BACKEND_URLS = {
+    'openai':    'https://api.openai.com/v1',
+    'grok':      'https://api.x.ai/v1',
+    'deepinfra': 'https://api.deepinfra.com/v1/openai',
+  };
+
+  function attachBackendUrlAutoFill() {
+    const backendEl = document.getElementById('cfg_LLM_llm_backend');
+    const urlEl = document.getElementById('cfg_LLM_base_url');
+    if (!backendEl || !urlEl) return;
+    // Remember the saved "other" URL so switching away and back restores it
+    let savedOtherUrl = backendEl.value === 'other' ? urlEl.value : '';
+    backendEl.addEventListener('change', (e) => {
+      const prev = e.target._prevValue || backendEl.value;
+      if (prev === 'other') savedOtherUrl = urlEl.value;
+      const url = BACKEND_URLS[backendEl.value];
+      if (url) {
+        urlEl.value = url;
+      } else if (backendEl.value === 'other') {
+        urlEl.value = savedOtherUrl;
+      }
+      e.target._prevValue = backendEl.value;
+    });
+    backendEl._prevValue = backendEl.value;
   }
 
   function saveConfiguration() {
@@ -1229,3 +1430,169 @@ window.showToast = function (message, type, duration) {
 
 // ── UTIL: shorthand getElementById ───────────────────────────────────────────
 function $(id) { return document.getElementById(id); }
+
+
+// ── CHARACTER EDITOR ─────────────────────────────────────────────────────────
+(function () {
+  const TRAIT_NAMES = [
+    'verbosity','humor','sarcasm','honesty','empathy',
+    'curiosity','confidence','formality','adaptability','discipline',
+    'imagination','emotional_stability','pragmatism','optimism',
+    'resourcefulness','cheerfulness','engagement','respectfulness'
+  ];
+
+  const JSON_FIELDS = [
+    'char_name', 'description', 'personality', 'scenario',
+    'char_persona', 'world_scenario', 'first_mes', 'mes_example'
+  ];
+
+  let currentCharName = null;
+  let currentCharData = null;
+  let currentTraits = null;
+  let charListLoaded = false;
+
+  function show(id) { const el = document.getElementById(id); if (el) el.style.display = ''; }
+  function hide(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+
+  async function loadCharacterList() {
+    const sel = document.getElementById('charedSelect');
+    if (!sel) return;
+    try {
+      const d = await fetch('/api/characters').then(r => r.json());
+      const names = d.characters || [];
+      sel.innerHTML = '<option value="">— select character —</option>' +
+        names.map(n => `<option value="${n}">${n}</option>`).join('');
+      charListLoaded = true;
+      // Pre-select active character
+      const active = (window.APP_CONFIG && window.APP_CONFIG.charName) || '';
+      if (active && names.includes(active)) {
+        sel.value = active;
+        loadCharacter(active);
+      }
+    } catch (e) {
+      sel.innerHTML = '<option value="">Error loading characters</option>';
+    }
+  }
+
+  async function loadCharacter(name) {
+    if (!name) { hide('charedBody'); hide('charedLoading'); show('charedEmpty'); return; }
+
+    hide('charedBody'); hide('charedEmpty'); show('charedLoading');
+
+    try {
+      const d = await fetch(`/api/character/${encodeURIComponent(name)}`).then(r => r.json());
+      if (d.error) throw new Error(d.error);
+
+      currentCharName = name;
+      currentCharData = d.character || {};
+      currentTraits   = d.traits   || {};
+
+      JSON_FIELDS.forEach(key => {
+        const el = document.getElementById('ched_' + key);
+        if (el) el.value = currentCharData[key] || '';
+      });
+
+      buildTraitsGrid(currentTraits);
+      hide('charedLoading'); hide('charedEmpty'); show('charedBody');
+    } catch (e) {
+      hide('charedLoading'); show('charedEmpty');
+      if (window.showToast) showToast('Failed to load character: ' + e.message, 'error');
+    }
+  }
+
+  function buildTraitsGrid(traits) {
+    const grid = document.getElementById('charedTraitsGrid');
+    if (!grid) return;
+    grid.innerHTML = TRAIT_NAMES.map(name => {
+      const val = traits[name] !== undefined ? parseInt(traits[name]) : 50;
+      const label = name.replace(/_/g, ' ').toUpperCase();
+      return `
+        <div class="chared-trait">
+          <div class="chared-trait-header">
+            <span class="chared-trait-name">${label}</span>
+            <span class="chared-trait-val" id="traitVal_${name}">${val}</span>
+          </div>
+          <input type="range" min="0" max="100" value="${val}"
+            id="trait_${name}" class="chared-trait-slider"
+            oninput="document.getElementById('traitVal_${name}').textContent=this.value">
+        </div>`;
+    }).join('');
+  }
+
+  async function saveCharacter() {
+    if (!currentCharName) return;
+
+    const btn = document.getElementById('saveCharBtn');
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="hud-spinner" style="width:12px;height:12px;border-width:2px;margin-right:6px;"></span>SAVING';
+
+    const charData = Object.assign({}, currentCharData);
+    JSON_FIELDS.forEach(key => {
+      const el = document.getElementById('ched_' + key);
+      if (el) charData[key] = el.value;
+    });
+    if (charData.char_name) charData.name = charData.char_name;
+
+    const traits = {};
+    TRAIT_NAMES.forEach(name => {
+      const el = document.getElementById('trait_' + name);
+      if (el) traits[name] = parseInt(el.value);
+    });
+
+    try {
+      const r = await fetch(`/api/character/${encodeURIComponent(currentCharName)}/save`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ character: charData, traits })
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || 'Save failed');
+      if (window.showToast) showToast('Character saved', 'success');
+      currentCharData = charData;
+      currentTraits   = traits;
+    } catch (e) {
+      if (window.showToast) showToast('Save failed: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+
+  // Called by loadConfiguration() after the config form HTML is injected
+  window.initCharacterEditor = function () {
+    charListLoaded = false;
+    currentCharName = null;
+
+    const sel = document.getElementById('charedSelect');
+    if (sel) sel.addEventListener('change', function () { loadCharacter(this.value); });
+
+    const saveBtn = document.getElementById('saveCharBtn');
+    if (saveBtn) saveBtn.addEventListener('click', saveCharacter);
+
+    document.querySelectorAll('.chared-inner-tab').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        document.querySelectorAll('.chared-inner-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.chared-panel').forEach(p => p.classList.remove('active'));
+        this.classList.add('active');
+        const panel = document.getElementById('charedPanel_' + this.dataset.charedTab);
+        if (panel) panel.classList.add('active');
+      });
+    });
+  };
+
+  // Trigger character list load when the editor panel opens
+  window.onCharacterEditorOpen = function (preselect) {
+    if (!charListLoaded) {
+      loadCharacterList().then(() => {
+        if (preselect) {
+          const sel = document.getElementById('charedSelect');
+          if (sel) { sel.value = preselect; loadCharacter(preselect); }
+        }
+      });
+    } else if (preselect) {
+      const sel = document.getElementById('charedSelect');
+      if (sel) { sel.value = preselect; loadCharacter(preselect); }
+    }
+  };
+})();

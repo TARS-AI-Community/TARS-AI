@@ -591,21 +591,13 @@ flashrank                       # Lightweight re-ranker
 EMBEDDINGS
     fi
 
-    cat >> "$req_file" << 'PICOVOICE'
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        cat >> "$req_file" << 'SHERPA'
 
-# === WAKE WORD (All Pi versions) ===
-pvporcupine                     # Wake word detection by Picovoice
-pvrecorder                      # Recorder for Picovoice
+# === SHERPA-ONNX STT (Pi4/Pi5) ===
+sherpa-onnx                     # Offline speech recognition (SenseVoiceTiny)
 
-PICOVOICE
-
-    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" || "$PI_VERSION" == "pi3" ]]; then
-        cat >> "$req_file" << 'VOSK'
-
-# === LOCAL STT (Pi3/Pi4/Pi5) ===
-vosk                            # Offline speech recognition
-
-VOSK
+SHERPA
     fi
 
     cat >> "$req_file" << 'LOCALTTS'
@@ -619,7 +611,7 @@ LOCALTTS
         cat >> "$req_file" << 'HEAVY'
 
 # === HEAVY PROCESSING (Pi5 only) ===
-faster-whisper                  # Local STT using Faster Whisper
+sherpa-onnx                     # Local STT using sherpa-onnx
 silero-vad                      # Voice Activity Detection (VAD) using Silero
 omegaconf                       # Required for silero speech
 fastrtc[vad, stt, tts]          # FastRTC for real-time communication
@@ -652,7 +644,6 @@ UI
 
 # === CLOUD TTS OPTIONS (Pi4/Pi5) ===
 elevenlabs                      # External TTS using 11Labs API
-azure-cognitiveservices-speech  # Azure TTS API
 
 CLOUDTTS
     fi
@@ -1045,7 +1036,104 @@ main() {
     
     cd src
     echo ""
-    
+
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        if [ ! -d "stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17" ]; then
+            echo ""
+            read -p "| Download sherpa-onnx SenseVoiceTiny model (~40MB)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading SenseVoiceTiny model..." "info"
+                mkdir -p stt
+                cd stt
+                if wget -q --show-progress https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2; then
+rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2                    tar xjf sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+                    
+                    echo "|  [OK] SenseVoiceTiny model installed"
+                else
+                    echo "| [!] Failed to download SenseVoiceTiny model"
+                fi
+                cd ..
+            fi
+        fi
+    fi
+
+    # Sherpa-onnx Silero VAD model (~2MB, enables sherpa-onnx VAD without torch)
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" || "$PI_VERSION" == "pi3" ]]; then
+        if [ ! -f "stt/silero_vad.onnx" ]; then
+            echo ""
+            read -p "| Download sherpa-onnx Silero VAD model (~2MB)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading Silero VAD model..." "info"
+                mkdir -p stt
+                if wget -q --show-progress -O stt/silero_vad.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx; then
+                    echo "|  [OK] Silero VAD model installed"
+                else
+                    echo "| [!] Failed to download Silero VAD model"
+                fi
+            fi
+        fi
+    fi
+
+    # Sherpa-onnx GTCRN denoiser model (~5MB, optional audio denoising)
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        if [ ! -f "stt/gtcrn_simple.onnx" ]; then
+            echo ""
+            read -p "| Download sherpa-onnx speech denoiser model (~5MB)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading GTCRN denoiser model..." "info"
+                mkdir -p stt
+                if wget -q --show-progress -O stt/gtcrn_simple.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-enhancement-models/gtcrn_simple.onnx; then
+                    echo "|  [OK] GTCRN denoiser model installed"
+                else
+                    echo "| [!] Failed to download GTCRN denoiser model"
+                fi
+            fi
+        fi
+    fi
+
+    # Sherpa-onnx punctuation model (~200MB, optional punctuation restoration)
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        if [ ! -d "stt/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12" ]; then
+            echo ""
+            read -p "| Download sherpa-onnx punctuation model (~200MB)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading punctuation model..." "info"
+                mkdir -p stt
+                cd stt
+                if wget -q --show-progress https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2; then
+                    tar xjf sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2
+                    rm sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2
+                    echo "|  [OK] Punctuation model installed"
+                else
+                    echo "| [!] Failed to download punctuation model"
+                fi
+                cd ..
+            fi
+        fi
+    fi
+
+    # Pipecat Smart Turn v3.2 model (~9MB, semantic turn detection for VAD)
+    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
+        if [ ! -f "stt/smart-turn-v3.2-cpu.onnx" ]; then
+            echo ""
+            read -p "| Download Smart Turn v3.2 model (~9MB, semantic end-of-speech)? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                tars_say "Downloading Smart Turn model..." "info"
+                mkdir -p stt
+                if wget -q --show-progress -O stt/smart-turn-v3.2-cpu.onnx https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx; then
+                    echo "|  [OK] Smart Turn model installed"
+                else
+                    echo "| [!] Failed to download Smart Turn model"
+                fi
+            fi
+        fi
+    fi
+
     if [ -z "$DISPLAY" ]; then
         export DISPLAY=:0
         echo "|  Display configuration set: $DISPLAY"
@@ -1053,7 +1141,7 @@ main() {
         echo "|  Display configuration preserved: $DISPLAY"
     fi
     echo ""
-    
+
     tars_say "Final system verification..." "info"
     cd ..
     

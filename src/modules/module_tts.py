@@ -4,7 +4,6 @@ module_tts.py
 Text-to-Speech (TTS) module for TARS-AI application.
 
 Handles TTS functionality to convert text into audio using:
-- Azure Speech SDK
 - Local tools (e.g., espeak-ng)
 - Server-based TTS systems
 
@@ -12,7 +11,8 @@ Handles TTS functionality to convert text into audio using:
 
 
 import requests
-import os 
+import os
+import threading
 from datetime import datetime
 import numpy as np
 import sounddevice as sd
@@ -25,15 +25,28 @@ from modules.module_config import load_config
 
 CONFIG = load_config()
 
+# Barge-in: TTS cancellation event (thread-safe)
+_tts_cancel_event = threading.Event()
+_tts_playing = threading.Event()  # Set while sd.play() is actively outputting audio
+
+def stop_tts_playback():
+    """Signal TTS to stop immediately. Safe to call from any thread."""
+    _tts_cancel_event.set()
+    try:
+        sd.stop()
+    except Exception:
+        pass
+
+def is_tts_playing():
+    """Check if TTS audio is currently being output. Used by barge-in monitor."""
+    return _tts_playing.is_set()
+
 # Conditional TTS module imports - not all are available on all devices
 text_to_speech_with_pipelining_piper = None
 text_to_speech_with_pipelining_silero = None
 text_to_speech_with_pipelining_espeak = None
-text_to_speech_with_pipelining_alltalk = None
 text_to_speech_with_pipelining_elevenlabs = None
-text_to_speech_with_pipelining_azure = None
 text_to_speech_with_pipelining_openai = None
-text_to_speech_with_pipelining_minimax = None
 
 try:
     from modules.module_piper import text_to_speech_with_pipelining_piper as _piper
@@ -54,32 +67,14 @@ except ImportError:
     pass
 
 try:
-    from modules.module_alltalk import text_to_speech_with_pipelining_alltalk as _alltalk
-    text_to_speech_with_pipelining_alltalk = _alltalk
-except ImportError:
-    pass
-
-try:
     from modules.module_elevenlabs import text_to_speech_with_pipelining_elevenlabs as _elevenlabs
     text_to_speech_with_pipelining_elevenlabs = _elevenlabs
 except ImportError:
     pass
 
 try:
-    from modules.module_azure import text_to_speech_with_pipelining_azure as _azure
-    text_to_speech_with_pipelining_azure = _azure
-except ImportError:
-    pass
-
-try:
     from modules.module_openai import text_to_speech_with_pipelining_openai as _openai
     text_to_speech_with_pipelining_openai = _openai
-except ImportError:
-    pass
-
-try:
-    from modules.module_minimax import text_to_speech_with_pipelining_minimax as _minimax
-    text_to_speech_with_pipelining_minimax = _minimax
 except ImportError:
     pass
 
@@ -113,16 +108,24 @@ def update_tts_settings(ttsurl):
 
 def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normalize=False):
     try:
-        with sd.OutputStream(samplerate=samplerate, channels=channels, dtype='int16', blocksize=4096) as stream:
+        target_rate = 16000
+        with sd.OutputStream(samplerate=target_rate, channels=channels, dtype='int16', blocksize=4096) as stream:
             for chunk in tts_stream:
                 if chunk:
                     audio_data = np.frombuffer(chunk, dtype='int16')
-                    
+
+                    # Resample to 16kHz if needed
+                    if samplerate != target_rate:
+                        ratio = target_rate / samplerate
+                        new_len = int(len(audio_data) * ratio)
+                        indices = np.linspace(0, len(audio_data) - 1, new_len)
+                        audio_data = np.interp(indices, np.arange(len(audio_data)), audio_data.astype(np.float32)).astype('int16')
+
                     if normalize:
                         max_value = np.max(np.abs(audio_data))
                         if max_value > 0:
                             audio_data = audio_data / max_value * 32767
-                    
+
                     audio_data = np.clip(audio_data * gain, -32768, 32767).astype('int16')
                     stream.write(audio_data)
                 else:
@@ -131,30 +134,18 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
         queue_message(f"ERROR: Error during audio playback: {e}")
 
 
-async def generate_tts_audio(text, ttsoption, is_wakeword=False, azure_api_key=None, azure_region=None, ttsurl=None, toggle_charvoice=True, tts_voice=None):
+async def generate_tts_audio(text, ttsoption, is_wakeword=False, ttsurl=None, toggle_charvoice=True, tts_voice=None):
     try:
-        if ttsoption == "azure" and text_to_speech_with_pipelining_azure:
-           async for chunk in text_to_speech_with_pipelining_azure(text):
-                yield chunk
-
-        elif ttsoption == "espeak" and text_to_speech_with_pipelining_espeak:
+        if ttsoption == "espeak" and text_to_speech_with_pipelining_espeak:
             async for chunk in text_to_speech_with_pipelining_espeak(text):
                 yield chunk
 
-        elif ttsoption == "alltalk" and text_to_speech_with_pipelining_alltalk:
-            async for chunk in text_to_speech_with_pipelining_alltalk(text):
-                yield chunk
-                
         elif ttsoption == "piper" and text_to_speech_with_pipelining_piper:
             async for chunk in text_to_speech_with_pipelining_piper(text):
                 yield chunk  
 
         elif ttsoption == "elevenlabs" and text_to_speech_with_pipelining_elevenlabs:
             async for chunk in text_to_speech_with_pipelining_elevenlabs(text, is_wakeword):
-                yield chunk
-
-        elif ttsoption == "minimax" and text_to_speech_with_pipelining_minimax:
-            async for chunk in text_to_speech_with_pipelining_minimax(text, is_wakeword):
                 yield chunk
 
         elif ttsoption == "silero" and text_to_speech_with_pipelining_silero:
@@ -177,7 +168,7 @@ async def generate_tts_audio(text, ttsoption, is_wakeword=False, azure_api_key=N
             for name, func in fallback_order:
                 if func is not None:
                     queue_message(f"WARNING: TTS '{ttsoption}' not available, falling back to '{name}'")
-                    if name in ["openai", "elevenlabs", "minimax"]:
+                    if name in ["openai", "elevenlabs"]:
                         async for chunk in func(text, is_wakeword):
                             yield chunk
                     else:
@@ -191,25 +182,34 @@ async def generate_tts_audio(text, ttsoption, is_wakeword=False, azure_api_key=N
         queue_message(f"ERROR: Text-to-speech generation failed: {e}")
 
 async def play_audio_chunks(text, config, is_wakeword=False):
+    _tts_cancel_event.clear()
     audio_queue = asyncio.Queue(maxsize=3)
     synthesis_done = asyncio.Event()
-    
+    was_interrupted = False
+
     async def synthesize_chunks():
         try:
             async for audio_chunk in generate_tts_audio(text, config, is_wakeword):
+                if _tts_cancel_event.is_set():
+                    break
                 await audio_queue.put(audio_chunk)
         except Exception as e:
             queue_message(f"ERROR: Synthesis failed: {e}")
         finally:
             synthesis_done.set()
-    
+
     async def play_chunks():
+        nonlocal was_interrupted
         try:
-            requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/start_talking", timeout=1)
+            requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/start_talking", timeout=1)
         except:
             pass
-        
+
         while True:
+            if _tts_cancel_event.is_set():
+                was_interrupted = True
+                break
+
             try:
                 try:
                     audio_chunk = await asyncio.wait_for(audio_queue.get(), timeout=0.1)
@@ -217,29 +217,76 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                     if synthesis_done.is_set() and audio_queue.empty():
                         break
                     continue
-                
+
                 data, samplerate = sf.read(audio_chunk, dtype='float32')
+
+                # Resample to 16kHz if needed
+                if samplerate != 16000:
+                    ratio = 16000 / samplerate
+                    new_len = int(len(data) * ratio)
+                    if data.ndim == 1:
+                        indices = np.linspace(0, len(data) - 1, new_len)
+                        data = np.interp(indices, np.arange(len(data)), data)
+                    else:
+                        indices = np.linspace(0, len(data) - 1, new_len)
+                        data = np.column_stack([
+                            np.interp(indices, np.arange(len(data)), data[:, ch])
+                            for ch in range(data.shape[1])
+                        ])
+                    samplerate = 16000
+
                 max_val = np.max(np.abs(data))
                 if max_val > 0:
                     data = data / max_val
-                
+
                 gain = 1.5
                 data = np.clip(data * gain, -1.0, 1.0)
-                
+
                 sd.play(data, samplerate)
-                sd.wait()
-                
+                _tts_playing.set()
+
+                # Poll instead of sd.wait() so we can check for barge-in
+                while True:
+                    if _tts_cancel_event.is_set():
+                        sd.stop()
+                        was_interrupted = True
+                        break
+                    try:
+                        stream = sd.get_stream()
+                        if stream is None or not stream.active:
+                            break
+                    except Exception:
+                        break
+                    await asyncio.sleep(0.05)
+
+                _tts_playing.clear()
+
+                if was_interrupted:
+                    break
+
+                # Brief pause between chunks for barge-in detection.
+                # Monitor checks mic RMS only when _tts_playing is clear.
+                for _ in range(6):  # 300ms window (6 x 50ms)
+                    if _tts_cancel_event.is_set():
+                        was_interrupted = True
+                        break
+                    await asyncio.sleep(0.05)
+
+                if was_interrupted:
+                    break
+
             except Exception as e:
                 queue_message(f"ERROR: Failed to play chunk: {e}")
                 if synthesis_done.is_set() and audio_queue.empty():
                     break
-        
+
         try:
-            requests.get(f"http://127.0.0.1:{CONFIG['CHATUI'].get('port', 5012)}/stop_talking", timeout=1)
+            requests.get(f"http://127.0.0.1:{CONFIG['UI'].get('webui_port', 80)}/stop_talking", timeout=1)
         except:
             pass
-    
+
     await asyncio.gather(
         synthesize_chunks(),
         play_chunks()
     )
+    return was_interrupted

@@ -42,12 +42,8 @@
       background-size: 100% 3px;
       pointer-events: none;
       z-index: 200;
-      animation: scanScroll 10s linear infinite;
     }
-    @keyframes scanScroll {
-      from { background-position: 0 0; }
-      to   { background-position: 0 -300px; }
-    }
+
 
     /* vignette */
     #vignette {
