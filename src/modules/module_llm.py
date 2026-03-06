@@ -707,8 +707,8 @@ def execute_function_call(func_call, bot_response, user_input):
                         if ui_manager and not ui_manager.running:
                             queue_message("Reopening UI...")
 
-                            if shutdown_event is None or battery_module is None:
-                                queue_message("ERROR: Missing shutdown_event or battery_module - cannot reopen UI")
+                            if shutdown_event is None:
+                                queue_message("ERROR: Missing shutdown_event - cannot reopen UI")
                                 return
 
                             new_ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery_module)
@@ -787,8 +787,8 @@ def execute_function_call(func_call, bot_response, user_input):
                         if ui_manager and not ui_manager.running:
                             queue_message("Reopening UI...")
 
-                            if shutdown_event is None or battery_module is None:
-                                queue_message("ERROR: Missing shutdown_event or battery_module - cannot reopen UI")
+                            if shutdown_event is None:
+                                queue_message("ERROR: Missing shutdown_event - cannot reopen UI")
                                 return
 
                             new_ui_manager = UIManager(shutdown_event=shutdown_event, battery_module=battery_module)
@@ -810,7 +810,6 @@ def execute_function_call(func_call, bot_response, user_input):
                         traceback.print_exc()
 
                     try:
-
                         from modules.module_stt import get_stt_manager
                         stt = get_stt_manager()
                         if stt:
