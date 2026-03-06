@@ -530,9 +530,29 @@ def execute_function_call(func_call, bot_response, user_input):
                 bot_response["reply"] = "Vision is not available on this device."
             else:
                 query = parameters.get("query", bot_response.get("question", ""))
-                description = process_camera_image(query)
+                # Pull detection context from UI if available
+                detection_context = None
+                try:
+                    from modules.module_main import ui_manager
+                    if ui_manager and hasattr(ui_manager, 'detection_manager'):
+                        detection_context = ui_manager.detection_manager.get_detection_summary() or None
+                except Exception:
+                    pass
+                description = process_camera_image(query, detection_context=detection_context)
                 if description and not description.startswith("Error:"):
-                    bot_response["reply"] = description
+                    # Feed vision result back through LLM with full personality
+                    vision_prompt = f"*You just looked through your camera and saw the following: {description}* Now respond to the user in character about what you see."
+                    if query:
+                        vision_prompt += f" The user asked: {query}"
+                    try:
+                        reply = get_completion(vision_prompt)
+                        if reply:
+                            bot_response["reply"] = reply
+                        else:
+                            bot_response["reply"] = description
+                    except Exception as e:
+                        queue_message(f"WARN: Vision follow-up LLM call failed: {e}")
+                        bot_response["reply"] = description
                 else:
                     bot_response["reply"] = "I tried to look but couldn't process the image."
 

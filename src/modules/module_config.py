@@ -420,7 +420,10 @@ def load_config():
         "VISION": {
             "enabled": config.getboolean('VISION', 'enabled'),
             "vision_processor": config.get('VISION', 'vision_processor', fallback='blip'),
+            "camera_rotation": config.getint('VISION', 'camera_rotation', fallback=0),
             "server_hosted": config.get('VISION', 'vision_processor', fallback='blip') == 'server_hosted',
+            "vision_model": config.get('VISION', 'vision_model', fallback=''),
+            "vision_max_tokens": config.getint('VISION', 'vision_max_tokens', fallback=150),
             "base_url": config.get('VISION', 'base_url', fallback=''),
         },
         "EMOTION": {
@@ -804,6 +807,22 @@ CONFIG_METADATA = {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'options': ['blip', 'llm', 'openai', 'server_hosted'],
             'description': 'How TARS processes images. "blip" runs a local AI model on your Pi (~1GB RAM) and generates a short caption. "llm" sends the image to your configured LLM backend (must support vision). "openai" sends the image to OpenAI GPT-4o-mini (requires OPENAI_API_KEY). "server_hosted" sends the image to an external BLIP server you run on another computer.'
+        },
+        'camera_rotation': {
+            'label': 'Camera Rotation',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'options': ['0', '90', '180', '270'],
+            'description': 'Rotate the camera image by this many degrees. Use this if your camera is mounted sideways or upside down. 0 = no rotation, 90 = rotated right, 180 = upside down, 270 = rotated left.'
+        },
+        'vision_model': {
+            'label': 'Vision Model',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm']}],
+            'description': 'The model name to use for vision processing. Leave blank to use your LLM backend default model. For OpenAI mode, defaults to gpt-4o-mini. Only applies to openai and llm vision processors.'
+        },
+        'vision_max_tokens': {
+            'label': 'Vision Max Tokens',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm']}],
+            'description': 'Maximum number of tokens in the vision response. Higher values give more detailed descriptions but cost more. Only applies to openai and llm vision processors.'
         },
         'base_url': {
             'label': 'Vision Server URL',

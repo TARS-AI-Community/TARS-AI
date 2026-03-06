@@ -187,14 +187,20 @@ def utterance_callback(message):
             # Legacy path or error string
             reply = parsed
         else:
-            reply = _sanitize_for_tts(parsed.get("reply", ""))
-
-            # Run function_calls and memory saves in background — parallel with TTS
-            if parsed.get("function_calls") or parsed.get("new_memories"):
-                threading.Thread(
-                    target=llm_execute_side_effects,
-                    args=(parsed, user_text), daemon=True
-                ).start()
+            # Vision calls must run synchronously
+            func_calls = parsed.get("function_calls", [])
+            has_vision = any(fc.get("function") == "capture_camera_view" for fc in func_calls)
+            if has_vision:
+                llm_execute_side_effects(parsed, user_text)
+                reply = _sanitize_for_tts(parsed.get("reply", ""))
+            else:
+                reply = _sanitize_for_tts(parsed.get("reply", ""))
+                # Run function_calls and memory saves in background — parallel with TTS
+                if func_calls or parsed.get("new_memories"):
+                    threading.Thread(
+                        target=llm_execute_side_effects,
+                        args=(parsed, user_text), daemon=True
+                    ).start()
 
         try:
             match = re.search(r"<think>(.*?)</think>", reply, re.DOTALL)

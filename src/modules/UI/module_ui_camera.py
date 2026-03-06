@@ -26,7 +26,7 @@ class CameraModule:
             return
         self._initialized = True
 
-        self.rotation = 270
+        self.rotation = CONFIG['VISION'].get('camera_rotation', 270)
         self.use_camera_module = use_camera_module
         self.apply_corrections = apply_corrections
         self.frame = None
@@ -168,6 +168,20 @@ class CameraModule:
                     saved_image = self.last_saved_image
                     self.last_saved_image = None
                     return saved_image
+            time.sleep(0.1)
+        raise RuntimeError("Camera capture timed out")
+
+    def capture_bytes(self, timeout=5):
+        """Return current frame as JPEG bytes (no disk I/O)."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.frame is not None:
+                frame_array = pygame.surfarray.array3d(self.frame)
+                frame_array = np.transpose(frame_array, (1, 0, 2))
+                frame_bgr = cv2.cvtColor(frame_array, cv2.COLOR_RGB2BGR)
+                ok, buf = cv2.imencode('.jpg', frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                if ok:
+                    return buf.tobytes()
             time.sleep(0.1)
         raise RuntimeError("Camera capture timed out")
 

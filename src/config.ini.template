@@ -133,6 +133,12 @@ enabled = False
 # openai = sends image to OpenAI GPT-4o-mini vision API (requires OPENAI_API_KEY)
 # server_hosted = sends image to external BLIP server (set base_url below)
 vision_processor = blip
+# Camera rotation in degrees: 0, 90, 180, 270
+camera_rotation = 270
+# Model name for openai/llm vision (leave blank to use LLM's default model)
+vision_model =
+# Max tokens for vision response (openai/llm modes only)
+vision_max_tokens = 150
 # Vision server URL (vision_processor = server_hosted only)
 base_url = http://192.168.1.100:5678
 
