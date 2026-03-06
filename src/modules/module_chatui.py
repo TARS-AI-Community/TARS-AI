@@ -464,6 +464,7 @@ def camera_feed():
 
     import cv2 as _cv2
     import numpy as _np
+    import eventlet
 
     camera = CameraModule(1920, 1080)
 
@@ -471,7 +472,7 @@ def camera_feed():
         while True:
             frame = camera.get_frame()
             if frame is None:
-                time.sleep(0.1)
+                eventlet.sleep(0.1)
                 continue
             try:
                 import pygame as _pg
@@ -483,7 +484,7 @@ def camera_feed():
                     yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
             except Exception:
                 pass
-            time.sleep(0.066)  # ~15 fps
+            eventlet.sleep(0.066)  # ~15 fps
 
     from flask import Response
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
