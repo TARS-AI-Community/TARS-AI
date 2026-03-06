@@ -378,6 +378,7 @@ def load_config():
             "sensitivity": config['STT']['sensitivity'],
             "external_url": config['STT']['external_url'],
             "enable_bargein": config.getboolean('STT', 'enable_bargein', fallback=True),
+            "bargein_sensitivity": config.getint('STT', 'bargein_sensitivity', fallback=5),
             "speechdelay": int(config['STT']['speechdelay']),
             "language": config['STT']['language'],
             "sherpa_onnx_denoise": config.get('STT', 'sherpa_onnx_denoise', fallback='False'),
@@ -715,6 +716,11 @@ CONFIG_METADATA = {
         'enable_bargein': {
             'options': ['True', 'False'],
             'description': 'When ON, you can interrupt TARS while it is talking by speaking over it. TARS listens to the mic during playback and uses speech recognition to detect if you are saying something new (not just echo from the speaker). When OFF, TARS will always finish its full response before listening again.'
+        },
+        'bargein_sensitivity': {
+            'options': ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+            'depends_on': [{'field': 'enable_bargein', 'values': ['True']}],
+            'description': 'How easy it is to interrupt TARS by speaking over it. 1 = very hard to interrupt (strict matching, good for noisy rooms with TV/music). 5 = balanced default. 10 = very easy to interrupt (sensitive, good for quiet rooms). If TARS keeps getting interrupted by background noise or speaker echo, lower this number. If you have to repeat yourself loudly to get TARS to stop talking, raise it.'
         },
         'speechdelay': {
             'description': 'After you stop talking, TARS waits this long before deciding you are done and processing your message. The number is in tenths of a second — so 10 = 1 second, 20 = 2 seconds. If set too short (5–8), TARS cuts you off whenever you pause mid-thought. If set too long (35+), there is an awkward gap after every sentence. 15–25 works well for most people and speaking styles. If you speak slowly or tend to pause between sentences, try 25–30. If you speak quickly and want snappy responses, try 12–15. This setting interacts with the VAD method: with "silero" VAD you can often use a lower value because it is better at detecting true silence.'

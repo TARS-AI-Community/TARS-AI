@@ -199,6 +199,12 @@ class STTManager:
         # Barge-in monitoring
         self._bargein_active = False
         self._bargein_thread = None
+        # Barge-in sensitivity: map 1-10 to fuzzy matching thresholds
+        sensitivity = max(1, min(10, int(CONFIG['STT'].get('bargein_sensitivity', 5))))
+        t = (sensitivity - 1) / 9.0  # 0.0 (strict) to 1.0 (sensitive)
+        self._bargein_broad_threshold = 0.3 + t * 0.4    # 0.3 (sens=1) to 0.7 (sens=10)
+        self._bargein_window_threshold = 0.2 + t * 0.35  # 0.2 (sens=1) to 0.55 (sens=10)
+        self._bargein_min_novel = max(1, 3 - int(t * 2))  # 3 (sens=1) to 1 (sens=10)
 
         # Last recorded audio for speaker ID (set by transcription backends)
         self._last_audio_float32 = None
@@ -1576,7 +1582,7 @@ class STTManager:
             # Broad fuzzy match against all TTS words
             if not matched:
                 for tts_w in tts_words_all:
-                    if SequenceMatcher(None, w, tts_w).ratio() >= 0.5:
+                    if SequenceMatcher(None, w, tts_w).ratio() >= self._bargein_broad_threshold:
                         matched = True
                         break
 
@@ -1584,7 +1590,7 @@ class STTManager:
             # Speaker bleed produces heavily distorted transcriptions
             if not matched and window_words:
                 for tts_w in window_words:
-                    if SequenceMatcher(None, w, tts_w).ratio() >= 0.35:
+                    if SequenceMatcher(None, w, tts_w).ratio() >= self._bargein_window_threshold:
                         matched = True
                         break
                     # Shared prefix match (3+ chars) — catches "mind"/"mine", "under"/"until"
@@ -1595,9 +1601,8 @@ class STTManager:
             if not matched:
                 novel.append(w)
 
-        # Require at least 2 novel words — single novel words are almost always
-        # mis-transcribed speaker bleed
-        return novel if len(novel) >= 2 else []
+        # Require minimum novel words — fewer = more sensitive to interrupts
+        return novel if len(novel) >= self._bargein_min_novel else []
 
     def stop_bargein_monitor(self):
         """Stop the barge-in monitor thread."""

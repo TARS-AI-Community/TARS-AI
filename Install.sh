@@ -1040,14 +1040,15 @@ main() {
     if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
         if [ ! -d "stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17" ]; then
             echo ""
-            read -p "| Download sherpa-onnx SenseVoiceTiny model (~40MB)? [y/N] " -n 1 -r
+            read -p "| Download sherpa-onnx SenseVoiceTiny model (~1GB)? [y/N] " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 tars_say "Downloading SenseVoiceTiny model..." "info"
                 mkdir -p stt
                 cd stt
                 if wget -q --show-progress https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2; then
-rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2                    tar xjf sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+                    tar xjf sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+                    rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
                     
                     echo "|  [OK] SenseVoiceTiny model installed"
                 else
