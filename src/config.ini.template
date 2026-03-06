@@ -87,6 +87,8 @@ sherpa_onnx_denoise = False
 sherpa_onnx_punctuation = False
 # Enable barge-in detection — interrupt TARS by speaking while it talks: True | False
 enable_bargein = True
+# Barge-in sensitivity 1–10 (1 = hard to interrupt, 10 = very sensitive)
+bargein_sensitivity = 5
 # Silence before processing in tenths of a second (20 = 2s)
 speechdelay = 20
 # Speaker identification — passively identify who is speaking (Pi5/Pi4 only)

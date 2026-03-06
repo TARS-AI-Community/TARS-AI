@@ -106,6 +106,9 @@ _BARGEIN_NOISE_WORDS = frozenset({
     'an', 'or', 'so', 'do', 'no', 'my', 'me', 'we', 'he', 'she',
     'be', 'at', 'by', 'if', 'up', 'as', 'on', 'you', 'not', 'but',
     'can', 'got', 'has', 'had', 'was', 'are', 'for', 'too', 'its',
+    'all', 'his', 'her', 'him', 'our', 'who', 'how', 'did', 'get',
+    'let', 'may', 'new', 'now', 'old', 'one', 'out', 'own', 'say',
+    'set', 'try', 'two', 'way', 'yet', 'any', 'few', 'per', 'put',
 })
 
 # Global STT manager instance
@@ -199,6 +202,15 @@ class STTManager:
         # Barge-in monitoring
         self._bargein_active = False
         self._bargein_thread = None
+        # Barge-in sensitivity: map 0-10 to fuzzy matching thresholds (0 = off)
+        sensitivity = max(0, min(10, int(CONFIG['STT'].get('bargein_sensitivity', 5))))
+        self._bargein_enabled = sensitivity > 0
+        if sensitivity > 0:
+            t = (sensitivity - 1) / 9.0  # 0.0 (sens=1, hard to interrupt) to 1.0 (sens=10, easy)
+            # Higher sensitivity = LOWER threshold = fewer words matched as TTS = easier to trigger
+            # Only one threshold now — fuzzy match for 5+ char words only
+            self._bargein_broad_threshold = 0.75 - t * 0.15   # 0.75 (sens=1) to 0.60 (sens=10)
+            self._bargein_min_novel = 3 if sensitivity <= 3 else 2  # strict=3, normal+=2
 
         # Last recorded audio for speaker ID (set by transcription backends)
         self._last_audio_float32 = None
@@ -1460,12 +1472,15 @@ class STTManager:
             tts_text: The text TARS is currently saying, used to filter out
                       words that are just echo/bleed from the speaker.
         """
+        if not self._bargein_enabled:
+            return
         if self.silence_threshold is None:
             return  # Can't monitor without a noise floor
         if self.sherpa_recognizer is None and self.fastrtc_model is None:
             queue_message("WARN: Barge-in requires sherpa-onnx or fastrtc, skipping")
             return
         self._bargein_active = True
+        queue_message(f"DEBUG: Barge-in started (sensitivity={int(CONFIG['STT'].get('bargein_sensitivity', 5))}, broad={self._bargein_broad_threshold:.2f}, min_novel={self._bargein_min_novel})")
 
         # Build ordered word list for sliding window + full set for broad matching
         tts_word_list = []
@@ -1484,6 +1499,8 @@ class STTManager:
             start_time = time.time()
             WORDS_PER_SEC = 3.0  # Estimated TTS speaking rate
             WINDOW_PAD = 4       # Extra words before/after estimated position
+            accumulated_novel = []  # Novel words across consecutive frames
+            no_novel_streak = 0     # Reset accumulator after 2 empty frames
 
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
@@ -1497,8 +1514,12 @@ class STTManager:
                             audio_buf.append(data.copy())
 
                         # Periodically transcribe what we've collected
+                        if frame_count % TRANSCRIBE_EVERY == 0:
+                            if len(audio_buf) < 2:
+                                queue_message(f"DEBUG: Barge-in: no speech frames ({len(audio_buf)}/8 above threshold)")
                         if frame_count % TRANSCRIBE_EVERY == 0 and len(audio_buf) >= 2:
                             transcript = self._bargein_transcribe(audio_buf)
+                            buf_len = len(audio_buf)
                             audio_buf.clear()
                             if transcript:
                                 # Build sliding window of TTS words near current playback position
@@ -1509,10 +1530,17 @@ class STTManager:
                                 window_words = set(tts_word_list[win_start:win_end])
 
                                 novel = self._find_novel_words(transcript, tts_words_all, window_words)
-                                if self.DEBUG:
-                                    queue_message(f"DEBUG: Barge-in: '{transcript}' window={window_words} novel={novel}")
                                 if novel:
-                                    queue_message(f"INFO: Barge-in detected! Heard: '{transcript}' (novel: {novel})")
+                                    accumulated_novel.extend(novel)
+                                    no_novel_streak = 0
+                                else:
+                                    no_novel_streak += 1
+                                    if no_novel_streak >= 2:
+                                        accumulated_novel.clear()
+
+                                queue_message(f"DEBUG: Barge-in: '{transcript}' window={window_words} novel={novel} accumulated={accumulated_novel} (frames={buf_len})")
+                                if len(accumulated_novel) >= self._bargein_min_novel:
+                                    queue_message(f"INFO: Barge-in detected! Heard: '{transcript}' (novel: {accumulated_novel})")
                                     stop_tts_playback()
                                     break
             except Exception as e:
@@ -1563,41 +1591,35 @@ class STTManager:
         novel = []
         for w in heard_words:
             # Filter out common filler/noise transcription artifacts and short words
-            if w in _BARGEIN_NOISE_WORDS or len(w) <= 2 or w in tts_words_all:
+            if w in _BARGEIN_NOISE_WORDS or len(w) <= 2:
+                continue
+
+            # Exact match against all TTS words
+            if w in tts_words_all:
+                continue
+
+            # Check if word is in the sliding window (currently being spoken — likely bleed)
+            if w in window_words:
                 continue
 
             matched = False
-            # Check substring containment (catches "under" in "underway", etc.)
-            for tts_w in tts_words_all:
-                if w in tts_w or tts_w in w:
-                    matched = True
-                    break
 
-            # Broad fuzzy match against all TTS words
-            if not matched:
-                for tts_w in tts_words_all:
-                    if SequenceMatcher(None, w, tts_w).ratio() >= 0.5:
-                        matched = True
-                        break
-
-            # Aggressive fuzzy match against sliding window words (currently being spoken)
-            # Speaker bleed produces heavily distorted transcriptions
-            if not matched and window_words:
-                for tts_w in window_words:
-                    if SequenceMatcher(None, w, tts_w).ratio() >= 0.35:
-                        matched = True
-                        break
-                    # Shared prefix match (3+ chars) — catches "mind"/"mine", "under"/"until"
-                    if len(w) >= 3 and len(tts_w) >= 3 and w[:3] == tts_w[:3]:
-                        matched = True
-                        break
+            # Fuzzy match: only for 5+ char words with similar length, high threshold
+            # Catches genuine misspellings like "satelite"/"satellite", "trping"/"tripping"
+            if len(w) >= 5:
+                compare_set = window_words | tts_words_all
+                for tts_w in compare_set:
+                    if len(tts_w) >= 5 and abs(len(w) - len(tts_w)) <= 2:
+                        ratio = SequenceMatcher(None, w, tts_w).ratio()
+                        if ratio >= self._bargein_broad_threshold:
+                            matched = True
+                            break
 
             if not matched:
                 novel.append(w)
 
-        # Require at least 2 novel words — single novel words are almost always
-        # mis-transcribed speaker bleed
-        return novel if len(novel) >= 2 else []
+        # Require minimum novel words — fewer = more sensitive to interrupts
+        return novel if len(novel) >= self._bargein_min_novel else []
 
     def stop_bargein_monitor(self):
         """Stop the barge-in monitor thread."""
