@@ -233,7 +233,7 @@ def utterance_callback(message):
         ui_manager.set_tars_status("TALKING")
 
         # Start barge-in monitoring (mic listens for speech during TTS)
-        if stt_manager and CONFIG['STT'].get('enable_bargein', True):
+        if stt_manager:
             stt_manager.start_bargein_monitor(tts_text=reply)
 
         was_interrupted = asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
@@ -244,6 +244,8 @@ def utterance_callback(message):
 
         if was_interrupted:
             queue_message("INFO: TARS was interrupted by user (barge-in)")
+            # Brief pause to let barge-in stream fully close before STT reopens mic
+            time.sleep(0.3)
             ui_manager.set_tars_status("LISTENING")
         else:
             ui_manager.set_tars_status("STANDBY")
