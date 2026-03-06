@@ -19,7 +19,6 @@ import os
 import sys
 import threading
 import time
-from datetime import datetime
 import warnings
 warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
 
@@ -112,7 +111,7 @@ from modules import module_servoctl
 BT_AVAILABLE = False
 if CONFIG['CONTROLS']['enabled'] == 'True':
     try:
-        from modules.module_btcontroller import start_controls
+        import modules.module_btcontroller  # noqa: F401 — validates availability
         BT_AVAILABLE = True
     except ImportError:
         queue_message("WARNING: Bluetooth controller not available")

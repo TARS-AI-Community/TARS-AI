@@ -24,7 +24,7 @@ from evdev import InputDevice, list_devices
 
 from modules.module_config import load_config
 from modules.module_messageQue import queue_message
-from modules.module_movement_registry import MOVEMENTS, get_legs_only, get_has_arms
+from modules.module_movement_registry import MOVEMENTS
 import modules.module_movements as movements
 
 config = load_config()
@@ -82,7 +82,7 @@ def execute_movement(name):
         func()
 
 def start_controls():
-    global gamepad_path, l2_held, r1_held, r2_held, dpad_state, last_dpad_time
+    global gamepad_path, l2_held, r1_held, r2_held, last_dpad_time
     
     DEADZONE = 16000
     
