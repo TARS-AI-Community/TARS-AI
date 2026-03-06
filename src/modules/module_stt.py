@@ -213,7 +213,7 @@ class STTManager:
         self._bargein_min_novel = 3 if sensitivity <= 3 else 2
         # Voiceprint mode: higher sensitivity = lower confidence required to match
         # Bleed scores 0.50-0.55, mixed voice+bleed scores 0.58-0.82
-        self._bargein_voiceprint_threshold = 0.70 - t * 0.10  # 0.70 (sens=1) to 0.60 (sens=10)
+        self._bargein_voiceprint_threshold = 0.69 - t * 0.10  # 0.69 (sens=1) to 0.59 (sens=10)
 
         # Last recorded audio for speaker ID (set by transcription backends)
         self._last_audio_float32 = None
@@ -683,6 +683,7 @@ class STTManager:
 
     def _transcribe_utterance(self):
         """Transcribe the user's utterance using the selected STT processor."""
+        result = None
         try:
             if self.is_paused():
                 return None
@@ -705,6 +706,7 @@ class STTManager:
             # Filter non-speech noise
             if result and not self._is_meaningful_text(result.get("text", "")):
                 queue_message(f"INFO: STT filtered non-speech noise: '{result.get('text', '')}'")
+                result = None
                 return None
 
             # Submit audio to Speaker ID for passive identification
@@ -717,12 +719,14 @@ class STTManager:
                 except Exception:
                     pass
 
-            if self.post_utterance_callback and result:
-                self.post_utterance_callback()
             return result
         except Exception as e:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
+        finally:
+            # Always restart listening — never let the loop die
+            if self.post_utterance_callback:
+                self.post_utterance_callback()
 
     # === Transcription Backends ===
 
@@ -1490,7 +1494,7 @@ class STTManager:
                 from modules.module_speaker_id import get_speaker_id_manager
                 sid = get_speaker_id_manager()
                 if sid is None or sid._manager is None or sid._manager.num_speakers == 0:
-                    queue_message(f"WARN: Barge-in voiceprint mode requires Speaker ID with enrolled speakers (sid={sid is not None}, mgr={sid._manager is not None if sid else 'N/A'}, speakers={sid._manager.num_speakers if sid and sid._manager else 0}), falling back to fuzzy")
+                    queue_message("WARN: Barge-in voiceprint mode requires Speaker ID with enrolled speakers, falling back to fuzzy")
                     mode = 'fuzzy'
             except Exception as e:
                 queue_message(f"WARN: Speaker ID not available ({e}), falling back to fuzzy barge-in")
@@ -1533,6 +1537,10 @@ class STTManager:
 
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
+                    # Flush stale audio from OS buffer (discard first ~0.5s)
+                    for _ in range(4):
+                        stream.read(2000)
+
                     while self._bargein_active:
                         data, _ = stream.read(2000)  # ~125ms frame
                         frame_count += 1
@@ -1594,6 +1602,10 @@ class STTManager:
 
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
+                    # Flush stale audio from OS buffer (discard first ~0.5s)
+                    for _ in range(4):
+                        stream.read(2000)
+
                     while self._bargein_active:
                         data, _ = stream.read(2000)  # ~125ms frame
                         frame_count += 1
@@ -1631,7 +1643,8 @@ class STTManager:
                                 continue
 
                             name, confidence = sid.identify_speaker(embedding)
-                            queue_message(f"DEBUG: Barge-in voiceprint: speaker='{name}' confidence={confidence:.2f} threshold={self._bargein_voiceprint_threshold:.2f}")
+                            if self.DEBUG:
+                                queue_message(f"DEBUG: Barge-in voiceprint: speaker='{name}' confidence={confidence:.2f} threshold={self._bargein_voiceprint_threshold:.2f}")
 
                             matched = bool(name and confidence >= self._bargein_voiceprint_threshold)
                             recent_results.append(matched)

@@ -728,7 +728,7 @@ CONFIG_METADATA = {
             'max': 10,
             'step': 1,
             'depends_on': [{'field': 'enable_bargein', 'values': ['True', 'true']}],
-            'description': 'How easy it is to interrupt TARS. 1 = very hard to interrupt (strict, good for noisy rooms). 5 = balanced default. 10 = very easy to interrupt (good for quiet rooms). In fuzzy mode this controls how aggressively words are matched against speaker echo. In voiceprint mode this controls how closely your voice must match your enrolled voiceprint. Lower this if TARS gets falsely interrupted.'
+            'description': 'How easy it is to interrupt TARS. 1 = very hard (69% match needed). 5 = balanced default (65%). 10 = very easy (59%). In fuzzy mode this controls how aggressively words are matched against speaker echo. In voiceprint mode this controls how closely your voice must match your enrolled voiceprint. Lower this if TARS gets falsely interrupted.'
         },
         'speechdelay': {
             'description': 'After you stop talking, TARS waits this long before deciding you are done and processing your message. The number is in tenths of a second — so 10 = 1 second, 20 = 2 seconds. If set too short (5–8), TARS cuts you off whenever you pause mid-thought. If set too long (35+), there is an awkward gap after every sentence. 15–25 works well for most people and speaking styles. If you speak slowly or tend to pause between sentences, try 25–30. If you speak quickly and want snappy responses, try 12–15. This setting interacts with the VAD method: with "silero" VAD you can often use a lower value because it is better at detecting true silence.'
