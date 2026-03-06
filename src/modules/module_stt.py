@@ -213,7 +213,7 @@ class STTManager:
         self._bargein_min_novel = 3 if sensitivity <= 3 else 2
         # Voiceprint mode: higher sensitivity = lower confidence required to match
         # Bleed scores 0.50-0.55, mixed voice+bleed scores 0.58-0.82
-        self._bargein_voiceprint_threshold = 0.69 - t * 0.10  # 0.69 (sens=1) to 0.59 (sens=10)
+        self._bargein_voiceprint_threshold = 0.95 - t * 0.45  # 0.95 (sens=1) to 0.50 (sens=10)
 
         # Last recorded audio for speaker ID (set by transcription backends)
         self._last_audio_float32 = None
@@ -634,6 +634,9 @@ class STTManager:
 
     def _emit_result(self, text, extra=None):
         """Build formatted result dict, fire utterance callback, return result."""
+        if not self._is_meaningful_text(text):
+            queue_message(f"INFO: STT filtered non-speech noise: '{text}'")
+            return None
         result = {"text": text}
         if extra:
             result.update(extra)
@@ -702,12 +705,6 @@ class STTManager:
                 transcribe_fn = self._transcribe_with_fastrtc
 
             result = transcribe_fn()
-
-            # Filter non-speech noise
-            if result and not self._is_meaningful_text(result.get("text", "")):
-                queue_message(f"INFO: STT filtered non-speech noise: '{result.get('text', '')}'")
-                result = None
-                return None
 
             # Submit audio to Speaker ID for passive identification
             if result and self._last_audio_float32 is not None:
