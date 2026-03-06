@@ -223,9 +223,9 @@ class STTManager:
         self._webui_port = CONFIG['UI'].get('webui_port', 80)
         self._character_name = self._resolve_character_name()
 
+        self.DEBUG = False
         self._initialize_models()
         self.vadmethod = CONFIG['STT']['vad_method']
-        self.DEBUG = False
 
     # === Initialization ===
 
