@@ -283,8 +283,6 @@ def update_emotion(detected_emotion):
     if not detected_emotion:
         return
 
-    queue_message(f"Emotion is set: {detected_emotion}")
-
     # Look up the eye mood from the original emotion BEFORE sprite fallback
     mood_name = _EMOTION_TO_MOOD.get(detected_emotion.lower(), "NEUTRAL")
 

@@ -388,7 +388,6 @@ def llm_parse_response(bot_response):
     bot_response["function_calls"] = bot_response.get("function_calls", [])
     bot_response["new_memories"] = bot_response.get("new_memories", [])
 
-    print(f"Data: {bot_response}")
     return bot_response
 
 

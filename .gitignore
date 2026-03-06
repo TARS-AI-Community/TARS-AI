@@ -147,75 +147,45 @@ llm/
 vision/
 config.ini
 config_backup.ini
-output.wav
-
 # Memory files
 *.pickle.gz
-/src/memory/TARS_topics.json
-src/memory/TARS_topics.json
-/src/memory/TARS_lite.json
-src/memory/TARS_lite.json
 TARS.wav
-/memory/initial_memory.json
-/memory/initial_memory.loaded
 src/memory/flashrank_cache
-memory/initial_memory.json
-memory/initial_memory.loaded
-initial_memory.loaded
-src/memory/initial_memory.loaded
-src/memory/initial_memory.json
-initial_memory.json
 TARS_topics.json
 TARS_lite.json
+initial_memory.loaded
+initial_memory.json
+voice_memory.json
 
-# Character Data
-character/persona.ini
+# Character Data & Personas
+*persona.ini
+persona*
 
-# Speech-to-text (STT) Folder (ignored except for specific file)
-stt/
-!stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
-
-src/tts/kokoro*
-
-# Ignore everything inside "character" by default
-character/
-# Unignore specific directories for TARS, KIPP, CASE, and PLEX
-!character/TARS/
-!character/TARS/images/
-!character/TARS/images/neutral/
-!character/TARS/images/neutral/**
-
-!character/KIPP/
-!character/KIPP/images/
-!character/KIPP/images/neutral/
-!character/KIPP/images/neutral/**
-
-!character/CASE/
-!character/CASE/images/
-!character/CASE/images/neutral/
-!character/CASE/images/neutral/**
-
-!character/PLEX/
-!character/PLEX/images/
-!character/PLEX/images/neutral/
-!character/PLEX/images/neutral/** 
-
-*.onnx
-*.onnx.json
-!TARS.onnx
-!TARS.onnx.json
-!CASE.onnx
-!CASE.onnx.json
-!KIPP.onnx
-!KIPP.onnx.json
-!PLEX.onnx
-!PLEX.onnx.json
-
-/src/modules/UI/pictures/*
-dashboard.ini
-
-#claude ignore
+# Claude & To-Do files
 .claude
 CLAUDE.md
 todo*.md
-voice_memory.json
+
+# UI & Misc
+/src/modules/UI/pictures/*
+dashboard.ini
+
+# ONNX Models (Ignore all except specific character models)
+*.onnx
+*.onnx.json
+!TARS.onnx*
+!CASE.onnx*
+!KIPP.onnx*
+!PLEX.onnx*
+
+# Speech-to-text (STT) Folder
+stt/
+!stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
+src/tts/kokoro*
+
+# Character Image Exceptions
+character/
+!character/TARS/images/neutral/**
+!character/KIPP/images/neutral/**
+!character/CASE/images/neutral/**
+!character/PLEX/images/neutral/**

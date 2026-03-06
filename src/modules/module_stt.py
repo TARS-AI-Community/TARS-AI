@@ -1005,7 +1005,8 @@ class STTManager:
                         target=_preemptive_llm, args=(spec_result[0],), daemon=True
                     )
                     preemptive_thread.start()
-                    queue_message(f"INFO: Preemptive LLM fired for: {spec_result[0][:60]}...")
+                    if self.DEBUG:
+                        queue_message(f"DEBUG: Preemptive LLM fired for: {spec_result[0][:60]}...")
 
             if speech_frames < MIN_SPEECH:
                 return None
@@ -1049,8 +1050,8 @@ class STTManager:
         if not STTManager._last_status_was_sleeping:
             if self.config["STT"]["use_indicators"]:
                 self.play_wav(os.path.join(_stt_dir(), "beep_off.wav"))
-            print()
             queue_message(f"{self._character_name}: Sleeping...")
+            print()
             STTManager._last_status_was_sleeping = True
 
         processors = {
@@ -1067,7 +1068,6 @@ class STTManager:
         self._fire_and_forget_get(f"http://127.0.0.1:{self._webui_port}/start_talking")
         if self.WAKE_WORD_RESPONSES:
             wake_response = random.choice(self.WAKE_WORD_RESPONSES)
-            queue_message(f"{self._character_name}: {wake_response}", stream=True)
             if self.wake_word_callback:
                 self.wake_word_callback(wake_response)
 
@@ -1217,7 +1217,7 @@ class STTManager:
     def _get_progress_bar(self):
         if self._progress_bar_funcs is None:
             bar_length = 10
-            show_console = self.ui_manager.__class__.__name__ != 'UIManagerLite'
+            show_console = self.ui_manager.__class__.__name__ not in ('UIManagerLite', 'UIManagerStub')
 
             def update(frames, max_frames):
                 self.ui_manager.silence(frames)
@@ -1512,7 +1512,6 @@ class STTManager:
             return
 
         self._bargein_active = True
-        queue_message(f"INFO: Barge-in started (mode={mode})")
 
         if mode == 'voiceprint':
             self._start_bargein_voiceprint()
@@ -1586,7 +1585,8 @@ class STTManager:
                                 if self.DEBUG:
                                     queue_message(f"DEBUG: Barge-in: '{transcript}' window={window_words} novel={novel} accumulated={accumulated_novel} (frames={buf_len})")
                                 if len(accumulated_novel) >= self._bargein_min_novel:
-                                    queue_message(f"INFO: Barge-in detected! Heard: '{transcript}' (novel: {accumulated_novel})")
+                                    if self.DEBUG:
+                                        queue_message(f"DEBUG: Barge-in detected! Heard: '{transcript}' (novel: {accumulated_novel})")
                                     stop_tts_playback()
                                     break
             except Exception as e:
@@ -1660,7 +1660,8 @@ class STTManager:
                             # High confidence = instant trigger, otherwise require 2/3
                             high_conf = name and confidence >= min(self._bargein_voiceprint_threshold + 0.15, 0.95)
                             if high_conf or sum(recent_results) >= 2:
-                                queue_message(f"INFO: Barge-in detected! Voice matched '{name}' (confidence: {confidence:.2f})")
+                                if self.DEBUG:
+                                    queue_message(f"DEBUG: Barge-in detected! Voice matched '{name}' (confidence: {confidence:.2f})")
                                 stop_tts_playback()
                                 break
             except Exception as e:

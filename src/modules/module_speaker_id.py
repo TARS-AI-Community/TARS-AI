@@ -394,8 +394,7 @@ class SpeakerIDManager:
         if embedding is None:
             return
 
-        # Log embedding extraction
-        queue_message("INFO: Speaker embedding extracted")
+        # Embedding extracted — logged only in debug mode
 
         # Try to identify
         name, confidence = self.identify_speaker(embedding)
@@ -412,7 +411,6 @@ class SpeakerIDManager:
                 self._unknown_count = 0
                 self._unknown_session_id = None
 
-            queue_message(f"INFO: Speaker identified as '{name}' (confidence: {confidence:.2f})")
 
             # Retroactively rename memories from the unknown session
             if old_tag:

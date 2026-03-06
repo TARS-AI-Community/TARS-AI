@@ -156,10 +156,7 @@ def utterance_callback(message):
         # Strip any special characters/control characters from user text
         user_text = message_dict['text'].strip()
         
-        #Print or stream the response
-        #queue_message(f"USER: {user_text}")
         ui_manager.update_data("USER", user_text, "USER")
-        queue_message(f"USER: {user_text}", stream=False)
 
         if "shutdown pc" in user_text.lower():
             queue_message(f"SHUTDOWN: Shutting down the PC...")
@@ -171,7 +168,6 @@ def utterance_callback(message):
         # Check if preemptive LLM already fired during silence detection
         preemptive = message_dict.get("preemptive_llm_result")
         if preemptive is not None:
-            queue_message("INFO: Using preemptive LLM result (saved ~1-3s)")
             parsed = preemptive
         else:
             parsed = process_completion(user_text)
@@ -215,18 +211,19 @@ def utterance_callback(message):
             ui_manager.set_tars_status("STANDBY")
             return
 
+        # Detect emotion
+        emotion = None
         if CONFIG['EMOTION']['enabled'] and reply:
-            detected = detect_emotion(reply)
-            if detected:
+            emotion = detect_emotion(reply)
+            if emotion:
                 try:
                     from modules.module_chatui import update_emotion
-                    update_emotion(detected)
+                    update_emotion(emotion)
                 except Exception:
                     pass
 
         character_name = CONFIG['CHAR']['character_name']
         ui_manager.update_data(character_name, reply, "TARS")
-        queue_message(f"{character_name}: {reply}", stream=False)
 
         reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
 
@@ -243,12 +240,27 @@ def utterance_callback(message):
             stt_manager.stop_bargein_monitor()
 
         if was_interrupted:
-            queue_message("INFO: TARS was interrupted by user (barge-in)")
-            # Brief pause to let barge-in stream fully close before STT reopens mic
             time.sleep(0.3)
             ui_manager.set_tars_status("LISTENING")
         else:
             ui_manager.set_tars_status("STANDBY")
+
+        # Round summary log
+        speaker = '?'
+        try:
+            from modules.module_speaker_id import get_speaker_id_manager
+            sid = get_speaker_id_manager()
+            if sid and sid.current_speaker:
+                speaker = sid.current_speaker
+        except Exception:
+            pass
+        parts = [
+            f"speaker={speaker}",
+            f"emotion={emotion or '?'}",
+            f"preemptive={'yes' if preemptive is not None else 'no'}",
+            f"end={'barge-in' if was_interrupted else 'timeout'}",
+        ]
+        queue_message(f"ROUND: {' | '.join(parts)}")
 
     except json.JSONDecodeError:
         queue_message("ERROR: Invalid JSON format. Could not process user message.")

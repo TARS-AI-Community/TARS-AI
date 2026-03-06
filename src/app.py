@@ -152,7 +152,7 @@ class UIManagerStub:
         pass
 
     def update_data(self, source, message, category="INFO"):
-        queue_message(f"[{category}] {source}: {message}")
+        queue_message(f"{category}: {message}")
     
     def deactivate_screensaver(self):
         pass
