@@ -23,7 +23,6 @@ import board
 import busio
 from adafruit_pca9685 import PCA9685
 import os
-import importlib
 
 from modules.module_config import load_config
 import modules.module_servoctl as servoctl
@@ -93,6 +92,7 @@ config = load_config()
 i2c = busio.I2C(board.SCL, board.SDA)
 pca = PCA9685(i2c)
 pca.frequency = 50
+servoctl.pca = pca
 
 global_speed = 1.0
 MIN_PULSE = 0
@@ -220,7 +220,7 @@ def reload_and_test():
     try:
         global config
         config = load_config()
-        importlib.reload(servoctl)
+        servoctl.refresh_config()
 
         globals().update({name: getattr(servoctl, name) for name in dir(servoctl) if not name.startswith('_')})
 
@@ -1370,6 +1370,7 @@ class ServoControllerGUI:
                     offset_values[offset_name] = new_value
 
                     if save_offset_to_config(offset_name, new_value):
+                        servoctl.refresh_config()
                         display_name = self.leg_offset_info[offset_name][0]
                         self.set_status(f"OK {display_name}: {new_value:+d}")
                         if not self.manual_test_checkbox.checked:
@@ -1423,17 +1424,9 @@ class ServoControllerGUI:
         print(f"[MOVE] L-Height={left_height}, R-Height={right_height}, L-Rot={left_leg}, R-Rot={right_leg}, Speed={speed:.2f}")
         
         try:
-            saved_positions = servoctl.servo_positions.copy()
-            saved_initialized = servoctl._channels_initialized.copy()
-            
-            importlib.reload(servoctl)
-            
-            servoctl.servo_positions.update(saved_positions)
-            servoctl._channels_initialized.update(saved_initialized)
-            
             servoctl.move_legs(left_height, right_height, left_leg, right_leg, speed)
             self.set_status(f"OK Moved (speed={speed:.2f})")
-            
+
             if self.disable_after_action_checkbox.checked:
                 time.sleep(0.3)
                 servoctl.disable_all_servos()
@@ -1487,6 +1480,7 @@ class ServoControllerGUI:
                     offset_values[offset_name] = new_value
 
                     if save_offset_to_config(offset_name, new_value):
+                        servoctl.refresh_config()
                         display_name = self.arm_offset_info[offset_name][0]
                         self.set_status(f"OK {display_name}: {new_value:+d}")
                         if not self.arm_manual_test_checkbox.checked:
@@ -1542,17 +1536,9 @@ class ServoControllerGUI:
         print(f"[ARM MOVE] L-Main={left_main}, L-Forearm={left_forearm}, L-Hand={left_hand}, R-Main={right_main}, R-Forearm={right_forearm}, R-Hand={right_hand}, Speed={speed:.2f}")
         
         try:
-            saved_positions = servoctl.servo_positions.copy()
-            saved_initialized = servoctl._channels_initialized.copy()
-            
-            importlib.reload(servoctl)
-            
-            servoctl.servo_positions.update(saved_positions)
-            servoctl._channels_initialized.update(saved_initialized)
-            
             servoctl.move_arm(left_main, left_forearm, left_hand, right_main, right_forearm, right_hand, speed)
             self.set_status(f"OK Arms moved (speed={speed:.2f})")
-            
+
             if self.arm_disable_after_action_checkbox.checked:
                 time.sleep(0.3)
                 servoctl.disable_all_servos()
