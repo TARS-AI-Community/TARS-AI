@@ -453,6 +453,41 @@ def upload():
 
     return 'Upload OK'
 
+@flask_app.route('/camera_feed')
+def camera_feed():
+    """MJPEG stream from the camera for the web UI."""
+    try:
+        from UI.module_ui_camera import CameraModule
+    except ImportError:
+        from flask import abort
+        abort(503, "Camera module not available")
+
+    import cv2 as _cv2
+    import numpy as _np
+
+    camera = CameraModule(1920, 1080)
+
+    def generate():
+        while True:
+            frame = camera.get_frame()
+            if frame is None:
+                time.sleep(0.1)
+                continue
+            try:
+                import pygame as _pg
+                frame_array = _pg.surfarray.array3d(frame)
+                frame_array = _np.transpose(frame_array, (1, 0, 2))
+                frame_bgr = _cv2.cvtColor(frame_array, _cv2.COLOR_RGB2BGR)
+                ok, buf = _cv2.imencode('.jpg', frame_bgr, [_cv2.IMWRITE_JPEG_QUALITY, 60])
+                if ok:
+                    yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
+            except Exception:
+                pass
+            time.sleep(0.066)  # ~15 fps
+
+    from flask import Response
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 @flask_app.route('/audio_stream')
 def audio_stream():
     """

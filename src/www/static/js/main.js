@@ -509,6 +509,20 @@ document.addEventListener('DOMContentLoaded', function () {
   btnRight.addEventListener('click', () => move(getSpeed() === 'fast' ? 'right'    : 'right_slow'));
 });
 
+// ── MOTION CAMERA TOGGLE ─────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+  const toggle = $('motionCameraToggle');
+  const bg = $('motionCameraBg');
+  const feed = $('motionCameraFeed');
+  if (!toggle || !bg || !feed) return;
+
+  toggle.addEventListener('click', function () {
+    const active = bg.classList.toggle('active');
+    toggle.classList.toggle('active', active);
+    feed.src = active ? '/camera_feed' : '';
+  });
+});
+
 function loadMovements() {
   fetch('/get_movements').then(r => r.json()).then(data => {
     if (!data.success) return;
