@@ -515,6 +515,15 @@ class STTManager:
     def amplify_audio(self, data: np.ndarray) -> np.ndarray:
         return np.clip(data * self.amp_gain, -32768, 32767).astype(np.int16)
 
+    def _compute_rms_fast(self, data):
+        """Compute RMS with amplification in one pass — no int16 round-trip."""
+        if data.size == 0:
+            return None
+        flat = data.reshape(-1).astype(np.float64) * self.amp_gain
+        if np.all(flat == 0):
+            return None
+        return np.sqrt(np.mean(np.square(flat)))
+
     def _find_default_mic_sample_rate(self):
         try:
             idx = sd.default.device[0]
@@ -535,7 +544,7 @@ class STTManager:
 
     def _is_quiet(self, data):
         """Quick RMS silence gate check. Returns True if below threshold."""
-        rms = self._compute_rms(self.amplify_audio(data))
+        rms = self._compute_rms_fast(data)
         if rms is None:
             return True
         threshold = self.silence_threshold_margin or self.silence_threshold
@@ -1271,7 +1280,7 @@ class STTManager:
     def _is_silence_detected_rms(self, data, detected_speech, silent_frames):
         """RMS-based silence detection with visual progress bar."""
         update_bar, clear_bar = self._get_progress_bar()
-        rms = self._compute_rms(self.amplify_audio(data))
+        rms = self._compute_rms_fast(data)
         if self.silence_threshold_margin is None:
             self.silence_threshold_margin = self.silence_threshold
 
@@ -1357,7 +1366,7 @@ class STTManager:
                 return self._is_silence_detected_rms(data, detected_speech, silent_frames)
 
             # RMS check on current frame
-            rms = self._compute_rms(self.amplify_audio(data))
+            rms = self._compute_rms_fast(data)
             if self.silence_threshold_margin is None:
                 self.silence_threshold_margin = self.silence_threshold
             if rms is None:
@@ -1430,7 +1439,7 @@ class STTManager:
         with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
             for _ in range(20):
                 data, _ = stream.read(4000)
-                rms = self._compute_rms(self.amplify_audio(data))
+                rms = self._compute_rms_fast(data)
                 if rms is not None:
                     rms_values.append(rms)
                 time.sleep(0.1)
@@ -1544,7 +1553,7 @@ class STTManager:
                         frame_count += 1
 
                         # Always collect audio with speech energy
-                        rms = self._compute_rms(self.amplify_audio(data))
+                        rms = self._compute_rms_fast(data)
                         if rms and rms > bargein_threshold:
                             audio_buf.append(data.copy())
 
@@ -1609,7 +1618,7 @@ class STTManager:
                         frame_count += 1
 
                         # Collect frames with speech energy
-                        rms = self._compute_rms(self.amplify_audio(data))
+                        rms = self._compute_rms_fast(data)
                         if rms and rms > bargein_threshold:
                             audio_buf.append(data.copy())
 
