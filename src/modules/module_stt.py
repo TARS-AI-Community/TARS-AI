@@ -641,7 +641,7 @@ class STTManager:
 
     def _chunks_to_float32(self, chunks):
         """Convert list of int16 numpy chunks to a single float32 array."""
-        return np.concatenate(chunks).astype(np.float32) / 32768.0
+        return np.concatenate(chunks).astype(np.float32).flatten() / 32768.0
 
     # === Result Emission ===
 
@@ -1635,7 +1635,7 @@ class STTManager:
                             # Convert to float32 for embedding extraction
                             audio_int16 = np.concatenate(audio_buf)
                             audio_buf.clear()
-                            audio_float32 = audio_int16.astype(np.float32) / 32768.0
+                            audio_float32 = audio_int16.astype(np.float32).flatten() / 32768.0
 
                             sid = get_speaker_id_manager()
                             if sid is None:
