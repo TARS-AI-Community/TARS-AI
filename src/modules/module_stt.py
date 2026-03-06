@@ -566,15 +566,15 @@ class STTManager:
         audio_chunks = []
         max_silent = self.MAX_SILENT_FRAMES
 
-        # Select VAD method
+        # Select VAD method — resolve once, not per frame
         if vad_method is None:
-            vad_func = self.voice_activity_detection_main
-        elif vad_method == "rms":
-            vad_func = self._is_silence_detected_rms
-        elif vad_method == "smart-turn" and self.smart_turn_session is not None:
-            vad_func = self._is_silence_detected_smart_turn
-        else:
-            vad_func = self._is_silence_detected_rms
+            vad_method = self.vadmethod
+        vad_dispatch = {
+            "silero": self._is_silence_detected_silero,
+            "sherpa-onnx": self._is_silence_detected_sherpa_onnx,
+            "smart-turn": self._is_silence_detected_smart_turn if self.smart_turn_session is not None else self._is_silence_detected_rms,
+        }
+        vad_func = vad_dispatch.get(vad_method, self._is_silence_detected_rms)
 
         with sd.InputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
             for _ in range(self.MAX_RECORDING_FRAMES):
