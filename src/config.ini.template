@@ -62,7 +62,7 @@ wake_word = hey tars
 #   Pi4: sherpa-onnx | atomik
 #   Pi3: sherpa-onnx | atomik
 #   PiZero2: atomik
-wake_word_processor = smart-turn
+wake_word_processor = atomik
 # Wake word strictness 1–10 (atomik only; 1 = lenient, 10 = strict)
 sensitivity = 7
 # Speech-to-text engine (independent of wake_word_processor — mix freely)
