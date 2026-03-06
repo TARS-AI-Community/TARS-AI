@@ -471,7 +471,10 @@ class STTManager:
 
             self.smart_turn_session = ort.InferenceSession(model_path, sess_options=so)
             self.smart_turn_extractor = WhisperFeatureExtractor(chunk_length=8)
-            queue_message("INFO: Smart Turn v3.2 model loaded successfully.")
+            # Pre-warm: run dummy inference to eliminate first-utterance latency spike
+            dummy = np.zeros(16000, dtype=np.float32)  # 1s silence
+            self._smart_turn_infer(dummy)
+            queue_message("INFO: Smart Turn v3.2 model loaded and pre-warmed.")
         except ImportError as e:
             queue_message(f"ERROR: Smart Turn requires onnxruntime and transformers: {e}")
             self.smart_turn_session = None
