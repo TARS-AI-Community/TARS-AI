@@ -208,9 +208,9 @@ class STTManager:
         if sensitivity > 0:
             t = (sensitivity - 1) / 9.0  # 0.0 (sens=1, hard to interrupt) to 1.0 (sens=10, easy)
             # Higher sensitivity = LOWER threshold = fewer words matched as TTS = easier to trigger
-            # Only one threshold now — fuzzy match for 5+ char words only
-            self._bargein_broad_threshold = 0.75 - t * 0.15   # 0.75 (sens=1) to 0.60 (sens=10)
-            self._bargein_min_novel = 3 if sensitivity <= 3 else 2  # strict=3, normal+=2
+            # Only one threshold now — fuzzy match for 4+ char words only
+            self._bargein_broad_threshold = 0.80 - t * 0.10   # 0.80 (sens=1) to 0.70 (sens=10)
+            self._bargein_min_novel = 3 if sensitivity <= 3 else 2
 
         # Last recorded audio for speaker ID (set by transcription backends)
         self._last_audio_float32 = None
@@ -665,6 +665,8 @@ class STTManager:
                 time.sleep(0.1)
                 continue
             if self._detect_wake_word():
+                if self.DEBUG:
+                    queue_message("DEBUG: Wake word detected, starting transcription")
                 STTManager._last_status_was_sleeping = False
                 # Reset sherpa VAD state to prevent heap corruption from stale native buffers
                 if self.sherpa_vad is not None:
@@ -1335,7 +1337,8 @@ class STTManager:
             "input_features": inputs.input_features.astype(np.float32)
         })
         prob = outputs[0][0].item()
-        queue_message(f"DEBUG: Smart Turn infer done: prob={prob:.3f}, audio_len={len(audio)}")
+        if self.DEBUG:
+            queue_message(f"DEBUG: Smart Turn infer done: prob={prob:.3f}, audio_len={len(audio)}")
         return prob
 
     def _is_silence_detected_smart_turn(self, data, detected_speech, silent_frames):
@@ -1398,7 +1401,8 @@ class STTManager:
                     and self.smart_turn_audio_buffer
                     and self._smart_turn_future is None):
                 audio_snapshot = np.concatenate(self.smart_turn_audio_buffer)
-                queue_message(f"DEBUG: Smart Turn submitting inference (silent={silent_frames}, buf_chunks={len(self.smart_turn_audio_buffer)}, samples={len(audio_snapshot)})")
+                if self.DEBUG:
+                    queue_message(f"DEBUG: Smart Turn submitting inference (silent={silent_frames}, buf_chunks={len(self.smart_turn_audio_buffer)}, samples={len(audio_snapshot)})")
                 self._smart_turn_future = self._smart_turn_executor.submit(
                     self._smart_turn_infer, audio_snapshot
                 )
@@ -1480,7 +1484,8 @@ class STTManager:
             queue_message("WARN: Barge-in requires sherpa-onnx or fastrtc, skipping")
             return
         self._bargein_active = True
-        queue_message(f"DEBUG: Barge-in started (sensitivity={int(CONFIG['STT'].get('bargein_sensitivity', 5))}, broad={self._bargein_broad_threshold:.2f}, min_novel={self._bargein_min_novel})")
+        if self.DEBUG:
+            queue_message(f"DEBUG: Barge-in started (sensitivity={int(CONFIG['STT'].get('bargein_sensitivity', 5))}, broad={self._bargein_broad_threshold:.2f}, min_novel={self._bargein_min_novel})")
 
         # Build ordered word list for sliding window + full set for broad matching
         tts_word_list = []
@@ -1516,7 +1521,8 @@ class STTManager:
                         # Periodically transcribe what we've collected
                         if frame_count % TRANSCRIBE_EVERY == 0:
                             if len(audio_buf) < 2:
-                                queue_message(f"DEBUG: Barge-in: no speech frames ({len(audio_buf)}/8 above threshold)")
+                                if self.DEBUG:
+                                    queue_message(f"DEBUG: Barge-in: no speech frames ({len(audio_buf)}/8 above threshold)")
                         if frame_count % TRANSCRIBE_EVERY == 0 and len(audio_buf) >= 2:
                             transcript = self._bargein_transcribe(audio_buf)
                             buf_len = len(audio_buf)
@@ -1538,7 +1544,8 @@ class STTManager:
                                     if no_novel_streak >= 2:
                                         accumulated_novel.clear()
 
-                                queue_message(f"DEBUG: Barge-in: '{transcript}' window={window_words} novel={novel} accumulated={accumulated_novel} (frames={buf_len})")
+                                if self.DEBUG:
+                                    queue_message(f"DEBUG: Barge-in: '{transcript}' window={window_words} novel={novel} accumulated={accumulated_novel} (frames={buf_len})")
                                 if len(accumulated_novel) >= self._bargein_min_novel:
                                     queue_message(f"INFO: Barge-in detected! Heard: '{transcript}' (novel: {accumulated_novel})")
                                     stop_tts_playback()
@@ -1604,12 +1611,12 @@ class STTManager:
 
             matched = False
 
-            # Fuzzy match: only for 5+ char words with similar length, high threshold
-            # Catches genuine misspellings like "satelite"/"satellite", "trping"/"tripping"
-            if len(w) >= 5:
+            # Fuzzy match: only for 4+ char words with similar length, high threshold
+            # Catches bleed misspellings like "yard"/"yarn", "satelite"/"satellite"
+            if len(w) >= 4:
                 compare_set = window_words | tts_words_all
                 for tts_w in compare_set:
-                    if len(tts_w) >= 5 and abs(len(w) - len(tts_w)) <= 2:
+                    if len(tts_w) >= 4 and abs(len(w) - len(tts_w)) <= 2:
                         ratio = SequenceMatcher(None, w, tts_w).ratio()
                         if ratio >= self._bargein_broad_threshold:
                             matched = True
@@ -1622,8 +1629,10 @@ class STTManager:
         return novel if len(novel) >= self._bargein_min_novel else []
 
     def stop_bargein_monitor(self):
-        """Stop the barge-in monitor thread."""
+        """Stop the barge-in monitor thread and wait for mic stream to close."""
         self._bargein_active = False
         if self._bargein_thread is not None:
-            self._bargein_thread.join(timeout=2)
+            self._bargein_thread.join(timeout=3)
+            if self._bargein_thread.is_alive():
+                queue_message("WARN: Barge-in monitor thread did not exit cleanly")
             self._bargein_thread = None
