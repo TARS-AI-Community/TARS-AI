@@ -192,7 +192,13 @@ async def play_audio_chunks(text, config, is_wakeword=False):
             async for audio_chunk in generate_tts_audio(text, config, is_wakeword):
                 if _tts_cancel_event.is_set():
                     break
-                await audio_queue.put(audio_chunk)
+                # Use put_nowait with a wait loop so we can check for cancellation
+                while not _tts_cancel_event.is_set():
+                    try:
+                        audio_queue.put_nowait(audio_chunk)
+                        break
+                    except asyncio.QueueFull:
+                        await asyncio.sleep(0.05)
         except Exception as e:
             queue_message(f"ERROR: Synthesis failed: {e}")
         finally:
