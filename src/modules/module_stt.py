@@ -1368,6 +1368,9 @@ class STTManager:
                 detected_speech = True
                 silent_frames = 0
                 self.smart_turn_audio_buffer.append(data.astype(np.float32).flatten() / 32768.0)
+                # Cap buffer at ~8 seconds (32 chunks x 0.25s) — smart turn only uses the tail
+                if len(self.smart_turn_audio_buffer) > 32:
+                    self.smart_turn_audio_buffer = self.smart_turn_audio_buffer[-32:]
                 self._smart_turn_future = None  # discard stale result if speaker resumed
                 clear_bar()
                 return False, detected_speech, silent_frames
