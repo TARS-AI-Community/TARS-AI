@@ -23,13 +23,16 @@ class CameraModule:
         apply_corrections = True
 
         if self._initialized:
+            if (width, height) != getattr(self, '_init_size', (width, height)):
+                print(f"WARNING: CameraModule singleton already initialized at {self._init_size}, ignoring ({width}, {height})")
             return
         self._initialized = True
+        self._init_size = (width, height)
 
         self.rotation = CONFIG['VISION'].get('camera_rotation', 270)
         self.use_camera_module = use_camera_module
         self.apply_corrections = apply_corrections
-        self.frame = None
+        self._frame = None
         self.running = False
         self.save_next_frame = False
         self.lock = threading.Lock()
@@ -138,19 +141,32 @@ class CameraModule:
                 elif self.rotation == 270:
                     frame = np.rot90(frame, k=3)
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                self.frame = pygame.surfarray.make_surface(frame)
-
-                if not self.first_frame_captured:
-                    self.first_frame_captured = True
+                surface = pygame.surfarray.make_surface(frame)
 
                 with self.lock:
+                    self._frame = surface
+
+                    if not self.first_frame_captured:
+                        self.first_frame_captured = True
+
                     if self.save_next_frame:
-                        self.last_saved_image = self.save_frame()
+                        self.last_saved_image = self._save_frame_unlocked()
                         self.save_next_frame = False
 
             except Exception as e:
                 print(f"ERROR: Frame capture failed: {e}")
-                self.restart_camera()
+                # Restart picamera2 hardware inline (can't call self.restart_camera()
+                # from within capture thread — self.stop() would deadlock on thread.join())
+                try:
+                    if self.picam2 is not None:
+                        self.picam2.stop()
+                        time.sleep(1)
+                        self.picam2.start()
+                        self.first_frame_captured = False
+                        print("Camera restarted successfully")
+                except Exception as restart_err:
+                    print(f"Camera restart failed: {restart_err}")
+                    self.running = False
                 time.sleep(2)  # Prevent rapid restart loop
 
             elapsed_time = time.time() - start_time
@@ -175,8 +191,10 @@ class CameraModule:
         """Return current frame as JPEG bytes (no disk I/O)."""
         deadline = time.time() + timeout
         while time.time() < deadline:
-            if self.frame is not None:
-                frame_array = pygame.surfarray.array3d(self.frame)
+            with self.lock:
+                frame = self._frame
+            if frame is not None:
+                frame_array = pygame.surfarray.array3d(frame)
                 frame_array = np.transpose(frame_array, (1, 0, 2))
                 frame_bgr = cv2.cvtColor(frame_array, cv2.COLOR_RGB2BGR)
                 ok, buf = cv2.imencode('.jpg', frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -185,10 +203,11 @@ class CameraModule:
             time.sleep(0.1)
         raise RuntimeError("Camera capture timed out")
 
-    def save_frame(self):
-        if self.frame is None:
+    def _save_frame_unlocked(self):
+        """Save current frame to disk. Must be called with self.lock held."""
+        if self._frame is None:
             return None
-        frame_array = pygame.surfarray.array3d(self.frame)
+        frame_array = pygame.surfarray.array3d(self._frame)
         frame_array = cv2.cvtColor(frame_array, cv2.COLOR_RGB2BGR)
         output_dir = Path("../vision")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -197,8 +216,13 @@ class CameraModule:
         cv2.imwrite(str(image_path), frame_array)
         return str(image_path)
 
+    def save_frame(self):
+        with self.lock:
+            return self._save_frame_unlocked()
+
     def get_frame(self):
-        return self.frame
+        with self.lock:
+            return self._frame
 
     def stop(self):
         self.running = False
