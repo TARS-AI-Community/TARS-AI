@@ -353,12 +353,12 @@ def receive_user_message():
             if img_b64:
                 vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
-                if vision_mode == 'llm':
-                    # Single call — image goes directly to LLM with full personality
+                if vision_mode in ('llm', 'openai'):
+                    # Single pass — image goes directly to LLM with full personality
                     prompt = msg or "The user sent you a photo. Describe what you see and respond in character."
                     reply = get_completion(prompt, image_b64=img_b64)
                 else:
-                    # Two-step — get caption first, then send to LLM for conversation
+                    # Two-pass — get caption first, then send to LLM for conversation
                     if VISION_AVAILABLE:
                         try:
                             caption = process_image(img_b64, msg or "Describe this image in detail.")
@@ -433,7 +433,7 @@ def upload():
 
     vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
-    if vision_mode == 'llm':
+    if vision_mode in ('llm', 'openai'):
         reply = get_completion(f"{CONFIG['CHAR']['user_name']} sent you a photo. Describe what you see and respond in character.", image_b64=base64_image)
     else:
         if VISION_AVAILABLE:
@@ -464,6 +464,7 @@ def camera_feed():
 
     import cv2 as _cv2
     import numpy as _np
+    import eventlet
 
     camera = CameraModule(1920, 1080)
 
@@ -471,7 +472,7 @@ def camera_feed():
         while True:
             frame = camera.get_frame()
             if frame is None:
-                time.sleep(0.1)
+                eventlet.sleep(0.1)
                 continue
             try:
                 import pygame as _pg
@@ -483,7 +484,7 @@ def camera_feed():
                     yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
             except Exception:
                 pass
-            time.sleep(0.066)  # ~15 fps
+            eventlet.sleep(0.066)  # ~15 fps
 
     from flask import Response
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')

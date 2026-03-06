@@ -1,4 +1,5 @@
 import base64
+import os
 import threading
 from io import BytesIO
 import requests
@@ -113,26 +114,52 @@ def _describe_blip(image_data, prompt):
     return caption
 
 
+def _get_vision_settings():
+    """Resolve API key, base URL, and model based on use_llm_backend toggle."""
+    use_llm = CONFIG['VISION'].get('use_llm_backend', True)
+    llm_backend = CONFIG['LLM']['llm_backend']
+
+    if use_llm:
+        # Use main LLM settings
+        api_key = CONFIG['LLM']['api_key']
+        base_url = CONFIG['LLM']['base_url']
+        if llm_backend == "deepinfra":
+            model = CONFIG['LLM']['openai_model']
+        elif llm_backend == "grok":
+            model = CONFIG['LLM']['grok_model']
+        elif llm_backend == "openai":
+            model = CONFIG['LLM']['openai_model']
+        else:
+            model = CONFIG['LLM']['other_model']
+    else:
+        # Use separate vision settings, fall back to LLM settings if blank
+        api_key = os.environ.get('VISION_API_KEY', '') or CONFIG['LLM']['api_key']
+        base_url = CONFIG['VISION'].get('base_url', '') or CONFIG['LLM']['base_url']
+        model = CONFIG['VISION'].get('vision_model', '')
+        if not model:
+            # Fall back to LLM model
+            if llm_backend == "openai":
+                model = CONFIG['LLM']['openai_model']
+            elif llm_backend == "grok":
+                model = CONFIG['LLM']['grok_model']
+            elif llm_backend == "deepinfra":
+                model = CONFIG['LLM']['openai_model']
+            else:
+                model = CONFIG['LLM']['other_model']
+
+    return api_key, base_url, model
+
+
 def _describe_llm(image_data, prompt):
     """Send image to the configured LLM backend for vision."""
-    llm_backend = CONFIG['LLM']['llm_backend']
-    api_key = CONFIG['LLM']['api_key']
-    base_url = CONFIG['LLM']['base_url']
-    vision_model = CONFIG['VISION'].get('vision_model', '')
+    api_key, base_url, model = _get_vision_settings()
     max_tokens = int(CONFIG['VISION'].get('vision_max_tokens', 150))
+    llm_backend = CONFIG['LLM']['llm_backend']
 
     if llm_backend == "deepinfra":
         url = f"{base_url}/v1/openai/chat/completions"
-        model = vision_model or CONFIG['LLM']['openai_model']
-    elif llm_backend == "grok":
-        url = f"{base_url}/v1/chat/completions"
-        model = vision_model or CONFIG['LLM']['grok_model']
-    elif llm_backend == "openai":
-        url = f"{base_url}/v1/chat/completions"
-        model = vision_model or CONFIG['LLM']['openai_model']
     else:
         url = f"{base_url}/v1/chat/completions"
-        model = vision_model or CONFIG['LLM']['other_model']
 
     b64 = _to_base64(image_data)
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
@@ -153,25 +180,34 @@ def _describe_llm(image_data, prompt):
 
 def _describe_openai(image_data, prompt):
     """Send image to OpenAI vision API."""
-    import os
-    api_key = os.getenv('OPENAI_API_KEY')
-    if not api_key:
-        return "Error: OPENAI_API_KEY not set"
+    use_llm = CONFIG['VISION'].get('use_llm_backend', True)
 
-    vision_model = CONFIG['VISION'].get('vision_model', '') or 'gpt-4o-mini'
+    if use_llm:
+        api_key = os.getenv('OPENAI_API_KEY') or CONFIG['LLM']['api_key']
+        api_url = "https://api.openai.com/v1/chat/completions"
+        model = 'gpt-4o-mini'
+    else:
+        api_key = os.environ.get('VISION_API_KEY', '') or os.getenv('OPENAI_API_KEY') or CONFIG['LLM']['api_key']
+        vision_base = CONFIG['VISION'].get('base_url', '')
+        api_url = f"{vision_base}/v1/chat/completions" if vision_base else "https://api.openai.com/v1/chat/completions"
+        model = CONFIG['VISION'].get('vision_model', '') or 'gpt-4o-mini'
+
+    if not api_key:
+        return "Error: No API key available for OpenAI vision"
+
     max_tokens = int(CONFIG['VISION'].get('vision_max_tokens', 150))
     b64 = _to_base64(image_data)
 
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
     payload = {
-        "model": vision_model,
+        "model": model,
         "messages": [{"role": "user", "content": [
             {"type": "text", "text": prompt},
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
         ]}],
         "max_tokens": max_tokens
     }
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    response = requests.post(api_url, headers=headers, json=payload)
     response.raise_for_status()
     description = response.json()['choices'][0]['message']['content']
     queue_message(f"Vision: {description}")
