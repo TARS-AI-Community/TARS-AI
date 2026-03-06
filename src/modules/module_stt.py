@@ -686,7 +686,6 @@ class STTManager:
 
     def _transcribe_utterance(self):
         """Transcribe the user's utterance using the selected STT processor."""
-        result = None
         try:
             if self.is_paused():
                 return None
@@ -716,14 +715,13 @@ class STTManager:
                 except Exception:
                     pass
 
+            if self.post_utterance_callback and result:
+                self.post_utterance_callback()
             return result
         except Exception as e:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
-        finally:
-            # Always restart listening — never let the loop die
-            if self.post_utterance_callback:
-                self.post_utterance_callback()
+            return None
 
     # === Transcription Backends ===
 
@@ -1593,7 +1591,7 @@ class STTManager:
         def _monitor():
             bargein_threshold = self.silence_threshold
             audio_buf = []
-            CHECK_EVERY = 12  # Check every ~1.5s (12 x 125ms) — need enough audio for embedding
+            CHECK_EVERY = 8  # Check every ~1s (8 x 125ms)
             frame_count = 0
             recent_results = []  # Sliding window: require 2 out of 3 matches
 
@@ -1613,8 +1611,8 @@ class STTManager:
                             audio_buf.append(data.copy())
 
                         if frame_count % CHECK_EVERY == 0:
-                            if len(audio_buf) < 6:
-                                # Not enough speech frames for a usable embedding (~0.75s)
+                            if len(audio_buf) < 4:
+                                # Not enough speech frames for a usable embedding (~0.5s)
                                 recent_results.append(False)
                                 recent_results = recent_results[-3:]
                                 if self.DEBUG:
@@ -1647,7 +1645,9 @@ class STTManager:
                             recent_results.append(matched)
                             recent_results = recent_results[-3:]
 
-                            if sum(recent_results) >= 2:
+                            # High confidence = instant trigger, otherwise require 2/3
+                            high_conf = name and confidence >= min(self._bargein_voiceprint_threshold + 0.15, 0.95)
+                            if high_conf or sum(recent_results) >= 2:
                                 queue_message(f"INFO: Barge-in detected! Voice matched '{name}' (confidence: {confidence:.2f})")
                                 stop_tts_playback()
                                 break
