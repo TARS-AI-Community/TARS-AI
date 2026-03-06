@@ -897,11 +897,56 @@ body::after {
 ══════════════════════════════════════════════ */
 #motion { overflow: hidden; }
 
+.motion-camera-bg {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.motion-camera-bg.active { display: block; }
+.motion-camera-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.4;
+}
+
 .motion-wrap {
   display: flex;
   height: 100%;
   width: 100%;
+  position: relative;
+  z-index: 1;
 }
+
+.camera-toggle-btn {
+  background: rgba(0,229,255,0.05);
+  border: 1px solid rgba(0,229,255,0.15);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  width: 100%;
+  height: 100%;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.camera-toggle-btn:hover {
+  border-color: rgba(0,229,255,0.5);
+  color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
+}
+.camera-toggle-btn.active {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.3);
+}
+
+.dpad-center { pointer-events: auto; }
 
 /* D-pad section */
 .dpad-section {
@@ -975,8 +1020,6 @@ body::after {
   display: flex; align-items: center; justify-content: center;
   color: var(--text-dim);
   font-size: 20px;
-  opacity: 0.3;
-  pointer-events: none;
 }
 
 /* speed pills */
@@ -1020,10 +1063,12 @@ body::after {
   flex-direction: column;
   justify-content: center;
   padding: 20px 18px;
-  background: rgba(14, 26, 48, 0.4);
+  background: rgba(14, 26, 48, 0.92);
   border-left: 1px solid rgba(0, 229, 255, 0.1);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
+  position: relative;
+  z-index: 1;
 }
 
 .actions-panel { display: flex; flex-direction: column; gap: 12px; }

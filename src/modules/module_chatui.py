@@ -338,21 +338,41 @@ def receive_user_message():
     def _process(msg, img_b64):
         global latest_text_to_read
         try:
+            # WebUI messages always come from the configured user
+            try:
+                from modules.module_speaker_id import get_speaker_id_manager
+                sid = get_speaker_id_manager()
+                if sid and sid.enabled:
+                    import time as _time
+                    with sid._lock:
+                        sid.current_speaker = CONFIG['CHAR']['user_name']
+                        sid.current_confidence = 1.0
+                        sid.last_identified_time = _time.time()
+            except Exception:
+                pass
             if img_b64:
-                if VISION_AVAILABLE:
-                    try:
-                        caption = process_image(img_b64, msg or "Describe this image in detail.")
-                    except Exception as e:
-                        queue_message(f"ERROR: Vision processing failed: {e}")
-                        caption = "Image uploaded but vision processing failed"
-                else:
-                    caption = "Image uploaded (vision module not available)"
+                vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
-                if msg:
-                    cmessage = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
+                if vision_mode == 'llm':
+                    # Single call — image goes directly to LLM with full personality
+                    prompt = msg or "The user sent you a photo. Describe what you see and respond in character."
+                    reply = get_completion(prompt, image_b64=img_b64)
                 else:
-                    cmessage = f"*The user uploaded a photo. Description: {caption}*"
-                reply = get_completion(cmessage)
+                    # Two-step — get caption first, then send to LLM for conversation
+                    if VISION_AVAILABLE:
+                        try:
+                            caption = process_image(img_b64, msg or "Describe this image in detail.")
+                        except Exception as e:
+                            queue_message(f"ERROR: Vision processing failed: {e}")
+                            caption = "Image uploaded but vision processing failed"
+                    else:
+                        caption = "Image uploaded (vision module not available)"
+
+                    if msg:
+                        cmessage = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
+                    else:
+                        cmessage = f"*The user uploaded a photo. Description: {caption}*"
+                    reply = get_completion(cmessage)
             else:
                 reply = get_completion(msg)
 
@@ -368,7 +388,7 @@ def receive_user_message():
             queue_message(f"ERROR: process_llm failed: {e}")
             socketio.emit('bot_message', {'message': f'Error processing message: {e}'})
 
-    threading.Thread(target=_process, args=(user_message, base64_image), daemon=True).start()
+    socketio.start_background_task(_process, user_message, base64_image)
     return jsonify({"status": "success"})
 
 @flask_app.route('/upload', methods=['GET', 'POST'])
@@ -399,22 +419,74 @@ def upload():
         socketio.emit('bot_message', {'message': 'Sorry, I could not process that image.'})
         return 'Invalid image', 400
 
-    if VISION_AVAILABLE:
-        try:
-            caption = process_image(base64_image, "Describe this image in detail.")
-        except Exception as e:
-            queue_message(f"ERROR: Vision processing failed: {e}")
-            caption = "Image uploaded but vision processing failed"
+    # WebUI messages always come from the configured user
+    try:
+        from modules.module_speaker_id import get_speaker_id_manager
+        sid = get_speaker_id_manager()
+        if sid and sid.enabled:
+            with sid._lock:
+                sid.current_speaker = CONFIG['CHAR']['user_name']
+                sid.current_confidence = 1.0
+                sid.last_identified_time = time.time()
+    except Exception:
+        pass
+
+    vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
+
+    if vision_mode == 'llm':
+        reply = get_completion(f"{CONFIG['CHAR']['user_name']} sent you a photo. Describe what you see and respond in character.", image_b64=base64_image)
     else:
-        caption = "Image uploaded (vision module not available)"
+        if VISION_AVAILABLE:
+            try:
+                caption = process_image(base64_image, "Describe this image in detail.")
+            except Exception as e:
+                queue_message(f"ERROR: Vision processing failed: {e}")
+                caption = "Image uploaded but vision processing failed"
+        else:
+            caption = "Image uploaded (vision module not available)"
 
-    cmessage = f"*{CONFIG['CHAR']['user_name']} sent a photo. Description: {caption}*"
-    reply = get_completion(cmessage)
+        cmessage = f"*{CONFIG['CHAR']['user_name']} sent a photo. Description: {caption}*"
+        reply = get_completion(cmessage)
+
     latest_text_to_read = reply
-
-    socketio.emit('bot_message', {'message': latest_text_to_read})
+    socketio.emit('bot_message', {'message': reply or ''})
 
     return 'Upload OK'
+
+@flask_app.route('/camera_feed')
+def camera_feed():
+    """MJPEG stream from the camera for the web UI."""
+    try:
+        from UI.module_ui_camera import CameraModule
+    except ImportError:
+        from flask import abort
+        abort(503, "Camera module not available")
+
+    import cv2 as _cv2
+    import numpy as _np
+
+    camera = CameraModule(1920, 1080)
+
+    def generate():
+        while True:
+            frame = camera.get_frame()
+            if frame is None:
+                time.sleep(0.1)
+                continue
+            try:
+                import pygame as _pg
+                frame_array = _pg.surfarray.array3d(frame)
+                frame_array = _np.transpose(frame_array, (1, 0, 2))
+                frame_bgr = _cv2.cvtColor(frame_array, _cv2.COLOR_RGB2BGR)
+                ok, buf = _cv2.imencode('.jpg', frame_bgr, [_cv2.IMWRITE_JPEG_QUALITY, 60])
+                if ok:
+                    yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
+            except Exception:
+                pass
+            time.sleep(0.066)  # ~15 fps
+
+    from flask import Response
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @flask_app.route('/audio_stream')
 def audio_stream():

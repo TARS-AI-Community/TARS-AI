@@ -19,9 +19,9 @@ try:
 except ImportError:
     pass
 
-describe_camera_view = None
+process_camera_image = None
 try:
-    from modules.module_vision import describe_camera_view
+    from modules.module_vision import process_camera_image
 except ImportError:
     pass
 
@@ -128,7 +128,7 @@ def launch_retropie():
 FUNCTION_REGISTRY = {
     "Weather": search_google,
     "News": search_google_news,
-    "Vision": describe_camera_view,
+    "Vision": process_camera_image,
     "Search": search_google,
     "SDmodule-Generate": generate_image,
     "Home_Assistant": send_prompt_to_homeassistant,

@@ -51,7 +51,7 @@ if CONFIG['EMOTION']['enabled']:
     except ImportError:
         pass
 
-def get_completion(user_prompt, istext=True):
+def get_completion(user_prompt, istext=True, image_b64=None):
 
     if memory_manager is None or character_manager is None:
         raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
@@ -93,7 +93,7 @@ def get_completion(user_prompt, istext=True):
         "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
     }
     llm_backend = CONFIG['LLM']['llm_backend']
-    url, data = _prepare_request_data(llm_backend, prompt)
+    url, data = _prepare_request_data(llm_backend, prompt, image_b64=image_b64)
 
     try:
         response = requests.post(url, headers=headers, json=data, stream=True)
@@ -137,65 +137,42 @@ def get_completion(user_prompt, istext=True):
         queue_message(f"ERROR: LLM request failed: {e}")
         return None
 
-def _prepare_request_data(llm_backend, prompt):
+def _prepare_request_data(llm_backend, prompt, image_b64=None):
+
+    # Build user content — multimodal if image provided, plain text otherwise
+    if image_b64:
+        user_content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}
+        ]
+    else:
+        user_content = prompt
 
     if llm_backend == "openai":
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
-        data = {
-            "model": CONFIG['LLM']['openai_model'],
-            "messages": [
-                {"role": "system", "content": CONFIG['LLM']['systemprompt']},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": CONFIG['LLM']['max_tokens'],
-            "temperature": CONFIG['LLM']['temperature'],
-            "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"},
-            "stream": True
-        }
+        model = CONFIG['LLM']['openai_model']
     elif llm_backend == "grok":
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
-        data = {
-            "model": CONFIG['LLM']['grok_model'],
-            "messages": [
-                {"role": "system", "content": CONFIG['LLM']['systemprompt']},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": CONFIG['LLM']['max_tokens'],
-            "temperature": CONFIG['LLM']['temperature'],
-            "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"},
-            "stream": True
-        }
+        model = CONFIG['LLM']['grok_model']
     elif llm_backend == "deepinfra":
         url = f"{CONFIG['LLM']['base_url']}/v1/openai/chat/completions"
-        data = {
-            "model": CONFIG['LLM']['openai_model'],
-            "messages": [
-                {"role": "system", "content": CONFIG['LLM']['systemprompt']},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": CONFIG['LLM']['max_tokens'],
-            "temperature": CONFIG['LLM']['temperature'],
-            "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"},
-            "stream": True
-        }
+        model = CONFIG['LLM']['openai_model']
     else:
-        # "other" and any unknown backend: treat as OpenAI-compatible with custom base_url
         url = f"{CONFIG['LLM']['base_url']}/v1/chat/completions"
-        data = {
-            "model": CONFIG['LLM']['other_model'],
-            "messages": [
-                {"role": "system", "content": CONFIG['LLM']['systemprompt']},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": CONFIG['LLM']['max_tokens'],
-            "temperature": CONFIG['LLM']['temperature'],
-            "top_p": CONFIG['LLM']['top_p'],
-            "response_format": {"type": "json_object"},
-            "stream": True
-        }
+        model = CONFIG['LLM']['other_model']
+
+    data = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": CONFIG['LLM']['systemprompt']},
+            {"role": "user", "content": user_content}
+        ],
+        "max_tokens": CONFIG['LLM']['max_tokens'],
+        "temperature": CONFIG['LLM']['temperature'],
+        "top_p": CONFIG['LLM']['top_p'],
+        "response_format": {"type": "json_object"},
+        "stream": True
+    }
 
     return url, data
 
@@ -547,15 +524,35 @@ def execute_function_call(func_call, bot_response, user_input):
 
         elif function_name == "capture_camera_view":
             # Skip camera capture when user already uploaded a photo
-            if "Uploaded photo" in user_input:
+            if "uploaded photo" in user_input.lower() or "sent you a photo" in user_input.lower() or "sent a photo" in user_input.lower():
                 pass
             elif process_camera_image is None:
                 bot_response["reply"] = "Vision is not available on this device."
             else:
                 query = parameters.get("query", bot_response.get("question", ""))
-                description = process_camera_image(query)
+                # Pull detection context from UI if available
+                detection_context = None
+                try:
+                    from modules.module_main import ui_manager
+                    if ui_manager and hasattr(ui_manager, 'detection_manager'):
+                        detection_context = ui_manager.detection_manager.get_detection_summary() or None
+                except Exception:
+                    pass
+                description = process_camera_image(query, detection_context=detection_context)
                 if description and not description.startswith("Error:"):
-                    bot_response["reply"] = description
+                    # Feed vision result back through LLM with full personality
+                    vision_prompt = f"*You just looked through your camera and saw the following: {description}* Now respond to the user in character about what you see."
+                    if query:
+                        vision_prompt += f" The user asked: {query}"
+                    try:
+                        reply = get_completion(vision_prompt)
+                        if reply:
+                            bot_response["reply"] = reply
+                        else:
+                            bot_response["reply"] = description
+                    except Exception as e:
+                        queue_message(f"WARN: Vision follow-up LLM call failed: {e}")
+                        bot_response["reply"] = description
                 else:
                     bot_response["reply"] = "I tried to look but couldn't process the image."
 

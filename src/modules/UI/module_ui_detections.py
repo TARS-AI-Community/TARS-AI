@@ -410,6 +410,7 @@ class DetectionManager:
         self._last_click_time = 0
         self._click_cooldown = 300
         self._button_font = None
+        self._last_labels = []
 
         self._name_input_active = False
         self._name_input_text = ""
@@ -751,8 +752,15 @@ class DetectionManager:
                 return True
         return False
 
+    def get_detection_summary(self):
+        """Return a short text summary of recent detections for the LLM."""
+        if not self._last_labels:
+            return ""
+        return "Detected: " + ", ".join(self._last_labels)
+
     def process_frame(self, frame):
         if not self.detectors or not any(d.enabled for d in self.detectors):
+            self._last_labels = []
             return frame
 
         frame_array = pygame.surfarray.array3d(frame)
@@ -766,6 +774,8 @@ class DetectionManager:
         for detector in self.detectors:
             if detector.enabled:
                 all_detections.extend(detector.detect(frame_bgr, gray))
+
+        self._last_labels = [d['label'] for d in all_detections if 'label' in d]
 
         frame_float = frame_bgr.astype(np.float32)
         for det in all_detections:
