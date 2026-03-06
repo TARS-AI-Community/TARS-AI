@@ -153,6 +153,10 @@ def _get_vision_settings():
 def _describe_llm(image_data, prompt):
     """Send image to the configured LLM backend for vision."""
     api_key, base_url, model = _get_vision_settings()
+    if not api_key:
+        return "Error: No API key configured for vision"
+    if not base_url:
+        return "Error: No base_url configured for vision"
     max_tokens = int(CONFIG['VISION'].get('vision_max_tokens', 150))
     llm_backend = CONFIG['LLM']['llm_backend']
 
@@ -171,7 +175,7 @@ def _describe_llm(image_data, prompt):
         ]}],
         "max_tokens": max_tokens
     }
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=payload, timeout=30)
     response.raise_for_status()
     description = response.json()['choices'][0]['message']['content']
     queue_message(f"Vision: {description}")
@@ -207,7 +211,7 @@ def _describe_openai(image_data, prompt):
         ]}],
         "max_tokens": max_tokens
     }
-    response = requests.post(api_url, headers=headers, json=payload)
+    response = requests.post(api_url, headers=headers, json=payload, timeout=30)
     response.raise_for_status()
     description = response.json()['choices'][0]['message']['content']
     queue_message(f"Vision: {description}")
@@ -216,9 +220,12 @@ def _describe_openai(image_data, prompt):
 
 def _describe_server(image_data, prompt):
     """Send image to external vision server for captioning."""
+    base_url = CONFIG['VISION'].get('base_url', '')
+    if not base_url:
+        return "Error: No base_url configured for server_hosted vision"
     img_bytes = _to_bytes(image_data)
     files = {'image': ('image.jpg', BytesIO(img_bytes), 'image/jpeg')}
-    response = requests.post(f"{CONFIG['VISION']['base_url']}/caption", files=files)
+    response = requests.post(f"{base_url}/caption", files=files, timeout=15)
     if response.status_code == 200:
         return response.json().get("caption", "No caption returned")
     return f"Error: Server returned {response.status_code}"
@@ -251,14 +258,28 @@ def process_image(image_data, prompt="Describe this image in detail.", detection
         return f"Error: {e}"
 
 
-def process_camera_image(user_prompt="Describe what you see.", detection_context=None):
-    """Capture from camera and process with configured vision backend."""
+def capture_camera_base64():
+    """Capture from camera and return base64 string. Returns (b64, None) or (None, error)."""
+    if not CONFIG['VISION'].get('enabled', False):
+        return None, "Error: Vision is not enabled"
     if CameraModule is None:
-        return "Error: Camera module not available"
+        return None, "Error: Camera module not available"
     try:
         camera = CameraModule(1920, 1080)
         image_bytes = camera.capture_bytes()
-        return process_image(image_bytes, user_prompt, detection_context=detection_context)
+        return _to_base64(image_bytes), None
+    except Exception as e:
+        queue_message(f"ERROR: Camera capture failed - {e}")
+        return None, "I tried to look but encountered an error."
+
+
+def process_camera_image(user_prompt="Describe what you see.", detection_context=None):
+    """Capture from camera and process with configured vision backend."""
+    b64, error = capture_camera_base64()
+    if error:
+        return error
+    try:
+        return process_image(b64, user_prompt, detection_context=detection_context)
     except Exception as e:
         queue_message(f"ERROR: Camera vision failed - {e}")
         return "I tried to look but encountered an error."

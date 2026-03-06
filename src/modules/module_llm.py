@@ -512,6 +512,8 @@ def _summarize_search_results(search_results, user_question):
         return None
 
 
+_vision_in_progress = threading.local()
+
 def execute_function_call(func_call, bot_response, user_input):
     function_name = func_call.get("function", "")
     parameters = func_call.get("parameters", {})
@@ -526,56 +528,60 @@ def execute_function_call(func_call, bot_response, user_input):
             # Skip camera capture when user already uploaded a photo
             if "uploaded photo" in user_input.lower() or "sent you a photo" in user_input.lower() or "sent a photo" in user_input.lower():
                 pass
+            elif getattr(_vision_in_progress, 'active', False):
+                queue_message("WARN: Skipping recursive capture_camera_view call")
             elif process_camera_image is None:
                 bot_response["reply"] = "Vision is not available on this device."
             else:
-                query = parameters.get("query", bot_response.get("question", ""))
-                vision_processor = CONFIG['VISION'].get('vision_processor', 'blip')
-
-                # Pull detection context from UI if available
-                detection_context = ""
+                _vision_in_progress.active = True
                 try:
-                    from modules.module_main import ui_manager
-                    if ui_manager and hasattr(ui_manager, 'detection_manager'):
-                        detection_context = ui_manager.detection_manager.get_detection_summary() or ""
-                except Exception:
-                    pass
+                    query = parameters.get("query", bot_response.get("question", ""))
+                    vision_processor = CONFIG['VISION'].get('vision_processor', 'blip')
 
-                # Single-pass for multimodal backends — send image directly to LLM with personality
-                if vision_processor in ("llm", "openai"):
+                    # Pull detection context from UI if available
+                    detection_context = ""
                     try:
-                        from modules.module_vision import CameraModule, _to_base64
-                        camera = CameraModule(1920, 1080)
-                        image_bytes = camera.capture_bytes()
-                        b64 = _to_base64(image_bytes)
-                        prompt = query or "Describe what you see."
-                        if detection_context:
-                            prompt = f"{detection_context}\n\n{prompt}"
-                        reply = get_completion(prompt, image_b64=b64)
-                        if reply:
-                            bot_response["reply"] = reply
+                        from modules.module_main import ui_manager
+                        if ui_manager and hasattr(ui_manager, 'detection_manager'):
+                            detection_context = ui_manager.detection_manager.get_detection_summary() or ""
+                    except Exception:
+                        pass
+
+                    # Single-pass for multimodal backends — send image directly to LLM with personality
+                    if vision_processor in ("llm", "openai"):
+                        from modules.module_vision import capture_camera_base64
+                        b64, capture_err = capture_camera_base64()
+                        if capture_err:
+                            bot_response["reply"] = capture_err
+                        else:
+                            try:
+                                prompt = query or "Describe what you see."
+                                if detection_context:
+                                    prompt = f"{detection_context}\n\n{prompt}"
+                                reply = get_completion(prompt, image_b64=b64)
+                                bot_response["reply"] = reply if reply else "I tried to look but couldn't process the image."
+                            except Exception as e:
+                                queue_message(f"ERROR: Single-pass vision failed: {e}")
+                                bot_response["reply"] = "I tried to look but encountered an error."
+                    else:
+                        # Two-pass for caption-only backends (blip, server_hosted)
+                        description = process_camera_image(query, detection_context=detection_context or None)
+                        if description and not description.startswith("Error:"):
+                            vision_prompt = f"*You looked through your camera and saw: {description}*"
+                            if detection_context:
+                                vision_prompt += f" {detection_context}"
+                            if query:
+                                vision_prompt += f" The user asked: {query}"
+                            try:
+                                reply = get_completion(vision_prompt)
+                                bot_response["reply"] = reply if reply else description
+                            except Exception as e:
+                                queue_message(f"WARN: Vision follow-up LLM call failed: {e}")
+                                bot_response["reply"] = description
                         else:
                             bot_response["reply"] = "I tried to look but couldn't process the image."
-                    except Exception as e:
-                        queue_message(f"ERROR: Single-pass vision failed: {e}")
-                        bot_response["reply"] = "I tried to look but encountered an error."
-                else:
-                    # Two-pass for caption-only backends (blip, server_hosted)
-                    description = process_camera_image(query, detection_context=detection_context or None)
-                    if description and not description.startswith("Error:"):
-                        vision_prompt = f"*You looked through your camera and saw: {description}*"
-                        if detection_context:
-                            vision_prompt += f" {detection_context}"
-                        if query:
-                            vision_prompt += f" The user asked: {query}"
-                        try:
-                            reply = get_completion(vision_prompt)
-                            bot_response["reply"] = reply if reply else description
-                        except Exception as e:
-                            queue_message(f"WARN: Vision follow-up LLM call failed: {e}")
-                            bot_response["reply"] = description
-                    else:
-                        bot_response["reply"] = "I tried to look but couldn't process the image."
+                finally:
+                    _vision_in_progress.active = False
 
         elif function_name == "web_search":
             from modules.module_websearch import search_google
