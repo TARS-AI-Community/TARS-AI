@@ -78,6 +78,8 @@ class EyesApp:
         self.eyes.set_mood(Mood.NEUTRAL)
 
         self._prev_time = time.time()
+        self._last_mouse_move_time = time.time()
+        self._cursor_hidden = False
 
     def reset(self):
         self.eyes.set_mood(Mood.NEUTRAL)
@@ -92,9 +94,19 @@ class EyesApp:
         if _mood_request is not None:
             self.eyes.set_mood(_mood_request)
             _mood_request = None
+
+        if not self._cursor_hidden and (now - self._last_mouse_move_time) >= 2.0:
+            pygame.mouse.set_visible(False)
+            self._cursor_hidden = True
+
         self.eyes.update(dt)
 
     def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self._last_mouse_move_time = time.time()
+            if self._cursor_hidden:
+                pygame.mouse.set_visible(True)
+                self._cursor_hidden = False
         if event.type == pygame.MOUSEBUTTONDOWN:
             x, y = event.pos
             # Exclude bottom toolbar area (6% of screen height) so back button remains usable
@@ -113,4 +125,6 @@ class EyesApp:
         self.eyes.draw(self.screen)
 
     def cleanup(self):
-        pass
+        if self._cursor_hidden:
+            pygame.mouse.set_visible(True)
+            self._cursor_hidden = False
