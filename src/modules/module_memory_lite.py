@@ -269,14 +269,24 @@ class MemoryManagerLite:
             "timestamp": current_time,
             "keywords": keywords
         }
-        # Tag memory with current speaker if speaker ID is active
+        # Tag memory with current speaker and present people via identity coordinator
         try:
-            from modules.module_speaker_id import get_speaker_id_manager
-            sid = get_speaker_id_manager()
-            if sid is not None:
-                speaker = sid.get_current_speaker()
+            from modules.module_identity import get_identity_manager
+            im = get_identity_manager()
+            if im is not None:
+                speaker = im.get_current_speaker()
                 if speaker is not None:
                     document["speaker"] = speaker
+                present = im.get_present_people()
+                if present:
+                    document["present"] = [p["name"] for p in present]
+            else:
+                from modules.module_speaker_id import get_speaker_id_manager
+                sid = get_speaker_id_manager()
+                if sid is not None:
+                    speaker = sid.get_current_speaker()
+                    if speaker is not None:
+                        document["speaker"] = speaker
         except Exception:
             pass
         self.documents.append(document)
