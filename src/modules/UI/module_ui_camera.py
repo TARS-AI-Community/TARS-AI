@@ -41,6 +41,9 @@ class CameraModule:
 
         if self.use_camera_module:
             from picamera2 import Picamera2
+            import logging as _logging
+            _logging.getLogger('picamera2').setLevel(_logging.WARNING)
+            _logging.getLogger('libcamera').setLevel(_logging.WARNING)
 
             try:
                 self.picam2 = Picamera2()

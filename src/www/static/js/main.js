@@ -274,6 +274,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Socket.IO
   const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+  window.socket = socket;
   socket.on('bot_message',    d => displayBotMessage(d.message));
   socket.on('user_message',   d => displayUserMessage(d.message));
   socket.on('talking_state',  d => { avatarIsTalking = d.talking; });
@@ -1362,7 +1363,7 @@ function executeAction() {
       qrOverlay.addEventListener('click', hideQrOverlay);
       qrAutoHide = setTimeout(hideQrOverlay, 8000);
       // Tell the Pi screen to show QR too
-      if (window.socket) socket.emit('show_qr', { url: urlInput.value });
+      if (window.socket) window.socket.emit('show_qr', { url: urlInput.value });
     });
 
     // Button handlers

@@ -169,6 +169,47 @@ def handle_connect():
 def handle_disconnect():
     pass
 
+@socketio.on('show_qr')
+def handle_show_qr(data):
+    """Display QR code on the Pi screen overlay."""
+    url = data.get('url', '') if isinstance(data, dict) else ''
+    if not url:
+        return
+    try:
+        import qrcode, tempfile, os
+        qr = qrcode.QRCode(box_size=10, border=2)
+        qr.add_data(url)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="#c0c0c0", back_color="#000000")
+        tmp = os.path.join(tempfile.gettempdir(), 'tars_qr_overlay.png')
+        img.save(tmp)
+        # Try the OpenGL UI overlay first
+        try:
+            from modules.module_main import ui_manager
+        except ImportError:
+            ui_manager = None
+        if ui_manager and hasattr(ui_manager, 'show_overlay_image'):
+            ui_manager.show_overlay_image(tmp, duration=8)
+        else:
+            # Fallback: display on framebuffer/X11 using feh
+            import subprocess, shutil
+            if shutil.which('feh'):
+                proc = subprocess.Popen(
+                    ['feh', '--fullscreen', '--auto-zoom', '--hide-pointer', tmp],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                def _kill_feh():
+                    import time
+                    time.sleep(8)
+                    proc.terminate()
+                import threading
+                threading.Thread(target=_kill_feh, daemon=True).start()
+                queue_message("[CHATUI] QR displayed via feh fallback")
+            else:
+                queue_message("[CHATUI] No UI manager and feh not installed — cannot display QR on screen")
+    except Exception as e:
+        queue_message(f"[CHATUI] show_qr error: {e}")
+
 @flask_app.route('/')
 def index():
     if WIFI_AVAILABLE and _wifi_manager:
