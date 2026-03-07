@@ -1153,7 +1153,8 @@ class STTManager:
         # Pre-allocate circular buffer to avoid np.concatenate memory fragmentation
         audio_buffer = np.zeros(frames_per_chunk, dtype=np.int16)
 
-        with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
+        try:
+          with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
             # Prime buffer with first full chunk
             data, _ = stream.read(frames_per_chunk)
             audio_buffer[:] = data.flatten()
@@ -1197,6 +1198,10 @@ class STTManager:
                 audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
                 new_data, _ = stream.read(read_frames)
                 audio_buffer[overlap_frames:] = new_data.flatten()
+        except sd.PortAudioError as e:
+            queue_message(f"WARNING: Audio device error in wake word detection, retrying in 2s: {e}")
+            time.sleep(2)
+            return False
 
         # InputStream is now closed — safe to play audio via sd.play
         if wake_detected:
