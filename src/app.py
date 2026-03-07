@@ -217,6 +217,9 @@ for arg in sys.argv[1:]:
             if value.lower() in ["1", "true", "yes", "on"]:
                 debug_mode = True
                 logging.basicConfig(level=logging.DEBUG, force=True)
+                # Suppress noisy third-party loggers
+                for _lib in ('picamera2'):
+                    logging.getLogger(_lib).setLevel(logging.WARNING)
                 queue_message("LOAD: Debug mode enabled")
 
 
