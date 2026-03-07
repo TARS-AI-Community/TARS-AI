@@ -87,6 +87,7 @@ class TerminalSystem:
             self.font = pygame.font.Font("UI/mono.ttf", 20)
             self.font_bold = pygame.font.Font("UI/mono.ttf", 20)
             self.toolbar_font = pygame.font.Font("UI/pixelmix.ttf", 14)
+            self._status_font = pygame.font.Font("UI/pixelmix.ttf", 22)
             self.label_font = pygame.font.Font("UI/mono.ttf", 12)
             self.title_font = pygame.font.Font("UI/mono.ttf", 21)
             self.code_font = pygame.font.Font("UI/mono.ttf", 17)
@@ -94,6 +95,7 @@ class TerminalSystem:
             self.font = pygame.font.SysFont("monospace", 20, bold=False)
             self.font_bold = pygame.font.SysFont("monospace", 20, bold=True)
             self.toolbar_font = pygame.font.SysFont("monospace", 14)
+            self._status_font = pygame.font.SysFont("monospace", 22)
             self.label_font = pygame.font.SysFont("monospace", 12)
             self.title_font = pygame.font.SysFont("monospace", 21)
             self.code_font = pygame.font.SysFont("monospace", 17)
@@ -481,7 +483,7 @@ class TerminalSystem:
         pygame.draw.line(surface, (*self.border_color, 200),
                         (0, bar_y), (self.width, bar_y), 2)
 
-        self._draw_tech_button(surface, self.back_button_rect, "BACK", "BCK-01", active=True)
+        self._draw_tech_button(surface, self.back_button_rect, "<-", "BCK-01", active=True)
 
         status_colors = {
             "STANDBY": self.dim_text_color,
@@ -491,10 +493,19 @@ class TerminalSystem:
         }
         status_color = status_colors.get(self.tars_status, self.dim_text_color)
         status_text = self.tars_status
-        status_surface = self.toolbar_font.render(status_text, True, status_color)
+        status_surface = self._status_font.render(status_text, True, status_color)
         status_x = x + button_width + 15
-        status_rect = status_surface.get_rect(midleft=(status_x, bar_y + self.bottom_toolbar_height // 2))
-        surface.blit(status_surface, status_rect)
+        pad_x, pad_y = 12, 12
+        pill_w = status_surface.get_width() + pad_x * 2
+        pill_h = status_surface.get_height() + pad_y * 2
+        pill_y = bar_y + (self.bottom_toolbar_height - pill_h) // 2
+        pill_rect = pygame.Rect(status_x, pill_y, pill_w, pill_h)
+        pill_bg = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
+        pill_bg.fill((0, 0, 0, 220))
+        pygame.draw.rect(pill_bg, (*status_color, 200), (0, 0, pill_w, pill_h), 2, border_radius=6)
+        surface.blit(pill_bg, pill_rect)
+        text_rect = status_surface.get_rect(center=pill_rect.center)
+        surface.blit(status_surface, text_rect)
 
         right_x = self.width - 10
 
@@ -704,9 +715,32 @@ class TerminalSystem:
             text_color = (80, 80, 80)
         else:
             text_color = self.primary_color if active or color_type == "warning" else self.text_color
-        text_surface = self.toolbar_font.render(label, True, text_color)
-        text_rect = text_surface.get_rect(center=rect.center)
-        surface.blit(text_surface, text_rect)
+
+        if label == "<-":
+            # Draw a proper back arrow instead of text
+            cx, cy = rect.center
+            arrow_w = min(rect.width, rect.height) * 0.4
+            arrow_h = arrow_w * 0.6
+            # Arrow pointing left: tip on the left, shaft on the right
+            tip_x = cx - arrow_w * 0.5
+            shaft_x = cx + arrow_w * 0.5
+            shaft_half = arrow_h * 0.2
+            head_half = arrow_h * 0.5
+            head_end = cx - arrow_w * 0.05
+            points = [
+                (tip_x, cy),                    # tip
+                (head_end, cy - head_half),     # top of arrowhead
+                (head_end, cy - shaft_half),    # top inner notch
+                (shaft_x, cy - shaft_half),     # top right of shaft
+                (shaft_x, cy + shaft_half),     # bottom right of shaft
+                (head_end, cy + shaft_half),    # bottom inner notch
+                (head_end, cy + head_half),     # bottom of arrowhead
+            ]
+            pygame.draw.polygon(surface, text_color, points)
+        else:
+            text_surface = self.toolbar_font.render(label, True, text_color)
+            text_rect = text_surface.get_rect(center=rect.center)
+            surface.blit(text_surface, text_rect)
 
     def _load_wifi_icon(self, path: str):
         try:
@@ -1165,10 +1199,34 @@ class TerminalSystem:
                                        is_active,
                                        button.get("color"))
 
+        # Draw status badge (STANDBY/LISTENING/THINKING/TALKING)
+        status_colors = {
+            "STANDBY": self.dim_text_color,
+            "LISTENING": (0, 200, 255),
+            "THINKING": (255, 180, 0),
+            "TALKING": (0, 255, 100),
+        }
+        s_color = status_colors.get(self.tars_status, self.dim_text_color)
+        s_surface = self._status_font.render(self.tars_status, True, s_color)
+        # Position after bottom buttons
+        last_btn = self.bottom_buttons[-1] if self.bottom_buttons else None
+        s_x = (last_btn["rect"].right + 15) if (last_btn and last_btn["rect"]) else 10
+        s_pad_x, s_pad_y = 12, 12
+        s_pill_w = s_surface.get_width() + s_pad_x * 2
+        s_pill_h = s_surface.get_height() + s_pad_y * 2
+        s_pill_y = bottom_toolbar_y + (self.bottom_toolbar_height - s_pill_h) // 2
+        s_pill_rect = pygame.Rect(s_x, s_pill_y, s_pill_w, s_pill_h)
+        s_pill_bg = pygame.Surface((s_pill_w, s_pill_h), pygame.SRCALPHA)
+        s_pill_bg.fill((0, 0, 0, 220))
+        pygame.draw.rect(s_pill_bg, (*s_color, 200), (0, 0, s_pill_w, s_pill_h), 2, border_radius=6)
+        self.overlay_surface.blit(s_pill_bg, s_pill_rect)
+        s_text_rect = s_surface.get_rect(center=s_pill_rect.center)
+        self.overlay_surface.blit(s_surface, s_text_rect)
+
         if self.cpu_temp_module and self.show_cpu_temp:
             cpu_width = 80
             cpu_height = self.bottom_toolbar_height - 10
-            cpu_x = self.width - cpu_width - 10 
+            cpu_x = self.width - cpu_width - 10
             cpu_y = bottom_toolbar_y + 5
             self._draw_cpu_temp_indicator(self.overlay_surface, cpu_x, cpu_y,
                                           cpu_width, cpu_height)

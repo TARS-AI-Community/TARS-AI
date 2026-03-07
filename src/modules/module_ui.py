@@ -805,6 +805,10 @@ class UIManager(threading.Thread):
                         self.screensaver_manager.check_timeout()
 
                 if self.app_manager and self.app_manager.is_active():
+                    # Keep terminal data updated (cpu temp, battery, etc.) even during apps
+                    if self.terminal_system:
+                        self.terminal_system.update()
+
                     needs_flip = self.app_manager.render()
 
                     if needs_flip:
