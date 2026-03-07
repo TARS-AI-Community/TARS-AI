@@ -252,17 +252,24 @@ document.addEventListener('DOMContentLoaded', function () {
     const f = this.files[0];
     if (!f) return;
     selectedImageFile = f;
+    if (voiceActive) {
+      // In voice mode, send image instantly
+      sendMessage();
+      return;
+    }
     const reader = new FileReader();
     reader.onload = e => {
       $('imagePreview').src = e.target.result;
       $('imagePreviewContainer').style.display = 'block';
     };
     reader.readAsDataURL(f);
+    updateMicSendButton();
   });
   $('removeImageButton').addEventListener('click', () => {
     selectedImageFile = null;
     $('imagePreviewContainer').style.display = 'none';
     $('imagePreview').src = '';
+    updateMicSendButton();
   });
 
   // Socket.IO
@@ -299,7 +306,6 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   const prompt   = $('prompt');
-  const sendBtn  = $('button-addon2');
 
   function sendMessage() {
     const txt = prompt.value.trim();
@@ -310,11 +316,11 @@ document.addEventListener('DOMContentLoaded', function () {
     selectedImageFile = null;
     $('imagePreviewContainer').style.display = 'none';
     $('imagePreview').src = '';
+    updateMicSendButton();
     // show typing indicator after 1s
     setTimeout(() => displayBotMessage('', true), 1000);
   }
 
-  if (sendBtn) sendBtn.addEventListener('click', sendMessage);
   if (prompt)  prompt.addEventListener('keyup', e => { if (e.key === 'Enter') sendMessage(); });
 
   function sendUserMessage(message, file) {
@@ -389,6 +395,179 @@ document.addEventListener('DOMContentLoaded', function () {
       localStorage.setItem('avatarHidden', avatarHeader.classList.contains('collapsed') ? '1' : '0');
     });
   }
+
+  // ── MIC / SEND TOGGLE + VOICE MODE ─────────────────────────────────────────
+  const voiceModeBtn = $('voiceModeButton');
+  const voiceOverlay = $('voiceOverlay');
+  const inputPill    = document.querySelector('.input-pill');
+  const voiceCanvas  = $('voiceWaveform');
+  const voiceStatus  = $('voiceStatus');
+
+  let voiceActive = false;
+  let recognition = null;
+  let voiceAnimFrame = null;
+  let voiceAnimLevel = 0;
+  let isSendMode = false;
+
+  // Check browser support for SpeechRecognition
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  // Toggle mic icon ↔ send icon based on text input
+  function updateMicSendButton() {
+    if (!voiceModeBtn || !prompt || voiceActive) return;
+    const hasText = prompt.value.trim().length > 0 || selectedImageFile;
+    if (hasText && !isSendMode) {
+      isSendMode = true;
+      voiceModeBtn.querySelector('i').className = 'bi bi-send-fill';
+      voiceModeBtn.classList.add('send-mode');
+      voiceModeBtn.setAttribute('aria-label', 'Send');
+    } else if (!hasText && isSendMode) {
+      isSendMode = false;
+      voiceModeBtn.querySelector('i').className = 'bi bi-mic-fill';
+      voiceModeBtn.classList.remove('send-mode');
+      voiceModeBtn.setAttribute('aria-label', 'Voice mode');
+    }
+  }
+
+  if (prompt) {
+    prompt.addEventListener('input', updateMicSendButton);
+  }
+
+  if (voiceModeBtn) {
+    voiceModeBtn.addEventListener('click', () => {
+      if (isSendMode) {
+        sendMessage();
+      } else if (voiceActive) {
+        stopVoiceMode();
+      } else {
+        startVoiceMode();
+      }
+    });
+  }
+
+  function startVoiceMode() {
+    if (!SpeechRecognition) {
+      if (window.showToast) showToast('Speech recognition not supported in this browser. Use Chrome or Edge.', 'error');
+      return;
+    }
+
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = function(event) {
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      // Animate waveform when hearing speech
+      if (interimTranscript) {
+        voiceAnimLevel = 1.0;
+      }
+
+      // When we get a final result, submit it as a chat message
+      if (finalTranscript.trim()) {
+        const text = finalTranscript.trim();
+        displayUserMessage(text);
+        sendUserMessage(text);
+        // Show typing indicator
+        setTimeout(() => displayBotMessage('', true), 500);
+        // Reset status after a moment
+        setTimeout(() => { if (voiceActive) voiceStatus.textContent = 'Listening...'; }, 1500);
+      }
+    };
+
+    recognition.onerror = function(event) {
+      console.error('Speech recognition error:', event.error);
+      if (event.error === 'not-allowed') {
+        if (window.showToast) showToast('Microphone access denied', 'error');
+        stopVoiceMode();
+        return;
+      }
+      // For transient errors (network, no-speech), keep listening
+      voiceStatus.textContent = 'Error: ' + event.error;
+      setTimeout(() => { if (voiceActive) voiceStatus.textContent = 'Listening...'; }, 2000);
+    };
+
+    recognition.onend = function() {
+      // Auto-restart if voice mode is still active (browser stops after silence)
+      if (voiceActive && recognition) {
+        try { recognition.start(); } catch(e) { /* already started */ }
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch(e) {
+      console.error('Failed to start speech recognition:', e);
+      return;
+    }
+
+    voiceActive = true;
+    voiceOverlay.style.display = 'flex';
+    inputPill.classList.add('voice-active');
+    voiceModeBtn.classList.add('voice-active');
+    voiceModeBtn.querySelector('i').className = 'bi bi-stop-circle-fill';
+    voiceModeBtn.setAttribute('aria-label', 'Stop voice');
+    voiceStatus.textContent = 'Listening...';
+
+    drawVoiceWaveform();
+  }
+
+  function stopVoiceMode() {
+    voiceActive = false;
+
+    if (recognition) { recognition.abort(); recognition = null; }
+    if (voiceAnimFrame) { cancelAnimationFrame(voiceAnimFrame); voiceAnimFrame = null; }
+
+    voiceModeBtn.classList.remove('voice-active');
+    voiceModeBtn.classList.remove('send-mode');
+    voiceModeBtn.querySelector('i').className = 'bi bi-mic-fill';
+    voiceModeBtn.setAttribute('aria-label', 'Voice mode');
+    voiceOverlay.style.display = 'none';
+    inputPill.classList.remove('voice-active');
+    isSendMode = false;
+    updateMicSendButton();
+    voiceStatus.textContent = 'Listening...';
+  }
+
+  function drawVoiceWaveform() {
+    if (!voiceActive) return;
+    voiceCanvas.width = voiceCanvas.clientWidth;
+    voiceCanvas.height = voiceCanvas.clientHeight;
+    const ctx = voiceCanvas.getContext('2d');
+    const w = voiceCanvas.width;
+    const h = voiceCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Animated pulse based on activity
+    voiceAnimLevel *= 0.92;
+    const barCount = 40;
+    const barWidth = (w / barCount) * 0.7;
+    const gap = (w / barCount) * 0.3;
+
+    ctx.fillStyle = '#00ced1';
+    for (let i = 0; i < barCount; i++) {
+      const wave = Math.sin(Date.now() / 200 + i * 0.3) * 0.5 + 0.5;
+      const level = 0.05 + voiceAnimLevel * wave * 0.95;
+      const barH = Math.max(2, level * (h - 4));
+      const x = i * (barWidth + gap);
+      const y = (h - barH) / 2;
+      ctx.fillRect(x, y, barWidth, barH);
+    }
+
+    voiceAnimFrame = requestAnimationFrame(drawVoiceWaveform);
+  }
+
 });
 
 
