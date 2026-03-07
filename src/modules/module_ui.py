@@ -752,7 +752,12 @@ class UIManager(threading.Thread):
                         if not self.show_app and self.terminal_system:
                             self.terminal_system.handle_mouse_up()
                     elif event.type == pygame.MOUSEMOTION:
-                        if not self.show_app:
+                        if self.show_app:
+                            if self.app_manager and self.app_manager.is_active():
+                                logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
+                                app_event = pygame.event.Event(pygame.MOUSEMOTION, pos=logical_pos)
+                                self.app_manager.handle_event(app_event)
+                        else:
                             if self.screensaver_manager:
                                 self.screensaver_manager.reset_timer()
                     elif event.type == pygame.MOUSEWHEEL:
