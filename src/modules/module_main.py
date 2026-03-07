@@ -143,19 +143,23 @@ def utterance_callback(message):
     - message (str): The recognized message from the Speech-to-Text (STT) module.
     """
     try:
+        import modules.module_speed as speed
+        speed.mark_utterance_start()
+        speed.start('total')
+
         # Deactivate screensaver when user speaks
         if ui_manager:
             ui_manager.deactivate_screensaver()
-        
+
         # Parse the user message
         message_dict = json.loads(message)
         if not message_dict.get('text'):  # Handles cases where text is "" or missing
             #queue_message(f"TARS: Going Idle...")
             return
-        
+
         # Strip any special characters/control characters from user text
         user_text = message_dict['text'].strip()
-        
+
         ui_manager.update_data("USER", user_text, "USER")
 
         if "shutdown pc" in user_text.lower():
@@ -167,10 +171,12 @@ def utterance_callback(message):
 
         # Check if preemptive LLM already fired during silence detection
         preemptive = message_dict.get("preemptive_llm_result")
+        speed.start('llm_total')
         if preemptive is not None:
             parsed = preemptive
         else:
             parsed = process_completion(user_text)
+        llm_total_dur = speed.stop('llm_total')
 
         # If a movement happened during the LLM call, discard the result
         if stt_manager and stt_manager.is_cancelled():
@@ -218,6 +224,7 @@ def utterance_callback(message):
             return
 
         # Detect emotion
+        speed.start('emotion')
         emotion = None
         if CONFIG['EMOTION']['enabled'] and reply:
             emotion = detect_emotion(reply)
@@ -227,6 +234,7 @@ def utterance_callback(message):
                     update_emotion(emotion)
                 except Exception:
                     pass
+        emo_dur = speed.stop('emotion')
 
         character_name = CONFIG['CHAR']['character_name']
         ui_manager.update_data(character_name, reply, "TARS")
@@ -239,7 +247,9 @@ def utterance_callback(message):
         if stt_manager:
             stt_manager.start_bargein_monitor(tts_text=reply)
 
+        speed.start('tts')
         was_interrupted = asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
+        tts_dur = speed.stop('tts')
 
         # Stop barge-in monitoring
         if stt_manager:
@@ -267,6 +277,30 @@ def utterance_callback(message):
             f"end={'barge-in' if was_interrupted else 'timeout'}",
         ]
         queue_message(f"ROUND: {' | '.join(parts)}")
+
+        # Speed profiling summary
+        total_dur = speed.stop('total')
+        if speed.enabled:
+            sp = []
+            llm_timings = parsed.get('_timings', {}) if isinstance(parsed, dict) else {}
+            if llm_timings:
+                id_t = llm_timings.get('prompt_identity', 0)
+                mem_t = llm_timings.get('prompt_memory', 0)
+                prompt_t = llm_timings.get('prompt_build', 0)
+                prompt_other = prompt_t - id_t - mem_t
+                sp.append(f"identity({speed.fmt(id_t)})")
+                sp.append(f"memory({speed.fmt(mem_t)})")
+                if prompt_other > 0.001:
+                    sp.append(f"prompt_other({speed.fmt(prompt_other)})")
+                sp.append(f"llm_wait({speed.fmt(llm_timings.get('llm_first_byte', 0))})")
+                sp.append(f"llm_stream({speed.fmt(llm_timings.get('llm_stream', 0))})")
+                sp.append(f"llm_parse({speed.fmt(llm_timings.get('parse', 0))})")
+            else:
+                sp.append(f"llm_total({speed.fmt(llm_total_dur)})")
+            sp.append(f"emotion({speed.fmt(emo_dur)})")
+            sp.append(f"tts({speed.fmt(tts_dur)})")
+            sp.append(f"total({speed.fmt(total_dur)})")
+            queue_message(f"SPEED: {', '.join(sp)}")
 
     except json.JSONDecodeError:
         queue_message("ERROR: Invalid JSON format. Could not process user message.")

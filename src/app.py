@@ -202,11 +202,22 @@ logging.getLogger('bm25s').setLevel(logging.WARNING)
 
 # === Command Line Arguments ===
 show_ui = True
+debug_mode = False
 for arg in sys.argv[1:]:
     if "=" in arg:
         key, value = arg.split("=", 1)
         if key == "show_ui":
             show_ui = value.lower() in ["1", "true", "yes", "on"]
+        elif key == "speed":
+            import modules.module_speed as _speed
+            _speed.enabled = value.lower() in ["1", "true", "yes", "on"]
+            if _speed.enabled:
+                queue_message("LOAD: Speed profiling enabled")
+        elif key == "debug":
+            if value.lower() in ["1", "true", "yes", "on"]:
+                debug_mode = True
+                logging.basicConfig(level=logging.DEBUG, force=True)
+                queue_message("LOAD: Debug mode enabled")
 
 
 # === Helper Functions ===
@@ -297,6 +308,8 @@ if __name__ == "__main__":
         shutdown_event=shutdown_event,
         ui_manager=ui_manager
     )
+    if debug_mode:
+        stt_manager.DEBUG = True
     stt_manager.set_wake_word_callback(wake_word_callback)
     stt_manager.set_utterance_callback(utterance_callback)
     stt_manager.set_post_utterance_callback(post_utterance_callback)

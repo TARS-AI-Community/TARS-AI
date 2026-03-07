@@ -20,6 +20,7 @@ import requests
 import threading
 import json
 import re
+import time
 import concurrent.futures
 import random
 import asyncio
@@ -82,7 +83,6 @@ def get_completion(user_prompt, istext=True, image_b64=None, source="voice"):
 
                 thinking_thread = threading.Thread(target=play_thinking, daemon=True)
                 thinking_thread.start()
-                import time
                 time.sleep(0.1)
     except Exception as e:
         pass
@@ -226,12 +226,15 @@ def process_completion(prompt):
                             queue_message(f"ERROR: Failed to play thinking response: {e}")
                     thinking_thread = threading.Thread(target=play_thinking, daemon=True)
                     thinking_thread.start()
-                    import time
                     time.sleep(0.1)
         except Exception:
             pass
 
+        import modules.module_speed as speed
+        _t0 = time.perf_counter()
         built_prompt = build_prompt(prompt, character_manager, memory_manager, CONFIG, debug=False)
+        _t_prompt = time.perf_counter()
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
@@ -241,6 +244,7 @@ def process_completion(prompt):
 
         response = requests.post(url, headers=headers, json=data, stream=True)
         response.raise_for_status()
+        _t_first_byte = time.perf_counter()
 
         full_content = ""
         try:
@@ -261,6 +265,7 @@ def process_completion(prompt):
                     continue
         except Exception:
             pass
+        _t_llm_done = time.perf_counter()
 
         if not full_content.strip():
             try:
@@ -270,7 +275,25 @@ def process_completion(prompt):
         else:
             bot_reply = full_content.strip()
 
-        return llm_parse_response(bot_reply)
+        result = llm_parse_response(bot_reply)
+        _t_parse = time.perf_counter()
+
+        if isinstance(result, dict) and speed.enabled:
+            # Pull sub-timings from prompt builder
+            try:
+                from modules.module_prompt import _last_prompt_timings
+                pt = _last_prompt_timings
+            except Exception:
+                pt = {}
+            result['_timings'] = {
+                'prompt_build': _t_prompt - _t0,
+                'prompt_identity': pt.get('identity', 0),
+                'prompt_memory': pt.get('memory', 0),
+                'llm_first_byte': _t_first_byte - _t_prompt,
+                'llm_stream': _t_llm_done - _t_first_byte,
+                'parse': _t_parse - _t_llm_done,
+            }
+        return result
 
     future = executor.submit(_get_parsed, prompt)
     return future.result()
@@ -520,6 +543,8 @@ _vision_in_progress = threading.local()
 def execute_function_call(func_call, bot_response, user_input, source="voice"):
     function_name = func_call.get("function", "")
     parameters = func_call.get("parameters", {})
+    import modules.module_speed as speed
+    speed.start('tool')
 
     try:
         if function_name == "execute_movement" and CONFIG["CONTROLS"]["voicemovement"]:
@@ -1025,6 +1050,8 @@ def execute_function_call(func_call, bot_response, user_input, source="voice"):
 
     except Exception as e:
         queue_message(f"Function execution failed for {function_name}: {e}")
+
+    speed.log_tool(function_name, speed.stop('tool'))
 
 def raw_complete_llm(user_prompt, istext=True):
     headers = {

@@ -12,6 +12,7 @@ Handles TTS functionality to convert text into audio using:
 
 import requests
 import os
+import time
 import threading
 from datetime import datetime
 import numpy as np
@@ -28,6 +29,7 @@ CONFIG = load_config()
 # Barge-in: TTS cancellation event (thread-safe)
 _tts_cancel_event = threading.Event()
 _tts_playing = threading.Event()  # Set while sd.play() is actively outputting audio
+
 
 def stop_tts_playback():
     """Signal TTS to stop immediately. Safe to call from any thread."""
@@ -250,6 +252,10 @@ async def play_audio_chunks(text, config, is_wakeword=False):
 
                 sd.play(data, samplerate)
                 _tts_playing.set()
+
+                # Log time-to-first-audio on the first chunk
+                import modules.module_speed as speed
+                speed.mark_first_audio()
 
                 # Poll instead of sd.wait() so we can check for barge-in
                 while True:

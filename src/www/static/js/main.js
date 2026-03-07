@@ -1308,12 +1308,24 @@ function executeAction() {
       });
     }
 
-    // Copy
+    // Copy (with fallback for Android/non-HTTPS contexts)
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(urlInput.value).then(() => {
+      const text = urlInput.value;
+      function onSuccess() {
         copyBtn.innerHTML = '<i class="bi bi-check"></i>';
         setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1500);
-      });
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+          urlInput.select();
+          document.execCommand('copy');
+          onSuccess();
+        });
+      } else {
+        urlInput.select();
+        document.execCommand('copy');
+        onSuccess();
+      }
     });
 
     // Button handlers

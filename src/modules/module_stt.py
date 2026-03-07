@@ -716,9 +716,13 @@ class STTManager:
                 queue_message(f"WARNING: Unknown STT processor '{processor}', falling back to FastRTC")
                 transcribe_fn = self._transcribe_with_fastrtc
 
+            import modules.module_speed as speed
+            speed.start('stt')
             result = transcribe_fn()
+            stt_dur = speed.stop('stt')
 
             # Submit audio to Speaker ID for passive identification
+            speed.start('speaker_id')
             if result and self._last_audio_float32 is not None:
                 try:
                     from modules.module_speaker_id import get_speaker_id_manager
@@ -727,6 +731,10 @@ class STTManager:
                         sid.submit_audio(self._last_audio_float32, 16000)
                 except Exception:
                     pass
+            sid_dur = speed.stop('speaker_id')
+
+            if result:
+                speed.log(f"stt:{processor}({speed.fmt(stt_dur)}), speaker_id({speed.fmt(sid_dur)})")
 
             if self.post_utterance_callback and result:
                 self.post_utterance_callback()

@@ -68,7 +68,13 @@ async def text_to_speech_with_pipelining_piper(text):
     # Split text into smaller chunks
     # Split at sentence boundaries and commas for faster first-chunk playback
     chunks = re.split(r'(?<=[.!?;])\s+|,\s+', text)
-    chunks = [c.strip() for c in chunks if len(c.strip()) >= 3]
+
+    #chunks = [c.strip() for c in chunks if len(c.strip()) >= 3]
+    #fix for missing "hi" or "hey"
+    chunks = [c.strip() for c in chunks if c.strip()]
+    # If splitting produced nothing (e.g. short text like "Hi"), use original text
+    if not chunks and text.strip():
+        chunks = [text.strip()]
 
     # Yield each audio chunk as soon as it's ready
     for chunk in chunks:
