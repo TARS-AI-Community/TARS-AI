@@ -174,7 +174,14 @@ def _get_active_user_name(config_user_name: str) -> str:
     return config_user_name
 
 
+# Speed profiling data from the last build_prompt call (read by module_llm)
+_last_prompt_timings = {}
+
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
+    global _last_prompt_timings
+    import modules.module_speed as speed
+    speed.start('prompt_build')
+
     from modules.module_config import reload_persona_settings
     fresh_traits = reload_persona_settings()
     if fresh_traits:
@@ -591,12 +598,20 @@ Response: {{"question": "Make me a picture of a sunset over the ocean", "reply":
 Current Date: {now.strftime('%m/%d/%Y')}
 Current Time: {now.strftime('%H:%M:%S')}
 {location_line}
-{_get_speaker_context()}
 """
+    # Identity / speaker context (voice ID + face recognition)
+    speed.start('identity')
+    speaker_ctx = _get_speaker_context()
+    id_dur = speed.stop('identity')
+    if speaker_ctx:
+        base_prompt += f"\n{speaker_ctx}"
 
+    # Memory retrieval (long-term + short-term + examples)
+    speed.start('memory')
     final_prompt = append_memory_and_examples(
         base_prompt, user_prompt, memory_manager, config, character_manager
     )
+    mem_dur = speed.stop('memory')
 
     if debug:
         queue_message(f"DEBUG PROMPT:\n{final_prompt}")
@@ -609,6 +624,13 @@ Current Time: {now.strftime('%H:%M:%S')}
             f.write(clean_text(final_prompt))
     except Exception as e:
         queue_message(f"[PROMPT DUMP] Failed to write prompt: {e}")
+
+    total_dur = speed.stop('prompt_build')
+    _last_prompt_timings = {
+        'identity': id_dur,
+        'memory': mem_dur,
+        'total': total_dur,
+    }
 
     return clean_text(final_prompt)
 

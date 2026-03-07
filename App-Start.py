@@ -462,14 +462,18 @@ def stop_tars_ai():
     subprocess.Popen("killall xterm", shell=True)
     subprocess.Popen("pkill -f 'python app.py'", shell=True)
 
+def _extra_args():
+    """Collect extra key=value CLI args (e.g. speed=true debug=true) to forward to app.py."""
+    return " ".join(a for a in sys.argv[1:] if "=" in a)
+
 def run_tars_ai_fullscreen():
-    command = "cd src && source .venv/bin/activate && python app.py show_ui=true"
+    extra = _extra_args()
+    command = f"cd src && source .venv/bin/activate && python app.py show_ui=true {extra}"
     subprocess.run(command, shell=True, executable="/bin/bash")
 
 def run_tars_ai_normal():
-    command = (
-        "cd src && source .venv/bin/activate && python app.py show_ui=false"
-    )
+    extra = _extra_args()
+    command = f"cd src && source .venv/bin/activate && python app.py show_ui=false {extra}"
     subprocess.run(command, shell=True, executable="/bin/bash")
 
 def draw_corner_brackets(surface, rect, color, size=20, thickness=2):

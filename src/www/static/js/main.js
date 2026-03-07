@@ -407,6 +407,9 @@ document.addEventListener('DOMContentLoaded', function () {
   let recognition = null;
   let voiceAnimFrame = null;
   let voiceAnimLevel = 0;
+  let voiceDebounceTimer = null;
+  let voicePendingTranscript = '';
+  let voiceLastSent = '';
   let isSendMode = false;
 
   // Check browser support for SpeechRecognition
@@ -474,15 +477,23 @@ document.addEventListener('DOMContentLoaded', function () {
         voiceAnimLevel = 1.0;
       }
 
-      // When we get a final result, submit it as a chat message
+      // When we get a final result, debounce before sending.
+      // On Android Chrome, each final result is cumulative (contains all words so far),
+      // so we replace rather than accumulate to avoid word duplication.
       if (finalTranscript.trim()) {
-        const text = finalTranscript.trim();
-        displayUserMessage(text);
-        sendUserMessage(text);
-        // Show typing indicator
-        setTimeout(() => displayBotMessage('', true), 500);
-        // Reset status after a moment
-        setTimeout(() => { if (voiceActive) voiceStatus.textContent = 'Listening...'; }, 1500);
+        voicePendingTranscript = finalTranscript.trim();
+        if (voiceDebounceTimer) clearTimeout(voiceDebounceTimer);
+        voiceDebounceTimer = setTimeout(() => {
+          const text = voicePendingTranscript.trim();
+          voicePendingTranscript = '';
+          if (text && text !== voiceLastSent) {
+            voiceLastSent = text;
+            displayUserMessage(text);
+            sendUserMessage(text);
+            setTimeout(() => displayBotMessage('', true), 500);
+            setTimeout(() => { if (voiceActive) voiceStatus.textContent = 'Listening...'; }, 1500);
+          }
+        }, 600);
       }
     };
 
@@ -525,6 +536,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function stopVoiceMode() {
     voiceActive = false;
+    if (voiceDebounceTimer) { clearTimeout(voiceDebounceTimer); voiceDebounceTimer = null; }
+    voicePendingTranscript = '';
+    voiceLastSent = '';
 
     if (recognition) { recognition.abort(); recognition = null; }
     if (voiceAnimFrame) { cancelAnimationFrame(voiceAnimFrame); voiceAnimFrame = null; }
@@ -1294,12 +1308,24 @@ function executeAction() {
       });
     }
 
-    // Copy
+    // Copy (with fallback for Android/non-HTTPS contexts)
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(urlInput.value).then(() => {
+      const text = urlInput.value;
+      function onSuccess() {
         copyBtn.innerHTML = '<i class="bi bi-check"></i>';
         setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1500);
-      });
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+          urlInput.select();
+          document.execCommand('copy');
+          onSuccess();
+        });
+      } else {
+        urlInput.select();
+        document.execCommand('copy');
+        onSuccess();
+      }
     });
 
     // Button handlers

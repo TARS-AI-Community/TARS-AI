@@ -7,4 +7,4 @@ source "$DIR/src/.venv/bin/activate"
 PYTHON_BIN="$(readlink -f "$(which python3)")"
 sudo setcap 'cap_net_bind_service=+ep' "$PYTHON_BIN" 2>/dev/null
 
-python "$DIR/App-Start.py"
+python "$DIR/App-Start.py" "$@"
