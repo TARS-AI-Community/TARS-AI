@@ -701,6 +701,10 @@ CONFIG_METADATA = {
             'options': ['silero', 'fastrtc', 'openai', 'external', 'sherpa-onnx'],
             'description': 'After TARS hears the wake word, this is the software that converts your actual speech into text. Think of it as the "ears" of TARS. "fastrtc" sends your audio to the cloud for fast, accurate transcription (recommended if you have internet). "silero" runs on your Pi with no internet needed (Pi5 recommended). "openai" uses OpenAI\'s Whisper service (best for non-English languages, needs API key and internet). "external" lets you point to your own speech-to-text server running elsewhere. "sherpa-onnx" uses SenseVoiceTiny for fast offline multilingual transcription (Pi5/Pi4).'
         },
+        'external_url': {
+            'depends_on': [{'field': 'stt_processor', 'values': ['external']}],
+            'description': 'If you set stt_processor to "external", put the web address of your speech-to-text server here. This is for advanced users who run their own Whisper or other STT server on a separate machine. If you are not using "external" mode, this setting is ignored. Format: http://IP-ADDRESS:PORT'
+        },
         'wake_word_processor': {
             'label': 'Wake Word Engine',
             'options': ['atomik', 'fastrtc', 'sherpa-onnx'],
@@ -717,10 +721,6 @@ CONFIG_METADATA = {
         'sensitivity': {
             'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],
             'description': 'How carefully TARS listens for the wake word (only works with the "atomik" wake word processor). Scale of 1 to 10. At 1, TARS triggers very easily - even similar-sounding words might activate it (annoying but you will never miss a command). At 10, you need to say the wake word very clearly and precisely for it to work (fewer accidental activations but you might have to repeat yourself). Start at 5 and adjust from there. If TARS keeps activating randomly, increase this number. If TARS never hears you, decrease it.'
-        },
-        'external_url': {
-            'depends_on': [{'field': 'stt_processor', 'values': ['external']}],
-            'description': 'If you set stt_processor to "external", put the web address of your speech-to-text server here. This is for advanced users who run their own Whisper or other STT server on a separate machine. If you are not using "external" mode, this setting is ignored. Format: http://IP-ADDRESS:PORT'
         },
         'enable_bargein': {
             'description': 'When ON, you can interrupt TARS while it is talking by speaking over it. TARS listens to the mic during playback and detects if you are saying something. When OFF, TARS will always finish its full response before listening again.'
