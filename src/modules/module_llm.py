@@ -544,6 +544,9 @@ _vision_in_progress = threading.local()
 def execute_function_call(func_call, bot_response, user_input, source="voice", has_image=False):
     function_name = func_call.get("function", "")
     parameters = func_call.get("parameters", {})
+    debug = CONFIG.get('debug_mode', False)
+    if debug:
+        queue_message(f"DEBUG: {function_name} | params: {parameters}")
     import modules.module_speed as speed
     speed.start('tool')
 
@@ -578,6 +581,8 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
 
                     # Single-pass for multimodal backends — send image directly to LLM with personality
                     if vision_processor in ("llm", "openai"):
+                        if debug:
+                            queue_message(f"DEBUG VISION: Single-pass (camera image sent directly to LLM)")
                         from modules.module_vision import capture_camera_base64
                         b64, capture_err = capture_camera_base64()
                         if capture_err:
@@ -594,6 +599,8 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
                                 bot_response["reply"] = "I tried to look but encountered an error."
                     else:
                         # Two-pass for caption-only backends (blip, server_hosted)
+                        if debug:
+                            queue_message(f"DEBUG VISION: Two-pass (caption via {vision_processor}, then LLM)")
                         description = process_camera_image(query, detection_context=detection_context or None)
                         if description and not description.startswith("Error:"):
                             vision_prompt = f"*You looked through your camera and saw: {description}*"
@@ -1052,6 +1059,8 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
     except Exception as e:
         queue_message(f"Function execution failed for {function_name}: {e}")
 
+    if debug:
+        queue_message(f"DEBUG: {function_name} | reply after: {bot_response.get('reply', '')[:300]}")
     speed.log_tool(function_name, speed.stop('tool'))
 
 def raw_complete_llm(user_prompt, istext=True):

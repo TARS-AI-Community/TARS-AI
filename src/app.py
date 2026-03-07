@@ -216,6 +216,7 @@ for arg in sys.argv[1:]:
         elif key == "debug":
             if value.lower() in ["1", "true", "yes", "on"]:
                 debug_mode = True
+                CONFIG['debug_mode'] = True
                 logging.basicConfig(level=logging.DEBUG, force=True)
                 # Suppress noisy picamera2 debug spam
                 logging.getLogger('picamera2').setLevel(logging.WARNING)

@@ -402,6 +402,8 @@ def _process_chat_message(msg, img_b64):
             vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
             if vision_mode in ('llm', 'openai'):
+                if CONFIG.get('debug_mode', False):
+                    queue_message("DEBUG: Single-pass upload (image sent directly to LLM with prompt)")
                 prompt = msg or "The user sent you a photo. Describe what you see and respond in character."
                 reply = get_completion(prompt, image_b64=img_b64, source="webui")
             else:
@@ -414,6 +416,8 @@ def _process_chat_message(msg, img_b64):
                 else:
                     caption = "Image uploaded (vision module not available)"
 
+                if CONFIG.get('debug_mode', False):
+                    queue_message(f"DEBUG: Two-pass upload (caption via {vision_mode}, then LLM)")
                 if msg:
                     cmessage = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
                 else:
