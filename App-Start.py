@@ -72,7 +72,7 @@ def check_for_updates():
         
     except subprocess.TimeoutExpired:
         return None, []
-    except Exception:
+    except Exception as e:
         return None, []
 
 
@@ -271,6 +271,7 @@ class TerminalScroll:
         
         random.shuffle(self.messages)
         
+        start_y = height - (self.max_lines * self.line_height)
         for i in range(self.max_lines):
             self.lines.append({
                 'text': '',
@@ -447,7 +448,7 @@ def load_config():
         if config.has_option('UI', 'font_size'):
             font_size = config.getint('UI', 'font_size')
 
-        print("Launching Main App")
+        print(f"Launching Main App")
 
     except Exception as e:
         print(f"[CONFIG] Error reading config file: {e}")
@@ -566,6 +567,7 @@ def create_touch_menu():
 
     BLACK = (0, 0, 0)
     DARK_GRAY = (15, 15, 15)
+    GRAY = (50, 50, 50)
     LIGHT_GRAY = (100, 100, 100)
     WHITE = (255, 255, 255)
     CYAN = (0, 200, 255)
@@ -944,6 +946,7 @@ def create_touch_menu():
                 scroll_rect = scroll_text.get_rect(center=(surf_width // 2, list_top + list_height + 12))
                 draw_surface.blit(scroll_text, scroll_rect)
             
+            install_color = GREEN if popup_install_hover else DARK_CYAN
             install_bg = GREEN if popup_button_pressed == 'install' else (DARK_GRAY if not popup_install_hover else (30, 50, 30))
             pygame.draw.rect(draw_surface, install_bg, popup_install_btn)
             pygame.draw.rect(draw_surface, GREEN, popup_install_btn, 2)

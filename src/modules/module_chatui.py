@@ -26,13 +26,10 @@ Requirements:
 
 import os
 import threading, time, math, random, io
+from PIL import Image
 import logging
 import json
 import asyncio
-from collections import OrderedDict
-import base64
-from io import BytesIO
-from PIL import Image, UnidentifiedImageError
 
 from flask import (
     Flask,
@@ -43,6 +40,13 @@ from flask import (
 )
 from flask_cors import CORS
 from flask_socketio import SocketIO
+import re
+import asyncio
+import threading
+from collections import OrderedDict
+import base64
+from io import BytesIO
+from PIL import Image, UnidentifiedImageError
 
 
 # === Custom Modules ===
@@ -53,7 +57,7 @@ from modules.module_tts import generate_tts_audio
 from modules.module_llm import detect_emotion
 from modules.module_messageQue import queue_message
 from modules.module_servoctl import *
-from modules.module_movement_registry import LEGS_ONLY, HAS_ARMS, MOVEMENTS
+from modules.module_movement_registry import get_names, get_names_by_type, LEGS_ONLY, HAS_ARMS, MOVEMENTS
 
 # Vision is optional — only available if enabled and dependencies are installed
 try:
@@ -151,7 +155,7 @@ def apply_breathing(base_img, t):
     return new_img
 
 def animation_loop():
-    global is_blinking, next_blink_time, blink_end_time, current_frame
+    global is_talking, is_blinking, next_blink_time, blink_end_time, current_frame
     start_time = time.time()
     while True:
         now = time.time()
@@ -367,8 +371,10 @@ def receive_user_message():
         buffer.seek(0)
 
         base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
 
         try:
+            raw_image = Image.open(buffer).convert('RGB')
             if VISION_AVAILABLE:
                 caption = get_image_caption_from_base64(base64_image)
             else:
@@ -410,10 +416,11 @@ def upload():
         img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
         socketio.emit('user_message', {'message': img_html})
 
-        # Validate the image format before captioning
+        # Optionally, for further processing like getting a caption
         try:
-            buffer.seek(0)
-            Image.open(buffer).convert('RGB')
+            buffer.seek(0)  # Reset buffer position to the beginning
+            raw_image = Image.open(buffer).convert('RGB')
+            # Proceed with processing the image, like getting a caption
             caption = "Image processed successfully"
         except UnidentifiedImageError as e:
             queue_message(f"Failed to open the image: {e}")
@@ -738,6 +745,8 @@ def move_arms_endpoint():
     - Increasing values: Main → Forearm → Hand
     - Decreasing values: Hand → Forearm → Main
     """
+    global previous_arm_positions
+    
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
     
