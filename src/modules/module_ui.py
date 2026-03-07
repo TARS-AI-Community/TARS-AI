@@ -785,6 +785,8 @@ class UIManager(threading.Thread):
                             original_surface.blit(self._overlay_image, (0, 0))
                         else:
                             self._overlay_image = None
+
+                if _show_overlay:
                     if self.effective_rotate != 0:
                         rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
                         self._render_surface_to_opengl(rotated_surface, texture_id)
