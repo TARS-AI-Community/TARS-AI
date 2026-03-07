@@ -34,6 +34,7 @@ import asyncio
 import base64
 import collections
 import configparser
+import contextlib
 import gc
 import hashlib
 import json
@@ -46,6 +47,7 @@ import sys
 import time
 import traceback
 import uuid
+import warnings
 import wave
 from datetime import datetime
 from io import BytesIO
@@ -81,6 +83,18 @@ logging.basicConfig(
     ],
 )
 log = logging.getLogger("tars-server")
+
+# Silence noisy third-party libraries — keep only WARNING+ from them
+for _lib in (
+    "transformers", "diffusers", "huggingface_hub", "sentence_transformers",
+    "filelock", "urllib3", "httpx", "torch", "ctranslate2",
+):
+    logging.getLogger(_lib).setLevel(logging.WARNING)
+
+# Suppress Python deprecation / future warnings from ML libraries
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # ---------------------------------------------------------------------------
 # GPU / Device helpers
@@ -275,10 +289,13 @@ class STTService:
 
     def _load_vad(self):
         try:
-            model, utils = torch.hub.load(
-                "snakers4/silero-vad", "silero_vad",
-                trust_repo=True, verbose=False,
-            )
+            with open(os.devnull, "w") as _devnull, \
+                 contextlib.redirect_stdout(_devnull), \
+                 contextlib.redirect_stderr(_devnull):
+                model, utils = torch.hub.load(
+                    "snakers4/silero-vad", "silero_vad",
+                    trust_repo=True, verbose=False,
+                )
             self._vad_model = model
             self._vad_utils = utils
             log.info("Silero VAD loaded for speech pre-filtering")
@@ -891,10 +908,12 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 @keyframes nd1{0%{transform:translate(0,0) scale(1);opacity:.6}25%{transform:translate(10vw,12vh) scale(1.2);opacity:.8}50%{transform:translate(18vw,5vh) scale(.95);opacity:.5}75%{transform:translate(5vw,-8vh) scale(1.1);opacity:.7}100%{transform:translate(0,0) scale(1);opacity:.6}}
 @keyframes nd2{0%{transform:translate(0,0) scale(1);opacity:.5}25%{transform:translate(-12vw,-6vh) scale(1.15);opacity:.7}50%{transform:translate(-8vw,10vh) scale(.9);opacity:.6}75%{transform:translate(5vw,8vh) scale(1.1);opacity:.4}100%{transform:translate(0,0) scale(1);opacity:.5}}
 @keyframes nd3{0%{transform:translate(0,0) scale(1);opacity:.5}25%{transform:translate(-8vw,-10vh) scale(1.1);opacity:.7}50%{transform:translate(10vw,-5vh) scale(1.2);opacity:.6}75%{transform:translate(15vw,8vh) scale(.95);opacity:.8}100%{transform:translate(0,0) scale(1);opacity:.5}}
-.wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:24px 20px 40px}
-.top-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--panel-solid);backdrop-filter:blur(28px) saturate(1.4);border:1px solid rgba(0,229,255,0.25);border-radius:var(--radius);margin-bottom:20px;box-shadow:0 12px 48px rgba(0,0,0,0.3),0 4px 12px rgba(0,0,0,0.15)}
-.top-bar h1{font-family:var(--font-hud);font-size:18px;font-weight:900;letter-spacing:.2em;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.top-bar .meta{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:12px}
+.wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:28px 32px 40px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:960px){.grid-2{grid-template-columns:1fr}.wrap{padding:20px 16px 32px}}
+.top-bar{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:var(--panel-solid);backdrop-filter:blur(28px) saturate(1.4);border:1px solid rgba(0,229,255,0.25);border-radius:var(--radius);margin-bottom:20px;box-shadow:0 12px 48px rgba(0,0,0,0.3),0 4px 12px rgba(0,0,0,0.15)}
+.top-bar h1{font-family:var(--font-hud);font-size:20px;font-weight:900;letter-spacing:.2em;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.top-bar .meta{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:14px}
 .live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.4s ease-in-out infinite;flex-shrink:0}
 .live-dot.off{background:var(--red);box-shadow:0 0 8px var(--red);animation:none}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
@@ -903,19 +922,19 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .glass>*{position:relative;z-index:1}
 h2{font-family:var(--font-hud);font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);margin-bottom:12px}
 table{width:100%;border-collapse:collapse}
-th,td{text-align:left;padding:8px 12px;font-size:12px}
-th{font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border)}
+th,td{text-align:left;padding:10px 14px;font-size:13px}
+th{font-family:var(--font-hud);font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border)}
 td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
-.svc-name{font-family:var(--font-hud);font-weight:700;font-size:11px;letter-spacing:.1em}
-.status-ready{color:var(--green);font-size:11px}
+.svc-name{font-family:var(--font-hud);font-weight:700;font-size:12px;letter-spacing:.1em}
+.status-ready{color:var(--green);font-size:12px}
 .status-ready::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);margin-right:6px;vertical-align:middle}
 .bar-bg{background:rgba(0,229,255,0.06);border:1px solid var(--border);border-radius:6px;height:26px;position:relative;overflow:hidden}
 .bar-fg{height:100%;border-radius:5px;transition:width .5s cubic-bezier(.4,0,.2,1);position:relative}
 .bar-fg::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);animation:shimmer 2s ease-in-out infinite}
 @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 .bar-label{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-hud);font-size:10px;letter-spacing:.1em;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,0.5)}
-.log-area{max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(0,229,255,0.2) transparent}
-.log-entry{font-size:11px;color:var(--text-dim);padding:3px 0;border-bottom:1px solid rgba(0,229,255,0.04);display:flex;gap:8px}
+.log-area{max-height:320px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(0,229,255,0.2) transparent}
+.log-entry{font-size:12px;color:var(--text-dim);padding:5px 0;border-bottom:1px solid rgba(0,229,255,0.04);display:flex;gap:10px}
 .log-entry .le-time{color:rgba(0,229,255,0.4);min-width:60px}
 .log-entry .le-method{color:var(--purple);min-width:36px;font-weight:700}
 .log-entry .le-path{color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -937,24 +956,26 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
   <div class="meta"><span class="live-dot" id="connDot"></span><span>{{GPU_NAME}}</span><span id="uptime">--</span></div>
 </div>
 <div id="vram-section"></div>
-<div class="glass">
-  <h2>Active Services</h2>
-  <table><thead><tr><th>Service</th><th>Status</th><th>Model</th><th>Avg Latency</th></tr></thead>
-  <tbody id="svc-table"><tr><td colspan="4" style="color:var(--text-dim)">Connecting...</td></tr></tbody></table>
-</div>
-<div class="glass">
-  <h2>Remote Access</h2>
-  <div id="tunnel-panel">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span id="tunnel-status" style="font-size:12px;color:var(--text-dim)">Checking...</span>
-      <button class="hud-btn-sm" id="tunnel-btn" onclick="toggleTunnel()">Open Tunnel</button>
-    </div>
-    <div id="tunnel-url" style="display:none;margin-top:12px">
+<div class="grid-2">
+  <div class="glass">
+    <h2>Active Services</h2>
+    <table><thead><tr><th>Service</th><th>Status</th><th>Model</th><th>Avg Latency</th></tr></thead>
+    <tbody id="svc-table"><tr><td colspan="4" style="color:var(--text-dim)">Connecting...</td></tr></tbody></table>
+  </div>
+  <div class="glass">
+    <h2>Remote Access</h2>
+    <div id="tunnel-panel">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <a id="tunnel-link" href="#" target="_blank" style="font-family:var(--font-mono);font-size:12px;color:var(--cyan);word-break:break-all"></a>
-        <button class="hud-btn-sm" onclick="copyTunnelUrl()">Copy</button>
+        <span id="tunnel-status" style="font-size:13px;color:var(--text-dim)">Checking...</span>
+        <button class="hud-btn-sm" id="tunnel-btn" onclick="toggleTunnel()">Open Tunnel</button>
       </div>
-      <div style="margin-top:10px;text-align:center"><img id="tunnel-qr" style="max-width:200px;border-radius:var(--radius-sm);border:1px solid var(--border);display:none"></div>
+      <div id="tunnel-url" style="display:none;margin-top:14px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <a id="tunnel-link" href="#" target="_blank" style="font-family:var(--font-mono);font-size:13px;color:var(--cyan);word-break:break-all"></a>
+          <button class="hud-btn-sm" onclick="copyTunnelUrl()">Copy</button>
+        </div>
+        <div style="margin-top:12px;text-align:center"><img id="tunnel-qr" style="max-width:200px;border-radius:var(--radius-sm);border:1px solid var(--border);display:none"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -966,7 +987,6 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
   <a href="/playground">Playground</a>
   <a href="/docs">API Docs</a>
   <a href="/ui">Settings</a>
-  <a href="/health">Health JSON</a>
 </div>
 </div>
 <script>
@@ -1435,46 +1455,74 @@ async def config_reload():
 import subprocess as _sp
 import shutil
 import re as _re
+import platform as _platform
 
 _tunnel_process = None
 _tunnel_url = None
 _tunnel_error = None
 _tunnel_lock = Lock()
+_CLOUDFLARED_DIR = Path(__file__).parent / "bin"
 
 
 def _cloudflared_bin():
-    return shutil.which("cloudflared")
+    """Return path to cloudflared binary — checks system PATH then local download."""
+    found = shutil.which("cloudflared")
+    if found:
+        return found
+    _CLOUDFLARED_DIR.mkdir(exist_ok=True)
+    local = _CLOUDFLARED_DIR / ("cloudflared.exe" if sys.platform == "win32" else "cloudflared")
+    if local.exists():
+        return str(local)
+    return None
 
 
 def _install_cloudflared():
-    try:
-        r = _sp.run(["bash", "-c",
-            "curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null && "
-            'echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list && '
-            "sudo apt-get update -qq && sudo apt-get install -y -qq cloudflared"
-        ], capture_output=True, text=True, timeout=120)
-        if r.returncode == 0 and _cloudflared_bin():
-            return True, ""
-    except Exception:
-        pass
-    try:
-        import platform
-        arch = platform.machine()
+    """Download cloudflared binary for the current platform (cross-platform)."""
+    import urllib.request
+
+    _CLOUDFLARED_DIR.mkdir(exist_ok=True)
+    base_url = "https://github.com/cloudflare/cloudflared/releases/latest/download/"
+    arch = _platform.machine().lower()
+
+    if sys.platform == "win32":
+        filename = "cloudflared-windows-amd64.exe"
+        local_name = "cloudflared.exe"
+    elif sys.platform == "darwin":
+        suffix = "arm64" if arch in ("arm64", "aarch64") else "amd64"
+        filename = f"cloudflared-darwin-{suffix}.tgz"
+        local_name = "cloudflared"
+    else:
         if arch in ("aarch64", "arm64"):
-            deb = "cloudflared-linux-arm64.deb"
+            filename = "cloudflared-linux-arm64"
         elif arch in ("armv7l", "armhf"):
-            deb = "cloudflared-linux-arm.deb"
+            filename = "cloudflared-linux-arm"
         else:
-            deb = "cloudflared-linux-amd64.deb"
-        url = f"https://github.com/cloudflare/cloudflared/releases/latest/download/{deb}"
-        r = _sp.run(["bash", "-c", f"curl -fsSL -o /tmp/cloudflared.deb {url} && sudo dpkg -i /tmp/cloudflared.deb && rm /tmp/cloudflared.deb"],
-                     capture_output=True, text=True, timeout=60)
-        if r.returncode == 0 and _cloudflared_bin():
-            return True, ""
-        return False, r.stderr.strip() or "Download failed"
-    except _sp.TimeoutExpired:
-        return False, "Download timed out"
+            filename = "cloudflared-linux-amd64"
+        local_name = "cloudflared"
+
+    dest = _CLOUDFLARED_DIR / local_name
+    url = base_url + filename
+    try:
+        log.info(f"Downloading cloudflared: {filename} ...")
+        urllib.request.urlretrieve(url, str(dest))
+
+        # macOS tgz needs extraction
+        if filename.endswith(".tgz"):
+            import tarfile
+            with tarfile.open(str(dest), "r:gz") as tar:
+                tar.extractall(path=str(_CLOUDFLARED_DIR))
+            dest.unlink()
+            dest = _CLOUDFLARED_DIR / "cloudflared"
+
+        if sys.platform != "win32":
+            os.chmod(str(dest), 0o755)
+
+        log.info(f"cloudflared installed to {dest}")
+        return True, ""
     except Exception as e:
+        log.error(f"Failed to install cloudflared: {e}")
+        if dest.exists():
+            dest.unlink()
         return False, str(e)
 
 
@@ -1488,9 +1536,13 @@ def _start_tunnel(port: int):
         if not bin_path:
             return False, "cloudflared not installed"
         try:
+            popen_kwargs = {}
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = _sp.CREATE_NO_WINDOW
             proc = _sp.Popen(
                 [bin_path, "tunnel", "--url", f"http://localhost:{port}"],
                 stdout=_sp.PIPE, stderr=_sp.PIPE, text=True,
+                **popen_kwargs,
             )
         except Exception as e:
             return False, str(e)
@@ -1601,7 +1653,7 @@ async def tunnel_qr(url: str = ""):
     try:
         import qrcode
     except ImportError:
-        raise HTTPException(500, "qrcode package not installed (pip install qrcode[pil])")
+        raise HTTPException(500, "qrcode not installed — pip install qrcode[pil]")
     buf = BytesIO()
     qr = qrcode.QRCode(box_size=10, border=2)
     qr.add_data(url)
@@ -1639,13 +1691,14 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 @keyframes nd1{0%{transform:translate(0,0) scale(1);opacity:.6}25%{transform:translate(10vw,12vh) scale(1.2);opacity:.8}50%{transform:translate(18vw,5vh) scale(.95);opacity:.5}75%{transform:translate(5vw,-8vh) scale(1.1);opacity:.7}100%{transform:translate(0,0) scale(1);opacity:.6}}
 @keyframes nd2{0%{transform:translate(0,0) scale(1);opacity:.5}25%{transform:translate(-12vw,-6vh) scale(1.15);opacity:.7}50%{transform:translate(-8vw,10vh) scale(.9);opacity:.6}75%{transform:translate(5vw,8vh) scale(1.1);opacity:.4}100%{transform:translate(0,0) scale(1);opacity:.5}}
 @keyframes nd3{0%{transform:translate(0,0) scale(1);opacity:.5}25%{transform:translate(-8vw,-10vh) scale(1.1);opacity:.7}50%{transform:translate(10vw,-5vh) scale(1.2);opacity:.6}75%{transform:translate(15vw,8vh) scale(.95);opacity:.8}100%{transform:translate(0,0) scale(1);opacity:.5}}
-.wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:24px 20px 40px}
-.top-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--panel-solid);backdrop-filter:blur(28px) saturate(1.4);border:1px solid rgba(0,229,255,0.25);border-radius:var(--radius);margin-bottom:20px;box-shadow:0 12px 48px rgba(0,0,0,0.3),0 4px 12px rgba(0,0,0,0.15)}
-.top-bar h1{font-family:var(--font-hud);font-size:18px;font-weight:900;letter-spacing:.2em;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.top-bar a{font-family:var(--font-hud);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);text-decoration:none;opacity:.6;transition:opacity .2s}
+.wrap{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:28px 32px 40px}
+@media(max-width:900px){.wrap{padding:20px 16px 32px}}
+.top-bar{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:var(--panel-solid);backdrop-filter:blur(28px) saturate(1.4);border:1px solid rgba(0,229,255,0.25);border-radius:var(--radius);margin-bottom:20px;box-shadow:0 12px 48px rgba(0,0,0,0.3),0 4px 12px rgba(0,0,0,0.15)}
+.top-bar h1{font-family:var(--font-hud);font-size:20px;font-weight:900;letter-spacing:.2em;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.top-bar a{font-family:var(--font-hud);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);text-decoration:none;opacity:.6;transition:opacity .2s}
 .top-bar a:hover{opacity:1}
-.key-bar{display:flex;gap:8px;align-items:center;margin-bottom:16px}
-.key-bar span{font-family:var(--font-hud);font-size:10px;letter-spacing:.1em;color:var(--text-dim);text-transform:uppercase}
+.key-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px}
+.key-bar span{font-family:var(--font-hud);font-size:11px;letter-spacing:.1em;color:var(--text-dim);text-transform:uppercase}
 .key-bar input{flex:1;max-width:320px;padding:8px 12px;background:rgba(0,229,255,0.04);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;transition:border-color .2s}
 .key-bar input:focus{border-color:var(--border-hi)}
 .glass{position:relative;background:var(--panel);backdrop-filter:blur(22px) saturate(1.3);border:1px solid rgba(0,229,255,0.2);border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.1);padding:18px 20px;margin-bottom:16px}
@@ -1657,19 +1710,19 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .tab.active{color:var(--cyan);background:rgba(0,229,255,0.08);box-shadow:inset 0 -2px 0 var(--cyan);text-shadow:0 0 12px rgba(0,229,255,0.4)}
 .panel{display:none}
 .panel.active{display:block}
-textarea,input[type=text],select{width:100%;padding:10px 14px;background:rgba(0,229,255,0.04);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:12px;margin:6px 0;outline:none;transition:border-color .2s}
-textarea{height:90px;resize:vertical}
+textarea,input[type=text],select{width:100%;padding:12px 16px;background:rgba(0,229,255,0.04);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:13px;margin:6px 0;outline:none;transition:border-color .2s}
+textarea{height:110px;resize:vertical}
 textarea:focus,input[type=text]:focus,select:focus{border-color:var(--border-hi);box-shadow:0 0 12px rgba(0,229,255,0.08)}
 select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2300e5ff'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
 select option{background:var(--bg2);color:var(--text)}
-label{font-family:var(--font-hud);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);display:block;margin-top:10px}
-.hud-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:var(--radius-sm);font-family:var(--font-hud);font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:all .25s;border:1px solid rgba(0,229,255,0.3);background:rgba(0,229,255,0.06);color:var(--cyan);text-shadow:0 0 8px rgba(0,229,255,0.2);margin:6px 4px 6px 0;backdrop-filter:blur(12px)}
+label{font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);display:block;margin-top:10px}
+.hud-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;border-radius:var(--radius-sm);font-family:var(--font-hud);font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:all .25s;border:1px solid rgba(0,229,255,0.3);background:rgba(0,229,255,0.06);color:var(--cyan);text-shadow:0 0 8px rgba(0,229,255,0.2);margin:6px 4px 6px 0;backdrop-filter:blur(12px)}
 .hud-btn:hover{background:rgba(0,229,255,0.12);border-color:var(--border-hi);box-shadow:0 0 20px rgba(0,229,255,0.15);text-shadow:0 0 12px rgba(0,229,255,0.5)}
 .hud-btn.danger{border-color:rgba(255,68,68,0.3);color:var(--red);background:rgba(255,68,68,0.06);text-shadow:0 0 8px rgba(255,68,68,0.2)}
 .hud-btn.danger:hover{background:rgba(255,68,68,0.12);border-color:rgba(255,68,68,0.5);box-shadow:0 0 20px rgba(255,68,68,0.15)}
 .hud-btn.recording{border-color:rgba(255,68,68,0.6);color:var(--red);background:rgba(255,68,68,0.1);animation:recPulse 1s ease-in-out infinite}
 @keyframes recPulse{0%,100%{box-shadow:0 0 8px rgba(255,68,68,0.2)}50%{box-shadow:0 0 20px rgba(255,68,68,0.5)}}
-.output{background:rgba(0,0,0,0.3);border:1px solid rgba(0,229,255,0.1);border-radius:var(--radius-sm);padding:14px 16px;margin-top:12px;min-height:100px;max-height:400px;overflow-y:auto;font-size:12px;color:var(--text-dim);scrollbar-width:thin;scrollbar-color:rgba(0,229,255,0.2) transparent;white-space:pre-wrap}
+.output{background:rgba(0,0,0,0.3);border:1px solid rgba(0,229,255,0.1);border-radius:var(--radius-sm);padding:16px 18px;margin-top:12px;min-height:140px;max-height:500px;overflow-y:auto;font-size:13px;color:var(--text-dim);scrollbar-width:thin;scrollbar-color:rgba(0,229,255,0.2) transparent;white-space:pre-wrap}
 .msg{margin:6px 0;padding:8px 12px;border-radius:var(--radius-sm);line-height:1.5}
 .msg.user{background:rgba(0,229,255,0.06);border-left:2px solid var(--cyan);color:var(--cyan)}
 .msg.assistant{background:rgba(180,77,255,0.06);border-left:2px solid var(--purple);color:var(--text)}
@@ -1891,32 +1944,34 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 @keyframes nd1{0%{transform:translate(0,0) scale(1);opacity:.6}25%{transform:translate(10vw,12vh) scale(1.2);opacity:.8}50%{transform:translate(18vw,5vh) scale(.95);opacity:.5}75%{transform:translate(5vw,-8vh) scale(1.1);opacity:.7}100%{transform:translate(0,0) scale(1);opacity:.6}}
 @keyframes nd2{0%{transform:translate(0,0) scale(1);opacity:.5}25%{transform:translate(-12vw,-6vh) scale(1.15);opacity:.7}50%{transform:translate(-8vw,10vh) scale(.9);opacity:.6}75%{transform:translate(5vw,8vh) scale(1.1);opacity:.4}100%{transform:translate(0,0) scale(1);opacity:.5}}
 @keyframes nd3{0%{transform:translate(0,0) scale(1);opacity:.5}25%{transform:translate(-8vw,-10vh) scale(1.1);opacity:.7}50%{transform:translate(10vw,-5vh) scale(1.2);opacity:.6}75%{transform:translate(15vw,8vh) scale(.95);opacity:.8}100%{transform:translate(0,0) scale(1);opacity:.5}}
-.wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:24px 20px 40px}
-.top-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--panel-solid);backdrop-filter:blur(28px) saturate(1.4);border:1px solid rgba(0,229,255,0.25);border-radius:var(--radius);margin-bottom:20px;box-shadow:0 12px 48px rgba(0,0,0,0.3),0 4px 12px rgba(0,0,0,0.15)}
-.top-bar h1{font-family:var(--font-hud);font-size:18px;font-weight:900;letter-spacing:.2em;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.top-bar a{font-family:var(--font-hud);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);text-decoration:none;opacity:.6;transition:opacity .2s}
+.wrap{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:28px 32px 40px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:960px){.grid-2{grid-template-columns:1fr}.wrap{padding:20px 16px 32px}}
+.top-bar{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:var(--panel-solid);backdrop-filter:blur(28px) saturate(1.4);border:1px solid rgba(0,229,255,0.25);border-radius:var(--radius);margin-bottom:20px;box-shadow:0 12px 48px rgba(0,0,0,0.3),0 4px 12px rgba(0,0,0,0.15)}
+.top-bar h1{font-family:var(--font-hud);font-size:20px;font-weight:900;letter-spacing:.2em;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.top-bar a{font-family:var(--font-hud);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);text-decoration:none;opacity:.6;transition:opacity .2s}
 .top-bar a:hover{opacity:1}
-.glass{position:relative;background:var(--panel);backdrop-filter:blur(22px) saturate(1.3);border:1px solid rgba(0,229,255,0.2);border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.1);padding:18px 20px;margin-bottom:16px}
+.glass{position:relative;background:var(--panel);backdrop-filter:blur(22px) saturate(1.3);border:1px solid rgba(0,229,255,0.2);border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.1);padding:20px 24px;margin-bottom:16px}
 .glass::before{content:'';position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,0.09) 0%,rgba(255,255,255,0.03) 40%,transparent 60%,rgba(0,229,255,0.04) 100%);pointer-events:none;z-index:0}
 .glass>*{position:relative;z-index:1}
-h2{font-family:var(--font-hud);font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);margin-bottom:12px}
-.form-row{display:flex;align-items:center;gap:12px;margin:8px 0;flex-wrap:wrap}
-.form-row label{font-family:var(--font-hud);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);min-width:150px;flex-shrink:0}
-input[type=text],input[type=number],input[type=password],select{padding:8px 12px;background:rgba(0,229,255,0.04);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;transition:border-color .2s}
+h2{font-family:var(--font-hud);font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);margin-bottom:14px}
+.form-row{display:flex;align-items:center;gap:14px;margin:10px 0;flex-wrap:wrap}
+.form-row label{font-family:var(--font-hud);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);min-width:160px;flex-shrink:0}
+input[type=text],input[type=number],input[type=password],select{padding:10px 14px;background:rgba(0,229,255,0.04);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:13px;outline:none;transition:border-color .2s}
 input[type=text]:focus,input[type=number]:focus,input[type=password]:focus,select:focus{border-color:var(--border-hi);box-shadow:0 0 12px rgba(0,229,255,0.08)}
-input[type=text],input[type=password]{flex:1;max-width:400px}
-input[type=number]{width:100px}
-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2300e5ff'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px;min-width:120px}
+input[type=text],input[type=password]{flex:1;max-width:500px}
+input[type=number]{width:120px}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2300e5ff'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:30px;min-width:140px}
 select option{background:var(--bg2);color:var(--text)}
-input[type=checkbox]{appearance:none;width:18px;height:18px;border:1px solid var(--border);border-radius:4px;background:rgba(0,229,255,0.04);cursor:pointer;position:relative;flex-shrink:0}
+input[type=checkbox]{appearance:none;width:20px;height:20px;border:1px solid var(--border);border-radius:4px;background:rgba(0,229,255,0.04);cursor:pointer;position:relative;flex-shrink:0}
 input[type=checkbox]:checked{background:rgba(0,229,255,0.15);border-color:var(--cyan)}
-input[type=checkbox]:checked::after{content:'\2713';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--cyan);font-size:13px;font-weight:700}
+input[type=checkbox]:checked::after{content:'\2713';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--cyan);font-size:14px;font-weight:700}
 table{width:100%;border-collapse:collapse}
-th,td{text-align:left;padding:8px 12px;font-size:12px}
-th{font-family:var(--font-hud);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border)}
+th,td{text-align:left;padding:10px 14px;font-size:13px}
+th{font-family:var(--font-hud);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border)}
 td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
-.svc-name{font-family:var(--font-hud);font-weight:700;font-size:11px;letter-spacing:.1em}
-.hud-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:var(--radius-sm);font-family:var(--font-hud);font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:all .25s;border:1px solid rgba(0,229,255,0.3);background:rgba(0,229,255,0.06);color:var(--cyan);text-shadow:0 0 8px rgba(0,229,255,0.2);backdrop-filter:blur(12px)}
+.svc-name{font-family:var(--font-hud);font-weight:700;font-size:12px;letter-spacing:.1em}
+.hud-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;border-radius:var(--radius-sm);font-family:var(--font-hud);font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:all .25s;border:1px solid rgba(0,229,255,0.3);background:rgba(0,229,255,0.06);color:var(--cyan);text-shadow:0 0 8px rgba(0,229,255,0.2);backdrop-filter:blur(12px)}
 .hud-btn:hover{background:rgba(0,229,255,0.12);border-color:var(--border-hi);box-shadow:0 0 20px rgba(0,229,255,0.15)}
 .hud-btn-sm{display:inline-flex;align-items:center;padding:6px 14px;border-radius:var(--radius-sm);font-family:var(--font-hud);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:all .25s;border:1px solid rgba(0,229,255,0.3);background:rgba(0,229,255,0.06);color:var(--cyan);backdrop-filter:blur(8px)}
 .hud-btn-sm:hover{background:rgba(0,229,255,0.12);border-color:var(--border-hi)}
@@ -1980,55 +2035,55 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
   </table>
 </div>
 
-<!-- Server -->
-<div class="glass">
-  <h2>Server</h2>
-  <div class="form-row"><label>Host</label><input type="text" id="s-host"></div>
-  <div class="form-row"><label>Port</label><input type="number" id="s-port"></div>
-</div>
-
-<!-- STT Config -->
-<div class="glass">
-  <h2>STT Configuration</h2>
-  <div class="form-row"><label>Whisper Model</label><select id="s-stt-model"><option>tiny</option><option>base</option><option>small</option><option>medium</option><option>large-v2</option><option>large-v3</option></select></div>
-  <div class="form-row"><label>Compute Type</label><select id="s-stt-compute"><option>auto</option><option>float16</option><option>int8</option><option>int8_float16</option><option>float32</option></select></div>
-  <div class="form-row"><label>VAD Pre-filter</label><input type="checkbox" id="s-stt-vad"></div>
-</div>
-
-<!-- LLM Config -->
-<div class="glass">
-  <h2>LLM Configuration</h2>
-  <div class="form-row"><label>Model</label><input type="text" id="s-llm-model" style="max-width:500px"></div>
-  <div class="form-row"><label>dtype</label><select id="s-llm-dtype"><option>auto</option><option>float16</option><option>bfloat16</option><option>float32</option></select></div>
-  <div class="form-row"><label>KV Cache Sessions</label><input type="number" id="s-llm-kvs"></div>
-  <div class="form-row"><label>KV Cache TTL (sec)</label><input type="number" id="s-llm-kvt"></div>
-</div>
-
-<!-- TTS Config -->
-<div class="glass">
-  <h2>TTS Configuration</h2>
-  <div class="form-row"><label>Voices Directory</label><input type="text" id="s-tts-dir" placeholder="empty = default"></div>
-  <div class="form-row"><label>Cache Size</label><input type="number" id="s-tts-cache"></div>
-</div>
-
-<!-- Vision Config -->
-<div class="glass">
-  <h2>Vision Configuration</h2>
-  <div class="form-row"><label>BLIP Model</label><input type="text" id="s-vision-model" style="max-width:500px"></div>
-</div>
-
-<!-- ImageGen Config -->
-<div class="glass">
-  <h2>ImageGen Configuration</h2>
-  <div class="form-row"><label>Diffusers Model</label><input type="text" id="s-imagegen-model" style="max-width:500px"></div>
-  <div class="form-row"><label>Default Steps</label><input type="number" id="s-imagegen-steps"></div>
-  <div class="form-row"><label>Default CFG</label><input type="number" id="s-imagegen-cfg" step="0.1"></div>
-</div>
-
-<!-- Embeddings Config -->
-<div class="glass">
-  <h2>Embeddings Configuration</h2>
-  <div class="form-row"><label>Model</label><input type="text" id="s-embeddings-model" style="max-width:500px"></div>
+<div class="grid-2">
+  <div>
+    <!-- Server -->
+    <div class="glass">
+      <h2>Server</h2>
+      <div class="form-row"><label>Host</label><input type="text" id="s-host"></div>
+      <div class="form-row"><label>Port</label><input type="number" id="s-port"></div>
+    </div>
+    <!-- STT Config -->
+    <div class="glass">
+      <h2>STT Configuration</h2>
+      <div class="form-row"><label>Whisper Model</label><select id="s-stt-model"><option>tiny</option><option>base</option><option>small</option><option>medium</option><option>large-v2</option><option>large-v3</option></select></div>
+      <div class="form-row"><label>Compute Type</label><select id="s-stt-compute"><option>auto</option><option>float16</option><option>int8</option><option>int8_float16</option><option>float32</option></select></div>
+      <div class="form-row"><label>VAD Pre-filter</label><input type="checkbox" id="s-stt-vad"></div>
+    </div>
+    <!-- LLM Config -->
+    <div class="glass">
+      <h2>LLM Configuration</h2>
+      <div class="form-row"><label>Model</label><input type="text" id="s-llm-model"></div>
+      <div class="form-row"><label>dtype</label><select id="s-llm-dtype"><option>auto</option><option>float16</option><option>bfloat16</option><option>float32</option></select></div>
+      <div class="form-row"><label>KV Cache Sessions</label><input type="number" id="s-llm-kvs"></div>
+      <div class="form-row"><label>KV Cache TTL (sec)</label><input type="number" id="s-llm-kvt"></div>
+    </div>
+  </div>
+  <div>
+    <!-- TTS Config -->
+    <div class="glass">
+      <h2>TTS Configuration</h2>
+      <div class="form-row"><label>Voices Directory</label><input type="text" id="s-tts-dir" placeholder="empty = default"></div>
+      <div class="form-row"><label>Cache Size</label><input type="number" id="s-tts-cache"></div>
+    </div>
+    <!-- Vision Config -->
+    <div class="glass">
+      <h2>Vision Configuration</h2>
+      <div class="form-row"><label>BLIP Model</label><input type="text" id="s-vision-model"></div>
+    </div>
+    <!-- ImageGen Config -->
+    <div class="glass">
+      <h2>ImageGen Configuration</h2>
+      <div class="form-row"><label>Diffusers Model</label><input type="text" id="s-imagegen-model"></div>
+      <div class="form-row"><label>Default Steps</label><input type="number" id="s-imagegen-steps"></div>
+      <div class="form-row"><label>Default CFG</label><input type="number" id="s-imagegen-cfg" step="0.1"></div>
+    </div>
+    <!-- Embeddings Config -->
+    <div class="glass">
+      <h2>Embeddings Configuration</h2>
+      <div class="form-row"><label>Model</label><input type="text" id="s-embeddings-model"></div>
+    </div>
+  </div>
 </div>
 
 <!-- Save -->
@@ -2157,14 +2212,15 @@ checkTunnel();
 # CLI + Startup
 # ===================================================================
 BANNER = r"""
- _____ _   ___  ___       ___ ___
-|_   _/_\ | _ \/ __|     / __| _ \__ _____ _ _
-  | |/ _ \|   /\__ \ __ | (__|   /\ V / -_) '_|
-  |_/_/ \_\_|_\|___/    / \___|_|_\ \_/\___|_|
-                       /
-  Companion Server v2.0
+ ████████╗ █████╗ ██████╗ ███████╗
+ ╚══██╔══╝██╔══██╗██╔══██╗██╔════╝
+    ██║   ███████║██████╔╝███████╗
+    ██║   ██╔══██║██╔══██╗╚════██║
+    ██║   ██║  ██║██║  ██║███████║
+    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
+   [ TARS-AI SERVER MODULE  v2.0 ]
+=====================================
 """
-
 
 def parse_args():
     cfg = load_config()
