@@ -274,6 +274,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Socket.IO
   const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+  window.socket = socket;
   socket.on('bot_message',    d => displayBotMessage(d.message));
   socket.on('user_message',   d => displayUserMessage(d.message));
   socket.on('talking_state',  d => { avatarIsTalking = d.talking; });
@@ -540,7 +541,7 @@ document.addEventListener('DOMContentLoaded', function () {
     voicePendingTranscript = '';
     voiceLastSent = '';
 
-    if (recognition) { recognition.abort(); recognition = null; }
+    if (recognition) { recognition.onend = null; recognition.onerror = null; recognition.onresult = null; recognition.abort(); recognition = null; }
     if (voiceAnimFrame) { cancelAnimationFrame(voiceAnimFrame); voiceAnimFrame = null; }
 
     voiceModeBtn.classList.remove('voice-active');
@@ -1011,7 +1012,7 @@ function executeAction() {
 </div></div>
 <div class="col-md-6 col-lg-4" id="tunUrlCol" style="display:none"><div class="field-wrapper">
 <label class="form-label d-flex align-items-center gap-1"><span>remote_url</span><span class="config-tooltip-wrap" data-tip="Your public URL for accessing TARS from anywhere."><i class="bi bi-info-circle config-tooltip-icon"></i></span></label>
-<div class="input-group input-group-sm"><input type="text" class="form-control form-control-sm config-input" id="tunUrl" readonly><button class="btn btn-outline-secondary" type="button" id="tunCopyBtn" title="Copy URL"><i class="bi bi-clipboard"></i></button></div>
+<div class="d-flex gap-1 align-items-stretch"><button class="btn btn-sm tun-btn" type="button" id="tunCopyBtn" title="Copy URL"><i class="bi bi-clipboard"></i></button><input type="text" class="form-control form-control-sm config-input flex-grow-1" id="tunUrl" readonly style="cursor:pointer"><button class="btn btn-sm tun-btn" type="button" id="tunOpenBtn" title="Open URL"><i class="bi bi-box-arrow-up-right"></i></button></div>
 </div></div>
 <div class="col-md-6 col-lg-4" id="tunQrCol" style="display:none"><div class="field-wrapper">
 <label class="form-label d-flex align-items-center gap-1"><span>qr_code</span><span class="config-tooltip-wrap" data-tip="Scan with your phone to open the remote access URL."><i class="bi bi-info-circle config-tooltip-icon"></i></span></label>
@@ -1219,6 +1220,7 @@ function executeAction() {
     const qrCol    = $('tunQrCol');
     const urlInput = $('tunUrl');
     const copyBtn  = $('tunCopyBtn');
+    const openBtn  = $('tunOpenBtn');
     const qrImg    = $('tunQrCode');
     const error    = $('tunError');
     const errorMsg = $('tunErrorMsg');
@@ -1309,8 +1311,9 @@ function executeAction() {
     }
 
     // Copy (with fallback for Android/non-HTTPS contexts)
-    copyBtn.addEventListener('click', () => {
+    function copyUrl() {
       const text = urlInput.value;
+      if (!text) return;
       function onSuccess() {
         copyBtn.innerHTML = '<i class="bi bi-check"></i>';
         setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1500);
@@ -1326,6 +1329,44 @@ function executeAction() {
         document.execCommand('copy');
         onSuccess();
       }
+    }
+    copyBtn.addEventListener('click', copyUrl);
+    urlInput.addEventListener('click', copyUrl);
+
+    // Open URL in new tab
+    if (openBtn) {
+      openBtn.addEventListener('click', () => {
+        const url = urlInput.value;
+        if (url) window.open(url, '_blank');
+      });
+    }
+
+    // QR fullscreen popup
+    let qrOverlay = null;
+    let qrAutoHide = null;
+    function hideQrOverlay() {
+      if (qrOverlay) { qrOverlay.remove(); qrOverlay = null; }
+      if (qrAutoHide) { clearTimeout(qrAutoHide); qrAutoHide = null; }
+    }
+    qrImg.style.cursor = 'pointer';
+    qrImg.addEventListener('click', () => {
+      if (!qrImg.src) return;
+      hideQrOverlay();
+      qrOverlay = document.createElement('div');
+      Object.assign(qrOverlay.style, {
+        position:'fixed', top:'0', left:'0', width:'100vw', height:'100vh',
+        background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center',
+        justifyContent:'center', zIndex:'99999', cursor:'pointer'
+      });
+      const img = document.createElement('img');
+      img.src = qrImg.src;
+      Object.assign(img.style, { maxWidth:'80vmin', maxHeight:'80vmin', borderRadius:'12px', background:'#fff', padding:'16px' });
+      qrOverlay.appendChild(img);
+      document.body.appendChild(qrOverlay);
+      qrOverlay.addEventListener('click', hideQrOverlay);
+      qrAutoHide = setTimeout(hideQrOverlay, 8000);
+      // Tell the Pi screen to show QR too
+      if (window.socket) window.socket.emit('show_qr', { url: urlInput.value });
     });
 
     // Button handlers

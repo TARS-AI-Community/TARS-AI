@@ -1728,6 +1728,23 @@ body::after {
   animation: inputGlow 2s ease-in-out infinite;
 }
 
+.tun-btn {
+  background: rgba(14, 26, 48, 0.3);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: var(--radius-sm);
+  color: rgba(0, 229, 255, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.25s;
+  font-size: 14px;
+}
+.tun-btn:hover {
+  background: rgba(14, 26, 48, 0.5);
+  border-color: rgba(0, 229, 255, 0.5);
+  color: rgba(0, 229, 255, 1);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+}
+
 .form-select.config-input {
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300e5ff' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e") !important;
   background-repeat: no-repeat !important;
