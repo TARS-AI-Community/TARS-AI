@@ -545,6 +545,7 @@ python-dotenv                   # Load environment variables from a .env file
 requests                        # HTTP library for API interactions
 joblib                          # Efficient serialization of Python objects
 ddgs                            # web search parsing
+qrcode[pil]                     # QR code generation for remote access
 
 # Servo Control
 adafruit-circuitpython-pca9685  # PCA9685 servo controller libraries
@@ -1008,6 +1009,10 @@ main() {
 
     if [ ! -f "config.ini" ]; then
         cp config.ini.template config.ini
+        # Generate a random 8-char alphanumeric password for the web UI
+        local random_pass=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 8)
+        sed -i "s/^webui_password = tarspassword$/webui_password = ${random_pass}/" config.ini
+        tars_say "Generated random WebUI password: ${random_pass}" "info"
     fi
     sudo chown $ACTUAL_USER:$ACTUAL_USER config.ini 2>/dev/null
     chmod 664 config.ini

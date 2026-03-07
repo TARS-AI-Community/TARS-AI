@@ -103,7 +103,7 @@ if CONFIG["UI"]["UI_enabled"]:
 
 # === Conditional ChatUI Import ===
 CHATUI_AVAILABLE = False
-if CONFIG['UI']['webui_enabled']:
+if CONFIG['ACCESS']['webui_enabled']:
     try:
         import modules.module_chatui
         CHATUI_AVAILABLE = True
@@ -259,8 +259,8 @@ if __name__ == "__main__":
         queue_message(f"LOAD: {'Lite' if _use_lite_ui else 'Full'} UI manager started")
 
     # === ChatUI Thread (starts early so webui is available during model loading) ===
-    if CONFIG['UI']['webui_enabled'] and CHATUI_AVAILABLE:
-        chatui_port = CONFIG['UI'].get('webui_port', 80)
+    if CONFIG['ACCESS']['webui_enabled'] and CHATUI_AVAILABLE:
+        chatui_port = CONFIG['ACCESS'].get('webui_port', 80)
         queue_message(f"LOAD: ChatUI starting on port {chatui_port}...")
         flask_thread = threading.Thread(
             target=modules.module_chatui.start_flask_app,

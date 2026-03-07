@@ -516,10 +516,13 @@ def load_config():
             "height": int(config['STABLE_DIFFUSION']['height']),
             "restore_faces": config.getboolean('STABLE_DIFFUSION', 'restore_faces'),
         },
+        "ACCESS": {
+            "webui_enabled": config.getboolean('ACCESS', 'webui_enabled', fallback=True),
+            "webui_port": config.getint('ACCESS', 'webui_port', fallback=80),
+            "webui_password": config.get('ACCESS', 'webui_password', fallback='tarspass1234'),
+            "remote_access_enabled": config.getboolean('ACCESS', 'remote_access_enabled', fallback=False),
+        },
         "UI": {
-            "webui_enabled": config.getboolean('UI', 'webui_enabled', fallback=True),
-            "webui_port": config.getint('UI', 'webui_port', fallback=80),
-            "webui_password": config.get('UI', 'webui_password', fallback='tarspass1234'),
             "UI_enabled": config.getboolean('UI', 'UI_enabled'),
             "use_camera_module": config.getboolean('UI', 'use_camera_module'),
             "show_mouse": config.getboolean('UI', 'show_mouse'),
@@ -871,8 +874,8 @@ CONFIG_METADATA = {
             'description': 'Makes TARS prioritize recent conversations in its memory. If set to 7, any conversation from the last 7 days gets a boost in search results, making TARS more likely to reference things you talked about recently. This feels natural because in real life, recent conversations are usually more relevant. Set to 0 if you want all memories treated equally regardless of when they happened.'
         },
     },
-    'UI': {
-        '__description__': 'Settings for the on-device display and the web browser interface',
+    'ACCESS': {
+        '__description__': 'Web interface and remote access settings',
         'webui_enabled': {
             'description': 'Master switch for the web-based chat interface. When ON, you can open a web browser on any device connected to the same WiFi/network and go to your Pi\'s IP address to chat with TARS, change settings, and more. This is the page you are probably looking at right now! Turn OFF if you only want to interact with TARS by voice.'
         },
@@ -884,6 +887,13 @@ CONFIG_METADATA = {
             'depends_on': [{'field': 'webui_enabled', 'values': ['True', 'true']}],
             'description': 'The password needed to log into this web interface. Anyone on your local network could potentially access it, so change this from the default to something only you know. This is NOT stored securely - it is a simple access barrier, not bank-level security.'
         },
+        'remote_access_enabled': {
+            'depends_on': [{'field': 'webui_enabled', 'values': ['True', 'true']}],
+            'description': 'Access TARS from anywhere — not just your local network. When enabled, a secure tunnel is automatically created giving you a public URL you can use from any device, anywhere. No accounts or setup needed. A new URL is generated each time TARS starts. The tunnel panel with URL and QR code appears below when enabled.'
+        },
+    },
+    'UI': {
+        '__description__': 'Settings for the on-device display',
         'UI_enabled': {
             'label': 'Enabled',
             'description': 'Master switch for the physical screen attached to your TARS robot. Turn this OFF if your TARS does not have a screen, or if you want to save resources by running "headless" (no display). When OFF, TARS still works - you just interact through the web interface or voice only.'

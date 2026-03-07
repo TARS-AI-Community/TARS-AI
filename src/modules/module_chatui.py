@@ -27,7 +27,8 @@ from flask import (
     Response,
     session,
     redirect,
-    url_for
+    url_for,
+    send_file
 )
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -131,7 +132,7 @@ flask_app.secret_key = os.getenv("FLASK_SECRET_KEY", "tars_default_secret_key_88
 @flask_app.before_request
 def check_auth():
     # Public routes that don't require login
-    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path in ('/login', '/emotion', '/start_talking', '/stop_talking') or not CONFIG['UI'].get('webui_enabled', True):
+    if request.path.startswith('/static') or request.path.startswith('/socket.io') or request.path in ('/login', '/emotion', '/start_talking', '/stop_talking') or not CONFIG['ACCESS'].get('webui_enabled', True):
         return
         
     # Check if user is logged in
@@ -167,13 +168,13 @@ def index():
                            char_name=character_name,
                            char_greeting='Welcome back',
                            talkinghead_base_url=ipadd,
-                           port=CONFIG['UI'].get('webui_port', 80))
+                           port=CONFIG['ACCESS'].get('webui_port', 80))
 
 @flask_app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         password = request.form.get('password')
-        correct_password = CONFIG['UI'].get('webui_password', 'tarspass1234')
+        correct_password = CONFIG['ACCESS'].get('webui_password', 'tarspass1234')
         
         if password == correct_password:
             session['logged_in'] = True
@@ -204,8 +205,8 @@ def get_config_variable():
     except Exception as e:
         return f"Error: {e}"
     
-    #queue_message(jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['UI'].get('webui_port', 80)}"}))
-    return jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['UI'].get('webui_port', 80)}"})
+    #queue_message(jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['ACCESS'].get('webui_port', 80)}"}))
+    return jsonify({'talkinghead_base_url': f"http://{local_ip}:{CONFIG['ACCESS'].get('webui_port', 80)}"})
 
 @flask_app.route('/avatar_sprites')
 def avatar_sprites():
@@ -1182,6 +1183,224 @@ def wifi_hotspot():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# ── CLOUDFLARE QUICK TUNNEL (REMOTE ACCESS) ──────────────────────────────
+
+import subprocess as _sp
+import shutil
+import threading
+import re
+
+_tunnel_process = None
+_tunnel_url = None
+_tunnel_lock = threading.Lock()
+
+def _cloudflared_bin():
+    """Return path to cloudflared binary, or None if not installed."""
+    return shutil.which('cloudflared')
+
+
+def _install_cloudflared():
+    """Install cloudflared via apt or direct download. Returns (success, error)."""
+    # Try apt first (works on Debian/Ubuntu/Raspbian)
+    try:
+        r = _sp.run(['bash', '-c',
+            'curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null && '
+            'echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list && '
+            'sudo apt-get update -qq && sudo apt-get install -y -qq cloudflared'
+        ], capture_output=True, text=True, timeout=120)
+        if r.returncode == 0 and _cloudflared_bin():
+            return True, ''
+    except Exception:
+        pass
+    # Fallback: direct binary download for ARM64
+    try:
+        import platform
+        arch = platform.machine()
+        if arch in ('aarch64', 'arm64'):
+            deb_url = 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb'
+        elif arch in ('armv7l', 'armhf'):
+            deb_url = 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm.deb'
+        else:
+            deb_url = 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb'
+        r = _sp.run(['bash', '-c', f'curl -fsSL -o /tmp/cloudflared.deb {deb_url} && sudo dpkg -i /tmp/cloudflared.deb && rm /tmp/cloudflared.deb'],
+                     capture_output=True, text=True, timeout=60)
+        if r.returncode == 0 and _cloudflared_bin():
+            return True, ''
+        return False, r.stderr.strip() or 'Download failed'
+    except _sp.TimeoutExpired:
+        return False, 'Download timed out'
+    except Exception as e:
+        return False, str(e)
+
+
+def _start_tunnel():
+    """Start cloudflared quick tunnel in background. Returns (success, url_or_error)."""
+    global _tunnel_process, _tunnel_url
+    with _tunnel_lock:
+        # Already running?
+        if _tunnel_process and _tunnel_process.poll() is None and _tunnel_url:
+            return True, _tunnel_url
+
+        # Kill any stale process
+        _stop_tunnel_internal()
+
+        bin_path = _cloudflared_bin()
+        if not bin_path:
+            return False, 'cloudflared not installed'
+
+        port = CONFIG['ACCESS'].get('webui_port', 80)
+        try:
+            proc = _sp.Popen(
+                [bin_path, 'tunnel', '--url', f'http://localhost:{port}'],
+                stdout=_sp.PIPE, stderr=_sp.PIPE, text=True
+            )
+        except Exception as e:
+            return False, str(e)
+
+        # Read stderr lines until we find the URL (cloudflared prints it there)
+        url = None
+        url_pattern = re.compile(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com')
+        import time
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            line = proc.stderr.readline()
+            if not line:
+                if proc.poll() is not None:
+                    break
+                continue
+            match = url_pattern.search(line)
+            if match:
+                url = match.group(0)
+                break
+
+        if not url:
+            proc.kill()
+            return False, 'Could not get tunnel URL (cloudflared may have failed to start)'
+
+        _tunnel_process = proc
+        _tunnel_url = url
+
+        # Background thread to drain stderr so the process doesn't block
+        def _drain():
+            try:
+                for _ in proc.stderr:
+                    pass
+            except Exception:
+                pass
+        threading.Thread(target=_drain, daemon=True).start()
+
+        queue_message(f"SYSTEM: Remote access tunnel active: {url}")
+        return True, url
+
+
+def _stop_tunnel_internal():
+    """Stop tunnel process (must hold _tunnel_lock)."""
+    global _tunnel_process, _tunnel_url
+    if _tunnel_process:
+        try:
+            _tunnel_process.terminate()
+            _tunnel_process.wait(timeout=5)
+        except Exception:
+            try:
+                _tunnel_process.kill()
+            except Exception:
+                pass
+        _tunnel_process = None
+    _tunnel_url = None
+
+
+def _stop_tunnel():
+    """Stop tunnel process (thread-safe)."""
+    with _tunnel_lock:
+        _stop_tunnel_internal()
+
+
+def _get_tunnel_status():
+    """Get current tunnel status."""
+    global _tunnel_process
+    with _tunnel_lock:
+        if _tunnel_process and _tunnel_process.poll() is None and _tunnel_url:
+            return {'state': 'active', 'url': _tunnel_url}
+        # Clean up if process died
+        if _tunnel_process:
+            _tunnel_process = None
+        return {'state': 'inactive'}
+
+
+@flask_app.route('/api/tunnel/status', methods=['GET'])
+def tunnel_status():
+    """Get remote access tunnel status."""
+    info = _get_tunnel_status()
+    info['installed'] = _cloudflared_bin() is not None
+    if info['state'] == 'inactive' and _tunnel_error:
+        info['state'] = 'error'
+        info['error'] = _tunnel_error
+    return jsonify(info)
+
+
+_tunnel_error = None
+
+@flask_app.route('/api/tunnel/start', methods=['POST'])
+def tunnel_start():
+    """Kick off tunnel in background, return immediately."""
+    global _tunnel_error
+    with _tunnel_lock:
+        if _tunnel_process and _tunnel_process.poll() is None and _tunnel_url:
+            return jsonify({'state': 'active', 'url': _tunnel_url})
+    _tunnel_error = None
+
+    def _bg_start():
+        global _tunnel_error
+        if not _cloudflared_bin():
+            ok, err = _install_cloudflared()
+            if not ok:
+                _tunnel_error = err
+                return
+        ok, result = _start_tunnel()
+        if not ok:
+            _tunnel_error = result
+
+    threading.Thread(target=_bg_start, daemon=True).start()
+    return jsonify({'state': 'starting'})
+
+
+@flask_app.route('/api/tunnel/stop', methods=['POST'])
+def tunnel_stop():
+    """Stop the remote access tunnel."""
+    _stop_tunnel()
+    return jsonify({'state': 'inactive'})
+
+
+@flask_app.route('/api/tunnel/qr', methods=['GET'])
+def tunnel_qr():
+    """Generate QR code PNG for a given URL."""
+    url = request.args.get('url', '')
+    if not url:
+        return jsonify({'error': 'No URL'}), 400
+    try:
+        import qrcode, io
+    except ImportError:
+        return jsonify({'error': 'qrcode package not installed'}), 500
+    buf = io.BytesIO()
+    qrcode.make(url).save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png')
+
+
+def tunnel_auto_start():
+    """Called on TARS boot — auto-start tunnel if enabled."""
+    if not CONFIG['ACCESS'].get('remote_access_enabled', False):
+        return
+    if not _cloudflared_bin():
+        ok, err = _install_cloudflared()
+        if not ok:
+            queue_message(f"WARNING: Could not install cloudflared: {err}")
+            return
+    ok, result = _start_tunnel()
+    if not ok:
+        queue_message(f"WARNING: Remote access tunnel failed: {result}")
+
+
 @flask_app.route('/api/eyes/mood', methods=['POST'])
 def eyes_set_mood():
     import modules.UI.apps.module_app_eyes as _eyes_mod
@@ -1372,6 +1591,11 @@ def save_character(name):
 
 def start_flask_app(port=None):
     if port is None:
-        port = CONFIG['UI'].get('webui_port', 80)
+        port = CONFIG['ACCESS'].get('webui_port', 80)
+    # Auto-start remote access tunnel if enabled
+    try:
+        tunnel_auto_start()
+    except Exception as e:
+        queue_message(f"WARNING: Remote access tunnel auto-start failed: {e}")
     queue_message(f"INFO: Starting Flask app on port {port}...")
     socketio.run(flask_app, host="0.0.0.0", port=port, log_output=False, allow_unsafe_werkzeug=True)

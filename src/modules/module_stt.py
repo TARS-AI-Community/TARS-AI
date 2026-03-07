@@ -221,7 +221,7 @@ class STTManager:
 
         # Cache progress bar, webui port, and character name so they aren't recreated per frame
         self._progress_bar_funcs = None
-        self._webui_port = CONFIG['UI'].get('webui_port', 80)
+        self._webui_port = CONFIG['ACCESS'].get('webui_port', 80)
         self._character_name = self._resolve_character_name()
 
         self.DEBUG = False

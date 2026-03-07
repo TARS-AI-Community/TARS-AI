@@ -67,6 +67,15 @@ class ConfigSection:
         if self.fields is None:
             self.fields = {}
 
+
+# Fields that moved between sections: (new_section, field) -> old_section
+FIELD_MIGRATIONS = {
+    ('ACCESS', 'webui_enabled'): 'UI',
+    ('ACCESS', 'webui_port'): 'UI',
+    ('ACCESS', 'webui_password'): 'UI',
+}
+
+
 class TarsConfigManager:
     def __init__(self):
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -512,12 +521,23 @@ class TarsConfigManager:
                         description_comments=template_field.description_comments.copy() if template_field.description_comments else []
                     )
                 else:
-                    final_field = ConfigField(
-                        name=field_name,
-                        value=template_field.value,
-                        inline_comment=template_field.inline_comment,
-                        description_comments=template_field.description_comments.copy() if template_field.description_comments else []
-                    )
+                    # Check if this field migrated from another section
+                    old_section = FIELD_MIGRATIONS.get((section_name, field_name))
+                    if old_section and old_section in existing_sections and field_name in existing_sections[old_section].fields:
+                        migrated_field = existing_sections[old_section].fields[field_name]
+                        final_field = ConfigField(
+                            name=field_name,
+                            value=migrated_field.value,
+                            inline_comment=template_field.inline_comment,
+                            description_comments=template_field.description_comments.copy() if template_field.description_comments else []
+                        )
+                    else:
+                        final_field = ConfigField(
+                            name=field_name,
+                            value=template_field.value,
+                            inline_comment=template_field.inline_comment,
+                            description_comments=template_field.description_comments.copy() if template_field.description_comments else []
+                        )
                 
                 final_section.fields[field_name] = final_field
             
