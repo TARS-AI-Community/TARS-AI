@@ -130,7 +130,7 @@ def get_completion(user_prompt, istext=True, image_b64=None, source="voice"):
         else:
             bot_reply = full_content.strip()
 
-        finalReply = llm_process(user_prompt, bot_reply, source=source)
+        finalReply = llm_process(user_prompt, bot_reply, source=source, has_image=image_b64 is not None)
         return finalReply
 
     except requests.RequestException as e:
@@ -391,16 +391,17 @@ def llm_parse_response(bot_response):
     return bot_response
 
 
-def llm_execute_side_effects(parsed, user_input, source="voice"):
+def llm_execute_side_effects(parsed, user_input, source="voice", has_image=False):
     """Execute function_calls and save memories. Safe to run in a background thread.
 
     source: 'voice' or 'webui' — controls where generated images are displayed.
+    has_image: True when the user already provided an image (skip camera capture).
     """
     global memory_manager
     try:
         if parsed.get("function_calls"):
             for func_call in parsed["function_calls"]:
-                execute_function_call(func_call, parsed, user_input, source=source)
+                execute_function_call(func_call, parsed, user_input, source=source, has_image=has_image)
 
         if memory_manager:
             threading.Thread(
@@ -422,12 +423,12 @@ def llm_execute_side_effects(parsed, user_input, source="voice"):
         queue_message(f"ERROR: Side effects execution failed: {e}")
 
 
-def llm_process(user_input, bot_response, source="voice"):
+def llm_process(user_input, bot_response, source="voice", has_image=False):
     """Parse LLM response and execute side effects (legacy wrapper)."""
     parsed = llm_parse_response(bot_response)
     if parsed is None:
         return "[Error: Invalid JSON from LLM. Check logs for details.]"
-    llm_execute_side_effects(parsed, user_input, source=source)
+    llm_execute_side_effects(parsed, user_input, source=source, has_image=has_image)
     return _sanitize_for_tts(parsed["reply"])
 
 
@@ -540,7 +541,7 @@ def _summarize_search_results(search_results, user_question):
 
 _vision_in_progress = threading.local()
 
-def execute_function_call(func_call, bot_response, user_input, source="voice"):
+def execute_function_call(func_call, bot_response, user_input, source="voice", has_image=False):
     function_name = func_call.get("function", "")
     parameters = func_call.get("parameters", {})
     import modules.module_speed as speed
@@ -553,9 +554,9 @@ def execute_function_call(func_call, bot_response, user_input, source="voice"):
                 execute_movement(movements)
 
         elif function_name == "capture_camera_view":
-            # Skip camera capture when user already uploaded a photo
-            if "uploaded photo" in user_input.lower() or "sent you a photo" in user_input.lower() or "sent a photo" in user_input.lower():
-                pass
+            # Skip camera capture when user already provided an image
+            if has_image:
+                queue_message("INFO: Skipping camera capture — user already provided an image")
             elif getattr(_vision_in_progress, 'active', False):
                 queue_message("WARN: Skipping recursive capture_camera_view call")
             elif process_camera_image is None:

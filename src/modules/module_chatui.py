@@ -444,14 +444,18 @@ def receive_user_message():
     if file:
         buffer = BytesIO()
         file.save(buffer)
+        file_bytes = buffer.getvalue()
+        if not file_bytes:
+            queue_message(f"ERROR: Empty image upload: {file.filename}")
+            socketio.emit('bot_message', {'message': 'Sorry, the uploaded file was empty.'})
+            return jsonify({"status": "error", "message": "Empty file"})
+        # Validate with PIL but don't block — LLM vision APIs handle many formats natively
         try:
             buffer.seek(0)
             Image.open(buffer).convert('RGB')
-            base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        except (UnidentifiedImageError, Exception) as e:
-            queue_message(f"ERROR: Invalid image file: {e}")
-            socketio.emit('bot_message', {'message': 'Sorry, I could not process that image.'})
-            return jsonify({"status": "error", "message": "Invalid image"})
+        except Exception as e:
+            queue_message(f"WARNING: PIL could not validate image ({file.filename}, {len(file_bytes)} bytes): {e}")
+        base64_image = base64.b64encode(file_bytes).decode('utf-8')
 
     socketio.start_background_task(_process_chat_message, user_message, base64_image)
     return jsonify({"status": "success"})
@@ -471,18 +475,21 @@ def upload():
 
     buffer = BytesIO()
     file.save(buffer)
-    base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    file_bytes = buffer.getvalue()
+    if not file_bytes:
+        socketio.emit('bot_message', {'message': 'Sorry, the uploaded file was empty.'})
+        return 'Empty file', 400
+    base64_image = base64.b64encode(file_bytes).decode('utf-8')
 
     img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
     socketio.emit('user_message', {'message': img_html})
 
+    # Validate with PIL but don't block — LLM vision APIs handle many formats natively
     try:
         buffer.seek(0)
         Image.open(buffer).convert('RGB')
-    except (UnidentifiedImageError, Exception) as e:
-        queue_message(f"ERROR: Invalid image file: {e}")
-        socketio.emit('bot_message', {'message': 'Sorry, I could not process that image.'})
-        return 'Invalid image', 400
+    except Exception as e:
+        queue_message(f"WARNING: PIL could not validate image ({file.filename}, {len(file_bytes)} bytes): {e}")
 
     # WebUI messages always come from the configured user
     try:
