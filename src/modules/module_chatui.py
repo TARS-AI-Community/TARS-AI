@@ -128,7 +128,23 @@ previous_arm_positions = {
     'right_hand': 1
 }
 
-flask_app.secret_key = os.getenv("FLASK_SECRET_KEY", "tars_default_secret_key_8822")
+def _get_secret_key():
+    """Auto-generate a unique secret key per device, persisted in .env."""
+    key = os.getenv("FLASK_SECRET_KEY")
+    if key:
+        return key
+    import secrets
+    key = secrets.token_hex(32)
+    env_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+    try:
+        with open(env_path, 'a') as f:
+            f.write(f'\n# Auto-generated Flask secret key (unique per device)\nFLASK_SECRET_KEY="{key}"\n')
+        os.environ["FLASK_SECRET_KEY"] = key
+    except OSError:
+        pass
+    return key
+
+flask_app.secret_key = _get_secret_key()
 
 # Authentication requirement check
 @flask_app.before_request
