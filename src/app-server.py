@@ -62,7 +62,7 @@ from fastapi import (
     WebSocket, WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # ---------------------------------------------------------------------------
@@ -102,8 +102,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 def detect_device():
     if torch.cuda.is_available():
         name = torch.cuda.get_device_name(0)
-        vram = torch.cuda.get_device_properties(0).total_mem / 1024**3
+        vram = torch.cuda.get_device_properties(0).total_memory / 1024**3
         log.info(f"GPU detected: {name} ({vram:.1f} GB VRAM)")
+        # TF32 gives ~20% free speedup on Ampere/Ada (RTX 30xx/40xx) with negligible precision loss
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
         return "cuda"
     log.info("No GPU detected, using CPU")
     return "cpu"
@@ -115,7 +118,7 @@ def get_gpu_stats() -> dict:
     try:
         allocated = torch.cuda.memory_allocated(0) / 1024**3
         reserved = torch.cuda.memory_reserved(0) / 1024**3
-        total = torch.cuda.get_device_properties(0).total_mem / 1024**3
+        total = torch.cuda.get_device_properties(0).total_memory / 1024**3
         return {
             "name": torch.cuda.get_device_name(0),
             "vram_total_gb": round(total, 2),
@@ -154,7 +157,7 @@ _CONFIG_DEFAULTS = {
     "services":   {"stt": "true", "tts": "true", "llm": "true", "vision": "true",
                    "imagegen": "false", "embeddings": "false"},
     "stt":        {"whisper_model": "large-v3", "compute_type": "auto", "vad_filter": "true", "device": "auto"},
-    "llm":        {"model": "Qwen/Qwen3-4B", "dtype": "auto", "kv_cache_sessions": "2", "kv_cache_ttl": "300", "device": "auto"},
+    "llm":        {"model": "Qwen/Qwen3-4B", "dtype": "auto", "quantize": "8bit", "kv_cache_sessions": "2", "kv_cache_ttl": "300", "device": "auto"},
     "tts":        {"voices_dir": "", "cache_size": "100"},
     "vision":     {"model": "Salesforce/blip-image-captioning-base", "device": "auto"},
     "imagegen":   {"model": "stabilityai/stable-diffusion-xl-base-1.0", "default_steps": "20", "default_cfg": "7.0", "device": "auto"},
@@ -346,7 +349,7 @@ class STTService:
             return None
 
     def transcribe(self, audio_bytes: BytesIO, language: str = None) -> tuple[list[dict], object]:
-        kwargs = {"beam_size": 5}
+        kwargs = {"beam_size": 1}  # greedy decoding — ~3x faster, negligible quality loss for speech
         if language:
             kwargs["language"] = language
         segments, info = self.model.transcribe(audio_bytes, **kwargs)
@@ -475,6 +478,7 @@ class TTSService:
 # ===================================================================
 class LLMService:
     def __init__(self, model_name: str = "Qwen/Qwen3-4B", dtype: str = "auto",
+                 quantize: str = "none",
                  kv_cache_sessions: int = 2, kv_cache_ttl: int = 300, device: str = None):
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -488,7 +492,7 @@ class LLMService:
         else:
             dtype = torch.float32
 
-        log.info(f"Loading LLM: {model_name} (dtype: {dtype}, device: {device})...")
+        log.info(f"Loading LLM: {model_name} (dtype: {dtype}, device: {device}, quantize: {quantize})...")
         self.model_name = model_name
         self._dtype = dtype
         llm_dir = MODELS_DIR / "llm"
@@ -496,14 +500,75 @@ class LLMService:
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_name, trust_remote_code=True, cache_dir=str(llm_dir)
         )
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name, dtype=dtype,
+        if device == "cuda" and not torch.cuda.is_available():
+            log.warning("CUDA requested but torch.cuda.is_available() = False. "
+                        "Install CUDA PyTorch: pip install torch --index-url https://download.pytorch.org/whl/cu124")
+            device = "cpu"
+            dtype = torch.float32
+            quantize = "none"
+
+        load_kwargs = dict(
             device_map="auto" if device == "cuda" else None,
             trust_remote_code=True, cache_dir=str(llm_dir),
         )
+
+        # Quantization (requires: pip install bitsandbytes)
+        if quantize in ("4bit", "8bit") and device == "cuda":
+            try:
+                from transformers import BitsAndBytesConfig
+                if quantize == "4bit":
+                    load_kwargs["quantization_config"] = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_compute_dtype=dtype,
+                        bnb_4bit_use_double_quant=True,
+                        bnb_4bit_quant_type="nf4",
+                    )
+                else:
+                    load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+                log.info(f"LLM quantization: {quantize}")
+            except ImportError:
+                log.warning("bitsandbytes not installed — quantization skipped. pip install bitsandbytes")
+                load_kwargs["dtype"] = dtype
+        else:
+            load_kwargs["dtype"] = dtype
+
+        # Try attention backends from fastest to most compatible
+        attn_impls = (["flash_attention_2", "sdpa"] if device == "cuda" else ["sdpa"])
+        self.model = None
+        for attn in attn_impls + [None]:
+            try:
+                kw = {**load_kwargs, **({"attn_implementation": attn} if attn else {})}
+                self.model = AutoModelForCausalLM.from_pretrained(model_name, **kw)
+                if attn:
+                    log.info(f"LLM attention: {attn}")
+                break
+            except Exception:
+                continue
         if device != "cuda":
             self.model = self.model.to(device)
         self.model.eval()
+
+        # Log actual device after load
+        try:
+            first_param = next(self.model.parameters())
+            actual_device = first_param.device
+            log.info(f"LLM loaded — actual device: {actual_device} | dtype: {first_param.dtype}")
+            if device == "cuda" and actual_device.type != "cuda":
+                log.warning("LLM ended up on CPU despite CUDA request! "
+                            "Run: pip install torch --index-url https://download.pytorch.org/whl/cu124")
+        except Exception:
+            pass
+
+        # Warmup: one forward pass so CUDA kernels are compiled before first real request
+        if device == "cuda":
+            try:
+                _warm = self.tokenizer("warmup", return_tensors="pt").input_ids.to(self.model.device)
+                with torch.inference_mode():
+                    self.model.generate(_warm, attention_mask=torch.ones_like(_warm),
+                                        max_new_tokens=1, do_sample=False, use_cache=True)
+                log.info("LLM warmup complete")
+            except Exception:
+                pass
 
         # KV cache for prompt reuse
         self._kv_cache: dict = {}  # session_id -> (token_count, past_kv, timestamp)
@@ -541,7 +606,7 @@ class LLMService:
         ]}]
         text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = processor(text=text, images=image, return_tensors="pt").to(self.model.device)
-        with torch.no_grad():
+        with torch.inference_mode():
             output_ids = self.model.generate(**inputs, max_new_tokens=200)
         output_ids = output_ids[:, inputs.input_ids.shape[1]:]
         return processor.decode(output_ids[0], skip_special_tokens=True)
@@ -557,20 +622,24 @@ class LLMService:
         result = self.tokenizer.apply_chat_template(
             messages, return_tensors="pt", add_generation_prompt=True
         )
-        full_ids = (result["input_ids"] if isinstance(result, dict) else result).to(self.model.device)
+        full_ids = (result if isinstance(result, torch.Tensor) else result["input_ids"]).to(self.model.device)
 
         input_ids, past_kv = self._try_reuse_kv(full_ids, session_id)
 
-        with torch.no_grad():
+        do_sample = temperature > 0
+        with torch.inference_mode():
             gen_kwargs = {
                 "input_ids": input_ids,
+                "attention_mask": torch.ones_like(input_ids),
                 "max_new_tokens": max_tokens,
-                "temperature": max(temperature, 0.01),
-                "top_p": top_p,
-                "do_sample": temperature > 0,
+                "do_sample": do_sample,
+                "use_cache": True,
                 "pad_token_id": self.tokenizer.eos_token_id,
                 "return_dict_in_generate": True,
             }
+            if do_sample:
+                gen_kwargs["temperature"] = max(temperature, 0.01)
+                gen_kwargs["top_p"] = top_p
             if past_kv is not None:
                 gen_kwargs["past_key_values"] = past_kv
             outputs = self.model.generate(**gen_kwargs)
@@ -591,7 +660,7 @@ class LLMService:
         result = self.tokenizer.apply_chat_template(
             messages, return_tensors="pt", add_generation_prompt=True
         )
-        full_ids = (result["input_ids"] if isinstance(result, dict) else result).to(self.model.device)
+        full_ids = (result if isinstance(result, torch.Tensor) else result["input_ids"]).to(self.model.device)
 
         input_ids, past_kv = self._try_reuse_kv(full_ids, session_id)
         prompt_tokens = full_ids.shape[-1]
@@ -600,15 +669,19 @@ class LLMService:
             self.tokenizer, skip_prompt=True, skip_special_tokens=True
         )
 
+        do_sample = temperature > 0
         gen_kwargs = {
             "input_ids": input_ids,
+            "attention_mask": torch.ones_like(input_ids),
             "max_new_tokens": max_tokens,
-            "temperature": max(temperature, 0.01),
-            "top_p": top_p,
-            "do_sample": temperature > 0,
+            "do_sample": do_sample,
+            "use_cache": True,
             "streamer": streamer,
             "pad_token_id": self.tokenizer.eos_token_id,
         }
+        if do_sample:
+            gen_kwargs["temperature"] = max(temperature, 0.01)
+            gen_kwargs["top_p"] = top_p
         if past_kv is not None:
             gen_kwargs["past_key_values"] = past_kv
 
@@ -618,8 +691,10 @@ class LLMService:
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         created = int(time.time())
         token_count = [0]
+        gen_start = [time.perf_counter()]
 
         def generate():
+            gen_start[0] = time.perf_counter()
             for token_text in streamer:
                 if not token_text:
                     continue
@@ -631,6 +706,7 @@ class LLMService:
                 }
                 yield f"data: {json.dumps(chunk)}\n\n"
 
+            elapsed_ms = int((time.perf_counter() - gen_start[0]) * 1000)
             final = {
                 "id": completion_id, "object": "chat.completion.chunk",
                 "created": created, "model": self.model_name,
@@ -639,6 +715,7 @@ class LLMService:
                     "prompt_tokens": prompt_tokens,
                     "completion_tokens": token_count[0],
                     "total_tokens": prompt_tokens + token_count[0],
+                    "elapsed_ms": elapsed_ms,
                 },
             }
             yield f"data: {json.dumps(final)}\n\n"
@@ -716,7 +793,7 @@ class VisionService:
         inputs = (self.processor(image, prompt, return_tensors="pt") if prompt
                   else self.processor(image, return_tensors="pt"))
         inputs = inputs.to(self._device)
-        with torch.no_grad():
+        with torch.inference_mode():
             outputs = self.model.generate(**inputs, max_new_tokens=100, num_beams=3)
         return self.processor.decode(outputs[0], skip_special_tokens=True)
 
@@ -820,25 +897,139 @@ class EmbeddingsService:
 app = FastAPI(
     title="TARS-AI Companion Server", version="2.0",
     description="Offload STT, TTS, LLM, Vision, ImageGen, and Embeddings from your Raspberry Pi.",
+    swagger_ui_init_oauth={"usePkceWithAuthorizationCodeGrant": False},
+    swagger_ui_parameters={"persistAuthorization": True},
+    openapi_tags=[],
 )
+
+# Inject Bearer security scheme into OpenAPI spec so /docs shows the Authorize button
+from fastapi.openapi.utils import get_openapi as _get_openapi
+def _custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = _get_openapi(
+        title=app.title, version=app.version,
+        description=app.description, routes=app.routes,
+    )
+    schema.setdefault("components", {}).setdefault("securitySchemes", {})["BearerAuth"] = {
+        "type": "http", "scheme": "bearer",
+    }
+    for path in schema.get("paths", {}).values():
+        for op in path.values():
+            op.setdefault("security", [{"BearerAuth": []}])
+    app.openapi_schema = schema
+    return schema
+app.openapi = _custom_openapi
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 # -- Auth middleware ---------------------------------------------------
 
-_AUTH_EXEMPT = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/playground", "/ws/dashboard", "/api/tunnel", "/ui", "/api/settings"}
+# Pages that need a browser session cookie (web UI)
+_WEB_PAGES = {"/", "/ui", "/playground"}
+# API paths called by the web UI — accept session cookie OR Bearer token
+_WEB_API_PATHS = {"/api/tunnel", "/api/settings"}
+# Paths exempt from ALL auth (health check, login, static API schema)
+_AUTH_EXEMPT = {"/health", "/login", "/logout", "/docs", "/openapi.json", "/redoc", "/ws/dashboard"}
+
+
+def _session_token(api_key: str) -> str:
+    import hmac as _hmac, hashlib as _hashlib
+    return _hmac.new(api_key.encode(), b"tars-web-session", _hashlib.sha256).hexdigest()
+
+
+def _is_web_authed(request: Request, api_key: str) -> bool:
+    expected = _session_token(api_key)
+    return request.cookies.get("tars_session") == expected
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         api_key = _active_config.get("server", "api_key", fallback="") if _active_config else ""
-        if api_key:
-            path = request.url.path
-            if not any(path == ex or path.startswith(ex + "/") for ex in _AUTH_EXEMPT):
-                auth = request.headers.get("authorization", "")
-                if auth != f"Bearer {api_key}":
-                    return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        if not api_key:
+            return await call_next(request)
+
+        path = request.url.path
+
+        # Always allowed
+        if any(path == ex or path.startswith(ex + "/") for ex in _AUTH_EXEMPT):
+            return await call_next(request)
+
+        # Web UI pages — require session cookie, redirect to /login if missing
+        if any(path == p or path.startswith(p + "/") for p in _WEB_PAGES):
+            if not _is_web_authed(request, api_key):
+                return RedirectResponse(url=f"/login?next={path}", status_code=302)
+            return await call_next(request)
+
+        # Web-facing API paths — accept session cookie OR Bearer token
+        if any(path == p or path.startswith(p + "/") for p in _WEB_API_PATHS):
+            if _is_web_authed(request, api_key) or request.headers.get("authorization", "") == f"Bearer {api_key}":
+                return await call_next(request)
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+        # API endpoints — require Bearer token
+        if request.headers.get("authorization", "") != f"Bearer {api_key}":
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
         return await call_next(request)
+
+
+_LOGIN_HTML = r"""<!DOCTYPE html>
+<html><head><title>TARS-AI Login</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#0a1220;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,229,255,0.003) 3px,rgba(0,229,255,0.003) 6px);pointer-events:none}
+.card{position:relative;z-index:1;background:rgba(14,26,48,0.85);border:1px solid rgba(0,229,255,0.25);border-radius:14px;padding:40px 48px;width:100%;max-width:380px;box-shadow:0 16px 64px rgba(0,0,0,0.5)}
+h1{font-family:'Orbitron',sans-serif;font-size:22px;font-weight:900;letter-spacing:.2em;background:linear-gradient(135deg,#00e5ff,#b44dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center;margin-bottom:8px}
+.sub{text-align:center;font-size:11px;color:rgba(0,229,255,0.4);letter-spacing:.15em;text-transform:uppercase;margin-bottom:32px}
+label{display:block;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#5a7a94;margin-bottom:6px}
+input{width:100%;padding:12px 16px;background:rgba(0,229,255,0.04);border:1px solid rgba(0,229,255,0.18);border-radius:8px;color:#e2eaf2;font-family:'Share Tech Mono',monospace;font-size:14px;outline:none;transition:border-color .2s;margin-bottom:20px}
+input:focus{border-color:rgba(0,229,255,0.5);box-shadow:0 0 12px rgba(0,229,255,0.08)}
+button{width:100%;padding:13px;background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.35);border-radius:8px;color:#00e5ff;font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;cursor:pointer;transition:all .2s}
+button:hover{background:rgba(0,229,255,0.15);box-shadow:0 0 20px rgba(0,229,255,0.15)}
+.err{color:#ff4444;font-size:12px;text-align:center;margin-top:16px;min-height:18px}
+</style></head><body>
+<div class="card">
+  <h1>TARS-AI</h1>
+  <div class="sub">Server Access</div>
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{NEXT}}">
+    <label>API Key</label>
+    <input type="password" name="password" placeholder="Enter your API key" autofocus autocomplete="current-password">
+    <button type="submit">Authenticate</button>
+  </form>
+  <div class="err">{{ERROR}}</div>
+</div>
+</body></html>"""
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_get(next: str = "/"):
+    return _LOGIN_HTML.replace("{{NEXT}}", next).replace("{{ERROR}}", "")
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def login_post(request: Request, next: str = "/"):
+    form = await request.form()
+    password = form.get("password", "")
+    next_url = form.get("next", next) or "/"
+    api_key = _active_config.get("server", "api_key", fallback="") if _active_config else ""
+    if password == api_key:
+        token = _session_token(api_key)
+        response = RedirectResponse(url="/", status_code=302)
+        response.set_cookie("tars_session", token, httponly=True, samesite="lax", max_age=86400 * 30)
+        return response
+    html = _LOGIN_HTML.replace("{{NEXT}}", next_url).replace("{{ERROR}}", "Invalid API key.")
+    return HTMLResponse(html, status_code=401)
+
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/login", status_code=302)
+    response.delete_cookie("tars_session")
+    return response
 
 
 # -- Request tracking middleware ----------------------------------------
@@ -987,6 +1178,7 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
   <a href="/playground">Playground</a>
   <a href="/docs">API Docs</a>
   <a href="/ui">Settings</a>
+  <a href="/logout" style="border-color:rgba(255,68,68,0.3);color:#ff6666">Logout</a>
 </div>
 </div>
 <script>
@@ -1113,13 +1305,14 @@ async def stt_transcribe(audio: UploadFile = File(...)):
     if "stt" not in SERVICES:
         raise HTTPException(503, "STT service not loaded")
     audio_bytes = BytesIO(await audio.read())
+    loop = asyncio.get_event_loop()
     try:
-        # VAD pre-filter
-        if not SERVICES["stt"].has_speech(audio_bytes):
+        has_speech = await loop.run_in_executor(None, SERVICES["stt"].has_speech, audio_bytes)
+        if not has_speech:
             log.info("STT: VAD filtered (no speech detected)")
             return {"transcription": []}
         audio_bytes.seek(0)
-        transcription, info = SERVICES["stt"].transcribe(audio_bytes)
+        transcription, info = await loop.run_in_executor(None, SERVICES["stt"].transcribe, audio_bytes)
         full_text = " ".join(t["text"] for t in transcription).strip()
         log.info(f"STT: \"{full_text}\" (lang={info.language}, prob={info.language_probability:.2f})")
         return {"transcription": transcription}
@@ -1133,11 +1326,15 @@ async def stt_transcribe_v2(audio: UploadFile = File(...), language: Optional[st
     if "stt" not in SERVICES:
         raise HTTPException(503, "STT service not loaded")
     audio_bytes = BytesIO(await audio.read())
+    loop = asyncio.get_event_loop()
     try:
-        if not SERVICES["stt"].has_speech(audio_bytes):
+        has_speech = await loop.run_in_executor(None, SERVICES["stt"].has_speech, audio_bytes)
+        if not has_speech:
             return {"text": "", "segments": [], "language": None, "language_probability": 0}
         audio_bytes.seek(0)
-        transcription, info = SERVICES["stt"].transcribe(audio_bytes, language=language)
+        transcription, info = await loop.run_in_executor(
+            None, lambda: SERVICES["stt"].transcribe(audio_bytes, language=language)
+        )
         full_text = " ".join(t["text"] for t in transcription).strip()
         log.info(f"STT: \"{full_text}\"")
         return {"text": full_text, "segments": transcription,
@@ -1258,7 +1455,7 @@ async def tts_generate(request: Request):
         body = await request.json()
     except Exception:
         raise HTTPException(400, "Invalid JSON body")
-    text = body.get("text", "").strip()
+    text = (body.get("text") or "").strip()
     if not text:
         raise HTTPException(400, "text is required")
     voice = body.get("voice", None)
@@ -1668,8 +1865,7 @@ async def tunnel_qr(url: str = ""):
 
 @app.get("/playground", response_class=HTMLResponse)
 async def playground():
-    api_key = _active_config.get("server", "api_key", fallback="") if _active_config else ""
-    return _PLAYGROUND_HTML.replace("{{API_KEY}}", api_key)
+    return _PLAYGROUND_HTML
 
 
 _PLAYGROUND_HTML = r"""<!DOCTYPE html>
@@ -1740,7 +1936,6 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   <h1>PLAYGROUND</h1>
   <a href="/">Dashboard</a>
 </div>
-<div class="key-bar"><span>API Key</span><input type="password" id="api-key" value="{{API_KEY}}" placeholder="leave empty if no auth"><button class="hud-btn" onclick="document.getElementById('api-key').type=document.getElementById('api-key').type==='password'?'text':'password'">Show</button></div>
 <div class="tabs">
   <div class="tab active" onclick="switchTab('chat')">Chat</div>
   <div class="tab" onclick="switchTab('stt')">STT</div>
@@ -1778,8 +1973,8 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
 </div>
 <script>
 const base='';
-function hdr(){const k=document.getElementById('api-key').value;const h={'Content-Type':'application/json'};if(k)h['Authorization']='Bearer '+k;return h}
-function hdrForm(){const k=document.getElementById('api-key').value;const h={};if(k)h['Authorization']='Bearer '+k;return h}
+function hdr(){return {'Content-Type':'application/json'}}
+function hdrForm(){return {}}
 
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
@@ -1806,8 +2001,17 @@ async function sendChat(){
       const lines=buf.split('\n');buf=lines.pop();
       for(const line of lines){
         if(!line.startsWith('data: ')||line==='data: [DONE]')continue;
-        try{const c=JSON.parse(line.slice(6));const t=c.choices[0].delta.content||'';
-          document.getElementById('stream-msg').textContent+=t;}catch(e){}
+        try{
+          const c=JSON.parse(line.slice(6));
+          const t=c.choices[0].delta.content||'';
+          if(t)document.getElementById('stream-msg').textContent+=t;
+          if(c.choices[0].finish_reason==='stop'&&c.usage){
+            const u=c.usage;const ms=u.elapsed_ms||1;
+            const tps=(u.completion_tokens/(ms/1000)).toFixed(1);
+            out.innerHTML+='<div style="text-align:right;font-size:11px;color:var(--text-dim);margin-top:4px;font-family:var(--font-hud);letter-spacing:.08em">'+
+              u.completion_tokens+' tokens · '+tps+' t/s</div>';
+          }
+        }catch(e){}
       }
     }
   }catch(e){out.innerHTML+='<div class="msg error">Error: '+e+'</div>'}
@@ -1888,7 +2092,14 @@ async function generateImg(){
 }
 
 document.getElementById('chat-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}});
-</script></body></html>"""
+</script>
+<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+  <a href="/" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Dashboard</a>
+  <a href="/ui" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Settings</a>
+  <a href="/docs" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">API Docs</a>
+  <a href="/logout" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(255,68,68,0.06);border:1px solid rgba(255,68,68,0.3);border-radius:8px;color:#ff6666;text-decoration:none">Logout</a>
+</div>
+</body></html>"""
 
 
 # ===================================================================
@@ -2002,20 +2213,6 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
     <button class="hud-btn-sm" onclick="const i=document.getElementById('s-apikey');i.type=i.type==='password'?'text':'password'">Show</button>
   </div>
   <div class="hint" style="margin-left:162px">Used for Bearer token auth on all endpoints. Share this with your RPi config.</div>
-  <div style="margin-top:18px">
-    <h2>Remote Access (Tunnel)</h2>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span id="tunnel-status" style="font-size:12px;color:var(--text-dim)">Checking...</span>
-      <button class="hud-btn-sm" id="tunnel-btn" onclick="toggleTunnel()">Open Tunnel</button>
-    </div>
-    <div id="tunnel-url" style="display:none;margin-top:12px">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <a id="tunnel-link" href="#" target="_blank" style="font-family:var(--font-mono);font-size:12px;color:var(--cyan);word-break:break-all"></a>
-        <button class="hud-btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('tunnel-link').textContent).then(()=>{this.textContent='Copied!';setTimeout(()=>{this.textContent='Copy'},1500)})">Copy</button>
-      </div>
-      <div style="margin-top:10px;text-align:center"><img id="tunnel-qr" style="max-width:180px;border-radius:var(--radius-sm);border:1px solid var(--border);display:none"></div>
-    </div>
-  </div>
 </div>
 
 <!-- Services & Devices -->
@@ -2055,6 +2252,7 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
       <h2>LLM Configuration</h2>
       <div class="form-row"><label>Model</label><input type="text" id="s-llm-model"></div>
       <div class="form-row"><label>dtype</label><select id="s-llm-dtype"><option>auto</option><option>float16</option><option>bfloat16</option><option>float32</option></select></div>
+      <div class="form-row"><label>Quantize</label><select id="s-llm-quantize"><option value="none">none</option><option value="4bit">4-bit (fastest, needs bitsandbytes)</option><option value="8bit">8-bit (balanced, needs bitsandbytes)</option></select></div>
       <div class="form-row"><label>KV Cache Sessions</label><input type="number" id="s-llm-kvs"></div>
       <div class="form-row"><label>KV Cache TTL (sec)</label><input type="number" id="s-llm-kvt"></div>
     </div>
@@ -2096,6 +2294,7 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
   <a href="/">Dashboard</a>
   <a href="/playground">Playground</a>
   <a href="/docs">API Docs</a>
+  <a href="/logout" style="border-color:rgba(255,68,68,0.3);color:#ff6666">Logout</a>
 </div>
 </div>
 <script>
@@ -2122,6 +2321,7 @@ async function loadSettings(){
     document.getElementById('s-stt-vad').checked=d.stt.vad_filter==='true';
     document.getElementById('s-llm-model').value=d.llm.model;
     setSelect('s-llm-dtype',d.llm.dtype);
+    setSelect('s-llm-quantize',d.llm.quantize||'none');
     document.getElementById('s-llm-kvs').value=d.llm.kv_cache_sessions;
     document.getElementById('s-llm-kvt').value=d.llm.kv_cache_ttl;
     document.getElementById('s-tts-dir').value=d.tts.voices_dir||'';
@@ -2148,7 +2348,7 @@ async function saveSettings(){
     server:{host:document.getElementById('s-host').value,port:document.getElementById('s-port').value,api_key:document.getElementById('s-apikey').value},
     services:{stt:document.getElementById('svc-stt').checked?'true':'false',tts:document.getElementById('svc-tts').checked?'true':'false',llm:document.getElementById('svc-llm').checked?'true':'false',vision:document.getElementById('svc-vision').checked?'true':'false',imagegen:document.getElementById('svc-imagegen').checked?'true':'false',embeddings:document.getElementById('svc-embeddings').checked?'true':'false'},
     stt:{whisper_model:document.getElementById('s-stt-model').value,compute_type:document.getElementById('s-stt-compute').value,vad_filter:document.getElementById('s-stt-vad').checked?'true':'false',device:document.getElementById('dev-stt').value},
-    llm:{model:document.getElementById('s-llm-model').value,dtype:document.getElementById('s-llm-dtype').value,kv_cache_sessions:document.getElementById('s-llm-kvs').value,kv_cache_ttl:document.getElementById('s-llm-kvt').value,device:document.getElementById('dev-llm').value},
+    llm:{model:document.getElementById('s-llm-model').value,dtype:document.getElementById('s-llm-dtype').value,quantize:document.getElementById('s-llm-quantize').value,kv_cache_sessions:document.getElementById('s-llm-kvs').value,kv_cache_ttl:document.getElementById('s-llm-kvt').value,device:document.getElementById('dev-llm').value},
     tts:{voices_dir:document.getElementById('s-tts-dir').value,cache_size:document.getElementById('s-tts-cache').value},
     vision:{model:document.getElementById('s-vision-model').value,device:document.getElementById('dev-vision').value},
     imagegen:{model:document.getElementById('s-imagegen-model').value,default_steps:document.getElementById('s-imagegen-steps').value,default_cfg:document.getElementById('s-imagegen-cfg').value,device:document.getElementById('dev-imagegen').value},
@@ -2161,50 +2361,7 @@ async function saveSettings(){
   }catch(e){st.textContent='Error: '+e;st.className='save-status err'}
 }
 
-// Tunnel controls
-let tunnelActive=false;
-function checkTunnel(){
-  fetch('/api/tunnel/status').then(r=>r.json()).then(d=>{
-    const st=document.getElementById('tunnel-status');
-    const btn=document.getElementById('tunnel-btn');
-    const urlDiv=document.getElementById('tunnel-url');
-    if(d.state==='active'){
-      tunnelActive=true;
-      st.innerHTML='<span style="color:var(--green)">Active</span>';
-      btn.textContent='Close Tunnel';btn.className='hud-btn-sm danger';btn.disabled=false;
-      document.getElementById('tunnel-link').href=d.url;
-      document.getElementById('tunnel-link').textContent=d.url;
-      const qr=document.getElementById('tunnel-qr');
-      qr.src='/api/tunnel/qr?url='+encodeURIComponent(d.url);qr.style.display='block';
-      urlDiv.style.display='block';
-    }else if(d.state==='starting'){
-      st.innerHTML='<span style="color:var(--orange)">Starting...</span>';
-      btn.disabled=true;setTimeout(checkTunnel,2000);
-    }else if(d.state==='error'){
-      tunnelActive=false;
-      st.innerHTML='<span style="color:var(--red)">Error: '+(d.error||'unknown')+'</span>';
-      btn.textContent='Retry';btn.className='hud-btn-sm';btn.disabled=false;
-      urlDiv.style.display='none';
-    }else{
-      tunnelActive=false;
-      st.textContent=d.installed?'Inactive':'cloudflared not installed (will auto-install)';
-      btn.textContent='Open Tunnel';btn.className='hud-btn-sm';btn.disabled=false;
-      urlDiv.style.display='none';
-    }
-  }).catch(()=>{});
-}
-function toggleTunnel(){
-  const btn=document.getElementById('tunnel-btn');btn.disabled=true;
-  if(tunnelActive){
-    fetch('/api/tunnel/stop',{method:'POST'}).then(()=>checkTunnel());
-  }else{
-    document.getElementById('tunnel-status').innerHTML='<span style="color:var(--orange)">Starting...</span>';
-    fetch('/api/tunnel/start',{method:'POST'}).then(()=>setTimeout(checkTunnel,3000));
-  }
-}
-
 loadSettings();
-checkTunnel();
 </script></body></html>"""
 
 
@@ -2277,8 +2434,9 @@ def _load_single_service(name: str, args):
         kvs = cfg.getint("llm", "kv_cache_sessions", fallback=2)
         kvt = cfg.getint("llm", "kv_cache_ttl", fallback=300)
         dev = resolve_service_device(cfg.get("llm", "device", fallback="auto"))
+        quant = cfg.get("llm", "quantize", fallback="none")
         SERVICES["llm"] = LLMService(model_name=args.llm_model, dtype=args.llm_dtype,
-                                      kv_cache_sessions=kvs, kv_cache_ttl=kvt, device=dev)
+                                      quantize=quant, kv_cache_sessions=kvs, kv_cache_ttl=kvt, device=dev)
     elif name == "vision":
         dev = resolve_service_device(cfg.get("vision", "device", fallback="auto"))
         SERVICES["vision"] = VisionService(model_name=args.vision_model, device=dev)

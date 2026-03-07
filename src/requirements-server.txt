@@ -1,8 +1,10 @@
 # TARS-AI Companion Server Dependencies
 # Install: pip install -r requirements-server.txt
-#
-# For GPU support, install PyTorch with CUDA first:
-#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+
+# PyTorch CUDA 12.4 as primary index so torch/torchaudio always install as GPU builds.
+# All other packages fall back to PyPI via --extra-index-url.
+--index-url https://download.pytorch.org/whl/cu124
+--extra-index-url https://pypi.org/simple
 
 # Server framework
 fastapi>=0.104.0
@@ -28,11 +30,15 @@ diffusers>=0.27.0
 sentence-transformers>=2.2.0
 
 # VAD - Voice Activity Detection (Silero)
-torchaudio>=2.1.0
+torchaudio==2.6.0+cu124
 
 # QR code generation for tunnel URLs
 qrcode[pil]>=7.0
 
-# Core
-torch>=2.1.0
+# Core — pinned to +cu124 so pip replaces any CPU-only torch already installed.
+# Latest available CUDA 12.4 build. Check https://download.pytorch.org/whl/cu124 for newer versions.
+torch==2.6.0+cu124
 python-multipart
+
+# Quantization (8-bit / 4-bit LLM inference)
+bitsandbytes>=0.43.0
