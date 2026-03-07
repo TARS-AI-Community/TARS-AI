@@ -203,6 +203,16 @@ class RoboEyes:
         self._heart_particles = []  # list of [x, y, size, life, drift_x]
         self._heart_spawn_timer = 0.0
 
+        # Touch reaction system
+        self._touch_reaction = None
+        self._touch_timer = 0.0
+        self._touch_duration = 0.0
+        self._touch_phase = 0
+        self._pre_touch_mood = None
+        self._rapid_tap_count = 0
+        self._rapid_tap_timer = 0.0
+        self._star_particles = []  # list of [x, y, size, life, angle, speed]
+
     # ── Blink System ─────────────────────────────────────────────────────────
 
     def _random_blink_time(self) -> float:
@@ -308,11 +318,268 @@ class RoboEyes:
     def get_current_mood(self) -> Tuple[Mood, float]:
         return (self._mood, self._mood_intensity)
 
+    # ── Touch Reactions ──────────────────────────────────────────────────────
+
+    def get_eye_rects(self) -> Tuple[pygame.Rect, pygame.Rect]:
+        """Return approximate bounding rects for left and right eyes."""
+        center_y = self.screen_height // 2
+        left_x = (self.screen_width - self.config.space_between) // 2 - self.config.width // 2
+        right_x = (self.screen_width + self.config.space_between) // 2 - self.config.width // 2
+        h = self.config.height
+        pad = int(self.config.width * 0.3)
+        left_rect = pygame.Rect(left_x - pad, center_y - h // 2 - pad, self.config.width + pad * 2, h + pad * 2)
+        right_rect = pygame.Rect(right_x - pad, center_y - h // 2 - pad, self.config.width + pad * 2, h + pad * 2)
+        return left_rect, right_rect
+
+    def handle_touch(self, x: int, y: int) -> Optional[str]:
+        """Handle a touch/click at screen position. Returns reaction name or None."""
+        if self._touch_reaction is not None:
+            return None
+
+        # Track rapid tapping
+        self._rapid_tap_count += 1
+        self._rapid_tap_timer = 0.0
+
+        if self._rapid_tap_count >= 5:
+            self._rapid_tap_count = 0
+            self._start_touch_reaction('dizzy')
+            return 'dizzy'
+
+        left_rect, right_rect = self.get_eye_rects()
+        center_y = self.screen_height // 2
+        between_x_min = left_rect.right
+        between_x_max = right_rect.left
+
+        if left_rect.collidepoint(x, y):
+            self._start_touch_reaction('poke_left')
+            return 'poke_left'
+        elif right_rect.collidepoint(x, y):
+            self._start_touch_reaction('poke_right')
+            return 'poke_right'
+        elif between_x_min <= x <= between_x_max and abs(y - center_y) < self.config.height:
+            self._start_touch_reaction('boop_nose')
+            return 'boop_nose'
+        elif y < center_y - self.config.height:
+            self._start_touch_reaction('forehead_tap')
+            return 'forehead_tap'
+        elif y > center_y + self.config.height:
+            self._start_touch_reaction('chin_tap')
+            return 'chin_tap'
+        else:
+            self._start_touch_reaction('poke_face')
+            return 'poke_face'
+
+    def _start_touch_reaction(self, reaction: str):
+        """Begin a touch reaction animation."""
+        self._pre_touch_mood = self._mood
+        self._touch_reaction = reaction
+        self._touch_timer = 0.0
+        self._touch_phase = 0
+
+        if reaction == 'poke_left':
+            self._touch_duration = 1.2
+        elif reaction == 'poke_right':
+            self._touch_duration = 1.2
+        elif reaction == 'boop_nose':
+            self._touch_duration = 1.5
+        elif reaction == 'forehead_tap':
+            self._touch_duration = 1.0
+        elif reaction == 'chin_tap':
+            self._touch_duration = 1.0
+        elif reaction == 'poke_face':
+            self._touch_duration = 0.8
+            self._touch_phase = random.choice([-1, 1])  # flinch direction
+        elif reaction == 'dizzy':
+            self._touch_duration = 3.0
+            # Spawn star particles around the eyes
+            cx, cy = self.screen_width // 2, self.screen_height // 2
+            for _ in range(8):
+                angle = random.uniform(0, math.pi * 2)
+                self._star_particles.append([
+                    cx + math.cos(angle) * 60,
+                    cy + math.sin(angle) * 40,
+                    random.uniform(8, 14),
+                    0.0,
+                    angle,
+                    random.uniform(20, 50),
+                ])
+
+    def _update_touch_reaction(self, dt: float):
+        """Update the active touch reaction animation."""
+        if self._touch_reaction is None:
+            # Decay rapid tap counter
+            self._rapid_tap_timer += dt
+            if self._rapid_tap_timer > 1.0:
+                self._rapid_tap_count = max(0, self._rapid_tap_count - 1)
+                self._rapid_tap_timer = 0.0
+            return
+
+        self._touch_timer += dt
+        progress = min(1.0, self._touch_timer / self._touch_duration)
+        reaction = self._touch_reaction
+
+        if reaction == 'poke_left':
+            # Left eye closes, flinch away, shake
+            if progress < 0.15:
+                self._left_open_target = 0.0
+                self._anim_offset_x = 8
+            elif progress < 0.5:
+                self._left_open_target = 0.0
+                self._right_open_target = 1.3
+                self._target_look_x = 0.8
+                self._anim_offset_x = math.sin(self._touch_timer * 40) * 5
+            elif progress < 0.8:
+                self._left_open_target = 0.4
+                self._right_open_target = 1.0
+                self._anim_offset_x = math.sin(self._touch_timer * 20) * 2
+                self._target_look_x = 0.3
+            else:
+                self._left_open_target = 1.0
+                self._right_open_target = 1.0
+                self._target_look_x = 0.0
+                self._anim_offset_x *= 0.8
+
+        elif reaction == 'poke_right':
+            if progress < 0.15:
+                self._right_open_target = 0.0
+                self._anim_offset_x = -8
+            elif progress < 0.5:
+                self._right_open_target = 0.0
+                self._left_open_target = 1.3
+                self._target_look_x = -0.8
+                self._anim_offset_x = math.sin(self._touch_timer * 40) * 5
+            elif progress < 0.8:
+                self._right_open_target = 0.4
+                self._left_open_target = 1.0
+                self._anim_offset_x = math.sin(self._touch_timer * 20) * 2
+                self._target_look_x = -0.3
+            else:
+                self._right_open_target = 1.0
+                self._left_open_target = 1.0
+                self._target_look_x = 0.0
+                self._anim_offset_x *= 0.8
+
+        elif reaction == 'boop_nose':
+            # Cross-eyed, then surprised, then giggle shake
+            if progress < 0.3:
+                self._target_look_x = 0.0
+                self._target_look_y = 0.5
+                self._left_open_target = 1.2
+                self._right_open_target = 1.2
+                self._pupil_scale_target = 0.7
+            elif progress < 0.6:
+                self._target_look_x = 0.0
+                self._target_look_y = 0.0
+                self._left_open_target = 1.4
+                self._right_open_target = 1.4
+                self._pupil_scale_target = 0.6
+                self._anim_offset_y = math.sin(self._touch_timer * 30) * 4
+            else:
+                self._left_open_target = 0.85
+                self._right_open_target = 0.85
+                self._pupil_scale_target = 1.0
+                self._anim_offset_y = math.sin(self._touch_timer * 25) * 3 * (1.0 - progress)
+
+        elif reaction == 'forehead_tap':
+            # Annoyed look - eyelids droop, eyes look up at the finger
+            if progress < 0.2:
+                self._target_look_y = -0.9
+                self._left_open_target = 0.7
+                self._right_open_target = 0.7
+            elif progress < 0.7:
+                self._target_look_y = -0.9
+                self._squint_target = 0.4
+                self._left_open_target = 0.6
+                self._right_open_target = 0.6
+            else:
+                self._target_look_y = 0.0
+                self._squint_target = 0.0
+                self._left_open_target = 1.0
+                self._right_open_target = 1.0
+
+        elif reaction == 'chin_tap':
+            # Surprised look up, then curious
+            if progress < 0.3:
+                self._target_look_y = 0.8
+                self._left_open_target = 1.4
+                self._right_open_target = 1.4
+                self._anim_offset_y = -6
+            elif progress < 0.7:
+                self._target_look_y = 0.5
+                self._left_open_target = 1.2
+                self._right_open_target = 0.9
+                self._anim_offset_y = -3
+            else:
+                self._target_look_y = 0.0
+                self._left_open_target = 1.0
+                self._right_open_target = 1.0
+                self._anim_offset_y *= 0.8
+
+        elif reaction == 'poke_face':
+            # Quick flinch and blink
+            if progress < 0.3:
+                self._left_open_target = 0.2
+                self._right_open_target = 0.2
+                self._anim_offset_x = self._touch_phase * 5
+            elif progress < 0.6:
+                self._left_open_target = 1.0
+                self._right_open_target = 1.0
+                self._anim_offset_x *= 0.7
+            else:
+                self._anim_offset_x *= 0.8
+
+        elif reaction == 'dizzy':
+            # Spinning eyes, wobbly, stars
+            spin_speed = 4.0 if progress < 0.7 else 2.0
+            angle = self._touch_timer * spin_speed
+            self._target_look_x = math.sin(angle) * 0.7
+            self._target_look_y = math.cos(angle) * 0.5
+            wobble = math.sin(self._touch_timer * 6) * 8 * (1.0 - progress)
+            self._anim_offset_x = wobble
+            self._anim_offset_y = math.sin(self._touch_timer * 4) * 5 * (1.0 - progress)
+            # Asymmetric eye sizes for dazed look
+            self._left_open_target = 0.7 + math.sin(self._touch_timer * 3) * 0.3
+            self._right_open_target = 0.7 + math.cos(self._touch_timer * 3) * 0.3
+
+            # Update star particles
+            for s in self._star_particles:
+                s[3] += dt
+                s[4] += 1.5 * dt  # orbit
+                radius = 70 + s[5] * s[3] * 0.3
+                cx, cy = self.screen_width // 2, self.screen_height // 2
+                s[0] = cx + math.cos(s[4]) * radius
+                s[1] = cy + math.sin(s[4]) * radius * 0.6
+                s[2] *= 0.997
+            self._star_particles = [s for s in self._star_particles if s[3] < self._touch_duration]
+
+        # End reaction
+        if progress >= 1.0:
+            self._touch_reaction = None
+            self._touch_timer = 0.0
+            self._touch_phase = 0
+            self._anim_offset_x = 0.0
+            self._anim_offset_y = 0.0
+            self._squint_target = 0.0
+            self._pupil_scale_target = 1.0
+            self._target_look_x = 0.0
+            self._target_look_y = 0.0
+            self._left_open_target = 1.0
+            self._right_open_target = 1.0
+            self._eye_offset_y_left = 0.0
+            self._eye_offset_y_right = 0.0
+            self._star_particles.clear()
+            if self._pre_touch_mood is not None:
+                self.set_mood(self._pre_touch_mood)
+                self._pre_touch_mood = None
+
     # ── Update ────────────────────────────────────────────────────────────────
 
     def update(self, dt: float):
+        # Touch reactions (override normal behavior while active)
+        self._update_touch_reaction(dt)
+
         # Auto-blink
-        if self._auto_blink:
+        if self._auto_blink and self._touch_reaction is None:
             self._blink_timer += dt
             if self._blink_timer >= self._next_blink:
                 self.blink()
@@ -337,24 +604,27 @@ class RoboEyes:
                 self._blink_left = True
                 self._blink_right = True
 
-        # Idle glances
-        self._idle_timer += dt
-        if self._idle_timer >= self._next_idle:
-            self._target_look_x = random.uniform(-0.5, 0.5)
-            self._target_look_y = random.uniform(-0.3, 0.2)
-            self._idle_timer = 0
-            self._next_idle = self._random_idle_time()
+        # Idle glances (skip during touch reactions)
+        if self._touch_reaction is None:
+            self._idle_timer += dt
+            if self._idle_timer >= self._next_idle:
+                self._target_look_x = random.uniform(-0.5, 0.5)
+                self._target_look_y = random.uniform(-0.3, 0.2)
+                self._idle_timer = 0
+                self._next_idle = self._random_idle_time()
 
-        # Micro-saccades
-        self._saccade_timer += dt
-        if self._saccade_timer >= self._next_saccade:
-            offset = random.uniform(-0.05, 0.05)
-            self._target_look_x = max(-1.0, min(1.0, self._target_look_x + offset))
-            self._saccade_timer = 0
-            self._next_saccade = random.uniform(0.5, 2.0)
+        # Micro-saccades (skip during touch reactions)
+        if self._touch_reaction is None:
+            self._saccade_timer += dt
+            if self._saccade_timer >= self._next_saccade:
+                offset = random.uniform(-0.05, 0.05)
+                self._target_look_x = max(-1.0, min(1.0, self._target_look_x + offset))
+                self._saccade_timer = 0
+                self._next_saccade = random.uniform(0.5, 2.0)
 
-        self._update_animations(dt)
-        self._update_mood(dt)
+        if self._touch_reaction is None:
+            self._update_animations(dt)
+            self._update_mood(dt)
 
         speed = EMOTION_TRANSITION_SPEEDS.get(self._mood, 6.0)
 
@@ -774,6 +1044,17 @@ class RoboEyes:
         ]
         pygame.draw.polygon(surface, color, points)
 
+    @staticmethod
+    def _draw_star(surface: pygame.Surface, cx: int, cy: int, size: int, color):
+        """Draw a 4-pointed star at (cx, cy)."""
+        points = []
+        for i in range(8):
+            angle = i * math.pi / 4 - math.pi / 2
+            r = size if i % 2 == 0 else size * 0.4
+            points.append((cx + int(math.cos(angle) * r), cy + int(math.sin(angle) * r)))
+        if len(points) >= 3:
+            pygame.draw.polygon(surface, color, points)
+
     def _draw_effects(self, surface: pygame.Surface):
         """Draw mood overlay effects (hearts, etc.)."""
         for h in self._heart_particles:
@@ -786,3 +1067,12 @@ class RoboEyes:
             g = int(80 * fade)
             b = int(140 * fade)
             self._draw_heart(surface, x, y, size, (r, g, b))
+
+        # Star particles (dizzy touch reaction)
+        for s in self._star_particles:
+            sx, sy, size, life = int(s[0]), int(s[1]), int(s[2]), s[3]
+            if size < 2:
+                continue
+            fade = max(0.0, 1.0 - life / 3.0)
+            color = (int(255 * fade), int(255 * fade), int(50 * fade))
+            self._draw_star(surface, sx, sy, size, color)
