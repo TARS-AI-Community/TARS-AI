@@ -407,6 +407,9 @@ document.addEventListener('DOMContentLoaded', function () {
   let recognition = null;
   let voiceAnimFrame = null;
   let voiceAnimLevel = 0;
+  let voiceDebounceTimer = null;
+  let voicePendingTranscript = '';
+  let voiceLastSent = '';
   let isSendMode = false;
 
   // Check browser support for SpeechRecognition
@@ -474,15 +477,22 @@ document.addEventListener('DOMContentLoaded', function () {
         voiceAnimLevel = 1.0;
       }
 
-      // When we get a final result, submit it as a chat message
+      // When we get a final result, debounce and accumulate before sending
+      // This prevents Android Chrome from firing duplicate/per-word submissions
       if (finalTranscript.trim()) {
-        const text = finalTranscript.trim();
-        displayUserMessage(text);
-        sendUserMessage(text);
-        // Show typing indicator
-        setTimeout(() => displayBotMessage('', true), 500);
-        // Reset status after a moment
-        setTimeout(() => { if (voiceActive) voiceStatus.textContent = 'Listening...'; }, 1500);
+        voicePendingTranscript += (voicePendingTranscript ? ' ' : '') + finalTranscript.trim();
+        if (voiceDebounceTimer) clearTimeout(voiceDebounceTimer);
+        voiceDebounceTimer = setTimeout(() => {
+          const text = voicePendingTranscript.trim();
+          voicePendingTranscript = '';
+          if (text && text !== voiceLastSent) {
+            voiceLastSent = text;
+            displayUserMessage(text);
+            sendUserMessage(text);
+            setTimeout(() => displayBotMessage('', true), 500);
+            setTimeout(() => { if (voiceActive) voiceStatus.textContent = 'Listening...'; }, 1500);
+          }
+        }, 600);
       }
     };
 
@@ -525,6 +535,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function stopVoiceMode() {
     voiceActive = false;
+    if (voiceDebounceTimer) { clearTimeout(voiceDebounceTimer); voiceDebounceTimer = null; }
+    voicePendingTranscript = '';
+    voiceLastSent = '';
 
     if (recognition) { recognition.abort(); recognition = null; }
     if (voiceAnimFrame) { cancelAnimationFrame(voiceAnimFrame); voiceAnimFrame = null; }
