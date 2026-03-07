@@ -31,13 +31,28 @@ def generate_image(prompt, on_image_ready=None):
     """
     result = "Image Tool not enabled"
     if config['STABLE_DIFFUSION']['enabled']:
-        if config['STABLE_DIFFUSION']['service'] == "openai":
+        service = config['STABLE_DIFFUSION']['service']
+        if service == "openai":
             result = get_image_from_dalle_v3(prompt, on_image_ready=on_image_ready)
-        if config['STABLE_DIFFUSION']['service'] == "automatic1111":
+        elif service == "automatic1111":
             result = get_image_from_automatic1111(prompt, on_image_ready=on_image_ready)
-        if config['STABLE_DIFFUSION']['service'] == "comfyui":
+            if result != "The image has been created and displayed on screen.":
+                result = _try_openai_fallback(prompt, on_image_ready)
+        elif service == "comfyui":
             result = get_image_from_comfyui(prompt, on_image_ready=on_image_ready)
+            if result and result != "The image has been created and displayed on screen.":
+                result = _try_openai_fallback(prompt, on_image_ready)
     return result
+
+def _try_openai_fallback(prompt, on_image_ready):
+    """Fall back to OpenAI DALL-E if the LLM backend is openai."""
+    llm_backend = config.get('LLM', 'llm_backend', fallback='').lower()
+    if llm_backend == 'openai':
+        queue_message("[SD] Primary image service failed, falling back to OpenAI DALL-E...")
+        fallback_result = get_image_from_dalle_v3(prompt, on_image_ready=on_image_ready)
+        if fallback_result:
+            return fallback_result
+    return "Image generation failed."
 
 def get_image_from_dalle_v3(prompt, on_image_ready=None):
     from openai import OpenAI

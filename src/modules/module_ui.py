@@ -730,8 +730,12 @@ class UIManager(threading.Thread):
                                 self._overlay_image = None
                                 continue
                         if self.show_app:
+                            logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
+                            # Forward touch to active app
+                            if self.app_manager and self.app_manager.is_active():
+                                app_event = pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=logical_pos, button=event.button)
+                                self.app_manager.handle_event(app_event)
                             if self.terminal_system:
-                                logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
                                 self.terminal_system.handle_app_click(logical_pos)
                         else:
                             if self.screensaver_manager:

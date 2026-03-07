@@ -110,6 +110,12 @@ class AppManager:
     def is_active(self):
         return self.active and self.current_app is not None
 
+    def handle_event(self, event):
+        """Forward an event to the active app if it supports it."""
+        if self.active and self.current_app and hasattr(self.current_app, 'handle_event'):
+            return self.current_app.handle_event(event)
+        return False
+
     def render(self):
         if not self.active or not self.current_app:
             return False
