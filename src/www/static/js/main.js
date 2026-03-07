@@ -989,19 +989,19 @@ function executeAction() {
   <span class="config-tooltip-wrap" data-tip="Start a temporary Cloudflare tunnel to access TARS remotely. A unique URL is generated each session and nothing persists after reboot."><i class="bi bi-info-circle config-tooltip-icon"></i></span>
   <span class="badge bg-secondary ms-1" id="tunBadge" style="font-size:.6rem">Inactive</span>
 </label>
-<div class="text-center mt-1">
-  <button class="btn btn-sm btn-primary" id="tunStartBtn"><i class="bi bi-globe me-1"></i>Start Tunnel</button>
+<div class="text-center mt-3">
+  <button class="btn btn-sm btn-outline-primary" id="tunStartBtn"><i class="bi bi-globe me-1"></i>Start Tunnel</button>
   <button class="btn btn-sm btn-outline-danger" id="tunStopBtn" style="display:none"><i class="bi bi-stop-fill me-1"></i>Stop Tunnel</button>
   <div id="tunError" style="display:none" class="mt-2"><p class="small text-danger mb-1" id="tunErrorMsg"></p><button class="btn btn-sm btn-outline-primary" id="tunRetryBtn"><i class="bi bi-arrow-clockwise me-1"></i>Retry</button></div>
 </div>
 </div></div>
 <div class="col-md-6 col-lg-4" id="tunUrlCol" style="display:none"><div class="field-wrapper">
 <label class="form-label d-flex align-items-center gap-1"><span>remote_url</span><span class="config-tooltip-wrap" data-tip="Your public URL for accessing TARS from anywhere."><i class="bi bi-info-circle config-tooltip-icon"></i></span></label>
-<div class="input-group input-group-sm"><input type="text" class="form-control form-control-sm font-monospace" id="tunUrl" readonly style="font-size:.78rem"><button class="btn btn-outline-secondary" type="button" id="tunCopyBtn" title="Copy URL"><i class="bi bi-clipboard"></i></button></div>
+<div class="input-group input-group-sm"><input type="text" class="form-control form-control-sm config-input" id="tunUrl" readonly><button class="btn btn-outline-secondary" type="button" id="tunCopyBtn" title="Copy URL"><i class="bi bi-clipboard"></i></button></div>
 </div></div>
 <div class="col-md-6 col-lg-4" id="tunQrCol" style="display:none"><div class="field-wrapper">
 <label class="form-label d-flex align-items-center gap-1"><span>qr_code</span><span class="config-tooltip-wrap" data-tip="Scan with your phone to open the remote access URL."><i class="bi bi-info-circle config-tooltip-icon"></i></span></label>
-<div class="text-center"><img id="tunQrCode" class="rounded" style="max-width:120px" alt="QR Code"></div>
+<div class="text-center"><img id="tunQrCode" class="rounded" style="max-width:120px; border:1px solid rgba(255,255,255,.25)" alt="QR Code"></div>
 </div></div>
 </div></div></div>`;
         } else {

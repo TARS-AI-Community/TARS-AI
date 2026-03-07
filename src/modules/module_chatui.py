@@ -1382,7 +1382,11 @@ def tunnel_qr():
     except ImportError:
         return jsonify({'error': 'qrcode package not installed'}), 500
     buf = io.BytesIO()
-    qrcode.make(url).save(buf, format='PNG')
+    qr = qrcode.QRCode(box_size=10, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#c0c0c0", back_color="#1a1a2e")
+    img.save(buf, format='PNG')
     buf.seek(0)
     return send_file(buf, mimetype='image/png')
 
