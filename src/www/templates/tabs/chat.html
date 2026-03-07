@@ -34,11 +34,17 @@
     </div>
 
     <!-- Input bar -->
-    <div class="chat-input-bar">
-      <input type="text" id="prompt" placeholder="Send a message…" autocomplete="off" />
+    <div class="chat-input-bar" id="chatInputBar">
+      <div class="input-pill">
+        <button id="uploadImageButton" aria-label="Upload image"><i class="bi bi-plus-lg"></i></button>
+        <input type="text" id="prompt" placeholder="Send a message…" autocomplete="off" />
+        <div class="voice-overlay" id="voiceOverlay" style="display:none;">
+          <canvas id="voiceWaveform" height="40"></canvas>
+          <span class="voice-status" id="voiceStatus" style="display:none;"></span>
+        </div>
+      </div>
       <button id="muteButton"       aria-label="Mute"><i class="bi bi-volume-mute-fill"></i></button>
-      <button id="uploadImageButton" aria-label="Upload image"><i class="bi bi-image"></i></button>
-      <button id="button-addon2"    aria-label="Send"><i class="bi bi-send-fill"></i></button>
+      <button id="voiceModeButton"  aria-label="Voice mode"><i class="bi bi-mic-fill"></i></button>
     </div>
 
   </div>

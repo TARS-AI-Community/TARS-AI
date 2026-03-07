@@ -74,7 +74,6 @@ except ImportError:
 # Suppress Flask logs
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
-os.environ['WERKZEUG_RUN_MAIN'] = 'true'
 
 # If using eventlet or gevent with Flask-SocketIO
 sio_logger = logging.getLogger('socketio')
@@ -140,7 +139,8 @@ def check_auth():
         return redirect(url_for('login'))
 
 CORS(flask_app)
-socketio = SocketIO(flask_app, cors_allowed_origins="*", logger=False, engineio_logger=False)
+socketio = SocketIO(flask_app, cors_allowed_origins="*", async_mode='threading', logger=False, engineio_logger=False)
+
 
 @socketio.on('connect')
 def handle_connect():
@@ -316,6 +316,58 @@ def set_emotion():
 
     return jsonify({"error": "No emotion provided"}), 400
 
+def _process_chat_message(msg, img_b64):
+    """Shared pipeline for WebUI text chat and voice mode — sends to LLM and emits response."""
+    global latest_text_to_read
+    try:
+        # WebUI messages always come from the configured user
+        try:
+            from modules.module_speaker_id import get_speaker_id_manager
+            sid = get_speaker_id_manager()
+            if sid and sid.enabled:
+                import time as _time
+                with sid._lock:
+                    sid.current_speaker = CONFIG['CHAR']['user_name']
+                    sid.current_confidence = 1.0
+                    sid.last_identified_time = _time.time()
+        except Exception:
+            pass
+        if img_b64:
+            vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
+
+            if vision_mode in ('llm', 'openai'):
+                prompt = msg or "The user sent you a photo. Describe what you see and respond in character."
+                reply = get_completion(prompt, image_b64=img_b64, source="webui")
+            else:
+                if VISION_AVAILABLE:
+                    try:
+                        caption = process_image(img_b64, msg or "Describe this image in detail.")
+                    except Exception as e:
+                        queue_message(f"ERROR: Vision processing failed: {e}")
+                        caption = "Image uploaded but vision processing failed"
+                else:
+                    caption = "Image uploaded (vision module not available)"
+
+                if msg:
+                    cmessage = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
+                else:
+                    cmessage = f"*The user uploaded a photo. Description: {caption}*"
+                reply = get_completion(cmessage, source="webui")
+        else:
+            reply = get_completion(msg, source="webui")
+
+        latest_text_to_read = reply
+        socketio.emit('bot_message', {'message': reply or ''})
+
+        if CONFIG['EMOTION']['enabled'] and reply:
+            detected = detect_emotion(reply)
+            if detected:
+                update_emotion(detected)
+
+    except Exception as e:
+        queue_message(f"ERROR: process_llm failed: {e}")
+        socketio.emit('bot_message', {'message': f'Error processing message: {e}'})
+
 @flask_app.route('/process_llm', methods=['POST'])
 def receive_user_message():
     user_message = request.form.get('message', '')
@@ -335,60 +387,7 @@ def receive_user_message():
             socketio.emit('bot_message', {'message': 'Sorry, I could not process that image.'})
             return jsonify({"status": "error", "message": "Invalid image"})
 
-    def _process(msg, img_b64):
-        global latest_text_to_read
-        try:
-            # WebUI messages always come from the configured user
-            try:
-                from modules.module_speaker_id import get_speaker_id_manager
-                sid = get_speaker_id_manager()
-                if sid and sid.enabled:
-                    import time as _time
-                    with sid._lock:
-                        sid.current_speaker = CONFIG['CHAR']['user_name']
-                        sid.current_confidence = 1.0
-                        sid.last_identified_time = _time.time()
-            except Exception:
-                pass
-            if img_b64:
-                vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
-
-                if vision_mode in ('llm', 'openai'):
-                    # Single pass — image goes directly to LLM with full personality
-                    prompt = msg or "The user sent you a photo. Describe what you see and respond in character."
-                    reply = get_completion(prompt, image_b64=img_b64, source="webui")
-                else:
-                    # Two-pass — get caption first, then send to LLM for conversation
-                    if VISION_AVAILABLE:
-                        try:
-                            caption = process_image(img_b64, msg or "Describe this image in detail.")
-                        except Exception as e:
-                            queue_message(f"ERROR: Vision processing failed: {e}")
-                            caption = "Image uploaded but vision processing failed"
-                    else:
-                        caption = "Image uploaded (vision module not available)"
-
-                    if msg:
-                        cmessage = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
-                    else:
-                        cmessage = f"*The user uploaded a photo. Description: {caption}*"
-                    reply = get_completion(cmessage, source="webui")
-            else:
-                reply = get_completion(msg, source="webui")
-
-            latest_text_to_read = reply
-            socketio.emit('bot_message', {'message': reply or ''})
-
-            if CONFIG['EMOTION']['enabled'] and reply:
-                detected = detect_emotion(reply)
-                if detected:
-                    update_emotion(detected)
-
-        except Exception as e:
-            queue_message(f"ERROR: process_llm failed: {e}")
-            socketio.emit('bot_message', {'message': f'Error processing message: {e}'})
-
-    socketio.start_background_task(_process, user_message, base64_image)
+    socketio.start_background_task(_process_chat_message, user_message, base64_image)
     return jsonify({"status": "success"})
 
 @flask_app.route('/upload', methods=['GET', 'POST'])
@@ -464,7 +463,6 @@ def camera_feed():
 
     import cv2 as _cv2
     import numpy as _np
-    import eventlet
 
     camera = CameraModule(1920, 1080)
 
@@ -472,7 +470,7 @@ def camera_feed():
         while True:
             frame = camera.get_frame()
             if frame is None:
-                eventlet.sleep(0.1)
+                time.sleep(0.1)
                 continue
             try:
                 import pygame as _pg
@@ -484,7 +482,7 @@ def camera_feed():
                     yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
             except Exception:
                 pass
-            eventlet.sleep(0.066)  # ~15 fps
+            time.sleep(0.066)  # ~15 fps
 
     from flask import Response
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
@@ -1375,11 +1373,5 @@ def save_character(name):
 def start_flask_app(port=None):
     if port is None:
         port = CONFIG['UI'].get('webui_port', 80)
-    import eventlet
-    import eventlet.wsgi
-    queue_message(f"INFO: Starting Flask app on port {port} with Eventlet...")
-    eventlet.wsgi.server(
-        eventlet.listen(("0.0.0.0", port)),
-        flask_app,
-        log_output=False  # Disable request logging.
-    )
+    queue_message(f"INFO: Starting Flask app on port {port}...")
+    socketio.run(flask_app, host="0.0.0.0", port=port, log_output=False, allow_unsafe_werkzeug=True)
