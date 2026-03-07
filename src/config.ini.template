@@ -163,13 +163,17 @@ top_k = 5
 # Boost memories within N days in results (0 = disabled)
 recency_boost_days = 7
 
-[UI]
+[ACCESS]
 # Enable web interface
 webui_enabled = True
 # Web interface port (80 = no port needed in browser URL)
 webui_port = 80
 # Web interface login password
 webui_password = tarspassword
+# Enable remote access tunnel (access TARS from anywhere, no account needed)
+remote_access_enabled = False
+
+[UI]
 # On-device display width in pixels (3.5" = 480, 5–7" = 800)
 screen_width = 480
 # On-device display height in pixels (3.5" = 320, 5" = 480)
