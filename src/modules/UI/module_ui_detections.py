@@ -98,6 +98,23 @@ class FaceDetector(BaseDetector):
             })
         return detections
 
+class LightRingDetector(BaseDetector):
+    """Solid white border (25% each side) to illuminate dark rooms from the screen."""
+    name = "LIGHT"
+    BORDER_FRAC = 0.25
+
+    def detect(self, frame_bgr, gray):
+        return []
+
+    def draw_light_ring(self, surface):
+        sw, sh = surface.get_size()
+        bx = max(int(sw * self.BORDER_FRAC), 1)
+        by = max(int(sh * self.BORDER_FRAC), 1)
+        pygame.draw.rect(surface, (255, 255, 255), (0, 0, sw, by))          # top
+        pygame.draw.rect(surface, (255, 255, 255), (0, sh - by, sw, by))    # bottom
+        pygame.draw.rect(surface, (255, 255, 255), (0, by, bx, sh - 2*by)) # left
+        pygame.draw.rect(surface, (255, 255, 255), (sw - bx, by, bx, sh - 2*by)) # right
+
 
 class MotionDetector(BaseDetector):
     name = "MOTION"
@@ -430,6 +447,10 @@ class DetectionManager:
         self._delete_menu_names = []
 
     def _init_default_detectors(self):
+        light = LightRingDetector()
+        light.enabled = False
+        self.detectors.append(light)
+
         face = FaceDetector()
         self.detectors.append(face)
 
@@ -473,6 +494,12 @@ class DetectionManager:
     def _get_face_id_detector(self):
         for d in self.detectors:
             if isinstance(d, FaceRecognitionDetector):
+                return d
+        return None
+
+    def _get_light_ring_detector(self):
+        for d in self.detectors:
+            if isinstance(d, LightRingDetector):
                 return d
         return None
 
