@@ -1,3 +1,4 @@
+import traceback
 import base64
 from datetime import datetime
 from pathlib import Path
@@ -84,7 +85,7 @@ def initialize_camera():
     global CAMERA
     if CAMERA is None:
         CAMERA = CameraModule(1920, 1080)
-        queue_message("INFO: Camera initialized.")
+        queue_message(f"INFO: Camera initialized.")
 
 def initialize_blip():
     """Initialize BLIP model and processor for detailed captions."""
@@ -97,13 +98,13 @@ def initialize_blip():
         
     global PROCESSOR, MODEL
     if not PROCESSOR or not MODEL:
-        queue_message("INFO: Initializing BLIP model...")
+        queue_message(f"INFO: Initializing BLIP model...")
 
         PROCESSOR = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR))
         MODEL = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
         MODEL = torch.quantization.quantize_dynamic(MODEL, {torch.nn.Linear}, dtype=torch.qint8)
 
-        queue_message("INFO: BLIP model initialized.")
+        queue_message(f"INFO: BLIP model initialized.")
 
 def capture_image() -> str:
     """Capture an image from the camera instance and return the saved image path."""
@@ -182,7 +183,7 @@ def describe_camera_view_openai(user_prompt) -> str:
 
     except Exception as e:
         queue_message(f"ERROR: Vision failed - {e}")
-        return "I tried to look but encountered an error."
+        return f"I tried to look but encountered an error."
 
 
 def send_image_to_server(image_path: str) -> str:

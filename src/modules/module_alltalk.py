@@ -1,6 +1,8 @@
 import requests
 import io
 import re
+import asyncio
+import wave
 
 from modules.module_config import load_config
 from modules.module_messageQue import queue_message
