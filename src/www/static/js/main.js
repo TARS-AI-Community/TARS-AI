@@ -540,7 +540,7 @@ document.addEventListener('DOMContentLoaded', function () {
     voicePendingTranscript = '';
     voiceLastSent = '';
 
-    if (recognition) { recognition.abort(); recognition = null; }
+    if (recognition) { recognition.onend = null; recognition.onerror = null; recognition.onresult = null; recognition.abort(); recognition = null; }
     if (voiceAnimFrame) { cancelAnimationFrame(voiceAnimFrame); voiceAnimFrame = null; }
 
     voiceModeBtn.classList.remove('voice-active');
