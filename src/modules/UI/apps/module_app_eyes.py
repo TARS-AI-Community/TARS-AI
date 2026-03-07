@@ -97,6 +97,10 @@ class EyesApp:
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
             x, y = event.pos
+            # Exclude bottom toolbar area (6% of screen height) so back button remains usable
+            bottom_toolbar_height = int(self.height * 0.06)
+            if y >= self.height - bottom_toolbar_height:
+                return False
             reaction = self.eyes.handle_touch(x, y)
             if reaction and reaction in TOUCH_VOICE_LINES:
                 line = random.choice(TOUCH_VOICE_LINES[reaction])
