@@ -147,6 +147,9 @@ llm/
 vision/
 config.ini
 config_backup.ini
+config-server.ini
+src/models/
+src/logs/
 # Memory files
 *.pickle.gz
 TARS.wav
