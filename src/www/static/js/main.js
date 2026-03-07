@@ -1012,7 +1012,7 @@ function executeAction() {
 </div></div>
 <div class="col-md-6 col-lg-4" id="tunUrlCol" style="display:none"><div class="field-wrapper">
 <label class="form-label d-flex align-items-center gap-1"><span>remote_url</span><span class="config-tooltip-wrap" data-tip="Your public URL for accessing TARS from anywhere."><i class="bi bi-info-circle config-tooltip-icon"></i></span></label>
-<div class="input-group input-group-sm"><input type="text" class="form-control form-control-sm config-input" id="tunUrl" readonly><button class="btn btn-outline-secondary" type="button" id="tunCopyBtn" title="Copy URL"><i class="bi bi-clipboard"></i></button><button class="btn btn-outline-secondary" type="button" id="tunOpenBtn" title="Open URL"><i class="bi bi-box-arrow-up-right"></i></button></div>
+<div class="d-flex gap-1 align-items-stretch"><button class="btn btn-sm tun-btn" type="button" id="tunCopyBtn" title="Copy URL"><i class="bi bi-clipboard"></i></button><input type="text" class="form-control form-control-sm config-input flex-grow-1" id="tunUrl" readonly style="cursor:pointer"><button class="btn btn-sm tun-btn" type="button" id="tunOpenBtn" title="Open URL"><i class="bi bi-box-arrow-up-right"></i></button></div>
 </div></div>
 <div class="col-md-6 col-lg-4" id="tunQrCol" style="display:none"><div class="field-wrapper">
 <label class="form-label d-flex align-items-center gap-1"><span>qr_code</span><span class="config-tooltip-wrap" data-tip="Scan with your phone to open the remote access URL."><i class="bi bi-info-circle config-tooltip-icon"></i></span></label>
@@ -1311,8 +1311,9 @@ function executeAction() {
     }
 
     // Copy (with fallback for Android/non-HTTPS contexts)
-    copyBtn.addEventListener('click', () => {
+    function copyUrl() {
       const text = urlInput.value;
+      if (!text) return;
       function onSuccess() {
         copyBtn.innerHTML = '<i class="bi bi-check"></i>';
         setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i>'; }, 1500);
@@ -1328,7 +1329,9 @@ function executeAction() {
         document.execCommand('copy');
         onSuccess();
       }
-    });
+    }
+    copyBtn.addEventListener('click', copyUrl);
+    urlInput.addEventListener('click', copyUrl);
 
     // Open URL in new tab
     if (openBtn) {
