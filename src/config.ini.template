@@ -252,8 +252,9 @@ prompt_prefix = in the style of midjourney
 prompt_postfix = clearly defined,high def,(detailed scene and background),key visual,vibrant,highly detailed
 # Random seed (-1 = random, fixed = reproducible)
 seed = -1
-# Diffusion sampler (Euler a = fast + quality; DPM++ 2M Karras = detailed)
-sampler_name = Euler a
+# Diffusion sampler (euler_ancestral = fast + quality; dpmpp_2m = detailed)
+# ComfyUI sampler names: euler, euler_ancestral, dpmpp_2m, dpmpp_2m_sde, dpmpp_sde, uni_pc, etc.
+sampler_name = euler
 # Noise reduction strength 0.0–1.0 (img2img: how much image changes)
 denoising_strength = 0.5
 # Diffusion steps (20–30 = good balance; 50+ = diminishing returns)

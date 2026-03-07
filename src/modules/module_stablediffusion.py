@@ -211,14 +211,14 @@ def get_image_from_comfyui(prompt, on_image_ready=None):
 
                 image_bytes = img_resp.content
 
-                # Fire WebUI callback with raw bytes
                 if on_image_ready:
+                    # WebUI request — send to browser only
                     try:
                         on_image_ready(image_bytes)
                     except Exception as cb_err:
                         queue_message(f"ComfyUI image callback error: {cb_err}")
                 else:
-                    # Only display locally via pygame when there is no WebUI callback
+                    # Voice request — display on physical screen
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
                         tmp.write(image_bytes)
                         tmp_path = tmp.name
@@ -235,65 +235,57 @@ def get_image_from_comfyui(prompt, on_image_ready=None):
         return f"ComfyUI error: {e}"
 
 def display_image_fullscreen(image_path):
-    """Function to display an image in fullscreen, scaled to fit the screen, for 8 seconds."""
+    """Display an image for 8 seconds — uses the existing UI overlay if running, otherwise opens a standalone pygame window."""
     try:
-        _display_image_fullscreen_inner(image_path)
+        # Try the existing UI manager first (avoids X11 display conflict)
+        import sys
+        app_module = sys.modules.get('app') or sys.modules.get('__main__')
+        ui_mgr = getattr(app_module, 'ui_manager', None) if app_module else None
+        if ui_mgr and hasattr(ui_mgr, 'show_overlay_image') and getattr(ui_mgr, 'running', False):
+            ui_mgr.show_overlay_image(image_path, duration=8)
+            queue_message("[SD] Image displayed via UI overlay")
+            return
+        else:
+            queue_message(f"[SD] UI overlay not available (ui_mgr={ui_mgr}, running={getattr(ui_mgr, 'running', None)})")
     except Exception as e:
-        queue_message(f"Display error (non-fatal): {e}")
+        queue_message(f"[SD] UI overlay lookup failed: {e}")
+
+    # Fallback: standalone pygame window (only if no existing display)
+    if not pygame.display.get_init() or pygame.display.get_surface() is None:
+        try:
+            _display_image_fullscreen_inner(image_path)
+        except Exception as e:
+            queue_message(f"Display error (non-fatal): {e}")
+    else:
+        queue_message("[SD] Cannot display image: pygame display already active but UI overlay unavailable")
 
 def _display_image_fullscreen_inner(image_path):
-    # Initialize Pygame
     pygame.init()
-
-    # Set the Pygame window to fullscreen
     screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    time.sleep(0.1)
 
-    # Allow time for the Pygame window to be fully initialized
-    time.sleep(0.1)  # Give a slight delay to ensure it's on top
-
-    # Get the screen dimensions
     screen_width, screen_height = screen.get_size()
-
-    # Load the image using Pygame
     pygame_img = pygame.image.load(image_path)
-
-    # Get the original image dimensions
     img_width, img_height = pygame_img.get_width(), pygame_img.get_height()
-
-    # Calculate the scaling factor to maintain aspect ratio
     scale_factor = min(screen_width / img_width, screen_height / img_height)
-
-    # Compute the new dimensions
     new_width = int(img_width * scale_factor)
     new_height = int(img_height * scale_factor)
-
-    # Scale the image
     scaled_img = pygame.transform.smoothscale(pygame_img, (new_width, new_height))
-
-    # Calculate position to center the image on the screen
     x_pos = (screen_width - new_width) // 2
     y_pos = (screen_height - new_height) // 2
 
-    # Display the image on the screen
-    screen.fill((0, 0, 0))  # Fill the screen with black
+    screen.fill((0, 0, 0))
     screen.blit(scaled_img, (x_pos, y_pos))
     pygame.display.update()
 
-    # Start a timer for 8 seconds but keep the event loop running
-    start_ticks = pygame.time.get_ticks()  # Get the current time (milliseconds)
+    start_ticks = pygame.time.get_ticks()
     running = True
-
-    # Event loop to keep the window open and allow other events to be handled
     while running:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:  # If the window is closed, exit
+            if event.type == pygame.QUIT:
                 running = False
-
-        # Check if 8 seconds have passed
         if pygame.time.get_ticks() - start_ticks > 8000:
             running = False
-
         pygame.display.update()
 
-    # Close Pygame and exit
     pygame.quit()

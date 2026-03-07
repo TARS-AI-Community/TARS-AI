@@ -356,7 +356,7 @@ def receive_user_message():
                 if vision_mode in ('llm', 'openai'):
                     # Single pass — image goes directly to LLM with full personality
                     prompt = msg or "The user sent you a photo. Describe what you see and respond in character."
-                    reply = get_completion(prompt, image_b64=img_b64)
+                    reply = get_completion(prompt, image_b64=img_b64, source="webui")
                 else:
                     # Two-pass — get caption first, then send to LLM for conversation
                     if VISION_AVAILABLE:
@@ -372,9 +372,9 @@ def receive_user_message():
                         cmessage = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
                     else:
                         cmessage = f"*The user uploaded a photo. Description: {caption}*"
-                    reply = get_completion(cmessage)
+                    reply = get_completion(cmessage, source="webui")
             else:
-                reply = get_completion(msg)
+                reply = get_completion(msg, source="webui")
 
             latest_text_to_read = reply
             socketio.emit('bot_message', {'message': reply or ''})
@@ -434,7 +434,7 @@ def upload():
     vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
     if vision_mode in ('llm', 'openai'):
-        reply = get_completion(f"{CONFIG['CHAR']['user_name']} sent you a photo. Describe what you see and respond in character.", image_b64=base64_image)
+        reply = get_completion(f"{CONFIG['CHAR']['user_name']} sent you a photo. Describe what you see and respond in character.", image_b64=base64_image, source="webui")
     else:
         if VISION_AVAILABLE:
             try:
@@ -446,7 +446,7 @@ def upload():
             caption = "Image uploaded (vision module not available)"
 
         cmessage = f"*{CONFIG['CHAR']['user_name']} sent a photo. Description: {caption}*"
-        reply = get_completion(cmessage)
+        reply = get_completion(cmessage, source="webui")
 
     latest_text_to_read = reply
     socketio.emit('bot_message', {'message': reply or ''})
