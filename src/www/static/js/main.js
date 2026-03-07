@@ -477,10 +477,11 @@ document.addEventListener('DOMContentLoaded', function () {
         voiceAnimLevel = 1.0;
       }
 
-      // When we get a final result, debounce and accumulate before sending
-      // This prevents Android Chrome from firing duplicate/per-word submissions
+      // When we get a final result, debounce before sending.
+      // On Android Chrome, each final result is cumulative (contains all words so far),
+      // so we replace rather than accumulate to avoid word duplication.
       if (finalTranscript.trim()) {
-        voicePendingTranscript += (voicePendingTranscript ? ' ' : '') + finalTranscript.trim();
+        voicePendingTranscript = finalTranscript.trim();
         if (voiceDebounceTimer) clearTimeout(voiceDebounceTimer);
         voiceDebounceTimer = setTimeout(() => {
           const text = voicePendingTranscript.trim();
