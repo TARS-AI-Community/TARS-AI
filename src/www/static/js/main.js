@@ -981,24 +981,27 @@ function executeAction() {
           html += '</div></div>';
         }
 
-        // Inject Remote Access tunnel fields directly into the ACCESS grid (no wrapper)
+        // Inject Remote Access tunnel controls into the ACCESS grid
         if (section === 'ACCESS') {
-          html += `<div class="col-md-6 col-lg-4" id="tunProgress" style="display:none"><div class="field-wrapper d-flex flex-column align-items-center justify-content-center" style="min-height:88px">
-<div class="d-flex align-items-center gap-2 mb-1"><span class="spinner-border spinner-border-sm text-primary"></span><span id="tunProgressMsg" class="small fw-semibold">Starting tunnel...</span></div>
-<span class="badge bg-secondary" id="tunBadge" style="font-size:.65rem"></span>
+          html += `<div class="col-md-6 col-lg-4"><div class="field-wrapper">
+<label class="form-label d-flex align-items-center gap-1">
+  <span>remote_access</span>
+  <span class="config-tooltip-wrap" data-tip="Start a temporary Cloudflare tunnel to access TARS remotely. A unique URL is generated each session and nothing persists after reboot."><i class="bi bi-info-circle config-tooltip-icon"></i></span>
+  <span class="badge bg-secondary ms-1" id="tunBadge" style="font-size:.6rem">Inactive</span>
+</label>
+<div class="text-center mt-1">
+  <button class="btn btn-sm btn-primary" id="tunStartBtn"><i class="bi bi-globe me-1"></i>Start Tunnel</button>
+  <button class="btn btn-sm btn-outline-danger" id="tunStopBtn" style="display:none"><i class="bi bi-stop-fill me-1"></i>Stop Tunnel</button>
+  <div id="tunError" style="display:none" class="mt-2"><p class="small text-danger mb-1" id="tunErrorMsg"></p><button class="btn btn-sm btn-outline-primary" id="tunRetryBtn"><i class="bi bi-arrow-clockwise me-1"></i>Retry</button></div>
+</div>
 </div></div>
 <div class="col-md-6 col-lg-4" id="tunUrlCol" style="display:none"><div class="field-wrapper">
-<label class="form-label d-flex align-items-center gap-1"><span>remote_url</span><span class="config-tooltip-wrap" data-tip="Your public URL for accessing TARS from anywhere. A new URL is generated each time the tunnel starts."><i class="bi bi-info-circle config-tooltip-icon"></i></span></label>
-<div class="input-group input-group-sm"><input type="text" class="form-control form-control-sm font-monospace" id="tunUrl" readonly><button class="btn btn-outline-secondary" type="button" id="tunCopyBtn" title="Copy link"><i class="bi bi-clipboard"></i></button></div>
+<label class="form-label d-flex align-items-center gap-1"><span>remote_url</span><span class="config-tooltip-wrap" data-tip="Your public URL for accessing TARS from anywhere."><i class="bi bi-info-circle config-tooltip-icon"></i></span></label>
+<div class="input-group input-group-sm"><input type="text" class="form-control form-control-sm font-monospace" id="tunUrl" readonly style="font-size:.78rem"><button class="btn btn-outline-secondary" type="button" id="tunCopyBtn" title="Copy URL"><i class="bi bi-clipboard"></i></button></div>
 </div></div>
 <div class="col-md-6 col-lg-4" id="tunQrCol" style="display:none"><div class="field-wrapper">
-<label class="form-label d-flex align-items-center gap-1"><span>qr_code</span><span class="config-tooltip-wrap" data-tip="Scan this QR code with your phone to open the remote access URL."><i class="bi bi-info-circle config-tooltip-icon"></i></span></label>
-<div class="text-center"><img id="tunQrCode" class="rounded" style="max-width:140px" alt="QR Code"></div>
-</div></div>
-<div class="col-md-6 col-lg-4" id="tunError" style="display:none"><div class="field-wrapper">
-<label class="form-label d-flex align-items-center gap-1"><span>tunnel_status</span></label>
-<p class="small text-danger mb-2" id="tunErrorMsg"></p>
-<button class="btn btn-sm btn-outline-primary" id="tunRetryBtn"><i class="bi bi-arrow-clockwise me-1"></i>Retry</button>
+<label class="form-label d-flex align-items-center gap-1"><span>qr_code</span><span class="config-tooltip-wrap" data-tip="Scan with your phone to open the remote access URL."><i class="bi bi-info-circle config-tooltip-icon"></i></span></label>
+<div class="text-center"><img id="tunQrCode" class="rounded" style="max-width:120px" alt="QR Code"></div>
 </div></div>
 </div></div></div>`;
         } else {
@@ -1196,8 +1199,8 @@ function executeAction() {
   /* ── Remote Access Tunnel (Cloudflare Quick Tunnel) ──────────── */
   function initTunnelControls() {
     const badge    = $('tunBadge');
-    const progress = $('tunProgress');
-    const progMsg  = $('tunProgressMsg');
+    const startBtn = $('tunStartBtn');
+    const stopBtn  = $('tunStopBtn');
     const urlCol   = $('tunUrlCol');
     const qrCol    = $('tunQrCol');
     const urlInput = $('tunUrl');
@@ -1206,15 +1209,17 @@ function executeAction() {
     const error    = $('tunError');
     const errorMsg = $('tunErrorMsg');
     const retryBtn = $('tunRetryBtn');
-    if (!badge || !progress) return;
+    if (!badge || !startBtn) return;
 
-    const allCols = [progress, urlCol, qrCol, error];
+    function showState(state) {
+      error.style.display = state === 'error' ? '' : 'none';
+      urlCol.style.display = state === 'active' ? '' : 'none';
+      qrCol.style.display = state === 'active' ? '' : 'none';
+    }
 
-    function showView(view) {
-      allCols.forEach(el => el.style.display = 'none');
-      if (view === 'progress') { progress.style.display = ''; }
-      else if (view === 'active') { urlCol.style.display = ''; qrCol.style.display = ''; }
-      else if (view === 'error') { error.style.display = ''; }
+    function setButtons(isActive) {
+      startBtn.style.display = isActive ? 'none' : '';
+      stopBtn.style.display = isActive ? '' : 'none';
     }
 
     let pollTimer = null;
@@ -1228,22 +1233,25 @@ function executeAction() {
           badge.className = 'badge bg-success';
           urlInput.value = d.url;
           qrImg.src = `/api/tunnel/qr?url=${encodeURIComponent(d.url)}`;
-          showView('active');
+          showState('active');
+          setButtons(true);
         } else if (d.state === 'error') {
           stopPolling();
           badge.textContent = 'Error';
           badge.className = 'badge bg-danger';
           errorMsg.textContent = d.error || 'Failed to start tunnel';
-          showView('error');
+          showState('error');
+          setButtons(false);
         }
       }).catch(() => {});
     }
 
     function startTunnel() {
-      showView('progress');
-      progMsg.textContent = 'Starting tunnel...';
-      badge.textContent = '';
-      badge.className = 'badge bg-secondary';
+      showState(null);
+      badge.textContent = 'Starting';
+      badge.className = 'badge bg-warning';
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'none';
       stopPolling();
 
       fetch('/api/tunnel/start', { method:'POST' })
@@ -1253,7 +1261,8 @@ function executeAction() {
             badge.className = 'badge bg-success';
             urlInput.value = d.url;
             qrImg.src = `/api/tunnel/qr?url=${encodeURIComponent(d.url)}`;
-            showView('active');
+            showState('active');
+            setButtons(true);
           } else {
             pollTimer = setInterval(pollStatus, 2000);
           }
@@ -1261,22 +1270,28 @@ function executeAction() {
           badge.textContent = 'Error';
           badge.className = 'badge bg-danger';
           errorMsg.textContent = 'Request failed. Check your connection.';
-          showView('error');
+          showState('error');
+          setButtons(false);
         });
     }
 
-    function checkStatus() {
-      fetch('/api/tunnel/status').then(r => r.json()).then(d => {
-        if (d.state === 'active' && d.url) {
-          badge.textContent = 'Active';
-          badge.className = 'badge bg-success';
-          urlInput.value = d.url;
-          qrImg.src = `/api/tunnel/qr?url=${encodeURIComponent(d.url)}`;
-          showView('active');
-        } else {
-          startTunnel();
-        }
-      }).catch(() => startTunnel());
+    function stopTunnel() {
+      stopPolling();
+      badge.textContent = 'Stopping...';
+      badge.className = 'badge bg-warning';
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'none';
+      fetch('/api/tunnel/stop', { method:'POST' }).then(() => {
+        badge.textContent = 'Inactive';
+        badge.className = 'badge bg-secondary';
+        showState(null);
+        setButtons(false);
+      }).catch(() => {
+        badge.textContent = 'Inactive';
+        badge.className = 'badge bg-secondary';
+        showState(null);
+        setButtons(false);
+      });
     }
 
     // Copy
@@ -1287,23 +1302,22 @@ function executeAction() {
       });
     });
 
-    // Retry
+    // Button handlers
+    startBtn.addEventListener('click', startTunnel);
+    stopBtn.addEventListener('click', stopTunnel);
     retryBtn.addEventListener('click', startTunnel);
 
-    // Toggle: show/hide tunnel fields + auto-start/stop
-    const toggle = $('cfg_ACCESS_remote_access_enabled');
-    function sync() {
-      const on = toggle && toggle.checked;
-      if (on) {
-        checkStatus();
-      } else {
-        stopPolling();
-        showView(null);
-        fetch('/api/tunnel/stop', { method:'POST' }).catch(() => {});
+    // Check current state on load
+    fetch('/api/tunnel/status').then(r => r.json()).then(d => {
+      if (d.state === 'active' && d.url) {
+        badge.textContent = 'Active';
+        badge.className = 'badge bg-success';
+        urlInput.value = d.url;
+        qrImg.src = `/api/tunnel/qr?url=${encodeURIComponent(d.url)}`;
+        showState('active');
+        setButtons(true);
       }
-    }
-    sync();
-    if (toggle) toggle.addEventListener('change', sync);
+    }).catch(() => {});
   }
 
   /* ── Fixed-position tooltips (escape overflow:hidden) ──────────── */
