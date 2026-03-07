@@ -218,9 +218,11 @@ for arg in sys.argv[1:]:
                 debug_mode = True
                 CONFIG['debug_mode'] = True
                 logging.basicConfig(level=logging.DEBUG, force=True)
-                # Suppress noisy picamera2 debug spam
+                # Suppress noisy library debug spam
                 logging.getLogger('picamera2').setLevel(logging.WARNING)
                 logging.getLogger('libcamera').setLevel(logging.WARNING)
+                logging.getLogger('piper_phonemize').setLevel(logging.WARNING)
+                logging.getLogger('piper').setLevel(logging.INFO)
                 queue_message("LOAD: Debug mode enabled")
 
 
