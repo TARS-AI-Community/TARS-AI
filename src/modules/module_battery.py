@@ -232,4 +232,4 @@ class BatteryModule:
         elevation = (self.voltage - self.baseline_voltage) * 1000 if self.baseline_voltage else 0
         cooldown = "COOLDOWN" if self._is_servo_cooldown_active() else ""
         print(f"V: {self.voltage:.3f} (base: {baseline_str}, {elevation:+.0f}mV)  |  "
-              f"I: {self.current:+.0f}mA  |  {self.charging_state} {cooldown}")
+              f"I: {self.current:+.0f}mA  |  trend: {trend}  |  {self.charging_state} {cooldown}")

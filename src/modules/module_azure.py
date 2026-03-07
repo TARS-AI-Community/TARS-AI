@@ -3,6 +3,7 @@ import re
 import asyncio
 import azure.cognitiveservices.speech as speechsdk
 from modules.module_config import load_config
+from modules.module_messageQue import queue_message
 
 
 CONFIG = load_config()
@@ -96,6 +97,8 @@ async def synthesize_azure(chunk: str) -> io.BytesIO:
     
         if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
             cancellation_details = getattr(result, "cancellation_details", None)
+            if cancellation_details:
+                queue_message(f"ERROR: Azure TTS cancelled: {cancellation_details}")
             return None
 
         if not result.audio_data:
@@ -107,6 +110,7 @@ async def synthesize_azure(chunk: str) -> io.BytesIO:
         return audio_buffer
 
     except Exception as e:
+        queue_message(f"ERROR: Azure TTS synthesis failed: {e}")
         return None
 
 async def apply_tars_effects(audio_buffer):
