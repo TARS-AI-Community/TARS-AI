@@ -125,7 +125,20 @@ def _check_patterns(short_term_memory, char_name):
 
 
 def _get_speaker_context():
-    """Get current speaker identification for prompt injection."""
+    """Get current speaker identification for prompt injection.
+
+    Prefers the fused IdentityManager (voice + face) when available,
+    falls back to voice-only SpeakerIDManager.
+    """
+    try:
+        from modules.module_identity import get_identity_manager
+        im = get_identity_manager()
+        if im is not None:
+            ctx = im.get_identity_context()
+            if ctx:
+                return ctx
+    except Exception:
+        pass
     try:
         from modules.module_speaker_id import get_speaker_id_manager
         sid = get_speaker_id_manager()
@@ -137,7 +150,18 @@ def _get_speaker_context():
 
 
 def _get_active_user_name(config_user_name: str) -> str:
-    """Return the speaker-identified name if available, otherwise the config user_name."""
+    """Return the best-known user name for conversation display.
+
+    Prefers the fused IdentityManager (voice + face), falls back to
+    voice-only SpeakerIDManager, then config fallback.
+    """
+    try:
+        from modules.module_identity import get_identity_manager
+        im = get_identity_manager()
+        if im is not None:
+            return im.get_active_user_name(config_user_name)
+    except Exception:
+        pass
     try:
         from modules.module_speaker_id import get_speaker_id_manager
         sid = get_speaker_id_manager()

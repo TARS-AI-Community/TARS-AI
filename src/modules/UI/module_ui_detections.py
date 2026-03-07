@@ -98,6 +98,23 @@ class FaceDetector(BaseDetector):
             })
         return detections
 
+class LightRingDetector(BaseDetector):
+    """Solid white border (25% each side) to illuminate dark rooms from the screen."""
+    name = "LIGHT"
+    BORDER_FRAC = 0.25
+
+    def detect(self, frame_bgr, gray):
+        return []
+
+    def draw_light_ring(self, surface):
+        sw, sh = surface.get_size()
+        bx = max(int(sw * self.BORDER_FRAC), 1)
+        by = max(int(sh * self.BORDER_FRAC), 1)
+        pygame.draw.rect(surface, (255, 255, 255), (0, 0, sw, by))          # top
+        pygame.draw.rect(surface, (255, 255, 255), (0, sh - by, sw, by))    # bottom
+        pygame.draw.rect(surface, (255, 255, 255), (0, by, bx, sh - 2*by)) # left
+        pygame.draw.rect(surface, (255, 255, 255), (sw - bx, by, bx, sh - 2*by)) # right
+
 
 class MotionDetector(BaseDetector):
     name = "MOTION"
@@ -247,6 +264,7 @@ class FaceRecognitionDetector(BaseDetector):
         self.training_name = None
         self.training_status = ""
         self.has_unknown = False
+        self._last_recognized = []
 
         try:
             _ensure_models(self.MODELS_DIR)
@@ -340,6 +358,7 @@ class FaceRecognitionDetector(BaseDetector):
             return []
 
         detections = []
+        recognized = []
         found_unknown = False
         for face in faces:
             bbox = face[:4].astype(int)
@@ -365,6 +384,7 @@ class FaceRecognitionDetector(BaseDetector):
                 color = (255, 200, 0) if name != "UNKNOWN" else (0, 0, 255)
                 if name == "UNKNOWN":
                     found_unknown = True
+                recognized.append({"name": name, "confidence": score})
 
             detections.append({
                 'bbox': (x, y, fw, fh),
@@ -373,7 +393,12 @@ class FaceRecognitionDetector(BaseDetector):
             })
 
         self.has_unknown = found_unknown
+        self._last_recognized = recognized
         return detections
+
+    def get_recognized_faces(self):
+        """Return structured list of currently detected faces with name and confidence."""
+        return list(self._last_recognized)
 
 
 class DetectionManager:
@@ -422,6 +447,10 @@ class DetectionManager:
         self._delete_menu_names = []
 
     def _init_default_detectors(self):
+        light = LightRingDetector()
+        light.enabled = False
+        self.detectors.append(light)
+
         face = FaceDetector()
         self.detectors.append(face)
 
@@ -465,6 +494,12 @@ class DetectionManager:
     def _get_face_id_detector(self):
         for d in self.detectors:
             if isinstance(d, FaceRecognitionDetector):
+                return d
+        return None
+
+    def _get_light_ring_detector(self):
+        for d in self.detectors:
+            if isinstance(d, LightRingDetector):
                 return d
         return None
 
@@ -757,6 +792,13 @@ class DetectionManager:
         if not self._last_labels:
             return ""
         return "Detected: " + ", ".join(self._last_labels)
+
+    def get_recognized_faces(self):
+        """Return structured list of recognized faces from FaceRecognitionDetector."""
+        face_id = self._get_face_id_detector()
+        if face_id is not None and face_id.enabled:
+            return face_id.get_recognized_faces()
+        return []
 
     def process_frame(self, frame):
         if not self.detectors or not any(d.enabled for d in self.detectors):

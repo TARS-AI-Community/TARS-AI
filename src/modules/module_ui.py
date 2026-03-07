@@ -544,6 +544,11 @@ class UIManager(threading.Thread):
         overlay.fill((0, 0, 0))
         surface.blit(overlay, (0, 0))
 
+        # Draw light ring first so camera and buttons render on top
+        light = self.detection_manager._get_light_ring_detector()
+        if light is not None and light.enabled:
+            light.draw_light_ring(surface)
+
         camera_w = int(self.logical_width * 0.8)
         camera_h = int(self.logical_height * 0.8)
         camera_x = (self.logical_width - camera_w) // 2

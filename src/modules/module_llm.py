@@ -1007,6 +1007,14 @@ def execute_function_call(func_call, bot_response, user_input, source="voice"):
                     if old_session:
                         sid._rename_speaker_in_memories(old_session, name)
                     queue_message(f"INFO: Speaker identified as '{name}' via LLM")
+                    # Auto-train face if unknown face is on camera
+                    try:
+                        from modules.module_identity import get_identity_manager
+                        im = get_identity_manager()
+                        if im is not None:
+                            im.auto_train_face(name)
+                    except Exception:
+                        pass
                 else:
                     queue_message("WARNING: Speaker ID manager not available")
             else:

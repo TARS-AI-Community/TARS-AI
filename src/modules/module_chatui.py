@@ -1382,23 +1382,14 @@ def tunnel_qr():
     except ImportError:
         return jsonify({'error': 'qrcode package not installed'}), 500
     buf = io.BytesIO()
-    qrcode.make(url).save(buf, format='PNG')
+    qr = qrcode.QRCode(box_size=10, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#c0c0c0", back_color="#1a1a2e")
+    img.save(buf, format='PNG')
     buf.seek(0)
     return send_file(buf, mimetype='image/png')
 
-
-def tunnel_auto_start():
-    """Called on TARS boot — auto-start tunnel if enabled."""
-    if not CONFIG['ACCESS'].get('remote_access_enabled', False):
-        return
-    if not _cloudflared_bin():
-        ok, err = _install_cloudflared()
-        if not ok:
-            queue_message(f"WARNING: Could not install cloudflared: {err}")
-            return
-    ok, result = _start_tunnel()
-    if not ok:
-        queue_message(f"WARNING: Remote access tunnel failed: {result}")
 
 
 @flask_app.route('/api/eyes/mood', methods=['POST'])
@@ -1592,10 +1583,5 @@ def save_character(name):
 def start_flask_app(port=None):
     if port is None:
         port = CONFIG['ACCESS'].get('webui_port', 80)
-    # Auto-start remote access tunnel if enabled
-    try:
-        tunnel_auto_start()
-    except Exception as e:
-        queue_message(f"WARNING: Remote access tunnel auto-start failed: {e}")
     queue_message(f"INFO: Starting Flask app on port {port}...")
     socketio.run(flask_app, host="0.0.0.0", port=port, log_output=False, allow_unsafe_werkzeug=True)

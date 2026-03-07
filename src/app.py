@@ -312,6 +312,20 @@ if __name__ == "__main__":
         except Exception as e:
             queue_message(f"WARNING: Speaker ID module not available: {e}")
 
+    # === Identity Coordinator (fuses speaker ID + face recognition) ===
+    try:
+        from modules.module_identity import IdentityManager
+        sid = None
+        try:
+            from modules.module_speaker_id import get_speaker_id_manager
+            sid = get_speaker_id_manager()
+        except Exception:
+            pass
+        IdentityManager(speaker_id_manager=sid, ui_manager=ui_manager)
+        queue_message("LOAD: Identity coordinator enabled")
+    except Exception as e:
+        queue_message(f"WARNING: Identity coordinator not available: {e}")
+
     # === Discord ===
     if CONFIG['DISCORD']['enabled']:
         start_discord_in_thread()
