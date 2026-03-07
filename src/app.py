@@ -169,6 +169,9 @@ class UIManagerStub:
     def silence(self, frames=0):
         pass
 
+    def show_overlay_image(self, image_path, duration=8):
+        pass
+
 
 # === Callback Setup ===
 def pause_ui_and_stt():

@@ -142,6 +142,13 @@ class UIManager(threading.Thread):
         self._wifi_poll_interval = 5.0
         self._wifi_thread_running = False
 
+        # Overlay image for generated images (set from any thread)
+        self._overlay_image = None          # pygame.Surface or None
+        self._overlay_expire = 0            # time.time() when overlay should disappear
+        self._overlay_pending_path = None   # path queued from background thread
+        self._overlay_pending_duration = 8
+        self._overlay_lock = threading.Lock()
+
         self.detection_manager = DetectionManager()
 
         if self.use_camera_module:
@@ -256,6 +263,16 @@ class UIManager(threading.Thread):
         """Deactivate the screensaver (called by wake word callback)."""
         if self.screensaver_manager:
             self.screensaver_manager.deactivate()
+
+    def show_overlay_image(self, image_path, duration=8):
+        """Queue an image overlay on the UI for *duration* seconds (thread-safe).
+
+        The actual pygame surface creation happens on the main render thread
+        to avoid X11 threading errors.
+        """
+        with self._overlay_lock:
+            self._overlay_pending_path = image_path
+            self._overlay_pending_duration = duration
 
     def exit_program(self):
         self.running = False
@@ -707,6 +724,11 @@ class UIManager(threading.Thread):
                             elif event.key == pygame.K_c:
                                 self.toggle_camera()
                     elif event.type == pygame.MOUSEBUTTONDOWN:
+                        # Dismiss overlay image on touch
+                        with self._overlay_lock:
+                            if self._overlay_image is not None:
+                                self._overlay_image = None
+                                continue
                         if self.show_app:
                             if self.terminal_system:
                                 logical_pos = self._transform_mouse_pos(event.pos, display_width, display_height)
@@ -735,6 +757,42 @@ class UIManager(threading.Thread):
 
                 if self.terminal_system and not self.show_app:
                     self.terminal_system.handle_scroll_hold()
+
+                # Check for pending/active overlay image
+                _show_overlay = False
+                with self._overlay_lock:
+                    # Load pending image on main thread (X11 safety)
+                    if self._overlay_pending_path is not None:
+                        try:
+                            img = pygame.image.load(self._overlay_pending_path)
+                            iw, ih = img.get_size()
+                            scale = min(self.logical_width / iw, self.logical_height / ih)
+                            scaled = pygame.transform.smoothscale(img, (int(iw * scale), int(ih * scale)))
+                            overlay = pygame.Surface((self.logical_width, self.logical_height))
+                            overlay.fill((0, 0, 0))
+                            overlay.blit(scaled, ((self.logical_width - scaled.get_width()) // 2,
+                                                  (self.logical_height - scaled.get_height()) // 2))
+                            self._overlay_image = overlay
+                            self._overlay_expire = _time.time() + self._overlay_pending_duration
+                        except Exception as e:
+                            queue_message(f"[UI] Failed to load overlay image: {e}")
+                        self._overlay_pending_path = None
+
+                    # Check if overlay is still active
+                    if self._overlay_image is not None:
+                        if _time.time() < self._overlay_expire:
+                            _show_overlay = True
+                            original_surface.blit(self._overlay_image, (0, 0))
+                        else:
+                            self._overlay_image = None
+                    if self.effective_rotate != 0:
+                        rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
+                        self._render_surface_to_opengl(rotated_surface, texture_id)
+                    else:
+                        self._render_surface_to_opengl(original_surface, texture_id)
+                    pygame.display.flip()
+                    clock.tick(self.target_fps)
+                    continue
 
                 if self.screensaver_manager:
                     if self.show_app or self.show_camera:

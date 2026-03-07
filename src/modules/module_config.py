@@ -1058,7 +1058,7 @@ CONFIG_METADATA = {
         },
         'sampler_name': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
-            'description': 'The algorithm used to create the image. Different samplers produce slightly different artistic results. "Euler a" is fast and produces good results (recommended default). You generally do not need to change this unless you are experienced with Stable Diffusion and want to experiment with different visual styles.'
+            'description': 'The algorithm used to create the image. Different samplers produce slightly different artistic results. For ComfyUI use names like "euler_ancestral" (fast, recommended), "euler", "dpmpp_2m", "dpmpp_2m_sde". For Automatic1111 use names like "Euler a", "DPM++ 2M Karras". You generally do not need to change this unless you are experienced with Stable Diffusion and want to experiment with different visual styles.'
         },
         'width': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111']}],

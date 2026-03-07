@@ -51,7 +51,7 @@ if CONFIG['EMOTION']['enabled']:
     except ImportError:
         pass
 
-def get_completion(user_prompt, istext=True, image_b64=None):
+def get_completion(user_prompt, istext=True, image_b64=None, source="voice"):
 
     if memory_manager is None or character_manager is None:
         raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
@@ -130,7 +130,7 @@ def get_completion(user_prompt, istext=True, image_b64=None):
         else:
             bot_reply = full_content.strip()
 
-        finalReply = llm_process(user_prompt, bot_reply)
+        finalReply = llm_process(user_prompt, bot_reply, source=source)
         return finalReply
 
     except requests.RequestException as e:
@@ -368,13 +368,16 @@ def llm_parse_response(bot_response):
     return bot_response
 
 
-def llm_execute_side_effects(parsed, user_input):
-    """Execute function_calls and save memories. Safe to run in a background thread."""
+def llm_execute_side_effects(parsed, user_input, source="voice"):
+    """Execute function_calls and save memories. Safe to run in a background thread.
+
+    source: 'voice' or 'webui' — controls where generated images are displayed.
+    """
     global memory_manager
     try:
         if parsed.get("function_calls"):
             for func_call in parsed["function_calls"]:
-                execute_function_call(func_call, parsed, user_input)
+                execute_function_call(func_call, parsed, user_input, source=source)
 
         if memory_manager:
             threading.Thread(
@@ -396,12 +399,12 @@ def llm_execute_side_effects(parsed, user_input):
         queue_message(f"ERROR: Side effects execution failed: {e}")
 
 
-def llm_process(user_input, bot_response):
+def llm_process(user_input, bot_response, source="voice"):
     """Parse LLM response and execute side effects (legacy wrapper)."""
     parsed = llm_parse_response(bot_response)
     if parsed is None:
         return "[Error: Invalid JSON from LLM. Check logs for details.]"
-    llm_execute_side_effects(parsed, user_input)
+    llm_execute_side_effects(parsed, user_input, source=source)
     return _sanitize_for_tts(parsed["reply"])
 
 
@@ -514,7 +517,7 @@ def _summarize_search_results(search_results, user_question):
 
 _vision_in_progress = threading.local()
 
-def execute_function_call(func_call, bot_response, user_input):
+def execute_function_call(func_call, bot_response, user_input, source="voice"):
     function_name = func_call.get("function", "")
     parameters = func_call.get("parameters", {})
 
@@ -927,34 +930,39 @@ def execute_function_call(func_call, bot_response, user_input):
                 # Always override — small LLMs tend to apologize even when calling the function
                 bot_response["reply"] = "On it — generating your image now."
 
-                def _on_image_ready(image_bytes):
-                    try:
-                        queue_message(f"[SD] Image ready ({len(image_bytes)} bytes) — emitting to WebUI")
-                        import base64 as _b64
-                        b64 = _b64.b64encode(image_bytes).decode('utf-8')
-                        img_html = f'<img style="max-width:100%;border-radius:8px;" src="data:image/png;base64,{b64}">'
-                        from modules.module_chatui import socketio
-                        socketio.emit('bot_message', {'message': img_html})
-                        queue_message("[SD] WebUI image emit sent")
-                    except Exception as _e:
-                        queue_message(f"[SD] WebUI image emit failed: {_e}")
+                _callback = None
+                if source == "webui":
+                    def _on_image_ready(image_bytes):
+                        try:
+                            queue_message(f"[SD] Image ready ({len(image_bytes)} bytes) — emitting to WebUI")
+                            import base64 as _b64
+                            b64 = _b64.b64encode(image_bytes).decode('utf-8')
+                            img_html = f'<img style="max-width:100%;border-radius:8px;" src="data:image/png;base64,{b64}">'
+                            from modules.module_chatui import socketio
+                            socketio.emit('bot_message', {'message': img_html})
+                            queue_message("[SD] WebUI image emit sent")
+                        except Exception as _e:
+                            queue_message(f"[SD] WebUI image emit failed: {_e}")
+                    _callback = _on_image_ready
 
                 def _generate_bg():
                     queue_message("[SD] Background generation thread started")
                     try:
-                        result = generate_image(prompt, on_image_ready=_on_image_ready)
+                        result = generate_image(prompt, on_image_ready=_callback)
                         queue_message(f"[SD] Background generation done: {result}")
                     except Exception as _e:
                         queue_message(f"[SD] Background image generation failed: {_e}")
 
-                # Use socketio.start_background_task so the green thread can emit via eventlet
-                try:
-                    from modules.module_chatui import socketio as _sio
-                    _sio.start_background_task(_generate_bg)
-                    queue_message("[SD] Started via socketio.start_background_task")
-                except Exception:
+                if source == "webui":
+                    # Use socketio background task so emit reaches eventlet-managed clients
+                    try:
+                        from modules.module_chatui import socketio as _sio
+                        _sio.start_background_task(_generate_bg)
+                    except Exception:
+                        threading.Thread(target=_generate_bg, daemon=True).start()
+                else:
                     threading.Thread(target=_generate_bg, daemon=True).start()
-                    queue_message("[SD] Started via threading fallback")
+                queue_message("[SD] Started image generation thread")
 
         elif function_name == "home_assistant":
             from modules.module_homeassistant import send_prompt_to_homeassistant
