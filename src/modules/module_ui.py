@@ -758,8 +758,10 @@ class UIManager(threading.Thread):
                 if self.terminal_system and not self.show_app:
                     self.terminal_system.handle_scroll_hold()
 
-                # Check for pending overlay image (load on main thread for X11 safety)
+                # Check for pending/active overlay image
+                _show_overlay = False
                 with self._overlay_lock:
+                    # Load pending image on main thread (X11 safety)
                     if self._overlay_pending_path is not None:
                         try:
                             img = pygame.image.load(self._overlay_pending_path)
@@ -776,17 +778,13 @@ class UIManager(threading.Thread):
                             queue_message(f"[UI] Failed to load overlay image: {e}")
                         self._overlay_pending_path = None
 
-                _show_overlay = False
-                with self._overlay_lock:
+                    # Check if overlay is still active
                     if self._overlay_image is not None:
                         if _time.time() < self._overlay_expire:
                             _show_overlay = True
+                            original_surface.blit(self._overlay_image, (0, 0))
                         else:
                             self._overlay_image = None
-
-                if _show_overlay:
-                    with self._overlay_lock:
-                        original_surface.blit(self._overlay_image, (0, 0))
                     if self.effective_rotate != 0:
                         rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
                         self._render_surface_to_opengl(rotated_surface, texture_id)
