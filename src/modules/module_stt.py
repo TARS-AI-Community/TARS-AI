@@ -788,26 +788,46 @@ class STTManager:
         try:
             chunks, _ = self._record_audio_chunks(sample_rate=self.SAMPLE_RATE)
             if chunks is None:
+                if self.DEBUG:
+                    queue_message("DEBUG STT: No speech recorded (silence timeout)")
                 return None
+
+            external_url = self.config['STT'].get('external_url', '')
+            if self.DEBUG:
+                total_samples = sum(len(c) for c in chunks)
+                queue_message(f"DEBUG STT: Sending {total_samples} samples to {external_url}/save_audio")
 
             wav_buf = self._chunks_to_wav_buffer(chunks, self.SAMPLE_RATE)
             files = {"audio": ("audio.wav", wav_buf, "audio/wav")}
+            headers = {}
+            api_key = os.environ.get('EXTERNAL_API_KEY', '')
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
             response = requests.post(
-                f"{self.config['STT'].get('external_url')}/save_audio",
-                files=files, timeout=10
+                f"{external_url}/save_audio",
+                files=files, headers=headers, timeout=10
             )
-            if response.status_code == 200:
-                transcription = response.json().get("transcription", [])
-                if transcription:
-                    raw_text = transcription[0].get("text", "").strip()
-                    extra = {
-                        "result": [
-                            {"conf": 1.0, "start": seg.get("start", 0),
-                             "end": seg.get("end", 0), "word": seg.get("text", "")}
-                            for seg in transcription
-                        ]
-                    }
-                    return self._emit_result(raw_text, extra)
+            if response.status_code != 200:
+                queue_message(f"ERROR: Server STT returned {response.status_code}: {response.text[:200]}")
+                return None
+
+            transcription = response.json().get("transcription", [])
+            if not transcription:
+                if self.DEBUG:
+                    queue_message("DEBUG STT: Server returned empty transcription (VAD filtered or no speech)")
+                return None
+
+            raw_text = transcription[0].get("text", "").strip()
+            if self.DEBUG:
+                queue_message(f"DEBUG STT: Server transcribed: '{raw_text}'")
+            extra = {
+                "result": [
+                    {"conf": 1.0, "start": seg.get("start", 0),
+                     "end": seg.get("end", 0), "word": seg.get("text", "")}
+                    for seg in transcription
+                ]
+            }
+            return self._emit_result(raw_text, extra)
         except requests.RequestException as e:
             queue_message(f"ERROR: Server transcription request failed: {e}")
         return None
