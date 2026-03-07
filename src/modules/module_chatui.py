@@ -72,9 +72,11 @@ except ImportError:
     WIFI_AVAILABLE = False
 
 
-# Suppress Flask logs
+# Suppress Flask logs and startup banner
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
+import flask.cli
+flask.cli.show_server_banner = lambda *_: None
 
 # If using eventlet or gevent with Flask-SocketIO
 sio_logger = logging.getLogger('socketio')
