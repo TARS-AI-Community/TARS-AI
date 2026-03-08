@@ -3,17 +3,28 @@ import base64
 import json
 import os
 import random
-from PIL import Image
 import tempfile
 import time
 import pygame
 import threading
-from io import BytesIO
 
 from modules.module_config import load_config
 from modules.module_messageQue import queue_message
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+def _deliver_image(image_bytes, on_image_ready, label="SD"):
+    """Handle image delivery: callback for web UI, or display on screen."""
+    if on_image_ready:
+        try:
+            on_image_ready(image_bytes)
+        except Exception as cb_err:
+            queue_message(f"[{label}] image callback error: {cb_err}")
+    else:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+            tmp.write(image_bytes)
+            tmp_path = tmp.name
+        threading.Thread(target=display_image_fullscreen, args=(tmp_path,)).start()
 
 # Load configuration
 config = load_config()
@@ -56,7 +67,7 @@ def generate_image(prompt, on_image_ready=None):
 
 def _try_openai_fallback(prompt, on_image_ready):
     """Fall back to OpenAI DALL-E if the LLM backend is openai."""
-    llm_backend = config.get('LLM', 'llm_backend', fallback='').lower()
+    llm_backend = config['LLM'].get('llm_backend', '').lower()
     if llm_backend == 'openai':
         queue_message("[SD] Primary image service failed, falling back to OpenAI DALL-E...")
         fallback_result = get_image_from_dalle_v3(prompt, on_image_ready=on_image_ready)
@@ -82,20 +93,8 @@ def get_image_from_dalle_v3(prompt, on_image_ready=None):
         image_response.raise_for_status()
         image_bytes = image_response.content
 
-        if on_image_ready:
-            try:
-                on_image_ready(image_bytes)
-            except Exception as cb_err:
-                queue_message(f"DALL-E image callback error: {cb_err}")
-        else:
-            image = Image.open(BytesIO(image_bytes))
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                resized_image = image.resize((512, 512))
-                resized_image.save(tmp, format='PNG')
-                tmp_path = tmp.name
-            threading.Thread(target=display_image_fullscreen, args=(tmp_path,)).start()
-
-        return "Image generated and displayed."
+        _deliver_image(image_bytes, on_image_ready, "DALL-E")
+        return "The image has been created and displayed on screen."
 
     except Exception as e:
         queue_message(f"Error: {e}")
@@ -112,7 +111,7 @@ def get_image_from_automatic1111(sdpromptllm, on_image_ready=None):
         "cfg_scale": float(config['STABLE_DIFFUSION']['cfg_scale']),
         "width": int(config['STABLE_DIFFUSION']['width']),
         "height": int(config['STABLE_DIFFUSION']['height']),
-        "restore_faces": config.get('STABLE_DIFFUSION', 'restore_faces') == 'True',
+        "restore_faces": config['STABLE_DIFFUSION']['restore_faces'],
         "override_settings_restore_afterwards": True,
     }
 
@@ -125,17 +124,7 @@ def get_image_from_automatic1111(sdpromptllm, on_image_ready=None):
         image_data_base64 = response.json()['images'][0]
         image_bytes = base64.b64decode(image_data_base64)
 
-        if on_image_ready:
-            try:
-                on_image_ready(image_bytes)
-            except Exception as cb_err:
-                queue_message(f"A1111 image callback error: {cb_err}")
-        else:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                tmp.write(image_bytes)
-                tmp_path = tmp.name
-            threading.Thread(target=display_image_fullscreen, args=(tmp_path,)).start()
-
+        _deliver_image(image_bytes, on_image_ready, "A1111")
         return "The image has been created and displayed on screen."
 
     except requests.exceptions.HTTPError as err:
@@ -176,17 +165,7 @@ def get_image_from_external(prompt, on_image_ready=None):
         image_data_base64 = response.json()['images'][0]
         image_bytes = base64.b64decode(image_data_base64)
 
-        if on_image_ready:
-            try:
-                on_image_ready(image_bytes)
-            except Exception as cb_err:
-                queue_message(f"[SD] External image callback error: {cb_err}")
-        else:
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                tmp.write(image_bytes)
-                tmp_path = tmp.name
-            threading.Thread(target=display_image_fullscreen, args=(tmp_path,)).start()
-
+        _deliver_image(image_bytes, on_image_ready, "External")
         return "The image has been created and displayed on screen."
 
     except requests.exceptions.RequestException as e:
@@ -284,20 +263,7 @@ def get_image_from_comfyui(prompt, on_image_ready=None):
 
                 image_bytes = img_resp.content
 
-                if on_image_ready:
-                    # WebUI request — send to browser only
-                    try:
-                        on_image_ready(image_bytes)
-                    except Exception as cb_err:
-                        queue_message(f"ComfyUI image callback error: {cb_err}")
-                else:
-                    # Voice request — display on physical screen
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                        tmp.write(image_bytes)
-                        tmp_path = tmp.name
-                    display_thread = threading.Thread(target=display_image_fullscreen, args=(tmp_path,))
-                    display_thread.start()
-
+                _deliver_image(image_bytes, on_image_ready, "ComfyUI")
                 return "The image has been created and displayed on screen."
 
         queue_message("ComfyUI image generation timed out.")

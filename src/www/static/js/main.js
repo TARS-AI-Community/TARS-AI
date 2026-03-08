@@ -189,17 +189,18 @@ document.addEventListener('DOMContentLoaded', function () {
   const audioPlayer = $('audioPlayer');
   const muteBtn = $('muteButton');
 
-  // Default to muted on load
-  audioPlayer.muted = true;
+  // Default to muted on load — use volume=0 so audio still plays through
+  // in real time (prevents queue buildup when muted)
+  audioPlayer.volume = 0;
 
   muteBtn.addEventListener('click', function () {
     const icon = this.querySelector('i');
     if (isMuted) {
-      audioPlayer.muted = false;
+      audioPlayer.volume = 1;
       icon.className = 'bi bi-volume-up-fill';
       if (!audioPlayer.paused) start_talking();
     } else {
-      audioPlayer.muted = true;
+      audioPlayer.volume = 0;
       icon.className = 'bi bi-volume-mute-fill';
       stop_talking();
     }
@@ -212,18 +213,19 @@ if (audioPlayer) audioPlayer.addEventListener('ended', stop_talking);
 
 let audioStarted = false;
 
+// Legacy full-response audio (used for image uploads / non-streaming paths)
 function startAudioStream() {
   if (audioStarted) return;
   audioStarted = true;
   fetch('/audio_stream').then(r => r.blob()).then(blob => {
-    if (!blob.size) return;
+    if (!blob.size) { audioStarted = false; return; }
     const url = URL.createObjectURL(blob);
     audioPlayer.src = url; audioPlayer.load();
     audioPlayer.play().then(() => {
       start_talking();
-      audioPlayer.onended = () => setTimeout(playNextAudioChunk, 500);
-    }).catch(console.error);
-  }).catch(console.error);
+      audioPlayer.onended = () => { URL.revokeObjectURL(url); setTimeout(playNextAudioChunk, 500); };
+    }).catch(e => { audioStarted = false; console.error(e); });
+  }).catch(e => { audioStarted = false; console.error(e); });
 }
 
 function playNextAudioChunk() {
@@ -236,9 +238,44 @@ function playNextAudioChunk() {
     audioPlayer.src = url; audioPlayer.load();
     audioPlayer.play().then(() => {
       start_talking();
-      audioPlayer.onended = () => setTimeout(playNextAudioChunk, 500);
+      audioPlayer.onended = () => { URL.revokeObjectURL(url); setTimeout(playNextAudioChunk, 500); };
     });
   }).catch(console.error);
+}
+
+// Sentence-by-sentence SocketIO audio queue (used for streaming text responses)
+const _audioQueue = [];
+let _audioPlaying = false;
+let _audioDone = false;
+
+function _playNextFromQueue() {
+  if (_audioPlaying || !_audioQueue.length) {
+    // If queue empty and server signalled done, finish up
+    if (!_audioQueue.length && _audioDone) {
+      _audioDone = false;
+      stop_talking();
+    }
+    return;
+  }
+  _audioPlaying = true;
+  const b64 = _audioQueue.shift();
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const blob = new Blob([bytes]);
+  const url = URL.createObjectURL(blob);
+  audioPlayer.src = url;
+  audioPlayer.load();
+  audioPlayer.play().then(() => {
+    start_talking();
+    audioPlayer.onended = () => {
+      URL.revokeObjectURL(url);
+      _audioPlaying = false;
+      _playNextFromQueue();
+    };
+  }).catch(e => {
+    console.error('Audio chunk play failed:', e);
+    _audioPlaying = false;
+    _playNextFromQueue();
+  });
 }
 
 
@@ -275,7 +312,68 @@ document.addEventListener('DOMContentLoaded', function () {
   // Socket.IO
   const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
   window.socket = socket;
-  socket.on('bot_message',    d => displayBotMessage(d.message));
+  // Streaming bot response
+  let _streamRow = null;
+  let _streamText = null;
+  let _streamActive = false;
+
+  socket.on('bot_stream_start', () => {
+    removeTypingMessage();
+    _streamActive = true;
+    // Flush audio state from previous message
+    _audioQueue.length = 0;
+    _audioDone = false;
+    _audioPlaying = false;
+    audioStarted = false;
+    // Bubble created lazily on first bot_token to avoid empty flash
+  });
+
+  socket.on('bot_token', d => {
+    removeTypingMessage();
+    if (!_streamActive) return;
+    // Create bubble on first token
+    if (!_streamRow) {
+      const chatBody = document.querySelector('.chat-messages');
+      _streamRow = document.createElement('div');
+      _streamRow.className = 'msg-row msg-bot';
+      _streamRow.innerHTML = '<div class="msg-bubble msg-bubble-bot"><div class="response-text"></div></div>';
+      chatBody.appendChild(_streamRow);
+      _streamText = _streamRow.querySelector('.response-text');
+    }
+    _streamText.textContent += d.text;
+    const chatBody = document.querySelector('.chat-messages');
+    chatBody.scrollTop = chatBody.scrollHeight;
+  });
+
+  socket.on('bot_audio_chunk', d => {
+    _audioQueue.push(d.data);
+    _playNextFromQueue();
+  });
+
+  socket.on('bot_audio_done', () => {
+    _audioDone = true;
+    // If nothing playing and queue empty, stop talking now
+    if (!_audioPlaying && !_audioQueue.length) stop_talking();
+  });
+
+  socket.on('bot_message', d => {
+    removeTypingMessage();
+    _streamActive = false;
+    if (_streamRow) {
+      if (d.message) {
+        _streamText.innerHTML = formatText(d.message);
+        // Only use legacy audio fetch if audio wasn't already streamed via SocketIO
+        if (!d.audio_streamed) startAudioStream();
+      } else {
+        _streamRow.remove();
+      }
+      _streamRow = null;
+      _streamText = null;
+    } else {
+      if (d.message) displayBotMessage(d.message);
+    }
+  });
+
   socket.on('user_message',   d => displayUserMessage(d.message));
   socket.on('talking_state',  d => { avatarIsTalking = d.talking; });
   socket.on('emotion_change', d => preloadAvatarSprites(d));

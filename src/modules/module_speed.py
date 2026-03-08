@@ -14,6 +14,7 @@ enabled = False
 
 # Timestamps for cross-module measurements
 _utterance_start = None
+_first_token_logged = False
 _first_audio_logged = False
 _timings = {}
 
@@ -47,11 +48,22 @@ def stop(label):
 
 def mark_utterance_start():
     """Mark the beginning of utterance processing (for time-to-first-audio)."""
-    global _utterance_start, _first_audio_logged
+    global _utterance_start, _first_token_logged, _first_audio_logged
     if not enabled:
         return
     _utterance_start = time.perf_counter()
+    _first_token_logged = False
     _first_audio_logged = False
+
+
+def mark_first_token():
+    """Called when first LLM reply token arrives. Logs time-to-first-token once."""
+    global _utterance_start, _first_token_logged
+    if not enabled or _utterance_start is None or _first_token_logged:
+        return
+    _first_token_logged = True
+    dur = time.perf_counter() - _utterance_start
+    queue_message(f"SPEED: time_to_first_token({fmt(dur)})")
 
 
 def mark_first_audio():

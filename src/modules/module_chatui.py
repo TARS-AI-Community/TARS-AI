@@ -37,8 +37,9 @@ from flask_socketio import SocketIO
 # === Custom Modules ===
 from modules.module_config import load_config
 from modules.module_config import CONFIG_METADATA as CONFIG_UI_FIELDS
-from modules.module_llm import get_completion
-from modules.module_tts import generate_tts_audio
+from modules.module_llm import get_completion, process_completion, _sanitize_for_tts
+import modules.module_llm as _llm_mod
+from modules.module_tts import generate_tts_audio, SentenceTTSPipeline
 from modules.module_llm import detect_emotion, classifier as emotion_classifier
 from modules.module_messageQue import queue_message, get_recent_logs
 from modules.module_servoctl import *
@@ -368,6 +369,30 @@ def update_emotion(detected_emotion):
     except Exception:
         pass
 
+def begin_bot_stream():
+    """Signal web UI that a bot response is starting to stream (voice mode)."""
+    try:
+        socketio.emit('bot_stream_start', {})
+    except Exception:
+        pass
+
+
+def stream_reply_token(text):
+    """Push a streaming text chunk of the bot reply to the web UI."""
+    try:
+        socketio.emit('bot_token', {'text': text})
+    except Exception:
+        pass
+
+
+def push_user_message(text):
+    """Push a voice-mode user message to the web UI chat."""
+    try:
+        socketio.emit('user_message', {'message': text})
+    except Exception:
+        pass
+
+
 @flask_app.route('/emotion', methods=['POST'])
 def set_emotion():
     """
@@ -398,14 +423,17 @@ def _process_chat_message(msg, img_b64):
                     sid.last_identified_time = _time.time()
         except Exception:
             pass
+        _audio_streamed = False
+        _reply_changed = False
+        _followup_reply = None
         if img_b64:
             vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
             if vision_mode in ('llm', 'openai'):
                 if CONFIG.get('debug_mode', False):
                     queue_message("DEBUG: Single-pass upload (image sent directly to LLM with prompt)")
-                prompt = msg or "The user sent you a photo. Describe what you see and respond in character."
-                reply = get_completion(prompt, image_b64=img_b64, source="webui")
+                _llm_prompt = msg or "The user sent you a photo. Describe what you see and respond in character."
+                _llm_image = img_b64
             else:
                 if VISION_AVAILABLE:
                     try:
@@ -419,20 +447,129 @@ def _process_chat_message(msg, img_b64):
                 if CONFIG.get('debug_mode', False):
                     queue_message(f"DEBUG: Two-pass upload (caption via {vision_mode}, then LLM)")
                 if msg:
-                    cmessage = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
+                    _llm_prompt = f"*The uploaded photo has the following description: {caption}* The user also said: {msg}"
                 else:
-                    cmessage = f"*The user uploaded a photo. Description: {caption}*"
-                reply = get_completion(cmessage, source="webui")
-        else:
-            reply = get_completion(msg, source="webui")
+                    _llm_prompt = f"*The user uploaded a photo. Description: {caption}*"
+                _llm_image = img_b64
+            # Fall through to streaming path below with _llm_prompt and _llm_image set
+            msg = _llm_prompt
 
+        # Stream tokens to web UI + TTS sentence-by-sentence to browser
+        # (works for both text and image uploads — image is passed to process_completion)
+        import modules.module_speed as speed
+        speed.mark_utterance_start()
+
+        begin_bot_stream()
+
+        # Think-block stripping + delta tracking (same pattern as voice mode)
+        _acc_raw = ['']
+        _clean_seen = ['']
+
+        def _sanitize_tts(text):
+            text = _sanitize_for_tts(text)
+            text = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', text)
+            return text.strip()
+
+        async def _browser_tts_play(sentence, tts_option):
+            """Generate TTS for a sentence and emit audio bytes to browser via SocketIO."""
+            try:
+                async for audio_chunk in generate_tts_audio(sentence, tts_option):
+                    audio_chunk.seek(0)
+                    audio_bytes = audio_chunk.read()
+                    if audio_bytes:
+                        encoded = base64.b64encode(audio_bytes).decode('ascii')
+                        socketio.emit('bot_audio_chunk', {'data': encoded})
+            except Exception as e:
+                queue_message(f"ERROR: Browser TTS failed: {e}")
+            return False  # No barge-in in browser
+
+        def _on_first_browser_play():
+            socketio.emit('talking_state', {'talking': True})
+
+        pipeline = SentenceTTSPipeline(
+            CONFIG['TTS']['ttsoption'],
+            sanitize=_sanitize_tts,
+            on_first_play=_on_first_browser_play,
+            play_func=_browser_tts_play,
+        )
+        pipeline.start()
+
+        def _on_chunk(chunk, is_first):
+            _acc_raw[0] += chunk
+            # Strip completed <think> blocks
+            clean_total = re.sub(r'<think>.*?</think>', '', _acc_raw[0], flags=re.DOTALL)
+            if '<think>' in clean_total:
+                return  # Unclosed think block, wait
+            new_clean = clean_total[len(_clean_seen[0]):]
+            _clean_seen[0] = clean_total
+            if not new_clean:
+                return
+            stream_reply_token(new_clean)
+            pipeline.feed(new_clean)
+            if is_first:
+                speed.mark_first_token()
+
+        _llm_mod._reply_chunk_callback = _on_chunk
+        try:
+            parsed = process_completion(msg, image_b64=img_b64)
+        finally:
+            _llm_mod._reply_chunk_callback = None
+            # Flush remaining text to pipeline
+            remaining = pipeline.remainder.strip()
+            if not remaining:
+                full_clean = re.sub(r'<think>.*?</think>', '', _acc_raw[0], flags=re.DOTALL).strip()
+                remaining = full_clean[len(_clean_seen[0]):].strip()
+            pipeline.finish(remaining=remaining if remaining else None)
+
+        if isinstance(parsed, dict):
+            reply = parsed.get("reply", "") or ""
+            if speed.enabled:
+                timings = parsed.get('_timings', {})
+                if timings:
+                    ttft = timings.get('prompt_build', 0) + timings.get('llm_first_byte', 0)
+                    speed.log(f"webui: ttft({speed.fmt(ttft)}), llm_stream({speed.fmt(timings.get('llm_stream', 0))}), parse({speed.fmt(timings.get('parse', 0))})")
+            # Run side effects — may update parsed["reply"] (e.g. web search)
+            from modules.module_llm import llm_execute_side_effects
+            llm_execute_side_effects(parsed, msg, source="webui", has_image=img_b64 is not None)
+            updated_reply = parsed.get("reply", "") or ""
+            _reply_changed = (updated_reply != reply)
+            if _reply_changed:
+                _followup_reply = updated_reply
+        else:
+            reply = parsed or ""
+
+        # Only mark as streamed if tokens actually flowed through the pipeline
+        _audio_streamed = bool(_acc_raw[0])
+
+        # Send the streamed reply (what the user already saw) — keeps original bubble
         latest_text_to_read = reply
-        socketio.emit('bot_message', {'message': reply or ''})
+        socketio.emit('bot_message', {'message': reply or '', 'audio_streamed': _audio_streamed})
 
         if CONFIG['EMOTION']['enabled'] and reply:
             detected = detect_emotion(reply)
             if detected:
                 update_emotion(detected)
+
+        # Wait for streamed TTS to finish
+        if _audio_streamed:
+            pipeline.join()
+
+        # If side effects produced new content (e.g. search results), show + speak as follow-up
+        if _reply_changed and _followup_reply:
+            followup = SentenceTTSPipeline(
+                CONFIG['TTS']['ttsoption'],
+                sanitize=_sanitize_tts,
+                play_func=_browser_tts_play,
+            )
+            followup.start()
+            followup.feed(_followup_reply)
+            followup.finish()
+            socketio.emit('bot_message', {'message': _followup_reply, 'audio_streamed': True})
+            followup.join()
+
+        if _audio_streamed or (_reply_changed and _followup_reply):
+            socketio.emit('bot_audio_done', {})
+            socketio.emit('talking_state', {'talking': False})
 
     except Exception as e:
         queue_message(f"ERROR: process_llm failed: {e}")
@@ -466,68 +603,11 @@ def receive_user_message():
 
 @flask_app.route('/upload', methods=['GET', 'POST'])
 def upload():
-    import base64
-    from io import BytesIO
-    from PIL import Image, UnidentifiedImageError
-
-    global start_time, latest_text_to_read
-    start_time = time.time()
-
+    """Legacy upload endpoint — redirects to the unified /process_llm pipeline."""
     file = request.files.get('file')
     if not file:
         return 'No file part', 400
-
-    buffer = BytesIO()
-    file.save(buffer)
-    file_bytes = buffer.getvalue()
-    if not file_bytes:
-        socketio.emit('bot_message', {'message': 'Sorry, the uploaded file was empty.'})
-        return 'Empty file', 400
-    base64_image = base64.b64encode(file_bytes).decode('utf-8')
-
-    img_html = f'<img height="256" src="data:image/png;base64,{base64_image}"></img>'
-    socketio.emit('user_message', {'message': img_html})
-
-    # Validate with PIL but don't block — LLM vision APIs handle many formats natively
-    try:
-        buffer.seek(0)
-        Image.open(buffer).convert('RGB')
-    except Exception as e:
-        queue_message(f"WARNING: PIL could not validate image ({file.filename}, {len(file_bytes)} bytes): {e}")
-
-    # WebUI messages always come from the configured user
-    try:
-        from modules.module_speaker_id import get_speaker_id_manager
-        sid = get_speaker_id_manager()
-        if sid and sid.enabled:
-            with sid._lock:
-                sid.current_speaker = CONFIG['CHAR']['user_name']
-                sid.current_confidence = 1.0
-                sid.last_identified_time = time.time()
-    except Exception:
-        pass
-
-    vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
-
-    if vision_mode in ('llm', 'openai'):
-        reply = get_completion(f"{CONFIG['CHAR']['user_name']} sent you a photo. Describe what you see and respond in character.", image_b64=base64_image, source="webui")
-    else:
-        if VISION_AVAILABLE:
-            try:
-                caption = process_image(base64_image, "Describe this image in detail.")
-            except Exception as e:
-                queue_message(f"ERROR: Vision processing failed: {e}")
-                caption = "Image uploaded but vision processing failed"
-        else:
-            caption = "Image uploaded (vision module not available)"
-
-        cmessage = f"*{CONFIG['CHAR']['user_name']} sent a photo. Description: {caption}*"
-        reply = get_completion(cmessage, source="webui")
-
-    latest_text_to_read = reply
-    socketio.emit('bot_message', {'message': reply or ''})
-
-    return 'Upload OK'
+    return receive_user_message()
 
 @flask_app.route('/camera_feed')
 def camera_feed():

@@ -142,6 +142,9 @@ cython_debug/
 # PyCharm
 .idea/
 
+# Notes
+*.md
+
 # LLM and Vision Files
 llm/
 vision/
