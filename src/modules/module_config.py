@@ -422,7 +422,7 @@ def load_config():
             "camera_rotation": config.getint('VISION', 'camera_rotation', fallback=0),
             "vision_processor": config.get('VISION', 'vision_processor', fallback='blip'),
             "use_llm_backend": config.getboolean('VISION', 'use_llm_backend', fallback=True),
-            "server_hosted": config.get('VISION', 'vision_processor', fallback='blip') == 'server_hosted',
+            "external": config.get('VISION', 'vision_processor', fallback='blip') == 'external',
             "base_url": config.get('VISION', 'base_url', fallback=''),
             "vision_model": config.get('VISION', 'vision_model', fallback=''),
             "vision_max_tokens": config.getint('VISION', 'vision_max_tokens', fallback=150),
@@ -454,6 +454,8 @@ def load_config():
             "max_memories": config.getint('RAG', 'max_memories', fallback=3),
             "top_k": config.getint('RAG', 'top_k', fallback=5),
             "recency_boost_days": config.getint('RAG', 'recency_boost_days', fallback=7),
+            "embedding_source": config.get('RAG', 'embedding_source', fallback='local'),
+            "embedding_url": config.get('RAG', 'embedding_url', fallback=''),
         },
         "HOME_ASSISTANT": {
             "enabled": config.getboolean('HOME_ASSISTANT', 'enabled'),
@@ -815,8 +817,8 @@ CONFIG_METADATA = {
         'vision_processor': {
             'label': 'Vision Processor',
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'options': ['blip', 'llm', 'openai', 'server_hosted'],
-            'description': 'How TARS processes images. "blip" runs a local AI model on your Pi (~1GB RAM) and generates a short caption. "llm" sends the image to your configured LLM backend (must support vision). "openai" sends the image to OpenAI GPT-4o-mini (requires OPENAI_API_KEY). "server_hosted" sends the image to an external BLIP server you run on another computer.'
+            'options': ['blip', 'llm', 'openai', 'external'],
+            'description': 'How TARS processes images. "blip" runs a local AI model on your Pi (~1GB RAM) and generates a short caption. "llm" sends the image to your configured LLM backend (must support vision). "openai" sends the image to OpenAI GPT-4o-mini (requires OPENAI_API_KEY). "external" sends the image to an external BLIP server you run on another computer. "external" sends the image to a TARS app-server instance (uses EXTERNAL_API_KEY from .env).'
         },
         'use_llm_backend': {
             'label': 'Use Same as LLM',
@@ -825,7 +827,7 @@ CONFIG_METADATA = {
         },
         'base_url': {
             'label': 'Vision API URL',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'use_llm_backend', 'values': ['False', 'false']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'use_llm_backend', 'values': ['False', 'false']}, {'field': 'vision_processor', 'values': ['external', 'openai', 'llm']}],
             'description': 'The API base URL for vision processing. For server_hosted: the BLIP server (e.g. http://192.168.1.100:5678). For llm/openai: the API endpoint (e.g. https://api.openai.com). Leave blank to use the default for your provider.'
         },
         'vision_model': {
@@ -835,7 +837,7 @@ CONFIG_METADATA = {
         },
         'vision_max_tokens': {
             'label': 'Vision Max Tokens',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm', 'server_hosted']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm', 'external']}],
             'description': 'Maximum number of tokens in the vision response. Higher values give more detailed descriptions but cost more.'
         },
     },
@@ -872,6 +874,17 @@ CONFIG_METADATA = {
         'recency_boost_days': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'Makes TARS prioritize recent conversations in its memory. If set to 7, any conversation from the last 7 days gets a boost in search results, making TARS more likely to reference things you talked about recently. This feels natural because in real life, recent conversations are usually more relevant. Set to 0 if you want all memories treated equally regardless of when they happened.'
+        },
+        'embedding_source': {
+            'label': 'Embedding Source',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'options': ['local', 'openai', 'external'],
+            'description': 'Where to generate text embeddings for memory search. "local" runs the embedding model on this device (uses ~500MB RAM). "openai" uses the OpenAI Embeddings API (requires OPENAI_API_KEY, uses text-embedding-3-small). "external" sends text to your TARS app-server instance to generate embeddings — much faster and frees up resources on the Pi. WARNING: If you switch between sources (e.g. local to openai), the existing memory database will have vectors of the wrong size (local=384 dimensions, openai=1536) and you will need to rebuild it. Same applies to external — dimensions depend on what model the app-server is running.'
+        },
+        'embedding_url': {
+            'label': 'Embedding Server URL',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'embedding_source', 'values': ['external']}],
+            'description': 'The URL of your TARS app-server for embeddings (e.g. http://192.168.1.100:5678). The server must have the embeddings service enabled.'
         },
     },
     'ACCESS': {
@@ -1034,12 +1047,12 @@ CONFIG_METADATA = {
         },
         'service': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'options': ['automatic1111', 'comfyui', 'openai'],
-            'description': 'Which image generation program you are running on your other computer. "automatic1111" is the most popular free option - it is a web interface for Stable Diffusion. "comfyui" is a more advanced, node-based alternative (harder to set up but more flexible). "openai" uses OpenAI\'s DALL-E to generate images in the cloud (no separate computer needed, but costs money per image and requires an OpenAI API key).'
+            'options': ['automatic1111', 'comfyui', 'openai', 'external'],
+            'description': 'Which image generation backend to use. "automatic1111" is the most popular free option - a web interface for Stable Diffusion. "comfyui" is a more advanced, node-based alternative. "openai" uses DALL-E in the cloud (costs money per image, requires OPENAI_API_KEY). "external" sends requests to your TARS app-server instance (uses EXTERNAL_API_KEY from .env, server must have ImageGen service enabled).'
         },
         'url': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
-            'description': 'The web address of your image generation server on your network. Format: http://IP-ADDRESS:PORT. For AUTOMATIC1111, the default port is usually 7860 (like http://192.168.1.100:7860). For ComfyUI, the default port is usually 8188. This is ignored if you are using the "openai" service.'
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
+            'description': 'The web address of your image generation server. Format: http://IP-ADDRESS:PORT. For AUTOMATIC1111 default port is 7860, ComfyUI is 8188, external app-server is 5678. Ignored when using "openai".'
         },
         'comfyui_workflow': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['comfyui']}],
@@ -1050,7 +1063,7 @@ CONFIG_METADATA = {
             'description': 'Same as above but for image-to-image generation (where TARS modifies an existing image instead of creating one from scratch). Only used with ComfyUI.'
         },
         'seed': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
             'description': 'Controls randomness in generated images. Leave at -1 for normal use - each image will be unique and different. If you set this to a specific number (like 12345), the EXACT same image will be generated every time you use the same prompt. This is useful for testing or if you found an image you like and want to reproduce it.'
         },
         'denoising_strength': {
@@ -1058,24 +1071,24 @@ CONFIG_METADATA = {
             'description': 'A number between 0.0 and 1.0 that controls how much creative freedom the image generator has. At lower values (0.3-0.5), images have more creative variation but may have some imperfections. At higher values (0.5-0.7), images are cleaner but more generic. When using image-to-image mode (modifying an existing image), lower values keep the original image more intact, while higher values change it more dramatically. 0.5 is a good starting point.'
         },
         'steps': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
             'description': 'How many passes the AI makes over the image while creating it. More steps = better quality but takes longer to generate. 20 is a good starting point that balances speed and quality. Going above 30-40 usually does not improve the image much but makes it take noticeably longer. Going below 15 can make images look blurry or unfinished.'
         },
         'cfg_scale': {
             'label': 'CFG Scale',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
             'description': 'How closely the generated image follows your text description. Think of it as a "creativity vs accuracy" slider. At low values (1-5), the AI takes a lot of creative freedom and the image might not match your description well but could look artistic. At medium values (7-9), there is a good balance (recommended). At high values (10-20), the AI tries very hard to match your exact words, but the image can start looking artificial or over-processed.'
         },
         'sampler_name': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
             'description': 'The algorithm used to create the image. Different samplers produce slightly different artistic results. For ComfyUI use names like "euler_ancestral" (fast, recommended), "euler", "dpmpp_2m", "dpmpp_2m_sde". For Automatic1111 use names like "Euler a", "DPM++ 2M Karras". You generally do not need to change this unless you are experienced with Stable Diffusion and want to experiment with different visual styles.'
         },
         'width': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
             'description': 'Width of the generated image in pixels. Bigger images have more detail but take longer to generate. For the standard TARS display, 480 pixels wide works well. For Stable Diffusion 1.5, the native resolution is 512x512. For SDXL, it is 1024x1024. Try to match your model\'s native resolution for best results.'
         },
         'height': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
             'description': 'Height of the generated image in pixels. Works the same as width. For the TARS display, 320 pixels tall matches the screen well. Together with width, this determines the aspect ratio (shape) of the image - 480x320 gives a wide/landscape image, 320x480 gives a tall/portrait image.'
         },
         'restore_faces': {

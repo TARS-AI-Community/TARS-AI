@@ -223,6 +223,10 @@ for arg in sys.argv[1:]:
                 logging.getLogger('libcamera').setLevel(logging.WARNING)
                 logging.getLogger('piper_phonemize').setLevel(logging.WARNING)
                 logging.getLogger('piper').setLevel(logging.INFO)
+                logging.getLogger('urllib3').setLevel(logging.WARNING)
+                logging.getLogger('huggingface_hub').setLevel(logging.WARNING)
+                logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
+                logging.getLogger('flashrank').setLevel(logging.WARNING)
                 queue_message("LOAD: Debug mode enabled")
 
 

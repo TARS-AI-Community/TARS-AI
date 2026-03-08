@@ -162,6 +162,10 @@ max_memories = 3
 top_k = 5
 # Boost memories within N days in results (0 = disabled)
 recency_boost_days = 7
+# Where to generate embeddings: local (on device) | openai (OpenAI API) | external (use app-server)
+embedding_source = local
+# URL of the external app-server for embeddings (only used when embedding_source = external)
+embedding_url =
 
 [ACCESS]
 # Enable web interface
@@ -245,7 +249,7 @@ channel_id = 23434653456345
 [STABLE_DIFFUSION]
 # Enable image generation
 enabled = False
-# Backend: automatic1111 | comfyui | openai
+# Backend: automatic1111 | comfyui | openai | external (use app-server)
 service = automatic1111
 # Image generation server URL (automatic1111 default: :7860, comfyui default: :8188)
 url = http://192.168.1.100:7860

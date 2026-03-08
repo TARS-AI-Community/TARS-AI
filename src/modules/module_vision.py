@@ -225,7 +225,11 @@ def _describe_server(image_data, prompt):
         return "Error: No base_url configured for server_hosted vision"
     img_bytes = _to_bytes(image_data)
     files = {'image': ('image.jpg', BytesIO(img_bytes), 'image/jpeg')}
-    response = requests.post(f"{base_url}/caption", files=files, timeout=15)
+    headers = {}
+    api_key = os.environ.get('EXTERNAL_API_KEY', '')
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    response = requests.post(f"{base_url}/caption", files=files, headers=headers, timeout=15)
     if response.status_code == 200:
         return response.json().get("caption", "No caption returned")
     return f"Error: Server returned {response.status_code}"
@@ -236,7 +240,7 @@ _BACKENDS = {
     "blip": _describe_blip,
     "llm": _describe_llm,
     "openai": _describe_openai,
-    "server_hosted": _describe_server,
+    "external": _describe_server,
 }
 
 

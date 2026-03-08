@@ -50,6 +50,7 @@ import uuid
 import warnings
 import wave
 from datetime import datetime
+import io
 from io import BytesIO
 from pathlib import Path
 from threading import Lock, Thread
@@ -122,6 +123,7 @@ def _bootstrap_deps():
         "diffusers>=0.27.0",        # ImageGen
         "sentence-transformers>=2.2.0",  # Embeddings
         "qrcode[pil]>=7.0",         # Tunnel QR codes
+        "psutil>=5.9.0",             # System stats (CPU/RAM)
     ]
     if has_gpu:
         packages.append("bitsandbytes>=0.43.0")
@@ -163,7 +165,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
     handlers=[
-        logging.StreamHandler(),
+        logging.StreamHandler(sys.stderr),
         logging.handlers.RotatingFileHandler(
             LOG_DIR / "server.log", maxBytes=5_000_000, backupCount=3
         ),
@@ -171,12 +173,12 @@ logging.basicConfig(
 )
 log = logging.getLogger("tars-server")
 
-# Silence noisy third-party libraries — keep only WARNING+ from them
+# Silence noisy third-party libraries (tied-weights warnings, generation flags, etc.)
 for _lib in (
     "transformers", "diffusers", "huggingface_hub", "sentence_transformers",
-    "filelock", "urllib3", "httpx", "torch", "ctranslate2",
+    "filelock", "urllib3", "httpx", "torch", "ctranslate2", "safetensors",
 ):
-    logging.getLogger(_lib).setLevel(logging.WARNING)
+    logging.getLogger(_lib).setLevel(logging.ERROR)
 
 # Suppress Python deprecation / future warnings from ML libraries
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -207,26 +209,56 @@ def detect_device():
     return "cpu"
 
 
+DEVICE = detect_device()
+
+# Cache static GPU info (these never change at runtime)
+_GPU_NAME = torch.cuda.get_device_name(0) if DEVICE == "cuda" else ""
+_VRAM_TOTAL_GB = torch.cuda.get_device_properties(0).total_memory / 1024**3 if DEVICE == "cuda" else 0
+try:
+    import psutil as _psutil
+    _SHARED_TOTAL_GB = _psutil.virtual_memory().total / 1024**3 / 2  # Windows WDDM default
+except Exception:
+    _SHARED_TOTAL_GB = 0
+
+
 def get_gpu_stats() -> dict:
     if DEVICE != "cuda":
         return {}
     try:
         allocated = torch.cuda.memory_allocated(0) / 1024**3
         reserved = torch.cuda.memory_reserved(0) / 1024**3
-        total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        ded_pct = allocated / _VRAM_TOTAL_GB * 100 if _VRAM_TOTAL_GB > 0 else 0
+        # Shared GPU memory (Windows WDDM: overflow from VRAM into system RAM)
+        shared_used = max(0, reserved - _VRAM_TOTAL_GB)
+        shared_pct = shared_used / _SHARED_TOTAL_GB * 100 if _SHARED_TOTAL_GB > 0 else 0
         return {
-            "name": torch.cuda.get_device_name(0),
-            "vram_total_gb": round(total, 2),
+            "name": _GPU_NAME,
+            "vram_total_gb": round(_VRAM_TOTAL_GB, 2),
             "vram_allocated_gb": round(allocated, 2),
             "vram_reserved_gb": round(reserved, 2),
-            "vram_free_gb": round(total - reserved, 2),
-            "vram_percent": round(reserved / total * 100, 1),
+            "vram_free_gb": round(max(_VRAM_TOTAL_GB - reserved, 0), 2),
+            "vram_percent": round(min(ded_pct, 100), 1),
+            "shared_total_gb": round(_SHARED_TOTAL_GB, 2),
+            "shared_used_gb": round(shared_used, 2),
+            "shared_percent": round(min(shared_pct, 100), 1),
         }
     except Exception:
         return {}
 
 
-DEVICE = detect_device()
+def get_system_stats() -> dict:
+    """Return CPU and RAM usage stats (requires psutil)."""
+    try:
+        import psutil
+        vm = psutil.virtual_memory()
+        return {
+            "cpu_percent": round(psutil.cpu_percent(interval=None), 1),
+            "ram_total_gb": round(vm.total / 1024**3, 2),
+            "ram_used_gb": round(vm.used / 1024**3, 2),
+            "ram_percent": round(vm.percent, 1),
+        }
+    except Exception:
+        return {}
 
 
 def _check_cuda_vs_integration() -> bool:
@@ -337,7 +369,7 @@ def _ensure_llamacpp_gpu():
         "  Vulkan: ensure Vulkan SDK glslc is in PATH."
     )
 
-_ensure_llamacpp_gpu()
+# _ensure_llamacpp_gpu() is called on-demand when LLM backend is "llamacpp"
 
 
 def resolve_service_device(cfg_value: str) -> str:
@@ -359,7 +391,7 @@ MODELS_DIR.mkdir(exist_ok=True)
 CONFIG_FILE = Path(__file__).parent / "config-server.ini"
 
 _CONFIG_DEFAULTS = {
-    "server":     {"host": "0.0.0.0", "port": "5678", "api_key": ""},
+    "server":     {"port": "5678", "api_key": ""},
     "services":   {"stt": "true", "tts": "true", "llm": "true", "vision": "true",
                    "imagegen": "false", "embeddings": "false"},
     "stt":        {"whisper_model": "large-v3", "compute_type": "auto", "vad_filter": "true", "device": "auto"},
@@ -368,7 +400,7 @@ _CONFIG_DEFAULTS = {
                    "n_ctx": "4096", "n_gpu_layers": "-1",
                    "n_batch": "2048", "flash_attn": "true",
                    "kv_cache_sessions": "2", "kv_cache_ttl": "300", "device": "auto"},
-    "tts":        {"voices_dir": "", "cache_size": "100"},
+    "tts":        {"voices_dir": "", "default_voice": "", "cache_size": "100"},
     "vision":     {"model": "Salesforce/blip-image-captioning-base", "device": "auto"},
     "imagegen":   {"model": "stabilityai/stable-diffusion-xl-base-1.0", "default_steps": "20", "default_cfg": "7.0", "device": "auto"},
     "embeddings": {"model": "all-MiniLM-L6-v2", "device": "auto"},
@@ -525,7 +557,11 @@ class STTService:
             wav_tensor = self._wav_bytes_to_tensor(audio_bytes)
             if wav_tensor is None:
                 return True
-            timestamps = get_speech_ts(wav_tensor, self._vad_model, sampling_rate=16000)
+            # Low threshold — this is a pre-filter to skip silence, not a gate.
+            # False negatives (missing speech) are far worse than false positives.
+            timestamps = get_speech_ts(wav_tensor, self._vad_model,
+                                       sampling_rate=16000, threshold=0.3,
+                                       min_speech_duration_ms=100)
             return len(timestamps) > 0
         except Exception:
             return True  # On error, proceed with transcription
@@ -538,16 +574,44 @@ class STTService:
                 sr = wf.getframerate()
                 n_frames = wf.getnframes()
                 n_channels = wf.getnchannels()
+                sampwidth = wf.getsampwidth()
                 raw = wf.readframes(n_frames)
-            samples = struct.unpack(f"<{n_frames * n_channels}h", raw)
-            tensor = torch.FloatTensor(samples) / 32768.0
+            if n_frames == 0 or not raw:
+                return None
+            n_samples = n_frames * n_channels
+            # Decode based on sample width (handles 8/16/24/32-bit WAV)
+            if sampwidth == 1:
+                samples = struct.unpack(f"<{n_samples}B", raw)
+                tensor = (torch.FloatTensor(samples) - 128.0) / 128.0
+            elif sampwidth == 2:
+                samples = struct.unpack(f"<{n_samples}h", raw)
+                tensor = torch.FloatTensor(samples) / 32768.0
+            elif sampwidth == 3:
+                import numpy as np
+                a = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3)
+                i32 = (a[:, 0].astype(np.int32)
+                       | (a[:, 1].astype(np.int32) << 8)
+                       | (a[:, 2].astype(np.int32) << 16))
+                i32[i32 >= 0x800000] -= 0x1000000
+                tensor = torch.from_numpy(i32.astype(np.float32)) / 8388608.0
+            elif sampwidth == 4:
+                # 32-bit float (Audacity, modern DAWs) or 32-bit int
+                samples = struct.unpack(f"<{n_samples}f", raw)
+                tensor = torch.FloatTensor(samples)
+                if tensor.isnan().any() or tensor.isinf().any() or tensor.abs().max() > 2.0:
+                    samples = struct.unpack(f"<{n_samples}i", raw)
+                    tensor = torch.FloatTensor(samples) / 2147483648.0
+            else:
+                return None
             if n_channels > 1:
                 tensor = tensor[::n_channels]  # take first channel
-            # Simple resample if not 16kHz
+            # Resample to 16kHz if needed
             if sr != 16000:
                 import numpy as np
                 ratio = 16000 / sr
                 new_len = int(len(tensor) * ratio)
+                if new_len < 1:
+                    return None
                 indices = torch.linspace(0, len(tensor) - 1, new_len)
                 tensor = torch.from_numpy(
                     np.interp(indices.numpy(), np.arange(len(tensor)), tensor.numpy())
@@ -1188,25 +1252,91 @@ class LlamaCppService:
 
 
 # ===================================================================
-# Vision Service (BLIP)
+# Vision Service (multi-backend: BLIP, BLIP-2, Moondream, Florence-2, generic)
 # ===================================================================
 class VisionService:
     def __init__(self, model_name: str = "Salesforce/blip-image-captioning-base", device: str = None):
-        from transformers import BlipProcessor, BlipForConditionalGeneration
         device = device or DEVICE
         self._device = device
-        log.info(f"Loading BLIP model: {model_name} (device: {device})...")
-        cache_dir = MODELS_DIR / "vision"
-        cache_dir.mkdir(exist_ok=True)
+        self._dtype = torch.float16 if ("cuda" in str(device)) else torch.float32
+        self._cache_dir = MODELS_DIR / "vision"
+        self._cache_dir.mkdir(exist_ok=True)
         self.model_name = model_name
-        self.processor = BlipProcessor.from_pretrained(model_name, cache_dir=str(cache_dir))
-        self.model = BlipForConditionalGeneration.from_pretrained(model_name, cache_dir=str(cache_dir))
-        self.model.to(device).eval()
-        log.info("BLIP model loaded.")
+        self.backend = self._detect_backend(model_name)
+        log.info(f"Loading vision model: {model_name} (backend: {self.backend}, device: {device})...")
+        loader = {"blip": self._load_blip, "blip2": self._load_blip2,
+                  "moondream": self._load_moondream, "florence": self._load_florence,
+                  "generic": self._load_generic}
+        loader[self.backend]()
+        log.info(f"Vision model loaded ({self.backend}).")
 
+    @staticmethod
+    def _detect_backend(name: str) -> str:
+        n = name.lower()
+        if "moondream" in n:   return "moondream"
+        if "florence" in n:    return "florence"
+        if "blip-2" in n or "blip2" in n: return "blip2"
+        if "blip" in n:       return "blip"
+        return "generic"
+
+    # -- loaders -----------------------------------------------------------
+    def _load_blip(self):
+        from transformers import BlipProcessor, BlipForConditionalGeneration
+        self.processor = BlipProcessor.from_pretrained(self.model_name, cache_dir=str(self._cache_dir))
+        self.model = BlipForConditionalGeneration.from_pretrained(
+            self.model_name, cache_dir=str(self._cache_dir), torch_dtype=self._dtype)
+        self.model.to(self._device).eval()
+
+    def _load_blip2(self):
+        from transformers import Blip2Processor, Blip2ForConditionalGeneration
+        self.processor = Blip2Processor.from_pretrained(self.model_name, cache_dir=str(self._cache_dir))
+        self.model = Blip2ForConditionalGeneration.from_pretrained(
+            self.model_name, cache_dir=str(self._cache_dir), torch_dtype=self._dtype)
+        self.model.to(self._device).eval()
+
+    def _load_moondream(self):
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, cache_dir=str(self._cache_dir))
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, cache_dir=str(self._cache_dir),
+            torch_dtype=self._dtype, trust_remote_code=True)
+        self.model.to(self._device).eval()
+        self.processor = None
+
+    def _load_florence(self):
+        from transformers import AutoProcessor, AutoModelForCausalLM
+        self.processor = AutoProcessor.from_pretrained(self.model_name, cache_dir=str(self._cache_dir),
+                                                       trust_remote_code=True)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, cache_dir=str(self._cache_dir),
+            torch_dtype=self._dtype, trust_remote_code=True)
+        self.model.to(self._device).eval()
+
+    def _load_generic(self):
+        from transformers import AutoProcessor, AutoModelForVision2Seq
+        self.processor = AutoProcessor.from_pretrained(self.model_name, cache_dir=str(self._cache_dir),
+                                                       trust_remote_code=True)
+        try:
+            self.model = AutoModelForVision2Seq.from_pretrained(
+                self.model_name, cache_dir=str(self._cache_dir),
+                torch_dtype=self._dtype, trust_remote_code=True)
+        except Exception:
+            from transformers import AutoModelForCausalLM
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name, cache_dir=str(self._cache_dir),
+                torch_dtype=self._dtype, trust_remote_code=True)
+        self.model.to(self._device).eval()
+
+    # -- caption dispatch --------------------------------------------------
     def caption(self, image_bytes: bytes, prompt: str = None) -> str:
         from PIL import Image
         image = Image.open(BytesIO(image_bytes)).convert("RGB")
+        fn = {"blip": self._caption_blip, "blip2": self._caption_blip,
+              "moondream": self._caption_moondream, "florence": self._caption_florence,
+              "generic": self._caption_generic}
+        return fn[self.backend](image, prompt)
+
+    def _caption_blip(self, image, prompt):
         inputs = (self.processor(image, prompt, return_tensors="pt") if prompt
                   else self.processor(image, return_tensors="pt"))
         inputs = inputs.to(self._device)
@@ -1214,8 +1344,31 @@ class VisionService:
             outputs = self.model.generate(**inputs, max_new_tokens=100, num_beams=3)
         return self.processor.decode(outputs[0], skip_special_tokens=True)
 
+    def _caption_moondream(self, image, prompt):
+        enc_img = self.model.encode_image(image)
+        question = prompt or "Describe this image."
+        return self.model.answer_question(enc_img, question, self.tokenizer)
+
+    def _caption_florence(self, image, prompt):
+        task = "<MORE_DETAILED_CAPTION>" if (prompt and "detail" in prompt.lower()) else "<CAPTION>"
+        inputs = self.processor(text=task, images=image, return_tensors="pt").to(self._device)
+        with torch.inference_mode():
+            ids = self.model.generate(**inputs, max_new_tokens=200, num_beams=3)
+        text = self.processor.batch_decode(ids, skip_special_tokens=False)[0]
+        parsed = self.processor.post_process_generation(text, task=task, image_size=(image.width, image.height))
+        return parsed.get(task, text).strip()
+
+    def _caption_generic(self, image, prompt):
+        text_input = prompt or "Describe this image."
+        inputs = self.processor(images=image, text=text_input, return_tensors="pt").to(self._device)
+        with torch.inference_mode():
+            ids = self.model.generate(**inputs, max_new_tokens=200)
+        return self.processor.batch_decode(ids, skip_special_tokens=True)[0].strip()
+
     def unload(self):
-        del self.model, self.processor
+        for attr in ("model", "processor", "tokenizer"):
+            if hasattr(self, attr):
+                delattr(self, attr)
         self.model = self.processor = None
 
 
@@ -1569,7 +1722,7 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
   <h1>TARS SERVER</h1>
   <div class="meta"><span class="live-dot" id="connDot"></span><span>{{GPU_NAME}}</span><span id="uptime">--</span></div>
 </div>
-<div id="vram-section"></div>
+<div id="stats-section" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"></div>
 <div class="grid-2">
   <div class="glass">
     <h2>Active Services</h2>
@@ -1613,11 +1766,13 @@ function connect(){
   ws.onmessage=function(e){
     const d=JSON.parse(e.data);
     document.getElementById('uptime').textContent=fmtUptime(d.uptime);
-    const vs=document.getElementById('vram-section');
-    if(d.gpu&&d.gpu.vram_percent!==undefined){
-      const p=d.gpu.vram_percent,c=p<70?'var(--cyan)':p<90?'var(--orange)':'var(--red)';
-      vs.innerHTML='<div class="glass"><h2>GPU Memory</h2><div class="bar-bg"><div class="bar-fg" style="background:linear-gradient(90deg,'+c+',rgba(180,77,255,0.5));width:'+p+'%"></div><span class="bar-label">'+d.gpu.vram_allocated_gb.toFixed(1)+' / '+d.gpu.vram_total_gb.toFixed(1)+' GB ('+p+'%)</span></div></div>';
-    }else{vs.innerHTML=''}
+    const ss=document.getElementById('stats-section');let bars='';
+    function mkBar(title,pct,label,extra){const c=pct<70?'var(--cyan)':pct<90?'var(--orange)':'var(--red)';const g='linear-gradient(90deg,'+c+',rgba(180,77,255,0.5))';return '<div class="glass" style="margin:0;'+(extra||'')+'"><h2>'+title+'</h2><div class="bar-bg"><div class="bar-fg" style="background:'+g+';width:'+Math.min(pct,100)+'%"></div><span class="bar-label">'+label+'</span></div></div>';}
+    if(d.system&&d.system.cpu_percent!==undefined){bars+=mkBar('CPU',d.system.cpu_percent,d.system.cpu_percent+'%');}
+    if(d.system&&d.system.ram_percent!==undefined){bars+=mkBar('RAM',d.system.ram_percent,d.system.ram_used_gb.toFixed(1)+' / '+d.system.ram_total_gb.toFixed(1)+' GB ('+d.system.ram_percent+'%)');}
+    if(d.gpu&&d.gpu.vram_percent!==undefined){bars+=mkBar('Dedicated GPU',d.gpu.vram_percent,d.gpu.vram_allocated_gb.toFixed(1)+' / '+d.gpu.vram_total_gb.toFixed(1)+' GB ('+d.gpu.vram_percent+'%)');}
+    if(d.gpu&&d.gpu.shared_percent!==undefined){bars+=mkBar('Shared GPU',d.gpu.shared_percent,d.gpu.shared_used_gb.toFixed(1)+' / '+d.gpu.shared_total_gb.toFixed(1)+' GB ('+d.gpu.shared_percent+'%)');}
+    ss.innerHTML=bars;
     const tb=document.getElementById('svc-table');let rows='';
     for(const[n,s]of Object.entries(d.services)){
       const lat=d.latency[n]?d.latency[n].avg_latency_ms.toFixed(0)+'ms <span style="color:var(--text-dim)">('+d.latency[n].requests+')</span>':'<span style="color:var(--text-dim)">-</span>';
@@ -1704,7 +1859,8 @@ async def ws_dashboard(ws: WebSocket):
                     info["model"] = svc.model_name
                 svc_info[name] = info
             data = {
-                "uptime": uptime, "gpu": gpu, "services": svc_info,
+                "uptime": uptime, "gpu": gpu, "system": get_system_stats(),
+                "services": svc_info,
                 "latency": TRACKER.get_latency_stats(),
                 "recent_logs": TRACKER.get_recent(20),
             }
@@ -1847,9 +2003,11 @@ async def llm_chat(request: Request):
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
         else:
-            result = SERVICES["llm"].chat(
-                messages, max_tokens, temperature, top_p, stream=False, session_id=session_id
-            )
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, lambda: SERVICES["llm"].chat(
+                    messages, max_tokens, temperature, top_p, stream=False, session_id=session_id
+                ))
             return JSONResponse(result)
     except HTTPException:
         raise
@@ -1884,7 +2042,8 @@ async def tts_generate(request: Request):
     voice = body.get("voice", None)
     speed = float(body.get("speed", 1.0))
     try:
-        wav_bytes = SERVICES["tts"].synthesize(text, voice=voice, speed=speed)
+        loop = asyncio.get_event_loop()
+        wav_bytes = await loop.run_in_executor(None, lambda: SERVICES["tts"].synthesize(text, voice=voice, speed=speed))
         log.info(f"TTS: \"{text[:60]}\" voice={voice}")
         return StreamingResponse(BytesIO(wav_bytes), media_type="audio/wav",
                                  headers={"Content-Disposition": "attachment; filename=speech.wav"})
@@ -1907,18 +2066,20 @@ async def tts_voices():
 # -- Vision Routes -----------------------------------------------------
 
 @app.post("/caption")
-async def vision_caption(image: UploadFile = File(...)):
+async def vision_caption(image: UploadFile = File(...), prompt: str = Form(None)):
     image_bytes = await image.read()
+    loop = asyncio.get_event_loop()
     if "vision" in SERVICES:
         try:
-            caption = SERVICES["vision"].caption(image_bytes)
-            log.info(f"Vision (BLIP): \"{caption}\"")
+            svc = SERVICES["vision"]
+            caption = await loop.run_in_executor(None, lambda: svc.caption(image_bytes, prompt=prompt or None))
+            log.info(f"Vision ({svc.backend}): \"{caption}\"")
             return {"caption": caption}
         except Exception:
-            log.error(f"BLIP error: {traceback.format_exc()}")
+            log.error(f"Vision error: {traceback.format_exc()}")
     if "llm" in SERVICES and getattr(SERVICES["llm"], "supports_vision", False):
         try:
-            caption = SERVICES["llm"].caption_image(image_bytes)
+            caption = await loop.run_in_executor(None, lambda: SERVICES["llm"].caption_image(image_bytes, prompt=prompt or None))
             log.info(f"Vision (VLM): \"{caption}\"")
             return {"caption": caption}
         except Exception:
@@ -1942,12 +2103,14 @@ async def sdapi_txt2img(request: Request):
     if not prompt:
         raise HTTPException(400, "prompt is required")
     try:
-        image_bytes = SERVICES["imagegen"].generate(
+        loop = asyncio.get_event_loop()
+        gen_kwargs = dict(
             prompt=prompt, negative_prompt=body.get("negative_prompt", ""),
             steps=int(body.get("steps", 20)), cfg_scale=float(body.get("cfg_scale", 7.0)),
             width=int(body.get("width", 1024)), height=int(body.get("height", 1024)),
             seed=int(body.get("seed", -1)), sampler_name=body.get("sampler_name"),
         )
+        image_bytes = await loop.run_in_executor(None, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
         log.info(f"ImageGen: \"{prompt[:60]}\"")
         return {"images": [base64.b64encode(image_bytes).decode()], "parameters": body, "info": ""}
     except Exception as e:
@@ -1967,12 +2130,14 @@ async def generate_image_simple(request: Request):
     if not prompt:
         raise HTTPException(400, "prompt is required")
     try:
-        image_bytes = SERVICES["imagegen"].generate(
+        loop = asyncio.get_event_loop()
+        gen_kwargs = dict(
             prompt=prompt, negative_prompt=body.get("negative_prompt", ""),
             steps=int(body.get("steps", 20)), cfg_scale=float(body.get("cfg_scale", 7.0)),
             width=int(body.get("width", 1024)), height=int(body.get("height", 1024)),
             seed=int(body.get("seed", -1)), sampler_name=body.get("sampler_name"),
         )
+        image_bytes = await loop.run_in_executor(None, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
         log.info(f"ImageGen: \"{prompt[:60]}\"")
         return StreamingResponse(BytesIO(image_bytes), media_type="image/png")
     except Exception as e:
@@ -1996,7 +2161,8 @@ async def embeddings(request: Request):
     if not inp:
         raise HTTPException(400, "input is required")
     try:
-        vectors = SERVICES["embeddings"].embed(inp)
+        loop = asyncio.get_event_loop()
+        vectors = await loop.run_in_executor(None, SERVICES["embeddings"].embed, inp)
         data = [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(vectors)]
         return {"object": "list", "data": data, "model": SERVICES["embeddings"].model_name,
                 "usage": {"prompt_tokens": sum(len(t.split()) for t in inp), "total_tokens": sum(len(t.split()) for t in inp)}}
@@ -2364,6 +2530,7 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   <div class="tab active" data-svc="llm" onclick="switchTab('chat')">Chat</div>
   <div class="tab" data-svc="stt" onclick="switchTab('stt')">STT</div>
   <div class="tab" data-svc="tts" onclick="switchTab('tts')">TTS</div>
+  <div class="tab" data-svc="vision" onclick="switchTab('vis')">Vision</div>
   <div class="tab" data-svc="imagegen" onclick="switchTab('img')">Image Gen</div>
 </div>
 <div id="p-chat" class="panel active"><div class="glass" style="display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
@@ -2403,6 +2570,16 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   </div>
 <style>#tts-audio::-webkit-media-controls-panel{background:linear-gradient(135deg,#1a3a5c,#0d2240);border-radius:8px}#tts-audio::-webkit-media-controls-current-time-display,#tts-audio::-webkit-media-controls-time-remaining-display{color:#7cb8ff}#tts-audio::-webkit-media-controls-play-button{filter:brightness(2)}#tts-audio::-webkit-media-controls-timeline{filter:hue-rotate(200deg) brightness(1.4)}</style>
 </div></div>
+<div id="p-vis" class="panel"><div class="glass">
+  <label>Image</label>
+  <input type="file" id="vis-file" accept="image/*">
+  <div id="vis-drop" style="margin:8px 0;padding:28px;text-align:center;border:2px dashed var(--border);border-radius:var(--radius-sm);color:var(--text-dim);font-size:12px;cursor:pointer;transition:border-color .2s,background .2s">Drop image here or click browse above</div>
+  <img class="preview" id="vis-preview" style="display:none;max-height:260px;margin-bottom:8px">
+  <label>Prompt <span style="opacity:.5;font-weight:400;text-transform:none;letter-spacing:0">(optional \u2013 guide the caption)</span></label>
+  <input type="text" id="vis-prompt" placeholder='e.g. "a photo of" or "describe the objects in"'>
+  <button class="hud-btn" onclick="captionImg()">Caption</button>
+  <div class="output" id="vis-out">Upload an image and click Caption.</div>
+</div></div>
 <div id="p-img" class="panel"><div class="glass">
   <textarea id="img-prompt" placeholder="Image prompt..."></textarea>
   <label>Negative prompt</label><input type="text" id="img-neg" placeholder="optional">
@@ -2425,7 +2602,7 @@ function hdrForm(){return {}}
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  const map={chat:0,stt:1,tts:2,img:3};
+  const map={chat:0,stt:1,tts:2,vis:3,img:4};
   document.querySelectorAll('.tab')[map[name]].classList.add('active');
   document.getElementById('p-'+name).classList.add('active');
   if(name==='tts')loadVoices();
@@ -2536,6 +2713,23 @@ async function synthesize(){
   finally{btn.textContent='Speak';btn.style.pointerEvents='';btn.style.opacity=''}
 }
 
+async function captionImg(){
+  const file=document.getElementById('vis-file').files[0];
+  if(!file){document.getElementById('vis-out').textContent='Select an image first.';return}
+  const prompt=document.getElementById('vis-prompt').value.trim();
+  document.getElementById('vis-out').textContent='Captioning...';
+  const fd=new FormData();fd.append('image',file);
+  if(prompt)fd.append('prompt',prompt);
+  try{
+    const t0=performance.now();
+    const resp=await fetch(base+'/caption',{method:'POST',body:fd});
+    if(!resp.ok){document.getElementById('vis-out').textContent='Error: '+resp.status+' '+resp.statusText;return}
+    const d=await resp.json();
+    const ms=Math.round(performance.now()-t0);
+    document.getElementById('vis-out').textContent=d.caption+'\n\n('+ms+'ms)';
+  }catch(e){document.getElementById('vis-out').textContent='Error: '+e}
+}
+
 async function generateImg(){
   const prompt=document.getElementById('img-prompt').value.trim();if(!prompt)return;
   const neg=document.getElementById('img-neg').value.trim();
@@ -2553,6 +2747,26 @@ async function generateImg(){
 document.getElementById('chat-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}});
 loadVoices();
 
+// Vision: image preview + drag-and-drop
+(function(){
+  const inp=document.getElementById('vis-file'),drop=document.getElementById('vis-drop'),prev=document.getElementById('vis-preview');
+  function showPreview(file){
+    const url=URL.createObjectURL(file);prev.src=url;prev.style.display='block';
+    prev.onload=()=>URL.revokeObjectURL(url);
+  }
+  inp.addEventListener('change',()=>{if(inp.files[0])showPreview(inp.files[0])});
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.style.borderColor='var(--cyan)';drop.style.background='rgba(0,229,255,0.06)'});
+  drop.addEventListener('dragleave',()=>{drop.style.borderColor='';drop.style.background=''});
+  drop.addEventListener('drop',e=>{
+    e.preventDefault();drop.style.borderColor='';drop.style.background='';
+    const file=e.dataTransfer.files[0];
+    if(file&&file.type.startsWith('image/')){
+      const dt=new DataTransfer();dt.items.add(file);inp.files=dt.files;
+      showPreview(file);
+    }
+  });
+})();
+
 // Dim tabs for services that aren't loaded, auto-select first available
 fetch(base+'/health').then(r=>r.json()).then(d=>{
   const active=Object.keys(d.services||{});
@@ -2568,7 +2782,7 @@ fetch(base+'/health').then(r=>r.json()).then(d=>{
   const cur=document.querySelector('.tab.active');
   if(!cur||cur.classList.contains('disabled')){
     if(firstAvail){
-      const map={llm:'chat',stt:'stt',tts:'tts',imagegen:'img'};
+      const map={llm:'chat',stt:'stt',tts:'tts',vision:'vis',imagegen:'img'};
       switchTab(map[firstAvail.dataset.svc]||'chat');
     }
   }
@@ -2668,6 +2882,11 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
 .save-status.ok{color:var(--green)}.save-status.err{color:var(--red)}
 .hint{font-size:10px;color:var(--text-dim);margin-top:2px}
 .section-note{font-size:11px;color:var(--text-dim);margin-bottom:10px}
+.info-i{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--cyan-dim);color:var(--cyan);font-family:var(--font-body);font-size:11px;font-weight:700;font-style:italic;cursor:help;flex-shrink:0;position:relative;opacity:.7;transition:opacity .2s}
+.info-i:hover{opacity:1}
+.info-i .tip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);width:280px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border-hi);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:11px;font-style:normal;font-weight:400;color:var(--text);line-height:1.5;z-index:100;box-shadow:0 8px 32px rgba(0,0,0,0.5);pointer-events:none;white-space:normal}
+.info-i:hover .tip{display:block}
+.info-i .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--border-hi)}
 .nav-links{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
 .nav-links a{font-family:var(--font-hud);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:var(--radius-sm);color:var(--cyan);text-decoration:none;transition:all .25s}
 .nav-links a:hover{background:rgba(0,229,255,0.12);border-color:var(--border-hi)}
@@ -2683,7 +2902,7 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
 <div class="glass">
   <h2>Access &amp; Security</h2>
   <div class="form-row">
-    <label>API Key</label>
+    <label>API Key <span class="info-i">i<span class="tip">Bearer token required for all API requests. Auto-generated on first boot. Copy this to your TARS RPi .env file as EXTERNAL_API_KEY so it can authenticate with this server.</span></span></label>
     <input type="password" id="s-apikey" placeholder="auto-generated on first boot">
     <button class="hud-btn-sm" onclick="const i=document.getElementById('s-apikey');i.type=i.type==='password'?'text':'password'">Show</button>
   </div>
@@ -2693,16 +2912,16 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
 <!-- Services & Devices -->
 <div class="glass">
   <h2>Services &amp; Devices</h2>
-  <div class="section-note">Enable/disable services and choose CPU or GPU per service. Restart required.</div>
+  <div class="section-note">Enable/disable services and choose CPU or GPU per service. Restart required. <span class="info-i">i<span class="tip">Each service runs independently. Disable unused services to save GPU memory and speed up startup. Device 'auto' uses GPU if available, falls back to CPU.</span></span></div>
   <table>
     <thead><tr><th>Service</th><th>Enabled</th><th>Device</th></tr></thead>
     <tbody>
-      <tr><td class="svc-name">STT</td><td><input type="checkbox" id="svc-stt"></td><td><select id="dev-stt"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
-      <tr><td class="svc-name">TTS</td><td><input type="checkbox" id="svc-tts"></td><td><span style="color:var(--text-dim);font-size:11px">CPU only (Piper ONNX)</span></td></tr>
-      <tr><td class="svc-name">LLM</td><td><input type="checkbox" id="svc-llm"></td><td><select id="dev-llm"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
-      <tr><td class="svc-name">Vision</td><td><input type="checkbox" id="svc-vision"></td><td><select id="dev-vision"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
-      <tr><td class="svc-name">ImageGen</td><td><input type="checkbox" id="svc-imagegen"></td><td><select id="dev-imagegen"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
-      <tr><td class="svc-name">Embeddings</td><td><input type="checkbox" id="svc-embeddings"></td><td><select id="dev-embeddings"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">STT <span class="info-i">i<span class="tip">Speech-to-Text: Transcribes audio to text using Faster-Whisper. Your TARS RPi sends recorded audio here for transcription.</span></span></td><td><input type="checkbox" id="svc-stt"></td><td><select id="dev-stt"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">TTS <span class="info-i">i<span class="tip">Text-to-Speech: Converts text to spoken audio using Piper ONNX voices. Runs on CPU only. Supports response caching for instant repeat playback.</span></span></td><td><input type="checkbox" id="svc-tts"></td><td><span style="color:var(--text-dim);font-size:11px">CPU only (Piper ONNX)</span></td></tr>
+      <tr><td class="svc-name">LLM <span class="info-i">i<span class="tip">Large Language Model: Runs a local AI model for chat responses. Supports HuggingFace transformers or llama.cpp GGUF models. Most GPU-intensive service.</span></span></td><td><input type="checkbox" id="svc-llm"></td><td><select id="dev-llm"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">Vision <span class="info-i">i<span class="tip">Image captioning: Analyzes images and generates text descriptions. Supports BLIP, BLIP-2, Moondream, Florence-2, and other HuggingFace vision models.</span></span></td><td><input type="checkbox" id="svc-vision"></td><td><select id="dev-vision"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">ImageGen <span class="info-i">i<span class="tip">Image generation: Creates images from text prompts using Stable Diffusion. Very GPU-intensive — requires significant VRAM.</span></span></td><td><input type="checkbox" id="svc-imagegen"></td><td><select id="dev-imagegen"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">Embeddings <span class="info-i">i<span class="tip">Text embeddings: Converts text into numerical vectors for semantic search. Used by TARS memory system (RAG). Lightweight — works well on CPU.</span></span></td><td><input type="checkbox" id="svc-embeddings"></td><td><select id="dev-embeddings"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
     </tbody>
   </table>
 </div>
@@ -2712,56 +2931,55 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
     <!-- Server -->
     <div class="glass">
       <h2>Server</h2>
-      <div class="form-row"><label>Host</label><input type="text" id="s-host"></div>
-      <div class="form-row"><label>Port</label><input type="number" id="s-port"></div>
+      <div class="form-row"><label>Port <span class="info-i">i<span class="tip">Network port the server listens on. Default is 5678. Make sure this matches the port in your TARS RPi configuration URLs (e.g. http://server-ip:5678).</span></span></label><input type="number" id="s-port"></div>
     </div>
     <!-- STT Config -->
     <div class="glass">
       <h2>STT Configuration</h2>
-      <div class="form-row"><label>Whisper Model</label><select id="s-stt-model"><option>tiny</option><option>base</option><option>small</option><option>medium</option><option>large-v2</option><option>large-v3</option></select></div>
-      <div class="form-row"><label>Compute Type</label><select id="s-stt-compute"><option>auto</option><option>float16</option><option>int8</option><option>int8_float16</option><option>float32</option></select></div>
-      <div class="form-row"><label>VAD Pre-filter</label><input type="checkbox" id="s-stt-vad"></div>
+      <div class="form-row"><label>Whisper Model <span class="info-i">i<span class="tip">Larger models are more accurate but use more memory and are slower. 'large-v3' is best for accuracy, 'base' or 'small' for lower-resource systems. Model is downloaded automatically on first use.</span></span></label><select id="s-stt-model"><option>tiny</option><option>base</option><option>small</option><option>medium</option><option>large-v2</option><option>large-v3</option></select></div>
+      <div class="form-row"><label>Compute Type <span class="info-i">i<span class="tip">Precision for inference. 'auto' picks the best for your hardware. 'float16' is fast on GPU, 'int8' uses less memory, 'int8_float16' balances both, 'float32' is most compatible but slowest.</span></span></label><select id="s-stt-compute"><option>auto</option><option>float16</option><option>int8</option><option>int8_float16</option><option>float32</option></select></div>
+      <div class="form-row"><label>VAD Pre-filter <span class="info-i">i<span class="tip">Voice Activity Detection. Skips silent audio chunks before running Whisper, reducing unnecessary processing and improving speed. Recommended ON.</span></span></label><input type="checkbox" id="s-stt-vad"></div>
     </div>
     <!-- LLM Config -->
     <div class="glass">
       <h2>LLM Configuration</h2>
-      <div class="form-row"><label>Backend</label><select id="s-llm-backend" onchange="toggleLlmBackend()"><option value="transformers">transformers (HuggingFace)</option><option value="llamacpp">llamacpp (GGUF — fast)</option></select></div>
-      <div class="form-row"><label id="s-llm-model-lbl">Model</label><input type="text" id="s-llm-model"></div>
+      <div class="form-row"><label>Backend <span class="info-i">i<span class="tip">'transformers' loads HuggingFace models with GPU acceleration and optional quantization. 'llamacpp' loads pre-quantized GGUF files — very fast and memory efficient.</span></span></label><select id="s-llm-backend" onchange="toggleLlmBackend()"><option value="transformers">transformers (HuggingFace)</option><option value="llamacpp">llamacpp (GGUF — fast)</option></select></div>
+      <div class="form-row"><label id="s-llm-model-lbl">Model <span class="info-i">i<span class="tip">For transformers: a HuggingFace model ID (e.g. 'Qwen/Qwen3-4B'). For llamacpp: path to a .gguf file. Model is downloaded automatically on first use.</span></span></label><input type="text" id="s-llm-model"></div>
       <div id="llm-transformers-opts">
-        <div class="form-row"><label>dtype</label><select id="s-llm-dtype"><option>auto</option><option>float16</option><option>bfloat16</option><option>float32</option></select></div>
-        <div class="form-row"><label>Quantize</label><select id="s-llm-quantize"><option value="none">none</option><option value="4bit">4-bit (fastest, needs bitsandbytes)</option><option value="8bit">8-bit (balanced, needs bitsandbytes)</option></select></div>
+        <div class="form-row"><label>dtype <span class="info-i">i<span class="tip">Model precision. 'auto' picks the best for your GPU. 'float16' for most GPUs, 'bfloat16' for newer GPUs (Ampere+, RTX 30/40 series), 'float32' for CPU-only (slowest).</span></span></label><select id="s-llm-dtype"><option>auto</option><option>float16</option><option>bfloat16</option><option>float32</option></select></div>
+        <div class="form-row"><label>Quantize <span class="info-i">i<span class="tip">Reduces model size and memory usage. '4-bit' is smallest and fastest (requires bitsandbytes). '8-bit' is a balanced middle ground. 'none' loads at full precision — best quality but most VRAM.</span></span></label><select id="s-llm-quantize"><option value="none">none</option><option value="4bit">4-bit (fastest, needs bitsandbytes)</option><option value="8bit">8-bit (balanced, needs bitsandbytes)</option></select></div>
       </div>
       <div id="llm-llamacpp-opts" style="display:none">
-        <div class="form-row"><label>Context Length</label><input type="number" id="s-llm-nctx" min="512" step="512"></div>
-        <div class="form-row"><label>GPU Layers</label><input type="number" id="s-llm-ngpu" min="-1"></div>
+        <div class="form-row"><label>Context Length <span class="info-i">i<span class="tip">Maximum tokens the model can process at once. Higher values allow longer conversations but use more memory. 4096 is a good default, increase if conversations get cut off.</span></span></label><input type="number" id="s-llm-nctx" min="512" step="512"></div>
+        <div class="form-row"><label>GPU Layers <span class="info-i">i<span class="tip">Number of model layers to offload to GPU. -1 = all layers on GPU (fastest). 0 = CPU only. Reduce if you run out of VRAM — each layer freed saves memory at the cost of speed.</span></span></label><input type="number" id="s-llm-ngpu" min="-1"></div>
       </div>
-      <div class="form-row"><label>KV Cache Sessions</label><input type="number" id="s-llm-kvs"></div>
-      <div class="form-row"><label>KV Cache TTL (sec)</label><input type="number" id="s-llm-kvt"></div>
+      <div class="form-row"><label>KV Cache Sessions <span class="info-i">i<span class="tip">Number of conversation contexts to keep cached in memory. Each session preserves the conversation state so follow-up requests are faster. Higher values use more RAM/VRAM.</span></span></label><input type="number" id="s-llm-kvs"></div>
+      <div class="form-row"><label>KV Cache TTL (sec) <span class="info-i">i<span class="tip">Seconds before an idle cached session expires and is freed from memory. Default 300 (5 minutes). Set higher if conversations have long pauses between messages.</span></span></label><input type="number" id="s-llm-kvt"></div>
     </div>
   </div>
   <div>
     <!-- TTS Config -->
     <div class="glass">
       <h2>TTS Configuration</h2>
-      <div class="form-row"><label>Voices Directory</label><input type="text" id="s-tts-dir" placeholder="empty = default"></div>
-      <div class="form-row"><label>Cache Size</label><input type="number" id="s-tts-cache"></div>
+      <div class="form-row"><label>Voice Model <span class="info-i">i<span class="tip">Piper ONNX voice to use for speech synthesis. Place .onnx voice files in the voices directory to add more options. The default TARS voice is downloaded automatically.</span></span></label><select id="s-tts-voice"><option value="">Loading...</option></select></div>
+      <div class="form-row"><label>Cache Size <span class="info-i">i<span class="tip">Number of generated audio clips to keep cached in memory. Cached responses are served instantly on repeat requests. Higher values use more RAM but improve response time for repeated phrases.</span></span></label><input type="number" id="s-tts-cache"></div>
     </div>
     <!-- Vision Config -->
     <div class="glass">
       <h2>Vision Configuration</h2>
-      <div class="form-row"><label>BLIP Model</label><input type="text" id="s-vision-model"></div>
+      <div class="form-row"><label>Model <span class="info-i">i<span class="tip">HuggingFace model ID for image captioning. Supports BLIP, BLIP-2, Moondream, Florence-2, or any compatible vision model. Downloaded automatically on first use. Larger models give better descriptions but use more VRAM.</span></span></label><input type="text" id="s-vision-model"></div>
     </div>
     <!-- ImageGen Config -->
     <div class="glass">
       <h2>ImageGen Configuration</h2>
-      <div class="form-row"><label>Diffusers Model</label><input type="text" id="s-imagegen-model"></div>
-      <div class="form-row"><label>Default Steps</label><input type="number" id="s-imagegen-steps"></div>
-      <div class="form-row"><label>Default CFG</label><input type="number" id="s-imagegen-cfg" step="0.1"></div>
+      <div class="form-row"><label>Diffusers Model <span class="info-i">i<span class="tip">HuggingFace model ID for image generation (e.g. 'stabilityai/stable-diffusion-xl-base-1.0'). Downloaded automatically on first use. Requires significant VRAM (4-8+ GB).</span></span></label><input type="text" id="s-imagegen-model"></div>
+      <div class="form-row"><label>Default Steps <span class="info-i">i<span class="tip">Number of diffusion steps per image. More steps = higher quality but slower generation. 20-30 is typical for good results. Can be overridden per request via the API.</span></span></label><input type="number" id="s-imagegen-steps"></div>
+      <div class="form-row"><label>Default CFG <span class="info-i">i<span class="tip">Classifier-free guidance scale. Higher values follow the text prompt more closely but can look artificial. Lower values are more creative but may drift from the prompt. 7-8 is a good default.</span></span></label><input type="number" id="s-imagegen-cfg" step="0.1"></div>
     </div>
     <!-- Embeddings Config -->
     <div class="glass">
       <h2>Embeddings Configuration</h2>
-      <div class="form-row"><label>Model</label><input type="text" id="s-embeddings-model"></div>
+      <div class="form-row"><label>Model <span class="info-i">i<span class="tip">Sentence-transformers model for generating text embeddings. Used by TARS memory system for semantic search and similarity matching. The default 'all-MiniLM-L6-v2' is lightweight and fast. Changing this requires rebuilding memory databases.</span></span></label><input type="text" id="s-embeddings-model"></div>
     </div>
   </div>
 </div>
@@ -2785,7 +3003,6 @@ async function loadSettings(){
   try{
     const r=await fetch('/api/settings');const d=await r.json();
     document.getElementById('s-apikey').value=d.server.api_key||'';
-    document.getElementById('s-host').value=d.server.host||'0.0.0.0';
     document.getElementById('s-port').value=d.server.port||'5678';
     document.getElementById('svc-stt').checked=d.services.stt==='true';
     document.getElementById('svc-tts').checked=d.services.tts==='true';
@@ -2810,8 +3027,9 @@ async function loadSettings(){
     document.getElementById('s-llm-ngpu').value=d.llm.n_gpu_layers||-1;
     document.getElementById('s-llm-kvs').value=d.llm.kv_cache_sessions;
     document.getElementById('s-llm-kvt').value=d.llm.kv_cache_ttl;
-    document.getElementById('s-tts-dir').value=d.tts.voices_dir||'';
+    window._ttsVoicesDir=d.tts.voices_dir||'';
     document.getElementById('s-tts-cache').value=d.tts.cache_size;
+    try{const vr=await fetch('/tts/voices');const vd=await vr.json();const sel=document.getElementById('s-tts-voice');sel.innerHTML='';(vd.voices||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.text=v;sel.add(o)});if(d.tts.default_voice)setSelect('s-tts-voice',d.tts.default_voice)}catch(e){document.getElementById('s-tts-voice').innerHTML='<option value="">TTS not loaded</option>'}
     document.getElementById('s-vision-model').value=d.vision.model;
     document.getElementById('s-imagegen-model').value=d.imagegen.model;
     document.getElementById('s-imagegen-steps').value=d.imagegen.default_steps;
@@ -2837,11 +3055,11 @@ async function saveSettings(){
   const st=document.getElementById('save-status');
   st.textContent='Saving...';st.className='save-status';
   const body={
-    server:{host:document.getElementById('s-host').value,port:document.getElementById('s-port').value,api_key:document.getElementById('s-apikey').value},
+    server:{port:document.getElementById('s-port').value,api_key:document.getElementById('s-apikey').value},
     services:{stt:document.getElementById('svc-stt').checked?'true':'false',tts:document.getElementById('svc-tts').checked?'true':'false',llm:document.getElementById('svc-llm').checked?'true':'false',vision:document.getElementById('svc-vision').checked?'true':'false',imagegen:document.getElementById('svc-imagegen').checked?'true':'false',embeddings:document.getElementById('svc-embeddings').checked?'true':'false'},
     stt:{whisper_model:document.getElementById('s-stt-model').value,compute_type:document.getElementById('s-stt-compute').value,vad_filter:document.getElementById('s-stt-vad').checked?'true':'false',device:document.getElementById('dev-stt').value},
     llm:{model:document.getElementById('s-llm-model').value,backend:document.getElementById('s-llm-backend').value,dtype:document.getElementById('s-llm-dtype').value,quantize:document.getElementById('s-llm-quantize').value,n_ctx:document.getElementById('s-llm-nctx').value,n_gpu_layers:document.getElementById('s-llm-ngpu').value,kv_cache_sessions:document.getElementById('s-llm-kvs').value,kv_cache_ttl:document.getElementById('s-llm-kvt').value,device:document.getElementById('dev-llm').value},
-    tts:{voices_dir:document.getElementById('s-tts-dir').value,cache_size:document.getElementById('s-tts-cache').value},
+    tts:{default_voice:document.getElementById('s-tts-voice').value,voices_dir:window._ttsVoicesDir||'',cache_size:document.getElementById('s-tts-cache').value},
     vision:{model:document.getElementById('s-vision-model').value,device:document.getElementById('dev-vision').value},
     imagegen:{model:document.getElementById('s-imagegen-model').value,default_steps:document.getElementById('s-imagegen-steps').value,default_cfg:document.getElementById('s-imagegen-cfg').value,device:document.getElementById('dev-imagegen').value},
     embeddings:{model:document.getElementById('s-embeddings-model').value,device:document.getElementById('dev-embeddings').value}
@@ -2878,7 +3096,7 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--port", type=int, default=int(cfg["server"]["port"]))
-    p.add_argument("--host", default=cfg["server"]["host"])
+    p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--services", nargs="+", choices=["stt", "tts", "llm", "vision", "imagegen", "embeddings"], default=None)
     p.add_argument("--no-stt", action="store_true", default=not cfg.getboolean("services", "stt"))
     p.add_argument("--no-tts", action="store_true", default=not cfg.getboolean("services", "tts"))
@@ -2956,6 +3174,7 @@ def _load_single_service(name: str, args):
             log.info(f"LLM backend auto-detected: {backend}")
 
         if backend == "llamacpp":
+            _ensure_llamacpp_gpu()
             SERVICES["llm"] = LlamaCppService(
                 model_path=args.llm_model, n_ctx=n_ctx, n_gpu_layers=n_gpu,
                 n_batch=n_batch, flash_attn=flash_attn,
@@ -2997,12 +3216,16 @@ def load_services(args):
     log.info(f"Services to load: {', '.join(s.upper() for s in to_load)}")
     for name in to_load:
         try:
-            _load_single_service(name, args)
+            # Redirect stdout to suppress safetensors LOAD REPORT print() noise.
+            # Our logs (stderr) and tqdm progress bars (stderr) are unaffected.
+            with contextlib.redirect_stdout(io.StringIO()):
+                _load_single_service(name, args)
         except (ImportError, ModuleNotFoundError):
             # Missing package — try to auto-install and retry once
             if _try_install_service_deps(name):
                 try:
-                    _load_single_service(name, args)
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        _load_single_service(name, args)
                     continue
                 except Exception:
                     pass
