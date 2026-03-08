@@ -196,6 +196,10 @@ def utterance_callback(message):
             on_first_play=_on_first_play,
         )
 
+        # Add placeholder message to OpenGL UI for streaming updates
+        character_name = CONFIG['CHAR']['character_name']
+        ui_manager.update_data(character_name, "", "TARS")
+
         def on_reply_chunk(chunk, is_first):
             """Called from LLM streaming thread with each reply text piece."""
             _acc_raw[0] += chunk
@@ -214,6 +218,9 @@ def utterance_callback(message):
             if not new_clean:
                 return
 
+            # Stream to OpenGL UI (update last message in-place)
+            ui_manager.update_streaming_data(clean_total)
+
             # Stream new text to web UI
             try:
                 from modules.module_chatui import stream_reply_token
@@ -221,16 +228,13 @@ def utterance_callback(message):
             except Exception:
                 pass
 
-            # Stream to terminal in debug mode
-            if CONFIG.get('debug_mode'):
-                queue_message(f"DEBUG stream: {new_clean}")
-
             # Feed to sentence-pipeline TTS
             pipeline.feed(new_clean)
 
         # Check if preemptive LLM already fired during silence detection
         preemptive = message_dict.get("preemptive_llm_result")
 
+        stt_to_llm_dur = 0
         if preemptive is not None:
             # Preemptive result: no streaming possible, fall through to normal TTS
             parsed = preemptive
@@ -247,6 +251,7 @@ def utterance_callback(message):
             llm_mod._reply_chunk_callback = on_reply_chunk
 
             try:
+                stt_to_llm_dur = speed.stop('stt_to_llm')
                 speed.start('llm_total')
                 parsed = process_completion(user_text)
                 llm_total_dur = speed.stop('llm_total')
@@ -317,8 +322,8 @@ def utterance_callback(message):
                     pass
         emo_dur = speed.stop('emotion')
 
-        character_name = CONFIG['CHAR']['character_name']
-        ui_manager.update_data(character_name, reply, "TARS")
+        # Finalize the streaming message with the complete reply
+        ui_manager.update_streaming_data(reply)
 
         # Handle side effects (vision/search/photo run inline, others in background)
         _followup_reply = None
@@ -415,6 +420,8 @@ def utterance_callback(message):
         total_dur = speed.stop('total')
         if speed.enabled:
             sp = []
+            if stt_to_llm_dur:
+                sp.append(f"stt_to_llm({speed.fmt(stt_to_llm_dur)})")
             llm_timings = parsed.get('_timings', {}) if isinstance(parsed, dict) else {}
             if llm_timings:
                 id_t = llm_timings.get('prompt_identity', 0)
