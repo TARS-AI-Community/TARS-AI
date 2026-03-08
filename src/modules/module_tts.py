@@ -208,6 +208,144 @@ async def generate_tts_audio(text, ttsoption, is_wakeword=False, ttsurl=None, to
     except Exception as e:
         queue_message(f"ERROR: Text-to-speech generation failed: {e}")
 
+import re as _re
+import queue as _queue
+
+
+class SentenceTTSPipeline:
+    """Sentence-by-sentence TTS pipeline.
+
+    Accepts streamed text via feed(), splits at sentence boundaries,
+    and plays each sentence through TTS as soon as it's complete.
+    TTS plays sentence 1 while the LLM is still generating sentence 2.
+
+    Usage:
+        pipeline = SentenceTTSPipeline('piper', sanitize=my_func, on_first_play=cb)
+        pipeline.start()
+        pipeline.feed("Hello there! How are ")
+        pipeline.feed("you doing today?")
+        pipeline.finish()
+        pipeline.join()
+        print(pipeline.interrupted, pipeline.duration)
+    """
+
+    _SENT_RE = _re.compile(r'(?<=[.!?])\s+')
+    _MIN_SENT = 20
+
+    def __init__(self, tts_option, sanitize=None, on_first_play=None, play_func=None):
+        self._tts_option = tts_option
+        self._sanitize = sanitize or str.strip
+        self._on_first_play = on_first_play
+        # Custom async play function: async def(sentence, tts_option) -> bool (interrupted).
+        # When None, defaults to play_audio_chunks (device speaker).
+        self._play_func = play_func
+        self._queue = _queue.Queue()
+        self._remainder = ''
+        self._interrupted = False
+        self._duration = 0.0
+        self._thread = None
+
+    def start(self):
+        """Start the TTS worker thread."""
+        self._thread = threading.Thread(target=self._worker, daemon=True, name="tts-pipeline")
+        self._thread.start()
+
+    def feed(self, text):
+        """Feed visible text. Complete sentences are queued for TTS immediately."""
+        self._remainder = self._extract_sentences(self._remainder + text)
+
+    def finish(self, remaining=None):
+        """Flush remaining text and signal end of stream.
+
+        If remaining is provided, it replaces the internal remainder
+        (useful for fallback flush from raw LLM output).
+        """
+        text = remaining if remaining is not None else self._remainder
+        text = self._sanitize(text) if text else ''
+        if text:
+            self._queue.put(text)
+        self._remainder = ''
+        self._queue.put(None)
+
+    def join(self, timeout=120):
+        """Wait for TTS worker to finish playing all sentences."""
+        if self._thread:
+            self._thread.join(timeout=timeout)
+
+    @property
+    def remainder(self):
+        """Current un-flushed text (no complete sentence boundary yet)."""
+        return self._remainder
+
+    @property
+    def interrupted(self):
+        return self._interrupted
+
+    @property
+    def duration(self):
+        return self._duration
+
+    def _extract_sentences(self, text):
+        """Split text at sentence boundaries, queue complete sentences, return remainder."""
+        while True:
+            pos = 0
+            m = None
+            while True:
+                m = self._SENT_RE.search(text, pos)
+                if not m or m.start() >= self._MIN_SENT:
+                    break
+                pos = m.end()
+            if not m:
+                break
+            sentence = self._sanitize(text[:m.start() + 1])
+            text = text[m.end():]
+            if sentence:
+                self._queue.put(sentence)
+        return text
+
+    def _worker(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        t_start = time.perf_counter()
+        first = True
+        try:
+            while not self._interrupted:
+                try:
+                    sentence = self._queue.get(timeout=30)
+                except _queue.Empty:
+                    break
+                if sentence is None:
+                    break
+                if first and self._on_first_play:
+                    first = False
+                    try:
+                        self._on_first_play()
+                    except Exception:
+                        pass
+                try:
+                    if self._play_func:
+                        was_int = loop.run_until_complete(
+                            self._play_func(sentence, self._tts_option)
+                        )
+                    else:
+                        was_int = loop.run_until_complete(
+                            play_audio_chunks(sentence, self._tts_option)
+                        )
+                except Exception as e:
+                    queue_message(f"ERROR: TTS pipeline failed: {e}")
+                    was_int = False
+                if was_int:
+                    self._interrupted = True
+                    while not self._queue.empty():
+                        try:
+                            self._queue.get_nowait()
+                        except _queue.Empty:
+                            break
+        finally:
+            self._duration = time.perf_counter() - t_start
+            loop.close()
+
+
 async def play_audio_chunks(text, config, is_wakeword=False):
     _tts_cancel_event.clear()
     audio_queue = asyncio.Queue(maxsize=3)

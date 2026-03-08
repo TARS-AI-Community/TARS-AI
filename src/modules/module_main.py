@@ -16,7 +16,7 @@ import asyncio
 # === Custom Modules ===
 from modules.module_config import load_config, get_capabilities
 from modules.module_llm import process_completion, detect_emotion, llm_execute_side_effects, _sanitize_for_tts
-from modules.module_tts import play_audio_chunks
+from modules.module_tts import play_audio_chunks, SentenceTTSPipeline
 from modules.module_messageQue import queue_message
 from modules.module_servoctl import initialize_servos
 
@@ -142,8 +142,10 @@ def utterance_callback(message):
     Parameters:
     - message (str): The recognized message from the Speech-to-Text (STT) module.
     """
+
     try:
         import modules.module_speed as speed
+        import modules.module_llm as llm_mod
         speed.mark_utterance_start()
         speed.start('total')
 
@@ -153,14 +155,19 @@ def utterance_callback(message):
 
         # Parse the user message
         message_dict = json.loads(message)
-        if not message_dict.get('text'):  # Handles cases where text is "" or missing
-            #queue_message(f"TARS: Going Idle...")
+        if not message_dict.get('text'):
             return
 
-        # Strip any special characters/control characters from user text
         user_text = message_dict['text'].strip()
 
         ui_manager.update_data("USER", user_text, "USER")
+
+        # Push voice-mode user message to web UI
+        try:
+            from modules.module_chatui import push_user_message
+            push_user_message(user_text)
+        except Exception:
+            pass
 
         if "shutdown pc" in user_text.lower():
             queue_message(f"SHUTDOWN: Shutting down the PC...")
@@ -169,61 +176,135 @@ def utterance_callback(message):
 
         ui_manager.set_tars_status("THINKING")
 
+        # ── Sentence-pipeline TTS ─────────────────────────────────────────────
+        _acc_raw    = ['']   # cumulative raw text from LLM (may include <think>)
+        _clean_seen = ['']   # total clean text processed so far (for delta tracking)
+
+        def _apply_sanitize(text):
+            text = _sanitize_for_tts(text)
+            text = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', text)
+            return text.strip()
+
+        def _on_first_play():
+            ui_manager.set_tars_status("TALKING")
+            if stt_manager:
+                stt_manager.start_bargein_monitor(tts_text="")
+
+        pipeline = SentenceTTSPipeline(
+            CONFIG['TTS']['ttsoption'],
+            sanitize=_apply_sanitize,
+            on_first_play=_on_first_play,
+        )
+
+        def on_reply_chunk(chunk, is_first):
+            """Called from LLM streaming thread with each reply text piece."""
+            _acc_raw[0] += chunk
+
+            # Remove any completed <think>…</think> blocks from full raw text
+            clean_total = re.sub(r'<think>.*?</think>', '', _acc_raw[0], flags=re.DOTALL)
+
+            # If an unclosed <think> tag remains, wait for it to close
+            if '<think>' in clean_total:
+                return
+
+            # Delta: only the NEW visible text since last call
+            new_clean = clean_total[len(_clean_seen[0]):]
+            _clean_seen[0] = clean_total
+
+            if not new_clean:
+                return
+
+            # Stream new text to web UI
+            try:
+                from modules.module_chatui import stream_reply_token
+                stream_reply_token(new_clean)
+            except Exception:
+                pass
+
+            # Stream to terminal in debug mode
+            if CONFIG.get('debug_mode'):
+                queue_message(f"DEBUG stream: {new_clean}")
+
+            # Feed to sentence-pipeline TTS
+            pipeline.feed(new_clean)
+
         # Check if preemptive LLM already fired during silence detection
         preemptive = message_dict.get("preemptive_llm_result")
-        speed.start('llm_total')
+
         if preemptive is not None:
+            # Preemptive result: no streaming possible, fall through to normal TTS
             parsed = preemptive
+            llm_total_dur = 0.0
         else:
-            parsed = process_completion(user_text)
-        llm_total_dur = speed.stop('llm_total')
+            # Notify web UI that streaming is starting
+            try:
+                from modules.module_chatui import begin_bot_stream
+                begin_bot_stream()
+            except Exception:
+                pass
+
+            pipeline.start()
+            llm_mod._reply_chunk_callback = on_reply_chunk
+
+            try:
+                speed.start('llm_total')
+                parsed = process_completion(user_text)
+                llm_total_dur = speed.stop('llm_total')
+            finally:
+                llm_mod._reply_chunk_callback = None
+                # Flush remaining — try pipeline remainder, fall back to raw
+                remaining = pipeline.remainder.strip()
+                if not remaining:
+                    full_clean = re.sub(r'<think>.*?</think>', '', _acc_raw[0], flags=re.DOTALL).strip()
+                    remaining = full_clean[len(_clean_seen[0]):].strip()
+                pipeline.finish(remaining=_apply_sanitize(remaining) if remaining else None)
 
         # If a movement happened during the LLM call, discard the result
         if stt_manager and stt_manager.is_cancelled():
             queue_message("INFO: LLM response discarded (movement interrupted)")
+            if preemptive is None:
+                try:
+                    from modules.module_chatui import socketio
+                    socketio.emit('bot_message', {'message': ''})
+                except Exception:
+                    pass
             ui_manager.set_tars_status("STANDBY")
             return
 
-        # Handle both old string returns and new parsed dict returns
         if parsed is None:
             queue_message("ERROR: LLM returned no response")
+            if preemptive is None:
+                try:
+                    from modules.module_chatui import socketio
+                    socketio.emit('bot_message', {'message': ''})
+                except Exception:
+                    pass
             ui_manager.set_tars_status("STANDBY")
             return
+
+        # Extract the final reply text for post-processing (emotion, display)
         if isinstance(parsed, str):
-            # Legacy path or error string
             reply = parsed
         else:
-            # Vision calls must run synchronously
-            func_calls = parsed.get("function_calls", [])
-            has_vision = any(fc.get("function") == "capture_camera_view" for fc in func_calls)
-            if has_vision:
-                llm_execute_side_effects(parsed, user_text)
-                reply = _sanitize_for_tts(parsed.get("reply", ""))
-            else:
-                reply = _sanitize_for_tts(parsed.get("reply", ""))
-                # Run function_calls and memory saves in background — parallel with TTS
-                if func_calls or parsed.get("new_memories"):
-                    threading.Thread(
-                        target=llm_execute_side_effects,
-                        args=(parsed, user_text), daemon=True
-                    ).start()
+            reply = _sanitize_for_tts(parsed.get("reply", ""))
 
         try:
-            match = re.search(r"<think>(.*?)</think>", reply, re.DOTALL)
-            thoughts = match.group(1).strip() if match else ""
-
-            # Remove the <think> block and clean up trailing whitespace/newlines
             reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
         except Exception:
-            thoughts = ""
+            pass
 
-        # Check again before TTS — movement could have started during post-processing
         if stt_manager and stt_manager.is_cancelled():
             queue_message("INFO: LLM response discarded (movement interrupted)")
+            if preemptive is None:
+                try:
+                    from modules.module_chatui import socketio
+                    socketio.emit('bot_message', {'message': ''})
+                except Exception:
+                    pass
             ui_manager.set_tars_status("STANDBY")
             return
 
-        # Detect emotion
+        # Detect emotion (parallel-safe — runs while TTS thread plays sentences)
         speed.start('emotion')
         emotion = None
         if CONFIG['EMOTION']['enabled'] and reply:
@@ -239,27 +320,48 @@ def utterance_callback(message):
         character_name = CONFIG['CHAR']['character_name']
         ui_manager.update_data(character_name, reply, "TARS")
 
-        reply = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
+        # Handle side effects
+        if not isinstance(parsed, str):
+            func_calls = parsed.get("function_calls", [])
+            has_vision = any(fc.get("function") == "capture_camera_view" for fc in func_calls)
+            if has_vision:
+                llm_execute_side_effects(parsed, user_text)
+            elif func_calls or parsed.get("new_memories"):
+                threading.Thread(
+                    target=llm_execute_side_effects,
+                    args=(parsed, user_text), daemon=True
+                ).start()
 
-        ui_manager.set_tars_status("TALKING")
-
-        # Start barge-in monitoring (mic listens for speech during TTS)
-        if stt_manager:
-            stt_manager.start_bargein_monitor(tts_text=reply)
-
-        speed.start('tts')
-        was_interrupted = asyncio.run(play_audio_chunks(reply, CONFIG['TTS']['ttsoption']))
-        tts_dur = speed.stop('tts')
-
-        # Stop barge-in monitoring
-        if stt_manager:
-            stt_manager.stop_bargein_monitor()
+        # For preemptive results, TTS hasn't started yet — play full reply normally
+        if preemptive is not None:
+            reply_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
+            ui_manager.set_tars_status("TALKING")
+            if stt_manager:
+                stt_manager.start_bargein_monitor(tts_text=reply_clean)
+            speed.start('tts')
+            was_interrupted = asyncio.run(play_audio_chunks(reply_clean, CONFIG['TTS']['ttsoption']))
+            pipeline._duration = speed.stop('tts')
+            if stt_manager:
+                stt_manager.stop_bargein_monitor()
+        else:
+            # Wait for the sentence-pipeline TTS to finish
+            pipeline.join(timeout=120)
+            if stt_manager:
+                stt_manager.stop_bargein_monitor()
+            was_interrupted = pipeline.interrupted
 
         if was_interrupted:
             time.sleep(0.3)
             ui_manager.set_tars_status("LISTENING")
         else:
             ui_manager.set_tars_status("STANDBY")
+
+        # Push final reply to web UI (finalizes streaming bubble or creates one for preemptive)
+        try:
+            from modules.module_chatui import socketio
+            socketio.emit('bot_message', {'message': reply})
+        except Exception:
+            pass
 
         # Round summary log
         speaker = '?'
@@ -288,6 +390,8 @@ def utterance_callback(message):
                 mem_t = llm_timings.get('prompt_memory', 0)
                 prompt_t = llm_timings.get('prompt_build', 0)
                 prompt_other = prompt_t - id_t - mem_t
+                ttft = prompt_t + llm_timings.get('llm_first_byte', 0)
+                sp.append(f"ttft({speed.fmt(ttft)})")
                 sp.append(f"identity({speed.fmt(id_t)})")
                 sp.append(f"memory({speed.fmt(mem_t)})")
                 if prompt_other > 0.001:
@@ -298,7 +402,7 @@ def utterance_callback(message):
             else:
                 sp.append(f"llm_total({speed.fmt(llm_total_dur)})")
             sp.append(f"emotion({speed.fmt(emo_dur)})")
-            sp.append(f"tts({speed.fmt(tts_dur)})")
+            sp.append(f"tts({speed.fmt(pipeline.duration)})")
             sp.append(f"total({speed.fmt(total_dur)})")
             queue_message(f"SPEED: {', '.join(sp)}")
 

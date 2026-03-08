@@ -38,7 +38,7 @@ config.read(os.path.join(os.path.dirname(__file__), '..', 'config.ini'))
 
 _EMBEDDING_SOURCE = config.get('RAG', 'embedding_source', fallback='local')
 _EMBEDDING_URL = config.get('RAG', 'embedding_url', fallback='').rstrip('/')
-queue_message(f"[MEMORY] Embedding source: {_EMBEDDING_SOURCE}, URL: {_EMBEDDING_URL or '(none)'}")
+# Debug: queue_message(f"[MEMORY] Embedding source: {_EMBEDDING_SOURCE}, URL: {_EMBEDDING_URL or '(none)'}")
 
 # Only load the local model if we're using local embeddings
 _EMBEDDING_MODEL = None

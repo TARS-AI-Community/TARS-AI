@@ -37,8 +37,9 @@ from flask_socketio import SocketIO
 # === Custom Modules ===
 from modules.module_config import load_config
 from modules.module_config import CONFIG_METADATA as CONFIG_UI_FIELDS
-from modules.module_llm import get_completion
-from modules.module_tts import generate_tts_audio
+from modules.module_llm import get_completion, process_completion, _sanitize_for_tts
+import modules.module_llm as _llm_mod
+from modules.module_tts import generate_tts_audio, SentenceTTSPipeline
 from modules.module_llm import detect_emotion, classifier as emotion_classifier
 from modules.module_messageQue import queue_message, get_recent_logs
 from modules.module_servoctl import *
@@ -368,6 +369,30 @@ def update_emotion(detected_emotion):
     except Exception:
         pass
 
+def begin_bot_stream():
+    """Signal web UI that a bot response is starting to stream (voice mode)."""
+    try:
+        socketio.emit('bot_stream_start', {})
+    except Exception:
+        pass
+
+
+def stream_reply_token(text):
+    """Push a streaming text chunk of the bot reply to the web UI."""
+    try:
+        socketio.emit('bot_token', {'text': text})
+    except Exception:
+        pass
+
+
+def push_user_message(text):
+    """Push a voice-mode user message to the web UI chat."""
+    try:
+        socketio.emit('user_message', {'message': text})
+    except Exception:
+        pass
+
+
 @flask_app.route('/emotion', methods=['POST'])
 def set_emotion():
     """
@@ -398,6 +423,7 @@ def _process_chat_message(msg, img_b64):
                     sid.last_identified_time = _time.time()
         except Exception:
             pass
+        _audio_streamed = False
         if img_b64:
             vision_mode = CONFIG['VISION'].get('vision_processor', 'blip')
 
@@ -424,15 +450,102 @@ def _process_chat_message(msg, img_b64):
                     cmessage = f"*The user uploaded a photo. Description: {caption}*"
                 reply = get_completion(cmessage, source="webui")
         else:
-            reply = get_completion(msg, source="webui")
+            # Stream tokens to web UI + TTS sentence-by-sentence to browser
+            import modules.module_speed as speed
+            speed.mark_utterance_start()
 
+            begin_bot_stream()
+
+            # Think-block stripping + delta tracking (same pattern as voice mode)
+            _acc_raw = ['']
+            _clean_seen = ['']
+
+            def _sanitize_tts(text):
+                text = _sanitize_for_tts(text)
+                text = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', text)
+                return text.strip()
+
+            async def _browser_tts_play(sentence, tts_option):
+                """Generate TTS for a sentence and emit audio bytes to browser via SocketIO."""
+                try:
+                    async for audio_chunk in generate_tts_audio(sentence, tts_option):
+                        audio_chunk.seek(0)
+                        audio_bytes = audio_chunk.read()
+                        if audio_bytes:
+                            encoded = base64.b64encode(audio_bytes).decode('ascii')
+                            socketio.emit('bot_audio_chunk', {'data': encoded})
+                except Exception as e:
+                    queue_message(f"ERROR: Browser TTS failed: {e}")
+                return False  # No barge-in in browser
+
+            def _on_first_browser_play():
+                socketio.emit('talking_state', {'talking': True})
+
+            pipeline = SentenceTTSPipeline(
+                CONFIG['TTS']['ttsoption'],
+                sanitize=_sanitize_tts,
+                on_first_play=_on_first_browser_play,
+                play_func=_browser_tts_play,
+            )
+            pipeline.start()
+
+            def _on_chunk(chunk, is_first):
+                _acc_raw[0] += chunk
+                # Strip completed <think> blocks
+                clean_total = re.sub(r'<think>.*?</think>', '', _acc_raw[0], flags=re.DOTALL)
+                if '<think>' in clean_total:
+                    return  # Unclosed think block, wait
+                new_clean = clean_total[len(_clean_seen[0]):]
+                _clean_seen[0] = clean_total
+                if not new_clean:
+                    return
+                stream_reply_token(new_clean)
+                pipeline.feed(new_clean)
+                if is_first:
+                    speed.mark_first_token()
+
+            _llm_mod._reply_chunk_callback = _on_chunk
+            try:
+                parsed = process_completion(msg)
+            finally:
+                _llm_mod._reply_chunk_callback = None
+                # Flush remaining text to pipeline
+                remaining = pipeline.remainder.strip()
+                if not remaining:
+                    full_clean = re.sub(r'<think>.*?</think>', '', _acc_raw[0], flags=re.DOTALL).strip()
+                    remaining = full_clean[len(_clean_seen[0]):].strip()
+                pipeline.finish(remaining=remaining if remaining else None)
+
+            if isinstance(parsed, dict):
+                reply = parsed.get("reply", "") or ""
+                if speed.enabled:
+                    timings = parsed.get('_timings', {})
+                    if timings:
+                        ttft = timings.get('prompt_build', 0) + timings.get('llm_first_byte', 0)
+                        speed.log(f"webui: ttft({speed.fmt(ttft)}), llm_stream({speed.fmt(timings.get('llm_stream', 0))}), parse({speed.fmt(timings.get('parse', 0))})")
+                # Execute function calls and save memories (was missing from streaming path)
+                from modules.module_llm import llm_execute_side_effects
+                llm_execute_side_effects(parsed, msg, source="webui")
+            else:
+                reply = parsed or ""
+
+            # Only mark as streamed if tokens actually flowed through the pipeline
+            _audio_streamed = bool(_acc_raw[0])
+
+        # Send final formatted text to browser immediately (don't wait for TTS)
         latest_text_to_read = reply
-        socketio.emit('bot_message', {'message': reply or ''})
+        socketio.emit('bot_message', {'message': reply or '', 'audio_streamed': _audio_streamed})
 
         if CONFIG['EMOTION']['enabled'] and reply:
             detected = detect_emotion(reply)
             if detected:
                 update_emotion(detected)
+
+        # Wait for all TTS audio to finish sending to browser (after text is displayed)
+        if _audio_streamed:
+            pipeline.join()
+            socketio.emit('bot_audio_done', {})
+            socketio.emit('talking_state', {'talking': False})
 
     except Exception as e:
         queue_message(f"ERROR: process_llm failed: {e}")

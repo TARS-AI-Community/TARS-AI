@@ -44,6 +44,69 @@ except ImportError:
 
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
+# Callback invoked with (text_chunk, is_first) as reply text streams from LLM.
+# Set by module_main.py before calling process_completion(); cleared afterward.
+_reply_chunk_callback = None
+
+
+class _ReplyExtractor:
+    """State machine that extracts the 'reply' field value from streaming LLM JSON.
+
+    As tokens arrive one by one, feeds them in and returns the visible reply
+    text extracted so far. Handles JSON escape sequences correctly.
+    """
+    def __init__(self):
+        self._state = 0   # 0=searching for "reply":", 1=inside value, 2=done
+        self._buf = ''
+        self._escape = False
+        self._had_any = False
+
+    def feed(self, token):
+        """Return (visible_text, is_first_token) extracted from this token."""
+        if self._state == 2:
+            return '', False
+        self._buf += token
+        extracted = ''
+
+        if self._state == 0:
+            m = re.search(r'"reply"\s*:\s*"', self._buf)
+            if m:
+                self._state = 1
+                self._buf = self._buf[m.end():]
+
+        if self._state == 1:
+            new_chars = []
+            i = 0
+            while i < len(self._buf):
+                c = self._buf[i]
+                if self._escape:
+                    if c == 'n':
+                        new_chars.append('\n')
+                    elif c == 't':
+                        new_chars.append('\t')
+                    else:
+                        new_chars.append(c)
+                    self._escape = False
+                elif c == '\\':
+                    self._escape = True
+                elif c == '"':
+                    self._state = 2
+                    self._buf = self._buf[i + 1:]
+                    break
+                else:
+                    new_chars.append(c)
+                i += 1
+            if self._state == 1:
+                self._buf = ''
+            extracted = ''.join(new_chars)
+
+        if extracted:
+            is_first = not self._had_any
+            self._had_any = True
+            return extracted, is_first
+        return '', False
+
+
 classifier = None
 if CONFIG['EMOTION']['enabled']:
     try:
@@ -247,6 +310,7 @@ def process_completion(prompt):
         _t_first_byte = time.perf_counter()
 
         full_content = ""
+        _extractor = _ReplyExtractor()
         try:
             for line in response.iter_lines():
                 if not line:
@@ -260,7 +324,20 @@ def process_completion(prompt):
                 try:
                     chunk = json.loads(data_str)
                     token = chunk['choices'][0]['delta'].get('content', '')
+                    if not token:
+                        continue
                     full_content += token
+                    # Extract visible reply text and invoke callback if set
+                    cb = _reply_chunk_callback
+                    if cb is not None:
+                        visible, is_first = _extractor.feed(token)
+                        if visible:
+                            if is_first:
+                                speed.mark_first_token()
+                            try:
+                                cb(visible, is_first)
+                            except Exception:
+                                pass
                 except (json.JSONDecodeError, KeyError, IndexError):
                     continue
         except Exception:
@@ -359,13 +436,38 @@ def llm_parse_response(bot_response):
             try:
                 bot_response = json.loads(bot_response)
             except json.JSONDecodeError:
-                bot_response = _repair_truncated_json(bot_response)
-                bot_response = json.loads(bot_response)
+                # Remove stray non-JSON chars between elements (e.g. LLM inserting "." between fields or array items)
+                bot_response = re.sub(r'([,\[])\s*[^"\s\[\]{}\d\-tfn]\s*(?=["\[{])', r'\1 ', bot_response)
+                # Fix missing values after colon (e.g. "function_calls":, or "key": })
+                bot_response = re.sub(r':\s*,', ': null,', bot_response)
+                bot_response = re.sub(r':\s*}', ': null}', bot_response)
+                try:
+                    bot_response = json.loads(bot_response)
+                    queue_message("WARNING: JSON repair triggered (stray chars / missing values)")
+                except json.JSONDecodeError:
+                    bot_response = _repair_truncated_json(bot_response)
+                    bot_response = json.loads(bot_response)
+                    queue_message("WARNING: JSON repair triggered (truncated JSON)")
 
         except json.JSONDecodeError as e:
-            queue_message(f"ERROR: JSON parsing failed: {e}")
+            queue_message(f"WARNING: JSON parsing failed, attempting reply extraction: {e}")
             queue_message(f"Raw response: {bot_response}")
-            return None
+            # Last resort: extract the reply field via regex from hopelessly broken JSON
+            reply_match = re.search(r'"reply"\s*:\s*"((?:[^"\\]|\\.)*)"', bot_response if isinstance(bot_response, str) else '')
+            if reply_match:
+                queue_message("WARNING: JSON repair triggered (reply extraction fallback)")
+                bot_response = {
+                    "reply": reply_match.group(1).replace('\\"', '"').replace('\\n', '\n'),
+                    "function_calls": [],
+                    "new_memories": []
+                }
+            else:
+                queue_message("ERROR: Could not extract reply from malformed JSON")
+                return None
+
+    if not isinstance(bot_response, dict):
+        queue_message(f"ERROR: LLM returned non-object JSON: {type(bot_response).__name__}")
+        return None
 
     if isinstance(bot_response, dict) and len(bot_response.keys()) == 1:
         sole_value = list(bot_response.values())[0]
@@ -385,8 +487,13 @@ def llm_parse_response(bot_response):
 
     bot_response["question"] = normalize_field(bot_response.get("question", ""))
     bot_response["reply"] = normalize_field(bot_response.get("reply", ""))
-    bot_response["function_calls"] = bot_response.get("function_calls", [])
-    bot_response["new_memories"] = bot_response.get("new_memories", [])
+    bot_response["function_calls"] = bot_response.get("function_calls") or []
+    bot_response["new_memories"] = bot_response.get("new_memories") or []
+
+    # Debug: log parsed structure so we can see what the pipeline produced
+    fc = bot_response["function_calls"]
+    mem = bot_response["new_memories"]
+    queue_message(f"DEBUG: llm_parse_response -> reply={bot_response['reply'][:80]!r}{'...' if len(bot_response['reply'])>80 else ''}, function_calls={fc}, new_memories={mem}")
 
     return bot_response
 
@@ -399,9 +506,14 @@ def llm_execute_side_effects(parsed, user_input, source="voice", has_image=False
     """
     global memory_manager
     try:
-        if parsed.get("function_calls"):
-            for func_call in parsed["function_calls"]:
+        fc = parsed.get("function_calls")
+        if fc:
+            queue_message(f"DEBUG: Executing {len(fc)} function call(s): {fc}")
+            for func_call in fc:
+                queue_message(f"DEBUG: execute_function_call -> {func_call}")
                 execute_function_call(func_call, parsed, user_input, source=source, has_image=has_image)
+        else:
+            queue_message(f"DEBUG: No function calls to execute (value: {fc!r})")
 
         if memory_manager:
             threading.Thread(
@@ -517,7 +629,7 @@ def _summarize_search_results(search_results, user_question):
 
         result = response.json()
         if 'choices' in result:
-            if llm_backend in ["openai", "grok", "deepinfra"]:
+            if llm_backend in ["openai", "grok", "deepinfra", "other"]:
                 text = result['choices'][0]['message']['content'].strip()
             else:
                 text = result['choices'][0]['text'].strip()
