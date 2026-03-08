@@ -1440,6 +1440,9 @@ function executeAction() {
       const visible = conds.every(cond => {
         const parentEl = document.getElementById(`cfg_${section}_${cond.field}`);
         if (!parentEl) return true;
+        // Skip condition if the parent field's own wrapper is hidden
+        const parentWrapper = parentEl.closest('[data-dep-conds]');
+        if (parentWrapper && parentWrapper.style.display === 'none') return true;
         const val = parentEl.type === 'checkbox'
           ? (parentEl.checked ? 'true' : 'false')
           : parentEl.value.toLowerCase();

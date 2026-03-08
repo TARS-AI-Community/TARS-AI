@@ -820,12 +820,12 @@ CONFIG_METADATA = {
         },
         'use_llm_backend': {
             'label': 'Use Same as LLM',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['external', 'openai', 'llm']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm']}],
             'description': 'When ON, vision uses the same model and API settings as your main LLM backend. Turn OFF to configure a separate model and URL for vision processing.'
         },
         'base_url': {
             'label': 'Vision API URL',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['external']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'use_llm_backend', 'values': ['False', 'false']}, {'field': 'vision_processor', 'values': ['external', 'openai', 'llm']}],
             'description': 'The API base URL for vision processing. For server_hosted: the BLIP server (e.g. http://192.168.1.100:5678). For llm/openai: the API endpoint (e.g. https://api.openai.com). Leave blank to use the default for your provider.'
         },
         'vision_model': {
