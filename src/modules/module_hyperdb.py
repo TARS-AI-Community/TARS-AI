@@ -35,57 +35,46 @@ import torch
 from modules.module_config import get_api_key
 from modules.module_messageQue import queue_message
 
+import os as _os
 config = configparser.ConfigParser()
-config.read('config.ini')
+config.read(_os.path.join(_os.path.dirname(__file__), '..', 'config.ini'))
 
-def get_embedding_new(documents):
-    base_url = config.getboolean('LLM', 'base_url')  # Replace with your API base URL
-    api_key = get_api_key(config['LLM']['llm_backend'])
-    encoding_format = "text/plain"
-    
-    url = f"{base_url}/v1/embeddings"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
+_EMBEDDING_SOURCE = config.get('RAG', 'embedding_source', fallback='local')
+_EMBEDDING_URL = config.get('RAG', 'embedding_url', fallback='').rstrip('/')
+queue_message(f"[MEMORY] Embedding source: {_EMBEDDING_SOURCE}, URL: {_EMBEDDING_URL or '(none)'}")
 
-    if isinstance(documents, str):
-        documents = [documents]
+# Only load the local model if we're using local embeddings
+_EMBEDDING_MODEL = None
 
-    data = {
-        "input": documents,
-        "encoding_format": encoding_format
-    }
+def _get_local_model():
+    global _EMBEDDING_MODEL
+    if _EMBEDDING_MODEL is None:
+        from sentence_transformers import SentenceTransformer
+        _EMBEDDING_MODEL = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device='cpu')
+    return _EMBEDDING_MODEL
 
-    response = requests.post(url, headers=headers, json=data)
+def _get_embedding_api(texts, url, api_key, model=None):
+    """Fetch embeddings from an OpenAI-compatible API endpoint."""
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
-    if response.status_code == 200:
-        try:
-            # Assuming the API response contains a list of embeddings under 'data'
-            embeddings_list = response.json().get("data", [])
-            if embeddings_list:
-                embeddings = [embedding["embedding"] for embedding in embeddings_list]
+    payload = {"input": texts}
+    if model:
+        payload["model"] = model
 
-                # Format embeddings in scientific notation
-                formatted_embeddings = [[f"{val:0.8e}" for val in embedding] for embedding in embeddings]
-
-                #queue_message("Embeddings:", formatted_embeddings)
-                return formatted_embeddings
-            else:
-                queue_message("Error: 'data' key not found in API response.")
-                return None
-        except KeyError:
-            queue_message("Error: 'data' key not found in API response.")
-            return None
-    else:
-        queue_message("Error:", response.status_code, response.text)
-        return None
-
-from sentence_transformers import SentenceTransformer
-EMBEDDING_MODEL = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device='cpu')
+    endpoint = f"{url}/v1/embeddings"
+    queue_message(f"[MEMORY] Fetching embeddings from {endpoint}")
+    response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
+    if response.status_code != 200:
+        queue_message(f"[MEMORY] Embedding API error: {response.status_code} {response.text[:200]}")
+        response.raise_for_status()
+    data = response.json().get("data", [])
+    embeddings = [item["embedding"] for item in sorted(data, key=lambda x: x["index"])]
+    return np.array(embeddings)
 
 def get_embedding(documents, key=None):
-    """Default embedding function that uses OpenAI Embeddings."""
+    """Get embeddings using local model, OpenAI, or external server based on config."""
     if isinstance(documents, list):
         if isinstance(documents[0], dict):
             texts = []
@@ -105,8 +94,19 @@ def get_embedding(documents, key=None):
         elif isinstance(documents[0], str):
             texts = documents
 
-    embeddings = EMBEDDING_MODEL.encode(texts)
-    return embeddings
+    import os
+    if _EMBEDDING_SOURCE == 'openai':
+        api_key = os.environ.get('OPENAI_API_KEY', '') or get_api_key('openai')
+        return _get_embedding_api(texts, 'https://api.openai.com', api_key, 'text-embedding-3-small')
+
+    if _EMBEDDING_SOURCE == 'external':
+        if not _EMBEDDING_URL:
+            queue_message("[MEMORY] ERROR: embedding_source is 'external' but embedding_url is not set")
+            return None
+        api_key = os.environ.get('EXTERNAL_API_KEY', '')
+        return _get_embedding_api(texts, _EMBEDDING_URL, api_key)
+
+    return _get_local_model().encode(texts)
 
 def get_norm_vector(vector):
     if len(vector.shape) == 1:
