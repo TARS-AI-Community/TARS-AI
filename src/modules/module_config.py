@@ -422,7 +422,7 @@ def load_config():
             "camera_rotation": config.getint('VISION', 'camera_rotation', fallback=0),
             "vision_processor": config.get('VISION', 'vision_processor', fallback='blip'),
             "use_llm_backend": config.getboolean('VISION', 'use_llm_backend', fallback=True),
-            "server_hosted": config.get('VISION', 'vision_processor', fallback='blip') == 'server_hosted',
+            "external": config.get('VISION', 'vision_processor', fallback='blip') == 'external',
             "base_url": config.get('VISION', 'base_url', fallback=''),
             "vision_model": config.get('VISION', 'vision_model', fallback=''),
             "vision_max_tokens": config.getint('VISION', 'vision_max_tokens', fallback=150),
@@ -815,17 +815,17 @@ CONFIG_METADATA = {
         'vision_processor': {
             'label': 'Vision Processor',
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'options': ['blip', 'llm', 'openai', 'server_hosted'],
-            'description': 'How TARS processes images. "blip" runs a local AI model on your Pi (~1GB RAM) and generates a short caption. "llm" sends the image to your configured LLM backend (must support vision). "openai" sends the image to OpenAI GPT-4o-mini (requires OPENAI_API_KEY). "server_hosted" sends the image to an external BLIP server you run on another computer.'
+            'options': ['blip', 'llm', 'openai', 'external'],
+            'description': 'How TARS processes images. "blip" runs a local AI model on your Pi (~1GB RAM) and generates a short caption. "llm" sends the image to your configured LLM backend (must support vision). "openai" sends the image to OpenAI GPT-4o-mini (requires OPENAI_API_KEY). "external" sends the image to an external BLIP server you run on another computer. "external" sends the image to a TARS app-server instance (uses EXTERNAL_API_KEY from .env).'
         },
         'use_llm_backend': {
             'label': 'Use Same as LLM',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['external', 'openai', 'llm']}],
             'description': 'When ON, vision uses the same model and API settings as your main LLM backend. Turn OFF to configure a separate model and URL for vision processing.'
         },
         'base_url': {
             'label': 'Vision API URL',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'use_llm_backend', 'values': ['False', 'false']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['external']}],
             'description': 'The API base URL for vision processing. For server_hosted: the BLIP server (e.g. http://192.168.1.100:5678). For llm/openai: the API endpoint (e.g. https://api.openai.com). Leave blank to use the default for your provider.'
         },
         'vision_model': {
@@ -835,7 +835,7 @@ CONFIG_METADATA = {
         },
         'vision_max_tokens': {
             'label': 'Vision Max Tokens',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm', 'server_hosted']}],
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm', 'external']}],
             'description': 'Maximum number of tokens in the vision response. Higher values give more detailed descriptions but cost more.'
         },
     },
