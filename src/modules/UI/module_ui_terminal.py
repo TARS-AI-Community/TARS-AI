@@ -266,12 +266,19 @@ class TerminalSystem:
 
         self._save_messages()
 
+    def update_last_message(self, value: str):
+        """Update the text of the most recent message (for streaming)."""
+        if self.messages:
+            key, _, msg_type, timestamp = self.messages[-1]
+            self.messages[-1] = (key, value, msg_type, timestamp)
+            self.cache_dirty = True
+
     def clear_messages(self):
         self.messages.clear()
         self.wrapped_cache.clear()
         self.scroll_offset = 0
         self.cache_dirty = True
-        self._save_messages()  
+        self._save_messages()
 
     def scroll_up(self, lines=3):
         self._update_wrapped_cache()

@@ -735,6 +735,7 @@ class STTManager:
 
             if result:
                 speed.log(f"stt:{processor}({speed.fmt(stt_dur)}), speaker_id({speed.fmt(sid_dur)})")
+                speed.start('stt_to_llm')  # Measure gap from STT done to LLM start
 
             if self.post_utterance_callback and result:
                 self.post_utterance_callback()
@@ -1660,8 +1661,6 @@ class STTManager:
                                 # Not enough speech frames for a usable embedding (~0.5s)
                                 recent_results.append(False)
                                 recent_results = recent_results[-3:]
-                                if self.DEBUG:
-                                    queue_message(f"DEBUG: Barge-in voiceprint: insufficient speech ({len(audio_buf)}/{CHECK_EVERY} frames)")
                                 audio_buf.clear()
                                 continue
 
@@ -1678,12 +1677,10 @@ class STTManager:
                             if embedding is None:
                                 recent_results.append(False)
                                 recent_results = recent_results[-3:]
-                                if self.DEBUG:
-                                    queue_message("DEBUG: Barge-in voiceprint: embedding extraction failed")
                                 continue
 
                             name, confidence = sid.identify_speaker(embedding)
-                            if self.DEBUG:
+                            if self.DEBUG and name and confidence > 0.01:
                                 queue_message(f"DEBUG: Barge-in voiceprint: speaker='{name}' confidence={confidence:.2f} threshold={self._bargein_voiceprint_threshold:.2f}")
 
                             matched = bool(name and confidence >= self._bargein_voiceprint_threshold)

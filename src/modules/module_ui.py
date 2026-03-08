@@ -363,6 +363,11 @@ class UIManager(threading.Thread):
         elif self.background_type == 'tesseract' and self.tesseract_system is not None:
             self.tesseract_system.action()
 
+    def update_streaming_data(self, value: str) -> None:
+        """Update the last terminal message in-place (for streaming tokens)."""
+        if self.terminal_system is not None:
+            self.terminal_system.update_last_message(value)
+
     def _transform_mouse_pos(self, screen_pos, display_width, display_height):
         x, y = screen_pos
 

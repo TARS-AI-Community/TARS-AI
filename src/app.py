@@ -227,6 +227,14 @@ for arg in sys.argv[1:]:
                 logging.getLogger('huggingface_hub').setLevel(logging.WARNING)
                 logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
                 logging.getLogger('flashrank').setLevel(logging.WARNING)
+                # Suppress web search / HTTP library spam
+                logging.getLogger('rustls').setLevel(logging.WARNING)
+                logging.getLogger('h2').setLevel(logging.WARNING)
+                logging.getLogger('hyper_util').setLevel(logging.WARNING)
+                logging.getLogger('reqwest').setLevel(logging.WARNING)
+                logging.getLogger('primp').setLevel(logging.WARNING)
+                logging.getLogger('cookie_store').setLevel(logging.WARNING)
+                logging.getLogger('asyncio').setLevel(logging.WARNING)
                 queue_message("LOAD: Debug mode enabled")
 
 
