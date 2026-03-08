@@ -214,13 +214,14 @@ def get_gpu_stats() -> dict:
         allocated = torch.cuda.memory_allocated(0) / 1024**3
         reserved = torch.cuda.memory_reserved(0) / 1024**3
         total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        pct = reserved / total * 100 if total > 0 else 0
         return {
             "name": torch.cuda.get_device_name(0),
             "vram_total_gb": round(total, 2),
             "vram_allocated_gb": round(allocated, 2),
             "vram_reserved_gb": round(reserved, 2),
-            "vram_free_gb": round(total - reserved, 2),
-            "vram_percent": round(reserved / total * 100, 1),
+            "vram_free_gb": round(max(total - reserved, 0), 2),
+            "vram_percent": round(min(pct, 100), 1),
         }
     except Exception:
         return {}
@@ -368,7 +369,7 @@ _CONFIG_DEFAULTS = {
                    "n_ctx": "4096", "n_gpu_layers": "-1",
                    "n_batch": "2048", "flash_attn": "true",
                    "kv_cache_sessions": "2", "kv_cache_ttl": "300", "device": "auto"},
-    "tts":        {"voices_dir": "", "cache_size": "100"},
+    "tts":        {"voices_dir": "", "default_voice": "", "cache_size": "100"},
     "vision":     {"model": "Salesforce/blip-image-captioning-base", "device": "auto"},
     "imagegen":   {"model": "stabilityai/stable-diffusion-xl-base-1.0", "default_steps": "20", "default_cfg": "7.0", "device": "auto"},
     "embeddings": {"model": "all-MiniLM-L6-v2", "device": "auto"},
@@ -525,7 +526,11 @@ class STTService:
             wav_tensor = self._wav_bytes_to_tensor(audio_bytes)
             if wav_tensor is None:
                 return True
-            timestamps = get_speech_ts(wav_tensor, self._vad_model, sampling_rate=16000)
+            # Low threshold — this is a pre-filter to skip silence, not a gate.
+            # False negatives (missing speech) are far worse than false positives.
+            timestamps = get_speech_ts(wav_tensor, self._vad_model,
+                                       sampling_rate=16000, threshold=0.3,
+                                       min_speech_duration_ms=100)
             return len(timestamps) > 0
         except Exception:
             return True  # On error, proceed with transcription
@@ -538,16 +543,44 @@ class STTService:
                 sr = wf.getframerate()
                 n_frames = wf.getnframes()
                 n_channels = wf.getnchannels()
+                sampwidth = wf.getsampwidth()
                 raw = wf.readframes(n_frames)
-            samples = struct.unpack(f"<{n_frames * n_channels}h", raw)
-            tensor = torch.FloatTensor(samples) / 32768.0
+            if n_frames == 0 or not raw:
+                return None
+            n_samples = n_frames * n_channels
+            # Decode based on sample width (handles 8/16/24/32-bit WAV)
+            if sampwidth == 1:
+                samples = struct.unpack(f"<{n_samples}B", raw)
+                tensor = (torch.FloatTensor(samples) - 128.0) / 128.0
+            elif sampwidth == 2:
+                samples = struct.unpack(f"<{n_samples}h", raw)
+                tensor = torch.FloatTensor(samples) / 32768.0
+            elif sampwidth == 3:
+                import numpy as np
+                a = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3)
+                i32 = (a[:, 0].astype(np.int32)
+                       | (a[:, 1].astype(np.int32) << 8)
+                       | (a[:, 2].astype(np.int32) << 16))
+                i32[i32 >= 0x800000] -= 0x1000000
+                tensor = torch.from_numpy(i32.astype(np.float32)) / 8388608.0
+            elif sampwidth == 4:
+                # 32-bit float (Audacity, modern DAWs) or 32-bit int
+                samples = struct.unpack(f"<{n_samples}f", raw)
+                tensor = torch.FloatTensor(samples)
+                if tensor.isnan().any() or tensor.isinf().any() or tensor.abs().max() > 2.0:
+                    samples = struct.unpack(f"<{n_samples}i", raw)
+                    tensor = torch.FloatTensor(samples) / 2147483648.0
+            else:
+                return None
             if n_channels > 1:
                 tensor = tensor[::n_channels]  # take first channel
-            # Simple resample if not 16kHz
+            # Resample to 16kHz if needed
             if sr != 16000:
                 import numpy as np
                 ratio = 16000 / sr
                 new_len = int(len(tensor) * ratio)
+                if new_len < 1:
+                    return None
                 indices = torch.linspace(0, len(tensor) - 1, new_len)
                 tensor = torch.from_numpy(
                     np.interp(indices.numpy(), np.arange(len(tensor)), tensor.numpy())
@@ -1188,25 +1221,91 @@ class LlamaCppService:
 
 
 # ===================================================================
-# Vision Service (BLIP)
+# Vision Service (multi-backend: BLIP, BLIP-2, Moondream, Florence-2, generic)
 # ===================================================================
 class VisionService:
     def __init__(self, model_name: str = "Salesforce/blip-image-captioning-base", device: str = None):
-        from transformers import BlipProcessor, BlipForConditionalGeneration
         device = device or DEVICE
         self._device = device
-        log.info(f"Loading BLIP model: {model_name} (device: {device})...")
-        cache_dir = MODELS_DIR / "vision"
-        cache_dir.mkdir(exist_ok=True)
+        self._dtype = torch.float16 if ("cuda" in str(device)) else torch.float32
+        self._cache_dir = MODELS_DIR / "vision"
+        self._cache_dir.mkdir(exist_ok=True)
         self.model_name = model_name
-        self.processor = BlipProcessor.from_pretrained(model_name, cache_dir=str(cache_dir))
-        self.model = BlipForConditionalGeneration.from_pretrained(model_name, cache_dir=str(cache_dir))
-        self.model.to(device).eval()
-        log.info("BLIP model loaded.")
+        self.backend = self._detect_backend(model_name)
+        log.info(f"Loading vision model: {model_name} (backend: {self.backend}, device: {device})...")
+        loader = {"blip": self._load_blip, "blip2": self._load_blip2,
+                  "moondream": self._load_moondream, "florence": self._load_florence,
+                  "generic": self._load_generic}
+        loader[self.backend]()
+        log.info(f"Vision model loaded ({self.backend}).")
 
+    @staticmethod
+    def _detect_backend(name: str) -> str:
+        n = name.lower()
+        if "moondream" in n:   return "moondream"
+        if "florence" in n:    return "florence"
+        if "blip-2" in n or "blip2" in n: return "blip2"
+        if "blip" in n:       return "blip"
+        return "generic"
+
+    # -- loaders -----------------------------------------------------------
+    def _load_blip(self):
+        from transformers import BlipProcessor, BlipForConditionalGeneration
+        self.processor = BlipProcessor.from_pretrained(self.model_name, cache_dir=str(self._cache_dir))
+        self.model = BlipForConditionalGeneration.from_pretrained(
+            self.model_name, cache_dir=str(self._cache_dir), torch_dtype=self._dtype)
+        self.model.to(self._device).eval()
+
+    def _load_blip2(self):
+        from transformers import Blip2Processor, Blip2ForConditionalGeneration
+        self.processor = Blip2Processor.from_pretrained(self.model_name, cache_dir=str(self._cache_dir))
+        self.model = Blip2ForConditionalGeneration.from_pretrained(
+            self.model_name, cache_dir=str(self._cache_dir), torch_dtype=self._dtype)
+        self.model.to(self._device).eval()
+
+    def _load_moondream(self):
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, cache_dir=str(self._cache_dir))
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, cache_dir=str(self._cache_dir),
+            torch_dtype=self._dtype, trust_remote_code=True)
+        self.model.to(self._device).eval()
+        self.processor = None
+
+    def _load_florence(self):
+        from transformers import AutoProcessor, AutoModelForCausalLM
+        self.processor = AutoProcessor.from_pretrained(self.model_name, cache_dir=str(self._cache_dir),
+                                                       trust_remote_code=True)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_name, cache_dir=str(self._cache_dir),
+            torch_dtype=self._dtype, trust_remote_code=True)
+        self.model.to(self._device).eval()
+
+    def _load_generic(self):
+        from transformers import AutoProcessor, AutoModelForVision2Seq
+        self.processor = AutoProcessor.from_pretrained(self.model_name, cache_dir=str(self._cache_dir),
+                                                       trust_remote_code=True)
+        try:
+            self.model = AutoModelForVision2Seq.from_pretrained(
+                self.model_name, cache_dir=str(self._cache_dir),
+                torch_dtype=self._dtype, trust_remote_code=True)
+        except Exception:
+            from transformers import AutoModelForCausalLM
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name, cache_dir=str(self._cache_dir),
+                torch_dtype=self._dtype, trust_remote_code=True)
+        self.model.to(self._device).eval()
+
+    # -- caption dispatch --------------------------------------------------
     def caption(self, image_bytes: bytes, prompt: str = None) -> str:
         from PIL import Image
         image = Image.open(BytesIO(image_bytes)).convert("RGB")
+        fn = {"blip": self._caption_blip, "blip2": self._caption_blip,
+              "moondream": self._caption_moondream, "florence": self._caption_florence,
+              "generic": self._caption_generic}
+        return fn[self.backend](image, prompt)
+
+    def _caption_blip(self, image, prompt):
         inputs = (self.processor(image, prompt, return_tensors="pt") if prompt
                   else self.processor(image, return_tensors="pt"))
         inputs = inputs.to(self._device)
@@ -1214,8 +1313,31 @@ class VisionService:
             outputs = self.model.generate(**inputs, max_new_tokens=100, num_beams=3)
         return self.processor.decode(outputs[0], skip_special_tokens=True)
 
+    def _caption_moondream(self, image, prompt):
+        enc_img = self.model.encode_image(image)
+        question = prompt or "Describe this image."
+        return self.model.answer_question(enc_img, question, self.tokenizer)
+
+    def _caption_florence(self, image, prompt):
+        task = "<MORE_DETAILED_CAPTION>" if (prompt and "detail" in prompt.lower()) else "<CAPTION>"
+        inputs = self.processor(text=task, images=image, return_tensors="pt").to(self._device)
+        with torch.inference_mode():
+            ids = self.model.generate(**inputs, max_new_tokens=200, num_beams=3)
+        text = self.processor.batch_decode(ids, skip_special_tokens=False)[0]
+        parsed = self.processor.post_process_generation(text, task=task, image_size=(image.width, image.height))
+        return parsed.get(task, text).strip()
+
+    def _caption_generic(self, image, prompt):
+        text_input = prompt or "Describe this image."
+        inputs = self.processor(images=image, text=text_input, return_tensors="pt").to(self._device)
+        with torch.inference_mode():
+            ids = self.model.generate(**inputs, max_new_tokens=200)
+        return self.processor.batch_decode(ids, skip_special_tokens=True)[0].strip()
+
     def unload(self):
-        del self.model, self.processor
+        for attr in ("model", "processor", "tokenizer"):
+            if hasattr(self, attr):
+                delattr(self, attr)
         self.model = self.processor = None
 
 
@@ -1907,18 +2029,19 @@ async def tts_voices():
 # -- Vision Routes -----------------------------------------------------
 
 @app.post("/caption")
-async def vision_caption(image: UploadFile = File(...)):
+async def vision_caption(image: UploadFile = File(...), prompt: str = Form(None)):
     image_bytes = await image.read()
     if "vision" in SERVICES:
         try:
-            caption = SERVICES["vision"].caption(image_bytes)
-            log.info(f"Vision (BLIP): \"{caption}\"")
+            svc = SERVICES["vision"]
+            caption = svc.caption(image_bytes, prompt=prompt or None)
+            log.info(f"Vision ({svc.backend}): \"{caption}\"")
             return {"caption": caption}
         except Exception:
-            log.error(f"BLIP error: {traceback.format_exc()}")
+            log.error(f"Vision error: {traceback.format_exc()}")
     if "llm" in SERVICES and getattr(SERVICES["llm"], "supports_vision", False):
         try:
-            caption = SERVICES["llm"].caption_image(image_bytes)
+            caption = SERVICES["llm"].caption_image(image_bytes, prompt=prompt or None)
             log.info(f"Vision (VLM): \"{caption}\"")
             return {"caption": caption}
         except Exception:
@@ -2364,6 +2487,7 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   <div class="tab active" data-svc="llm" onclick="switchTab('chat')">Chat</div>
   <div class="tab" data-svc="stt" onclick="switchTab('stt')">STT</div>
   <div class="tab" data-svc="tts" onclick="switchTab('tts')">TTS</div>
+  <div class="tab" data-svc="vision" onclick="switchTab('vis')">Vision</div>
   <div class="tab" data-svc="imagegen" onclick="switchTab('img')">Image Gen</div>
 </div>
 <div id="p-chat" class="panel active"><div class="glass" style="display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
@@ -2403,6 +2527,16 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   </div>
 <style>#tts-audio::-webkit-media-controls-panel{background:linear-gradient(135deg,#1a3a5c,#0d2240);border-radius:8px}#tts-audio::-webkit-media-controls-current-time-display,#tts-audio::-webkit-media-controls-time-remaining-display{color:#7cb8ff}#tts-audio::-webkit-media-controls-play-button{filter:brightness(2)}#tts-audio::-webkit-media-controls-timeline{filter:hue-rotate(200deg) brightness(1.4)}</style>
 </div></div>
+<div id="p-vis" class="panel"><div class="glass">
+  <label>Image</label>
+  <input type="file" id="vis-file" accept="image/*">
+  <div id="vis-drop" style="margin:8px 0;padding:28px;text-align:center;border:2px dashed var(--border);border-radius:var(--radius-sm);color:var(--text-dim);font-size:12px;cursor:pointer;transition:border-color .2s,background .2s">Drop image here or click browse above</div>
+  <img class="preview" id="vis-preview" style="display:none;max-height:260px;margin-bottom:8px">
+  <label>Prompt <span style="opacity:.5;font-weight:400;text-transform:none;letter-spacing:0">(optional \u2013 guide the caption)</span></label>
+  <input type="text" id="vis-prompt" placeholder='e.g. "a photo of" or "describe the objects in"'>
+  <button class="hud-btn" onclick="captionImg()">Caption</button>
+  <div class="output" id="vis-out">Upload an image and click Caption.</div>
+</div></div>
 <div id="p-img" class="panel"><div class="glass">
   <textarea id="img-prompt" placeholder="Image prompt..."></textarea>
   <label>Negative prompt</label><input type="text" id="img-neg" placeholder="optional">
@@ -2425,7 +2559,7 @@ function hdrForm(){return {}}
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  const map={chat:0,stt:1,tts:2,img:3};
+  const map={chat:0,stt:1,tts:2,vis:3,img:4};
   document.querySelectorAll('.tab')[map[name]].classList.add('active');
   document.getElementById('p-'+name).classList.add('active');
   if(name==='tts')loadVoices();
@@ -2536,6 +2670,23 @@ async function synthesize(){
   finally{btn.textContent='Speak';btn.style.pointerEvents='';btn.style.opacity=''}
 }
 
+async function captionImg(){
+  const file=document.getElementById('vis-file').files[0];
+  if(!file){document.getElementById('vis-out').textContent='Select an image first.';return}
+  const prompt=document.getElementById('vis-prompt').value.trim();
+  document.getElementById('vis-out').textContent='Captioning...';
+  const fd=new FormData();fd.append('image',file);
+  if(prompt)fd.append('prompt',prompt);
+  try{
+    const t0=performance.now();
+    const resp=await fetch(base+'/caption',{method:'POST',body:fd});
+    if(!resp.ok){document.getElementById('vis-out').textContent='Error: '+resp.status+' '+resp.statusText;return}
+    const d=await resp.json();
+    const ms=Math.round(performance.now()-t0);
+    document.getElementById('vis-out').textContent=d.caption+'\n\n('+ms+'ms)';
+  }catch(e){document.getElementById('vis-out').textContent='Error: '+e}
+}
+
 async function generateImg(){
   const prompt=document.getElementById('img-prompt').value.trim();if(!prompt)return;
   const neg=document.getElementById('img-neg').value.trim();
@@ -2553,6 +2704,26 @@ async function generateImg(){
 document.getElementById('chat-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}});
 loadVoices();
 
+// Vision: image preview + drag-and-drop
+(function(){
+  const inp=document.getElementById('vis-file'),drop=document.getElementById('vis-drop'),prev=document.getElementById('vis-preview');
+  function showPreview(file){
+    const url=URL.createObjectURL(file);prev.src=url;prev.style.display='block';
+    prev.onload=()=>URL.revokeObjectURL(url);
+  }
+  inp.addEventListener('change',()=>{if(inp.files[0])showPreview(inp.files[0])});
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.style.borderColor='var(--cyan)';drop.style.background='rgba(0,229,255,0.06)'});
+  drop.addEventListener('dragleave',()=>{drop.style.borderColor='';drop.style.background=''});
+  drop.addEventListener('drop',e=>{
+    e.preventDefault();drop.style.borderColor='';drop.style.background='';
+    const file=e.dataTransfer.files[0];
+    if(file&&file.type.startsWith('image/')){
+      const dt=new DataTransfer();dt.items.add(file);inp.files=dt.files;
+      showPreview(file);
+    }
+  });
+})();
+
 // Dim tabs for services that aren't loaded, auto-select first available
 fetch(base+'/health').then(r=>r.json()).then(d=>{
   const active=Object.keys(d.services||{});
@@ -2568,7 +2739,7 @@ fetch(base+'/health').then(r=>r.json()).then(d=>{
   const cur=document.querySelector('.tab.active');
   if(!cur||cur.classList.contains('disabled')){
     if(firstAvail){
-      const map={llm:'chat',stt:'stt',tts:'tts',imagegen:'img'};
+      const map={llm:'chat',stt:'stt',tts:'tts',vision:'vis',imagegen:'img'};
       switchTab(map[firstAvail.dataset.svc]||'chat');
     }
   }
@@ -2743,13 +2914,13 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
     <!-- TTS Config -->
     <div class="glass">
       <h2>TTS Configuration</h2>
-      <div class="form-row"><label>Voices Directory</label><input type="text" id="s-tts-dir" placeholder="empty = default"></div>
+      <div class="form-row"><label>Voice Model</label><select id="s-tts-voice"><option value="">Loading...</option></select></div>
       <div class="form-row"><label>Cache Size</label><input type="number" id="s-tts-cache"></div>
     </div>
     <!-- Vision Config -->
     <div class="glass">
       <h2>Vision Configuration</h2>
-      <div class="form-row"><label>BLIP Model</label><input type="text" id="s-vision-model"></div>
+      <div class="form-row"><label>Model <span style="opacity:.5;font-size:11px">(BLIP, BLIP-2, Moondream, Florence-2, or any HF vision model)</span></label><input type="text" id="s-vision-model"></div>
     </div>
     <!-- ImageGen Config -->
     <div class="glass">
@@ -2810,8 +2981,9 @@ async function loadSettings(){
     document.getElementById('s-llm-ngpu').value=d.llm.n_gpu_layers||-1;
     document.getElementById('s-llm-kvs').value=d.llm.kv_cache_sessions;
     document.getElementById('s-llm-kvt').value=d.llm.kv_cache_ttl;
-    document.getElementById('s-tts-dir').value=d.tts.voices_dir||'';
+    window._ttsVoicesDir=d.tts.voices_dir||'';
     document.getElementById('s-tts-cache').value=d.tts.cache_size;
+    try{const vr=await fetch('/tts/voices');const vd=await vr.json();const sel=document.getElementById('s-tts-voice');sel.innerHTML='';(vd.voices||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.text=v;sel.add(o)});if(d.tts.default_voice)setSelect('s-tts-voice',d.tts.default_voice)}catch(e){document.getElementById('s-tts-voice').innerHTML='<option value="">TTS not loaded</option>'}
     document.getElementById('s-vision-model').value=d.vision.model;
     document.getElementById('s-imagegen-model').value=d.imagegen.model;
     document.getElementById('s-imagegen-steps').value=d.imagegen.default_steps;
@@ -2841,7 +3013,7 @@ async function saveSettings(){
     services:{stt:document.getElementById('svc-stt').checked?'true':'false',tts:document.getElementById('svc-tts').checked?'true':'false',llm:document.getElementById('svc-llm').checked?'true':'false',vision:document.getElementById('svc-vision').checked?'true':'false',imagegen:document.getElementById('svc-imagegen').checked?'true':'false',embeddings:document.getElementById('svc-embeddings').checked?'true':'false'},
     stt:{whisper_model:document.getElementById('s-stt-model').value,compute_type:document.getElementById('s-stt-compute').value,vad_filter:document.getElementById('s-stt-vad').checked?'true':'false',device:document.getElementById('dev-stt').value},
     llm:{model:document.getElementById('s-llm-model').value,backend:document.getElementById('s-llm-backend').value,dtype:document.getElementById('s-llm-dtype').value,quantize:document.getElementById('s-llm-quantize').value,n_ctx:document.getElementById('s-llm-nctx').value,n_gpu_layers:document.getElementById('s-llm-ngpu').value,kv_cache_sessions:document.getElementById('s-llm-kvs').value,kv_cache_ttl:document.getElementById('s-llm-kvt').value,device:document.getElementById('dev-llm').value},
-    tts:{voices_dir:document.getElementById('s-tts-dir').value,cache_size:document.getElementById('s-tts-cache').value},
+    tts:{default_voice:document.getElementById('s-tts-voice').value,voices_dir:window._ttsVoicesDir||'',cache_size:document.getElementById('s-tts-cache').value},
     vision:{model:document.getElementById('s-vision-model').value,device:document.getElementById('dev-vision').value},
     imagegen:{model:document.getElementById('s-imagegen-model').value,default_steps:document.getElementById('s-imagegen-steps').value,default_cfg:document.getElementById('s-imagegen-cfg').value,device:document.getElementById('dev-imagegen').value},
     embeddings:{model:document.getElementById('s-embeddings-model').value,device:document.getElementById('dev-embeddings').value}
