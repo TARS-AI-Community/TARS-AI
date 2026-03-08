@@ -642,7 +642,7 @@ class TTSService:
         import wave as wave_mod
 
         try:
-            from piper import PiperVoice
+            from piper.voice import PiperVoice
         except ImportError:
             raise RuntimeError("piper-tts not installed. Install with: pip install piper-tts")
 
@@ -653,17 +653,26 @@ class TTSService:
             raise ValueError(f"Voice '{voice}' not found. Available: {available}")
 
         voice_info = self._voices[voice]
-        piper_voice = PiperVoice.load(voice_info["model"], voice_info["config"])
+        piper_voice = PiperVoice.load(voice_info["model"])
         wav_buf = BytesIO()
         with wave_mod.open(wav_buf, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(piper_voice.config.sample_rate)
             synth_kwargs = {}
             if speed != 1.0:
                 synth_kwargs["length_scale"] = 1.0 / speed
             try:
-                piper_voice.synthesize(text, wav_file, **synth_kwargs)
+                if hasattr(piper_voice, "synthesize_wav"):
+                    piper_voice.synthesize_wav(text, wav_file, **synth_kwargs)
+                else:
+                    piper_voice.synthesize(text, wav_file, **synth_kwargs)
             except TypeError:
                 # Older piper-tts without length_scale param
-                piper_voice.synthesize(text, wav_file)
+                if hasattr(piper_voice, "synthesize_wav"):
+                    piper_voice.synthesize_wav(text, wav_file)
+                else:
+                    piper_voice.synthesize(text, wav_file)
         return wav_buf.getvalue()
 
     def unload(self):
@@ -2318,6 +2327,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .tab{flex:1;padding:12px 16px;text-align:center;font-family:var(--font-hud);font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);cursor:pointer;transition:all .25s;border:none;background:transparent;position:relative}
 .tab:hover{color:rgba(0,229,255,0.8);background:rgba(0,229,255,0.04)}
 .tab.active{color:var(--cyan);background:rgba(0,229,255,0.08);box-shadow:inset 0 -2px 0 var(--cyan);text-shadow:0 0 12px rgba(0,229,255,0.4)}
+.tab.disabled{opacity:.25;cursor:not-allowed;pointer-events:none}
 .panel{display:none}
 .panel.active{display:block}
 textarea,input[type=text],select{width:100%;padding:12px 16px;background:rgba(0,229,255,0.04);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:13px;margin:6px 0;outline:none;transition:border-color .2s}
@@ -2351,10 +2361,10 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   <a href="/">Dashboard</a>
 </div>
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('chat')">Chat</div>
-  <div class="tab" onclick="switchTab('stt')">STT</div>
-  <div class="tab" onclick="switchTab('tts')">TTS</div>
-  <div class="tab" onclick="switchTab('img')">Image Gen</div>
+  <div class="tab active" data-svc="llm" onclick="switchTab('chat')">Chat</div>
+  <div class="tab" data-svc="stt" onclick="switchTab('stt')">STT</div>
+  <div class="tab" data-svc="tts" onclick="switchTab('tts')">TTS</div>
+  <div class="tab" data-svc="imagegen" onclick="switchTab('img')">Image Gen</div>
 </div>
 <div id="p-chat" class="panel active"><div class="glass" style="display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border)">
@@ -2375,12 +2385,23 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   </div>
   <div class="output" id="stt-out">Upload an audio file or click Record.</div>
 </div></div>
-<div id="p-tts" class="panel"><div class="glass">
-  <textarea id="tts-input" placeholder="Text to speak..."></textarea>
-  <label>Voice</label><select id="tts-voice"><option value="">default</option></select>
-  <button class="hud-btn" onclick="synthesize()">Synthesize</button>
-  <audio id="tts-audio" controls style="display:none"></audio>
-  <div class="output" id="tts-out"></div>
+<div id="p-tts" class="panel"><div class="glass" style="display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border)">
+    <span style="font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim)">Text to Speech</span>
+    <span id="tts-status" style="font-family:var(--font-hud);font-size:10px;letter-spacing:.1em;color:var(--text-dim)"></span>
+  </div>
+  <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+    <textarea id="tts-input" placeholder="Type something to hear it spoken..." style="height:90px;margin:0"></textarea>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div style="min-width:140px"><label>Voice</label><select id="tts-voice" style="margin-top:4px"></select></div>
+      <button class="hud-btn" style="margin:0;height:42px;padding:0 24px;flex-shrink:0" id="tts-btn" onclick="synthesize()">Speak</button>
+    </div>
+    <div id="tts-player" style="display:none;gap:10px;align-items:center;background:rgba(0,120,255,0.12);border:1px solid rgba(0,150,255,0.35);border-radius:var(--radius-sm);padding:8px 12px">
+      <audio id="tts-audio" controls style="flex:1;outline:none;height:40px"></audio>
+      <button class="hud-btn" style="margin:0;padding:6px 14px;font-size:9px;height:36px;flex-shrink:0" onclick="const a=document.getElementById('tts-audio');if(a.src){const l=document.createElement('a');l.href=a.src;l.download='tts_output.wav';l.click()}">Save</button>
+    </div>
+  </div>
+<style>#tts-audio::-webkit-media-controls-panel{background:linear-gradient(135deg,#1a3a5c,#0d2240);border-radius:8px}#tts-audio::-webkit-media-controls-current-time-display,#tts-audio::-webkit-media-controls-time-remaining-display{color:#7cb8ff}#tts-audio::-webkit-media-controls-play-button{filter:brightness(2)}#tts-audio::-webkit-media-controls-timeline{filter:hue-rotate(200deg) brightness(1.4)}</style>
 </div></div>
 <div id="p-img" class="panel"><div class="glass">
   <textarea id="img-prompt" placeholder="Image prompt..."></textarea>
@@ -2487,7 +2508,7 @@ async function loadVoices(){
   try{
     const resp=await fetch(base+'/tts/voices',{headers:hdrForm()});
     const d=await resp.json();const sel=document.getElementById('tts-voice');
-    sel.innerHTML='<option value="">default</option>';
+    sel.innerHTML='';
     (d.voices||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.text=v;sel.add(o)});
   }catch(e){}
 }
@@ -2495,14 +2516,24 @@ async function loadVoices(){
 async function synthesize(){
   const text=document.getElementById('tts-input').value.trim();if(!text)return;
   const voice=document.getElementById('tts-voice').value||undefined;
-  document.getElementById('tts-out').textContent='Synthesizing...';
+  const btn=document.getElementById('tts-btn');
+  const status=document.getElementById('tts-status');
+  const player=document.getElementById('tts-player');
+  btn.textContent='Generating...';btn.style.pointerEvents='none';btn.style.opacity='.5';
   try{
+    const t0=performance.now();
     const resp=await fetch(base+'/tts/generate',{method:'POST',headers:hdr(),
       body:JSON.stringify({text,voice})});
+    if(!resp.ok){status.textContent='Error: '+resp.status;status.style.color='var(--red)';player.style.display='block';return}
     const blob=await resp.blob();const url=URL.createObjectURL(blob);
-    const audio=document.getElementById('tts-audio');audio.src=url;audio.style.display='block';audio.play();
-    document.getElementById('tts-out').textContent='Done.';
-  }catch(e){document.getElementById('tts-out').textContent='Error: '+e}
+    const audio=document.getElementById('tts-audio');audio.src=url;
+    player.style.display='flex';
+    const ms=Math.round(performance.now()-t0);
+    status.style.color='var(--text-dim)';
+    status.textContent='Generated in '+ms+'ms \u00B7 '+(blob.size/1024).toFixed(1)+' KB';
+    audio.play();
+  }catch(e){status.textContent='Error: '+e;status.style.color='var(--red)';player.style.display='flex'}
+  finally{btn.textContent='Speak';btn.style.pointerEvents='';btn.style.opacity=''}
 }
 
 async function generateImg(){
@@ -2520,6 +2551,28 @@ async function generateImg(){
 }
 
 document.getElementById('chat-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}});
+loadVoices();
+
+// Dim tabs for services that aren't loaded, auto-select first available
+fetch(base+'/health').then(r=>r.json()).then(d=>{
+  const active=Object.keys(d.services||{});
+  const tabs=document.querySelectorAll('.tab[data-svc]');
+  let firstAvail=null;
+  tabs.forEach(tab=>{
+    if(!active.includes(tab.dataset.svc)){
+      tab.classList.add('disabled');
+      tab.classList.remove('active');
+    }else if(!firstAvail){firstAvail=tab}
+  });
+  // If current active tab is disabled, switch to first available
+  const cur=document.querySelector('.tab.active');
+  if(!cur||cur.classList.contains('disabled')){
+    if(firstAvail){
+      const map={llm:'chat',stt:'stt',tts:'tts',imagegen:'img'};
+      switchTab(map[firstAvail.dataset.svc]||'chat');
+    }
+  }
+}).catch(()=>{});
 </script>
 </body></html>"""
 
