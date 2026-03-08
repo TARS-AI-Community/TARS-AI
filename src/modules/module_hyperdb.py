@@ -24,20 +24,17 @@ import pickle
 import numpy as np
 import random
 import requests
-from typing import List, Union
 import bm25s
 import Stemmer
-from sentence_transformers import CrossEncoder
 from flashrank import Ranker, RerankRequest
 import configparser
-import torch
+import os
 
 from modules.module_config import get_api_key
 from modules.module_messageQue import queue_message
 
-import os as _os
 config = configparser.ConfigParser()
-config.read(_os.path.join(_os.path.dirname(__file__), '..', 'config.ini'))
+config.read(os.path.join(os.path.dirname(__file__), '..', 'config.ini'))
 
 _EMBEDDING_SOURCE = config.get('RAG', 'embedding_source', fallback='local')
 _EMBEDDING_URL = config.get('RAG', 'embedding_url', fallback='').rstrip('/')
@@ -64,7 +61,6 @@ def _get_embedding_api(texts, url, api_key, model=None):
         payload["model"] = model
 
     endpoint = f"{url}/v1/embeddings"
-    queue_message(f"[MEMORY] Fetching embeddings from {endpoint}")
     response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
     if response.status_code != 200:
         queue_message(f"[MEMORY] Embedding API error: {response.status_code} {response.text[:200]}")
@@ -94,7 +90,6 @@ def get_embedding(documents, key=None):
         elif isinstance(documents[0], str):
             texts = documents
 
-    import os
     if _EMBEDDING_SOURCE == 'openai':
         api_key = os.environ.get('OPENAI_API_KEY', '') or get_api_key('openai')
         return _get_embedding_api(texts, 'https://api.openai.com', api_key, 'text-embedding-3-small')
@@ -173,11 +168,9 @@ class HyperDB:
             - similarity_metric: Metric for vector similarity
             - rag_strategy: 'naive' for vector-only or 'hybrid' for vector+BM25
         """
-        self.documents = documents or []
         self.documents = []
         self.vectors = None
         self.embedding_function = embedding_function or (
-            #lambda docs: get_embedding(docs, key=key)
             lambda docs: get_embedding(docs)
         )
         self.rag_strategy = rag_strategy
@@ -265,33 +258,6 @@ class HyperDB:
         if not isinstance(documents, list):
             return self.add_document(documents, vectors)
         self.add_documents(documents, vectors)
-
-    def add_document_new(self, document: dict, vector=None):
-        # These changes were for an old version
-        # here I also changed the line:
-        # vector = vector or self.embedding_function([document])[0]
-        # to:
-        # if vector is None:
-        #     vector = self.embedding_function([document])
-        # else:
-        #     vector = vector
-        # this is because I ran into an error: "ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()"
-
-        vector = vector if vector is not None else self.embedding_function([document])
-        if vector is not None and len(vector) > 0:
-            vector = vector[0]
-        else:
-            # Handle the case where the embedding function returns None or an empty list
-            queue_message("Error: Unable to get embeddings for the document.")
-            return
-
-        if self.vectors is None:
-            self.vectors = np.empty((0, len(vector)), dtype=np.float32)
-        elif len(vector) != self.vectors.shape[1]:
-            raise ValueError("All vectors must have the same length.")
-
-        self.vectors = np.vstack([self.vectors, vector]).astype(np.float32)
-        self.documents.append(document)
 
     def add_document(self, document: dict, vector=None):
 
