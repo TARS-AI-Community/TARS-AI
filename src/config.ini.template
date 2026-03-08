@@ -162,6 +162,10 @@ max_memories = 3
 top_k = 5
 # Boost memories within N days in results (0 = disabled)
 recency_boost_days = 7
+# Where to generate embeddings: local (on device) | openai (OpenAI API) | external (use app-server)
+embedding_source = local
+# URL of the external app-server for embeddings (only used when embedding_source = external)
+embedding_url =
 
 [ACCESS]
 # Enable web interface

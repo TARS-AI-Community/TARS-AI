@@ -454,6 +454,8 @@ def load_config():
             "max_memories": config.getint('RAG', 'max_memories', fallback=3),
             "top_k": config.getint('RAG', 'top_k', fallback=5),
             "recency_boost_days": config.getint('RAG', 'recency_boost_days', fallback=7),
+            "embedding_source": config.get('RAG', 'embedding_source', fallback='local'),
+            "embedding_url": config.get('RAG', 'embedding_url', fallback=''),
         },
         "HOME_ASSISTANT": {
             "enabled": config.getboolean('HOME_ASSISTANT', 'enabled'),
@@ -872,6 +874,17 @@ CONFIG_METADATA = {
         'recency_boost_days': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'description': 'Makes TARS prioritize recent conversations in its memory. If set to 7, any conversation from the last 7 days gets a boost in search results, making TARS more likely to reference things you talked about recently. This feels natural because in real life, recent conversations are usually more relevant. Set to 0 if you want all memories treated equally regardless of when they happened.'
+        },
+        'embedding_source': {
+            'label': 'Embedding Source',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'options': ['local', 'openai', 'external'],
+            'description': 'Where to generate text embeddings for memory search. "local" runs the embedding model on this device (uses ~500MB RAM). "openai" uses the OpenAI Embeddings API (requires OPENAI_API_KEY, uses text-embedding-3-small). "external" sends text to your TARS app-server instance to generate embeddings — much faster and frees up resources on the Pi.'
+        },
+        'embedding_url': {
+            'label': 'Embedding Server URL',
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'embedding_source', 'values': ['external']}],
+            'description': 'The URL of your TARS app-server for embeddings (e.g. http://192.168.1.100:5678). The server must have the embeddings service enabled.'
         },
     },
     'ACCESS': {
