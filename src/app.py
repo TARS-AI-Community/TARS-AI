@@ -154,9 +154,15 @@ class UIManagerStub:
     def update_data(self, source, message, category="INFO"):
         queue_message(f"{category}: {message}")
     
+    def update_streaming_data(self, value):
+        pass
+
+    def set_tars_status(self, status):
+        pass
+
     def deactivate_screensaver(self):
         pass
-    
+
     def save_memory(self):
         pass
     
