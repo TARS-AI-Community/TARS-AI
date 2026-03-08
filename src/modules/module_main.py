@@ -272,7 +272,7 @@ def utterance_callback(message):
             return
 
         if parsed is None:
-            queue_message("ERROR: LLM returned no response")
+            queue_message("DEBUG VOICE: parsed is None — LLM returned no response")
             if preemptive is None:
                 try:
                     from modules.module_chatui import socketio
@@ -320,17 +320,36 @@ def utterance_callback(message):
         character_name = CONFIG['CHAR']['character_name']
         ui_manager.update_data(character_name, reply, "TARS")
 
-        # Handle side effects
+        # Handle side effects (vision/search/photo run inline, others in background)
+        _followup_reply = None
         if not isinstance(parsed, str):
             func_calls = parsed.get("function_calls", [])
-            has_vision = any(fc.get("function") == "capture_camera_view" for fc in func_calls)
-            if has_vision:
+            new_mems = parsed.get("new_memories", [])
+            queue_message(f"DEBUG VOICE: parsed type={type(parsed).__name__}, func_calls={func_calls}, new_memories={new_mems}")
+            has_blocking_tool = any(
+                fc.get("function") in ("capture_camera_view", "web_search", "take_photo")
+                for fc in func_calls
+            )
+            if has_blocking_tool:
+                queue_message(f"DEBUG VOICE: Running blocking side effects inline")
                 llm_execute_side_effects(parsed, user_text)
-            elif func_calls or parsed.get("new_memories"):
+                # Check if side effects updated the reply (e.g. vision result, search summary)
+                updated_reply = parsed.get("reply", "") or ""
+                if updated_reply and updated_reply != reply:
+                    _followup_reply = _sanitize_for_tts(updated_reply)
+                    queue_message(f"DEBUG VOICE: Follow-up reply detected: {_followup_reply[:80]}...")
+                else:
+                    queue_message(f"DEBUG VOICE: No reply change after side effects")
+            elif func_calls or new_mems:
+                queue_message(f"DEBUG VOICE: Running side effects in background thread")
                 threading.Thread(
                     target=llm_execute_side_effects,
                     args=(parsed, user_text), daemon=True
                 ).start()
+            else:
+                queue_message(f"DEBUG VOICE: No side effects to run")
+        else:
+            queue_message(f"DEBUG VOICE: parsed is str (legacy), no side effects")
 
         # For preemptive results, TTS hasn't started yet — play full reply normally
         if preemptive is not None:
@@ -349,6 +368,18 @@ def utterance_callback(message):
             if stt_manager:
                 stt_manager.stop_bargein_monitor()
             was_interrupted = pipeline.interrupted
+
+        # Speak follow-up if side effects produced new content (vision result, search summary)
+        queue_message(f"DEBUG VOICE: followup_reply={'yes' if _followup_reply else 'no'}, was_interrupted={was_interrupted}")
+        if _followup_reply and not was_interrupted:
+            followup_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', _followup_reply)
+            ui_manager.set_tars_status("TALKING")
+            if stt_manager:
+                stt_manager.start_bargein_monitor(tts_text=followup_clean)
+            was_interrupted = asyncio.run(play_audio_chunks(followup_clean, CONFIG['TTS']['ttsoption']))
+            if stt_manager:
+                stt_manager.stop_bargein_monitor()
+            reply = _followup_reply  # Update for web UI display
 
         if was_interrupted:
             time.sleep(0.3)

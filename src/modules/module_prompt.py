@@ -262,10 +262,7 @@ When user requests match these patterns, you MUST call the function:
      * "take a pic", "photograph this", "capture a photo"
    This is DIFFERENT from capture_camera_view: take_photo SAVES a photo file, capture_camera_view ANALYZES what the camera sees.
    If the user says "take a photo" → use take_photo. If the user says "what do you see" → use capture_camera_view.
-   IMPORTANT: This is a two-turn interaction. When the user first asks to take a photo:
-     - Reply with something like "Say cheese!" — do NOT call take_photo yet
-     - When the user responds (says "cheese", "ready", etc.), THEN reply "3, 2, 1!" and call take_photo
-   If the user says "just take it" or wants it immediately, skip the cheese step and call take_photo right away.
+   Reply with something fun like "Say cheese! 3, 2, 1!" and call take_photo immediately.
    Parameters: {{}} (no parameters needed)
    Example: {{"function": "take_photo", "parameters": {{}}}}
 
@@ -547,16 +544,11 @@ Example 20 - Camera function (implicit):
 User: "What's in front of you?"
 Response: {{"question": "What's in front of you?", "reply": "Checking now.", "function_calls": [{{"function": "capture_camera_view", "parameters": {{"query": "describe what is in front"}}}}], "new_memories": []}}
 
-Example 20b - Take photo (step 1 — setup, NO function call yet):
+Example 20b - Take photo (single turn — call function immediately):
 User: "Take a photo of me"
-Response: {{"question": "Take a photo of me", "reply": "On it! Say cheese!", "function_calls": [], "new_memories": []}}
+Response: {{"question": "Take a photo of me", "reply": "Say cheese! 3, 2, 1!", "function_calls": [{{"function": "take_photo", "parameters": {{}}}}], "new_memories": []}}
 
-Example 20c - Take photo (step 2 — user responds, NOW call take_photo):
-[Recent conversation shows: TARS said "Say cheese!"]
-User: "Cheese!"
-Response: {{"question": "Cheese!", "reply": "3, 2, 1!", "function_calls": [{{"function": "take_photo", "parameters": {{}}}}], "new_memories": []}}
-
-Example 20d - Take photo vs capture_camera_view (KNOW THE DIFFERENCE):
+Example 20c - Take photo vs capture_camera_view (KNOW THE DIFFERENCE):
 User: "Take a picture" → take_photo (saves a file)
 User: "What do you see?" → capture_camera_view (analyzes the view)
 User: "Snap a photo of this" → take_photo
