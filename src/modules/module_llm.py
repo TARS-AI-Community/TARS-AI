@@ -253,7 +253,7 @@ def _extract_text(response_json, istext):
     except (KeyError, IndexError, TypeError) as error:
         return f"Text extraction failed: {str(error)}"
 
-def process_completion(prompt):
+def process_completion(prompt, image_b64=None):
     """Run LLM completion and return parsed dict with reply + side effects deferred.
 
     Returns a dict with 'reply', 'function_calls', 'new_memories' fields,
@@ -303,7 +303,7 @@ def process_completion(prompt):
             "Authorization": f"Bearer {CONFIG['LLM']['api_key']}"
         }
         llm_backend = CONFIG['LLM']['llm_backend']
-        url, data = _prepare_request_data(llm_backend, built_prompt)
+        url, data = _prepare_request_data(llm_backend, built_prompt, image_b64=image_b64)
 
         response = requests.post(url, headers=headers, json=data, stream=True)
         response.raise_for_status()
@@ -438,6 +438,8 @@ def llm_parse_response(bot_response):
             except json.JSONDecodeError:
                 # Remove stray non-JSON chars between elements (e.g. LLM inserting "." between fields or array items)
                 bot_response = re.sub(r'([,\[])\s*[^"\s\[\]{}\d\-tfn]\s*(?=["\[{])', r'\1 ', bot_response)
+                # Fix missing opening quote for string values (e.g. "reply":\n text" -> "reply": "text")
+                bot_response = re.sub(r':\s*\n\s*([^"\[{\]\}\d\-tfn,\s])', r': "\1', bot_response)
                 # Fix missing values after colon (e.g. "function_calls":, or "key": })
                 bot_response = re.sub(r':\s*,', ': null,', bot_response)
                 bot_response = re.sub(r':\s*}', ': null}', bot_response)
@@ -453,7 +455,11 @@ def llm_parse_response(bot_response):
             queue_message(f"WARNING: JSON parsing failed, attempting reply extraction: {e}")
             queue_message(f"Raw response: {bot_response}")
             # Last resort: extract the reply field via regex from hopelessly broken JSON
-            reply_match = re.search(r'"reply"\s*:\s*"((?:[^"\\]|\\.)*)"', bot_response if isinstance(bot_response, str) else '')
+            raw = bot_response if isinstance(bot_response, str) else ''
+            reply_match = re.search(r'"reply"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+            if not reply_match:
+                # Handle missing opening quote: "reply":\n text here",
+                reply_match = re.search(r'"reply"\s*:\s*\n?\s*(.*?)",\s*\n', raw, re.DOTALL)
             if reply_match:
                 queue_message("WARNING: JSON repair triggered (reply extraction fallback)")
                 bot_response = {
