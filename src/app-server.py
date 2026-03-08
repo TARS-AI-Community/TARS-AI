@@ -390,7 +390,7 @@ MODELS_DIR.mkdir(exist_ok=True)
 CONFIG_FILE = Path(__file__).parent / "config-server.ini"
 
 _CONFIG_DEFAULTS = {
-    "server":     {"host": "0.0.0.0", "port": "5678", "api_key": ""},
+    "server":     {"port": "5678", "api_key": ""},
     "services":   {"stt": "true", "tts": "true", "llm": "true", "vision": "true",
                    "imagegen": "false", "embeddings": "false"},
     "stt":        {"whisper_model": "large-v3", "compute_type": "auto", "vad_filter": "true", "device": "auto"},
@@ -2925,7 +2925,6 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
     <!-- Server -->
     <div class="glass">
       <h2>Server</h2>
-      <div class="form-row"><label>Host</label><input type="text" id="s-host"></div>
       <div class="form-row"><label>Port</label><input type="number" id="s-port"></div>
     </div>
     <!-- STT Config -->
@@ -2998,7 +2997,6 @@ async function loadSettings(){
   try{
     const r=await fetch('/api/settings');const d=await r.json();
     document.getElementById('s-apikey').value=d.server.api_key||'';
-    document.getElementById('s-host').value=d.server.host||'0.0.0.0';
     document.getElementById('s-port').value=d.server.port||'5678';
     document.getElementById('svc-stt').checked=d.services.stt==='true';
     document.getElementById('svc-tts').checked=d.services.tts==='true';
@@ -3051,7 +3049,7 @@ async function saveSettings(){
   const st=document.getElementById('save-status');
   st.textContent='Saving...';st.className='save-status';
   const body={
-    server:{host:document.getElementById('s-host').value,port:document.getElementById('s-port').value,api_key:document.getElementById('s-apikey').value},
+    server:{port:document.getElementById('s-port').value,api_key:document.getElementById('s-apikey').value},
     services:{stt:document.getElementById('svc-stt').checked?'true':'false',tts:document.getElementById('svc-tts').checked?'true':'false',llm:document.getElementById('svc-llm').checked?'true':'false',vision:document.getElementById('svc-vision').checked?'true':'false',imagegen:document.getElementById('svc-imagegen').checked?'true':'false',embeddings:document.getElementById('svc-embeddings').checked?'true':'false'},
     stt:{whisper_model:document.getElementById('s-stt-model').value,compute_type:document.getElementById('s-stt-compute').value,vad_filter:document.getElementById('s-stt-vad').checked?'true':'false',device:document.getElementById('dev-stt').value},
     llm:{model:document.getElementById('s-llm-model').value,backend:document.getElementById('s-llm-backend').value,dtype:document.getElementById('s-llm-dtype').value,quantize:document.getElementById('s-llm-quantize').value,n_ctx:document.getElementById('s-llm-nctx').value,n_gpu_layers:document.getElementById('s-llm-ngpu').value,kv_cache_sessions:document.getElementById('s-llm-kvs').value,kv_cache_ttl:document.getElementById('s-llm-kvt').value,device:document.getElementById('dev-llm').value},
@@ -3092,7 +3090,7 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--port", type=int, default=int(cfg["server"]["port"]))
-    p.add_argument("--host", default=cfg["server"]["host"])
+    p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--services", nargs="+", choices=["stt", "tts", "llm", "vision", "imagegen", "embeddings"], default=None)
     p.add_argument("--no-stt", action="store_true", default=not cfg.getboolean("services", "stt"))
     p.add_argument("--no-tts", action="store_true", default=not cfg.getboolean("services", "tts"))
