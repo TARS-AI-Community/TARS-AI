@@ -122,6 +122,7 @@ def _bootstrap_deps():
         "diffusers>=0.27.0",        # ImageGen
         "sentence-transformers>=2.2.0",  # Embeddings
         "qrcode[pil]>=7.0",         # Tunnel QR codes
+        "psutil>=5.9.0",             # System stats (CPU/RAM)
     ]
     if has_gpu:
         packages.append("bitsandbytes>=0.43.0")
@@ -207,27 +208,56 @@ def detect_device():
     return "cpu"
 
 
+DEVICE = detect_device()
+
+# Cache static GPU info (these never change at runtime)
+_GPU_NAME = torch.cuda.get_device_name(0) if DEVICE == "cuda" else ""
+_VRAM_TOTAL_GB = torch.cuda.get_device_properties(0).total_memory / 1024**3 if DEVICE == "cuda" else 0
+try:
+    import psutil as _psutil
+    _SHARED_TOTAL_GB = _psutil.virtual_memory().total / 1024**3 / 2  # Windows WDDM default
+except Exception:
+    _SHARED_TOTAL_GB = 0
+
+
 def get_gpu_stats() -> dict:
     if DEVICE != "cuda":
         return {}
     try:
         allocated = torch.cuda.memory_allocated(0) / 1024**3
         reserved = torch.cuda.memory_reserved(0) / 1024**3
-        total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-        pct = reserved / total * 100 if total > 0 else 0
+        ded_pct = allocated / _VRAM_TOTAL_GB * 100 if _VRAM_TOTAL_GB > 0 else 0
+        # Shared GPU memory (Windows WDDM: overflow from VRAM into system RAM)
+        shared_used = max(0, reserved - _VRAM_TOTAL_GB)
+        shared_pct = shared_used / _SHARED_TOTAL_GB * 100 if _SHARED_TOTAL_GB > 0 else 0
         return {
-            "name": torch.cuda.get_device_name(0),
-            "vram_total_gb": round(total, 2),
+            "name": _GPU_NAME,
+            "vram_total_gb": round(_VRAM_TOTAL_GB, 2),
             "vram_allocated_gb": round(allocated, 2),
             "vram_reserved_gb": round(reserved, 2),
-            "vram_free_gb": round(max(total - reserved, 0), 2),
-            "vram_percent": round(min(pct, 100), 1),
+            "vram_free_gb": round(max(_VRAM_TOTAL_GB - reserved, 0), 2),
+            "vram_percent": round(min(ded_pct, 100), 1),
+            "shared_total_gb": round(_SHARED_TOTAL_GB, 2),
+            "shared_used_gb": round(shared_used, 2),
+            "shared_percent": round(min(shared_pct, 100), 1),
         }
     except Exception:
         return {}
 
 
-DEVICE = detect_device()
+def get_system_stats() -> dict:
+    """Return CPU and RAM usage stats (requires psutil)."""
+    try:
+        import psutil
+        vm = psutil.virtual_memory()
+        return {
+            "cpu_percent": round(psutil.cpu_percent(interval=None), 1),
+            "ram_total_gb": round(vm.total / 1024**3, 2),
+            "ram_used_gb": round(vm.used / 1024**3, 2),
+            "ram_percent": round(vm.percent, 1),
+        }
+    except Exception:
+        return {}
 
 
 def _check_cuda_vs_integration() -> bool:
@@ -1691,7 +1721,7 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
   <h1>TARS SERVER</h1>
   <div class="meta"><span class="live-dot" id="connDot"></span><span>{{GPU_NAME}}</span><span id="uptime">--</span></div>
 </div>
-<div id="vram-section"></div>
+<div id="stats-section" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"></div>
 <div class="grid-2">
   <div class="glass">
     <h2>Active Services</h2>
@@ -1735,11 +1765,13 @@ function connect(){
   ws.onmessage=function(e){
     const d=JSON.parse(e.data);
     document.getElementById('uptime').textContent=fmtUptime(d.uptime);
-    const vs=document.getElementById('vram-section');
-    if(d.gpu&&d.gpu.vram_percent!==undefined){
-      const p=d.gpu.vram_percent,c=p<70?'var(--cyan)':p<90?'var(--orange)':'var(--red)';
-      vs.innerHTML='<div class="glass"><h2>GPU Memory</h2><div class="bar-bg"><div class="bar-fg" style="background:linear-gradient(90deg,'+c+',rgba(180,77,255,0.5));width:'+p+'%"></div><span class="bar-label">'+d.gpu.vram_allocated_gb.toFixed(1)+' / '+d.gpu.vram_total_gb.toFixed(1)+' GB ('+p+'%)</span></div></div>';
-    }else{vs.innerHTML=''}
+    const ss=document.getElementById('stats-section');let bars='';
+    function mkBar(title,pct,label,extra){const c=pct<70?'var(--cyan)':pct<90?'var(--orange)':'var(--red)';const g='linear-gradient(90deg,'+c+',rgba(180,77,255,0.5))';return '<div class="glass" style="margin:0;'+(extra||'')+'"><h2>'+title+'</h2><div class="bar-bg"><div class="bar-fg" style="background:'+g+';width:'+Math.min(pct,100)+'%"></div><span class="bar-label">'+label+'</span></div></div>';}
+    if(d.system&&d.system.cpu_percent!==undefined){bars+=mkBar('CPU',d.system.cpu_percent,d.system.cpu_percent+'%');}
+    if(d.system&&d.system.ram_percent!==undefined){bars+=mkBar('RAM',d.system.ram_percent,d.system.ram_used_gb.toFixed(1)+' / '+d.system.ram_total_gb.toFixed(1)+' GB ('+d.system.ram_percent+'%)');}
+    if(d.gpu&&d.gpu.vram_percent!==undefined){bars+=mkBar('Dedicated GPU',d.gpu.vram_percent,d.gpu.vram_allocated_gb.toFixed(1)+' / '+d.gpu.vram_total_gb.toFixed(1)+' GB ('+d.gpu.vram_percent+'%)');}
+    if(d.gpu&&d.gpu.shared_percent!==undefined){bars+=mkBar('Shared GPU',d.gpu.shared_percent,d.gpu.shared_used_gb.toFixed(1)+' / '+d.gpu.shared_total_gb.toFixed(1)+' GB ('+d.gpu.shared_percent+'%)');}
+    ss.innerHTML=bars;
     const tb=document.getElementById('svc-table');let rows='';
     for(const[n,s]of Object.entries(d.services)){
       const lat=d.latency[n]?d.latency[n].avg_latency_ms.toFixed(0)+'ms <span style="color:var(--text-dim)">('+d.latency[n].requests+')</span>':'<span style="color:var(--text-dim)">-</span>';
@@ -1826,7 +1858,8 @@ async def ws_dashboard(ws: WebSocket):
                     info["model"] = svc.model_name
                 svc_info[name] = info
             data = {
-                "uptime": uptime, "gpu": gpu, "services": svc_info,
+                "uptime": uptime, "gpu": gpu, "system": get_system_stats(),
+                "services": svc_info,
                 "latency": TRACKER.get_latency_stats(),
                 "recent_logs": TRACKER.get_recent(20),
             }
@@ -1969,9 +2002,11 @@ async def llm_chat(request: Request):
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
         else:
-            result = SERVICES["llm"].chat(
-                messages, max_tokens, temperature, top_p, stream=False, session_id=session_id
-            )
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, lambda: SERVICES["llm"].chat(
+                    messages, max_tokens, temperature, top_p, stream=False, session_id=session_id
+                ))
             return JSONResponse(result)
     except HTTPException:
         raise
@@ -2006,7 +2041,8 @@ async def tts_generate(request: Request):
     voice = body.get("voice", None)
     speed = float(body.get("speed", 1.0))
     try:
-        wav_bytes = SERVICES["tts"].synthesize(text, voice=voice, speed=speed)
+        loop = asyncio.get_event_loop()
+        wav_bytes = await loop.run_in_executor(None, lambda: SERVICES["tts"].synthesize(text, voice=voice, speed=speed))
         log.info(f"TTS: \"{text[:60]}\" voice={voice}")
         return StreamingResponse(BytesIO(wav_bytes), media_type="audio/wav",
                                  headers={"Content-Disposition": "attachment; filename=speech.wav"})
@@ -2031,17 +2067,18 @@ async def tts_voices():
 @app.post("/caption")
 async def vision_caption(image: UploadFile = File(...), prompt: str = Form(None)):
     image_bytes = await image.read()
+    loop = asyncio.get_event_loop()
     if "vision" in SERVICES:
         try:
             svc = SERVICES["vision"]
-            caption = svc.caption(image_bytes, prompt=prompt or None)
+            caption = await loop.run_in_executor(None, lambda: svc.caption(image_bytes, prompt=prompt or None))
             log.info(f"Vision ({svc.backend}): \"{caption}\"")
             return {"caption": caption}
         except Exception:
             log.error(f"Vision error: {traceback.format_exc()}")
     if "llm" in SERVICES and getattr(SERVICES["llm"], "supports_vision", False):
         try:
-            caption = SERVICES["llm"].caption_image(image_bytes, prompt=prompt or None)
+            caption = await loop.run_in_executor(None, lambda: SERVICES["llm"].caption_image(image_bytes, prompt=prompt or None))
             log.info(f"Vision (VLM): \"{caption}\"")
             return {"caption": caption}
         except Exception:
@@ -2065,12 +2102,14 @@ async def sdapi_txt2img(request: Request):
     if not prompt:
         raise HTTPException(400, "prompt is required")
     try:
-        image_bytes = SERVICES["imagegen"].generate(
+        loop = asyncio.get_event_loop()
+        gen_kwargs = dict(
             prompt=prompt, negative_prompt=body.get("negative_prompt", ""),
             steps=int(body.get("steps", 20)), cfg_scale=float(body.get("cfg_scale", 7.0)),
             width=int(body.get("width", 1024)), height=int(body.get("height", 1024)),
             seed=int(body.get("seed", -1)), sampler_name=body.get("sampler_name"),
         )
+        image_bytes = await loop.run_in_executor(None, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
         log.info(f"ImageGen: \"{prompt[:60]}\"")
         return {"images": [base64.b64encode(image_bytes).decode()], "parameters": body, "info": ""}
     except Exception as e:
@@ -2090,12 +2129,14 @@ async def generate_image_simple(request: Request):
     if not prompt:
         raise HTTPException(400, "prompt is required")
     try:
-        image_bytes = SERVICES["imagegen"].generate(
+        loop = asyncio.get_event_loop()
+        gen_kwargs = dict(
             prompt=prompt, negative_prompt=body.get("negative_prompt", ""),
             steps=int(body.get("steps", 20)), cfg_scale=float(body.get("cfg_scale", 7.0)),
             width=int(body.get("width", 1024)), height=int(body.get("height", 1024)),
             seed=int(body.get("seed", -1)), sampler_name=body.get("sampler_name"),
         )
+        image_bytes = await loop.run_in_executor(None, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
         log.info(f"ImageGen: \"{prompt[:60]}\"")
         return StreamingResponse(BytesIO(image_bytes), media_type="image/png")
     except Exception as e:
@@ -2119,7 +2160,8 @@ async def embeddings(request: Request):
     if not inp:
         raise HTTPException(400, "input is required")
     try:
-        vectors = SERVICES["embeddings"].embed(inp)
+        loop = asyncio.get_event_loop()
+        vectors = await loop.run_in_executor(None, SERVICES["embeddings"].embed, inp)
         data = [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(vectors)]
         return {"object": "list", "data": data, "model": SERVICES["embeddings"].model_name,
                 "usage": {"prompt_tokens": sum(len(t.split()) for t in inp), "total_tokens": sum(len(t.split()) for t in inp)}}
