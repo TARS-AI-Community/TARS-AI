@@ -16,6 +16,7 @@ requires a separate written license from Charles-Olivier Dion (AtomikSpace).
 
 This license applies only to this file and does not override licenses of other files in the repository.
 """
+import os
 import requests
 import threading
 import json
@@ -983,7 +984,6 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
 
         elif function_name == "launch_retropie":
             import subprocess
-            import os
 
             retropie_script = os.path.expanduser("~/TARS-AI/launch_retropie.sh")
 
@@ -1141,6 +1141,29 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
                         bot_response["reply"] = "Action completed via Home Assistant."
                 else:
                     bot_response["reply"] = "I couldn't get a response from Home Assistant."
+
+        elif function_name == "take_photo":
+            from modules.module_vision import capture_camera_base64
+            b64, capture_err = capture_camera_base64()
+            if capture_err:
+                bot_response["reply"] = "I tried to take a photo but the camera isn't working."
+            else:
+                import base64 as _b64
+                from datetime import datetime
+                photos_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "vision", "photos")
+                os.makedirs(photos_dir, exist_ok=True)
+                filename = f"photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                filepath = os.path.join(photos_dir, filename)
+                with open(filepath, "wb") as f:
+                    f.write(_b64.b64decode(b64))
+                queue_message(f"Photo saved: {filepath}")
+                bot_response["reply"] = f"Photo saved! Got it as {filename}."
+                # Display on RPi screen
+                try:
+                    from modules.module_stablediffusion import display_image_fullscreen
+                    threading.Thread(target=display_image_fullscreen, args=(filepath,)).start()
+                except Exception as e:
+                    queue_message(f"WARN: Could not display photo: {e}")
 
         elif function_name == "identify_speaker_name":
             from modules.module_speaker_id import get_speaker_id_manager
