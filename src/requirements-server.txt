@@ -1,21 +1,29 @@
 # TARS-AI Companion Server Dependencies
 # Install: pip install -r requirements-server.txt
-#
-# For GPU support, install PyTorch with CUDA first:
-#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+
+# PyTorch CUDA 12.4 as primary index so torch/torchaudio always install as GPU builds.
+# All other packages fall back to PyPI via --extra-index-url.
+# For CPU-only installs, remove these two lines and just "pip install torch torchaudio".
+--index-url https://download.pytorch.org/whl/cu124
+--extra-index-url https://pypi.org/simple
+
+# Core — install torch first so CUDA variant is picked from the index above.
+torch>=2.6.0
+torchaudio>=2.6.0
+python-multipart
 
 # Server framework
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 
-# STT - Speech to Text (faster-whisper)
+# STT - Speech to Text (faster-whisper + Silero VAD)
 faster-whisper>=1.0.0
 
 # TTS - Text to Speech (Piper)
 piper-tts>=1.2.0
 
 # LLM - Language Model (transformers + Qwen)
-transformers>=4.44.0
+transformers>=4.51.0
 accelerate>=0.27.0
 
 # Vision - Image Captioning (BLIP)
@@ -27,12 +35,14 @@ diffusers>=0.27.0
 # Embeddings
 sentence-transformers>=2.2.0
 
-# VAD - Voice Activity Detection (Silero)
-torchaudio>=2.1.0
-
 # QR code generation for tunnel URLs
 qrcode[pil]>=7.0
 
-# Core
-torch>=2.1.0
-python-multipart
+# Quantization (8-bit / 4-bit LLM inference)
+bitsandbytes>=0.43.0
+
+# LLM - llama.cpp backend (GGUF models, much faster than transformers on consumer GPUs)
+# CPU build installed here. The server auto-upgrades to a pre-built CUDA wheel on first run
+# if a GPU is detected. Manual CUDA install (if auto fails):
+#   pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124 --force-reinstall
+llama-cpp-python>=0.3.0

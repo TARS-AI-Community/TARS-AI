@@ -57,7 +57,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PI5: DeviceCapabilities(
         profile=DeviceProfile.PI5,
         allowed_stt={"fastrtc", "silero", "openai", "external", "sherpa-onnx"},
-        allowed_tts={"espeak", "piper", "silero", "elevenlabs", "openai"},
+        allowed_tts={"espeak", "piper", "silero", "elevenlabs", "openai", "other", "external"},
         allowed_vad={"silero", "rms", "sherpa-onnx", "smart-turn"},
         allowed_wake={"fastrtc", "atomik", "sherpa-onnx"},
         can_use_embeddings=True,
@@ -75,7 +75,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PI4: DeviceCapabilities(
         profile=DeviceProfile.PI4,
         allowed_stt={"openai", "external", "sherpa-onnx"},
-        allowed_tts={"espeak", "piper", "elevenlabs", "openai"},
+        allowed_tts={"espeak", "piper", "elevenlabs", "openai", "other", "external"},
         allowed_vad={"silero", "rms", "sherpa-onnx", "smart-turn"},
         allowed_wake={"atomik", "sherpa-onnx"},
         can_use_embeddings=True,
@@ -93,7 +93,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PI3: DeviceCapabilities(
         profile=DeviceProfile.PI3,
         allowed_stt={"openai", "external"},
-        allowed_tts={"espeak", "elevenlabs", "openai"},
+        allowed_tts={"espeak", "elevenlabs", "openai", "other", "external"},
         allowed_vad={"rms", "sherpa-onnx"},
         allowed_wake={"atomik", "sherpa-onnx"},
         can_use_embeddings=False,
@@ -111,7 +111,7 @@ DEVICE_PROFILES: Dict[DeviceProfile, DeviceCapabilities] = {
     DeviceProfile.PIZERO2: DeviceCapabilities(
         profile=DeviceProfile.PIZERO2,
         allowed_stt={"openai"},
-        allowed_tts={"elevenlabs", "openai"},
+        allowed_tts={"elevenlabs", "openai", "other", "external"},
         allowed_vad={"rms"},
         allowed_wake={"atomik"},
         can_use_embeddings=False,
@@ -701,6 +701,10 @@ CONFIG_METADATA = {
             'options': ['silero', 'fastrtc', 'openai', 'external', 'sherpa-onnx'],
             'description': 'After TARS hears the wake word, this is the software that converts your actual speech into text. Think of it as the "ears" of TARS. "fastrtc" sends your audio to the cloud for fast, accurate transcription (recommended if you have internet). "silero" runs on your Pi with no internet needed (Pi5 recommended). "openai" uses OpenAI\'s Whisper service (best for non-English languages, needs API key and internet). "external" lets you point to your own speech-to-text server running elsewhere. "sherpa-onnx" uses SenseVoiceTiny for fast offline multilingual transcription (Pi5/Pi4).'
         },
+        'external_url': {
+            'depends_on': [{'field': 'stt_processor', 'values': ['external']}],
+            'description': 'If you set stt_processor to "external", put the web address of your speech-to-text server here. This is for advanced users who run their own Whisper or other STT server on a separate machine. If you are not using "external" mode, this setting is ignored. Format: http://IP-ADDRESS:PORT'
+        },
         'wake_word_processor': {
             'label': 'Wake Word Engine',
             'options': ['atomik', 'fastrtc', 'sherpa-onnx'],
@@ -717,10 +721,6 @@ CONFIG_METADATA = {
         'sensitivity': {
             'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],
             'description': 'How carefully TARS listens for the wake word (only works with the "atomik" wake word processor). Scale of 1 to 10. At 1, TARS triggers very easily - even similar-sounding words might activate it (annoying but you will never miss a command). At 10, you need to say the wake word very clearly and precisely for it to work (fewer accidental activations but you might have to repeat yourself). Start at 5 and adjust from there. If TARS keeps activating randomly, increase this number. If TARS never hears you, decrease it.'
-        },
-        'external_url': {
-            'depends_on': [{'field': 'stt_processor', 'values': ['external']}],
-            'description': 'If you set stt_processor to "external", put the web address of your speech-to-text server here. This is for advanced users who run their own Whisper or other STT server on a separate machine. If you are not using "external" mode, this setting is ignored. Format: http://IP-ADDRESS:PORT'
         },
         'enable_bargein': {
             'description': 'When ON, you can interrupt TARS while it is talking by speaking over it. TARS listens to the mic during playback and detects if you are saying something. When OFF, TARS will always finish its full response before listening again.'
@@ -763,18 +763,18 @@ CONFIG_METADATA = {
         },
         'ttsoption': {
             'label': 'TTS Engine',
-            'options': ['espeak', 'piper', 'silero', 'elevenlabs', 'openai', 'other'],
-            'description': 'Choose how TARS speaks out loud. This is the most important voice setting. FREE options that work without internet: "piper" sounds natural and is the best free option (recommended for Pi 5 and Pi 4). "espeak" is a basic robotic-sounding voice but works on any Pi, even very weak ones. "silero" is another good-sounding option but only works on Pi 5. PAID cloud options (need internet + API key in .env file): "elevenlabs" has the most natural, human-like voices. "openai" is good quality and works well in many languages. "other" lets you point to any external TTS server using a custom URL.'
+            'options': ['espeak', 'piper', 'silero', 'elevenlabs', 'openai', 'other', 'external'],
+            'description': 'Choose how TARS speaks out loud. This is the most important voice setting. FREE options that work without internet: "piper" sounds natural and is the best free option (recommended for Pi 5 and Pi 4). "espeak" is a basic robotic-sounding voice but works on any Pi, even very weak ones. "silero" is another good-sounding option but only works on Pi 5. PAID cloud options (need internet + API key in .env file): "elevenlabs" has the most natural, human-like voices. "openai" is good quality and works well in many languages. "other" lets you point to any external TTS server using a custom URL. "external" sends text to a TARS app-server instance for TTS generation.'
         },
         'ttsurl': {
             'label': 'TTS Server URL',
-            'depends_on': [{'field': 'ttsoption', 'values': ['other']}],
-            'description': 'The URL of your external TTS server. Only used when TTS Engine is set to "other". Format: http://IP-ADDRESS:PORT. Compatible servers include Coqui TTS (default port 5002), Piper server mode, AllTalk TTS, and any server that accepts a text parameter and returns audio. Example: http://192.168.1.100:5002. TARS sends a POST request with the text to synthesize and expects audio back.'
+            'depends_on': [{'field': 'ttsoption', 'values': ['other', 'external']}],
+            'description': 'The URL of your external TTS server. Used when TTS Engine is set to "other" or "external". Format: http://IP-ADDRESS:PORT. For "external", point to your TARS app-server (e.g. http://192.168.1.100:5678). For "other", compatible servers include Coqui TTS, Piper server mode, AllTalk TTS.'
         },
         'tts_voice': {
             'label': 'TTS Voice',
-            'depends_on': [{'field': 'ttsoption', 'values': ['other']}],
-            'description': 'The voice name or ID to request from your external TTS server. Leave blank if your server uses a default voice or does not support voice selection. For Coqui TTS this might be a speaker name. For AllTalk it might be a voice file name. Check your TTS server\'s documentation for what voice identifiers it accepts.'
+            'depends_on': [{'field': 'ttsoption', 'values': ['other', 'external']}],
+            'description': 'The voice name or ID to request from your external TTS server. Leave blank if your server uses a default voice or does not support voice selection.'
         },
         'elevenlabs_voice_id': {
             'depends_on': [{'field': 'ttsoption', 'values': ['elevenlabs']}],

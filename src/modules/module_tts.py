@@ -49,7 +49,6 @@ text_to_speech_with_pipelining_silero = None
 text_to_speech_with_pipelining_espeak = None
 text_to_speech_with_pipelining_elevenlabs = None
 text_to_speech_with_pipelining_openai = None
-
 try:
     from modules.module_piper import text_to_speech_with_pipelining_piper as _piper
     text_to_speech_with_pipelining_piper = _piper
@@ -157,6 +156,32 @@ async def generate_tts_audio(text, ttsoption, is_wakeword=False, ttsurl=None, to
         elif ttsoption == "openai" and text_to_speech_with_pipelining_openai:
             async for chunk in text_to_speech_with_pipelining_openai(text, is_wakeword):
                 yield chunk
+
+        elif ttsoption == "external":
+            external_url = (CONFIG["TTS"].ttsurl or "").rstrip("/")
+            if not external_url:
+                queue_message("ERROR: External TTS URL (ttsurl) is not configured")
+                return
+            payload = {"text": text}
+            ext_voice = CONFIG["TTS"].tts_voice or ""
+            if ext_voice:
+                payload["voice"] = ext_voice
+            headers = {"Content-Type": "application/json"}
+            api_key = os.environ.get('EXTERNAL_API_KEY', '')
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            try:
+                response = requests.post(f"{external_url}/tts/generate", json=payload, headers=headers, timeout=30)
+                if response.status_code == 200:
+                    audio_buffer = BytesIO(response.content)
+                    audio_buffer.seek(0)
+                    yield audio_buffer
+                else:
+                    queue_message(f"ERROR: External TTS server returned {response.status_code}")
+            except requests.exceptions.ConnectionError:
+                queue_message(f"ERROR: Cannot connect to external TTS server at {external_url}")
+            except Exception as e:
+                queue_message(f"ERROR: External TTS failed: {e}")
 
         else:
             # Try fallback TTS options
