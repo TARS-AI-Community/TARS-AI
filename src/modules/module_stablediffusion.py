@@ -31,9 +31,19 @@ def generate_image(prompt, on_image_ready=None):
     """
     result = "Image Tool not enabled"
     if config['STABLE_DIFFUSION']['enabled']:
+        # Apply prompt prefix/postfix from config
+        prefix = config['STABLE_DIFFUSION'].get('prompt_prefix', '').strip()
+        postfix = config['STABLE_DIFFUSION'].get('prompt_postfix', '').strip()
+        if prefix:
+            prompt = f"{prefix}, {prompt}"
+        if postfix:
+            prompt = f"{prompt}, {postfix}"
+
         service = config['STABLE_DIFFUSION']['service']
         if service == "openai":
             result = get_image_from_dalle_v3(prompt, on_image_ready=on_image_ready)
+        elif service == "external":
+            result = get_image_from_external(prompt, on_image_ready=on_image_ready)
         elif service == "automatic1111":
             result = get_image_from_automatic1111(prompt, on_image_ready=on_image_ready)
             if result != "The image has been created and displayed on screen.":
@@ -135,6 +145,54 @@ def get_image_from_automatic1111(sdpromptllm, on_image_ready=None):
 
     return "Image generation failed."
 
+def get_image_from_external(prompt, on_image_ready=None):
+    """Generate an image via the TARS app-server's /sdapi/v1/txt2img endpoint."""
+    url = config['STABLE_DIFFUSION']['url'].rstrip('/')
+    if not url:
+        queue_message("[SD] ERROR: External image generation URL is not set")
+        return "Image generation failed — no server URL configured."
+
+    payload = {
+        "prompt": prompt,
+        "negative_prompt": config['STABLE_DIFFUSION']['negative_prompt'],
+        "seed": int(config['STABLE_DIFFUSION']['seed']),
+        "sampler_name": config['STABLE_DIFFUSION']['sampler_name'],
+        "steps": int(config['STABLE_DIFFUSION']['steps']),
+        "cfg_scale": float(config['STABLE_DIFFUSION']['cfg_scale']),
+        "width": int(config['STABLE_DIFFUSION']['width']),
+        "height": int(config['STABLE_DIFFUSION']['height']),
+    }
+
+    headers = {"Content-Type": "application/json"}
+    api_key = os.environ.get('EXTERNAL_API_KEY', '')
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        queue_message(f"[SD] Sending to external server: {url}/sdapi/v1/txt2img")
+        response = requests.post(f"{url}/sdapi/v1/txt2img", json=payload, headers=headers, timeout=120)
+        response.raise_for_status()
+
+        image_data_base64 = response.json()['images'][0]
+        image_bytes = base64.b64decode(image_data_base64)
+
+        if on_image_ready:
+            try:
+                on_image_ready(image_bytes)
+            except Exception as cb_err:
+                queue_message(f"[SD] External image callback error: {cb_err}")
+        else:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                tmp.write(image_bytes)
+                tmp_path = tmp.name
+            threading.Thread(target=display_image_fullscreen, args=(tmp_path,)).start()
+
+        return "The image has been created and displayed on screen."
+
+    except requests.exceptions.RequestException as e:
+        queue_message(f"[SD] External server error: {e}")
+        return "Image generation failed."
+
 def get_image_from_comfyui(prompt, on_image_ready=None):
     """Generate an image using ComfyUI API with a workflow JSON template."""
     comfy_url = config['STABLE_DIFFUSION']['url'].rstrip('/')
@@ -171,6 +229,16 @@ def get_image_from_comfyui(prompt, on_image_ready=None):
             workflow["11"]["inputs"]["cfg"] = float(config['STABLE_DIFFUSION']['cfg_scale'])
         if "sampler_name" in workflow["11"]["inputs"]:
             workflow["11"]["inputs"]["sampler_name"] = config['STABLE_DIFFUSION']['sampler_name']
+
+    # Inject width/height into Empty Latent Image node (scan all nodes)
+    img_w = int(config['STABLE_DIFFUSION']['width'])
+    img_h = int(config['STABLE_DIFFUSION']['height'])
+    for node_id, node in workflow.items():
+        if isinstance(node, dict) and node.get("class_type") == "EmptyLatentImage":
+            if "inputs" in node:
+                node["inputs"]["width"] = img_w
+                node["inputs"]["height"] = img_h
+            break
 
     try:
         # Queue the prompt

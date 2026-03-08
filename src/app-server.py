@@ -50,6 +50,7 @@ import uuid
 import warnings
 import wave
 from datetime import datetime
+import io
 from io import BytesIO
 from pathlib import Path
 from threading import Lock, Thread
@@ -164,7 +165,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
     handlers=[
-        logging.StreamHandler(),
+        logging.StreamHandler(sys.stderr),
         logging.handlers.RotatingFileHandler(
             LOG_DIR / "server.log", maxBytes=5_000_000, backupCount=3
         ),
@@ -172,12 +173,12 @@ logging.basicConfig(
 )
 log = logging.getLogger("tars-server")
 
-# Silence noisy third-party libraries — keep only WARNING+ from them
+# Silence noisy third-party libraries (tied-weights warnings, generation flags, etc.)
 for _lib in (
     "transformers", "diffusers", "huggingface_hub", "sentence_transformers",
-    "filelock", "urllib3", "httpx", "torch", "ctranslate2",
+    "filelock", "urllib3", "httpx", "torch", "ctranslate2", "safetensors",
 ):
-    logging.getLogger(_lib).setLevel(logging.WARNING)
+    logging.getLogger(_lib).setLevel(logging.ERROR)
 
 # Suppress Python deprecation / future warnings from ML libraries
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -368,7 +369,7 @@ def _ensure_llamacpp_gpu():
         "  Vulkan: ensure Vulkan SDK glslc is in PATH."
     )
 
-_ensure_llamacpp_gpu()
+# _ensure_llamacpp_gpu() is called on-demand when LLM backend is "llamacpp"
 
 
 def resolve_service_device(cfg_value: str) -> str:
@@ -3173,6 +3174,7 @@ def _load_single_service(name: str, args):
             log.info(f"LLM backend auto-detected: {backend}")
 
         if backend == "llamacpp":
+            _ensure_llamacpp_gpu()
             SERVICES["llm"] = LlamaCppService(
                 model_path=args.llm_model, n_ctx=n_ctx, n_gpu_layers=n_gpu,
                 n_batch=n_batch, flash_attn=flash_attn,
@@ -3214,12 +3216,16 @@ def load_services(args):
     log.info(f"Services to load: {', '.join(s.upper() for s in to_load)}")
     for name in to_load:
         try:
-            _load_single_service(name, args)
+            # Redirect stdout to suppress safetensors LOAD REPORT print() noise.
+            # Our logs (stderr) and tqdm progress bars (stderr) are unaffected.
+            with contextlib.redirect_stdout(io.StringIO()):
+                _load_single_service(name, args)
         except (ImportError, ModuleNotFoundError):
             # Missing package — try to auto-install and retry once
             if _try_install_service_deps(name):
                 try:
-                    _load_single_service(name, args)
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        _load_single_service(name, args)
                     continue
                 except Exception:
                     pass

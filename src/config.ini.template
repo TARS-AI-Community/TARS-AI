@@ -249,7 +249,7 @@ channel_id = 23434653456345
 [STABLE_DIFFUSION]
 # Enable image generation
 enabled = False
-# Backend: automatic1111 | comfyui | openai
+# Backend: automatic1111 | comfyui | openai | external (use app-server)
 service = automatic1111
 # Image generation server URL (automatic1111 default: :7860, comfyui default: :8188)
 url = http://192.168.1.100:7860
