@@ -55,6 +55,93 @@ from pathlib import Path
 from threading import Lock, Thread
 from typing import Optional
 
+# ---------------------------------------------------------------------------
+# Auto-install dependencies on first run (works on ANY PC, no manual setup)
+# ---------------------------------------------------------------------------
+def _has_nvidia_gpu() -> bool:
+    """Detect NVIDIA GPU before torch is installed (uses nvidia-smi)."""
+    import subprocess as _sp
+    try:
+        return _sp.run(["nvidia-smi"], capture_output=True, timeout=10).returncode == 0
+    except (FileNotFoundError, _sp.TimeoutExpired):
+        return False
+
+
+def _restart_self():
+    """Restart the current script (cross-platform)."""
+    if sys.platform == "win32":
+        # os.execv on Windows spawns a new process but the parent continues — use subprocess + exit
+        import subprocess
+        subprocess.Popen([sys.executable] + sys.argv)
+        sys.exit(0)
+    else:
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+
+def _bootstrap_deps():
+    """Auto-install all dependencies. Works with or without requirements-server.txt."""
+    import importlib.util
+    import subprocess
+
+    # Check core packages — if all present, skip
+    _CORE = ["torch", "fastapi", "uvicorn", "transformers", "accelerate"]
+    missing = [p for p in _CORE if importlib.util.find_spec(p) is None]
+    if not missing:
+        return
+
+    print(f"[TARS] Missing packages: {', '.join(missing)}")
+    print("[TARS] First run — installing dependencies. This may take several minutes...")
+
+    # Prefer requirements-server.txt if it exists
+    req_file = Path(__file__).parent / "requirements-server.txt"
+    if req_file.exists():
+        rc = subprocess.call([sys.executable, "-m", "pip", "install", "-r", str(req_file)])
+        if rc != 0:
+            print(f"[TARS] pip install failed (exit {rc}). Run manually:\n  pip install -r {req_file}")
+            sys.exit(rc)
+        print("[TARS] Dependencies installed. Restarting...")
+        _restart_self()
+
+    # No requirements file — install from embedded list
+    has_gpu = _has_nvidia_gpu()
+    pip_cmd = [sys.executable, "-m", "pip", "install"]
+    if has_gpu:
+        print("[TARS] NVIDIA GPU detected — installing CUDA-accelerated packages")
+        pip_cmd += ["--index-url", "https://download.pytorch.org/whl/cu124",
+                    "--extra-index-url", "https://pypi.org/simple"]
+    else:
+        print("[TARS] No NVIDIA GPU detected — installing CPU packages")
+
+    packages = [
+        "torch", "fastapi>=0.104.0", "uvicorn[standard]>=0.24.0",
+        "transformers>=4.44.0", "accelerate>=0.27.0",
+        "Pillow>=10.0.0", "python-multipart",
+        # Service-specific packages
+        "faster-whisper>=1.0.0",    # STT
+        "piper-tts>=1.2.0",         # TTS
+        "diffusers>=0.27.0",        # ImageGen
+        "sentence-transformers>=2.2.0",  # Embeddings
+        "qrcode[pil]>=7.0",         # Tunnel QR codes
+    ]
+    if has_gpu:
+        packages.append("bitsandbytes>=0.43.0")
+        packages.append("torchaudio")  # VAD for STT
+
+    rc = subprocess.call(pip_cmd + packages)
+    if rc != 0:
+        print(f"[TARS] pip install failed (exit {rc}).")
+        print("[TARS] Try manually: pip install torch transformers fastapi uvicorn accelerate")
+        sys.exit(rc)
+
+    # llama-cpp-python is optional — install separately so failures don't block startup
+    subprocess.call([sys.executable, "-m", "pip", "install",
+                     "llama-cpp-python>=0.3.0", "--quiet"])
+
+    print("[TARS] Dependencies installed. Restarting...")
+    _restart_self()
+
+_bootstrap_deps()
+
 import torch
 import uvicorn
 from fastapi import (
@@ -108,7 +195,15 @@ def detect_device():
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         return "cuda"
-    log.info("No GPU detected, using CPU")
+    # Warn if NVIDIA GPU exists but torch lacks CUDA
+    if _has_nvidia_gpu():
+        log.warning(
+            "NVIDIA GPU found but PyTorch lacks CUDA support!\n"
+            "  Reinstall with: pip install torch --index-url https://download.pytorch.org/whl/cu124\n"
+            "  Running on CPU for now (much slower)."
+        )
+    else:
+        log.info("No GPU detected, using CPU")
     return "cpu"
 
 
@@ -134,6 +229,117 @@ def get_gpu_stats() -> dict:
 DEVICE = detect_device()
 
 
+def _check_cuda_vs_integration() -> bool:
+    """Return True if CUDA Visual Studio integration files are present."""
+    import glob
+    # CUDA installs MSBuild customization files into VS when VS integration is selected
+    patterns = [
+        "C:/Program Files*/Microsoft Visual Studio/*/BuildTools/MSBuild/Microsoft/VC/*/BuildCustomizations/CUDA*.targets",
+        "C:/Program Files*/Microsoft Visual Studio/*/Community/MSBuild/Microsoft/VC/*/BuildCustomizations/CUDA*.targets",
+        "C:/Program Files*/Microsoft Visual Studio/*/Professional/MSBuild/Microsoft/VC/*/BuildCustomizations/CUDA*.targets",
+        "C:/Program Files*/Microsoft Visual Studio/*/Enterprise/MSBuild/Microsoft/VC/*/BuildCustomizations/CUDA*.targets",
+    ]
+    return any(glob.glob(p) for p in patterns)
+
+
+def _check_vulkan_sdk() -> bool:
+    """Return True if Vulkan SDK is installed."""
+    return bool(os.environ.get("VULKAN_SDK") or
+                os.path.isdir("C:/VulkanSDK") or
+                os.path.isdir("C:/Program Files (x86)/VulkanSDK"))
+
+
+def _ensure_llamacpp_gpu():
+    """Ensure llama-cpp-python has GPU support. Pre-checks toolchain before attempting build.
+    Uses a stamp file to avoid retrying failed builds on every startup."""
+    if DEVICE != "cuda":
+        return
+    try:
+        from llama_cpp import llama_supports_gpu_offload  # type: ignore[import]
+        if llama_supports_gpu_offload():
+            return  # Already has GPU support
+    except ImportError:
+        return  # Not installed — will raise a clear error when first used
+
+    # Don't retry if a previous GPU build attempt already failed
+    stamp = Path(__file__).parent / ".llamacpp_gpu_failed"
+    if stamp.exists():
+        hint = ""
+        vi = sys.version_info
+        if vi.major == 3 and vi.minor >= 13:
+            hint = " Pre-built CUDA wheels only exist for Python <=3.12."
+        log.warning("llama-cpp-python running on CPU (GPU build previously failed)."
+                    f"{hint} Delete .llamacpp_gpu_failed to retry.")
+        return
+
+    import subprocess
+
+    # Try 1: Pre-built CUDA wheel (fastest install, no build tools needed)
+    log.info("llama-cpp-python: trying pre-built CUDA 12.4 wheel...")
+    rc = subprocess.call([
+        sys.executable, "-m", "pip", "install", "llama-cpp-python",
+        "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cu124",
+        "--force-reinstall", "--no-cache-dir", "--quiet",
+    ])
+    if rc == 0:
+        try:
+            import importlib
+            importlib.invalidate_caches()
+            from llama_cpp import llama_supports_gpu_offload  # type: ignore[import]
+            if llama_supports_gpu_offload():
+                log.info("llama-cpp-python CUDA wheel installed. Restarting...")
+                _restart_self()
+        except Exception:
+            pass
+
+    # Try 2: Build from source with CUDA or Vulkan
+    has_cuda_vs = _check_cuda_vs_integration()
+    has_vulkan  = _check_vulkan_sdk()
+
+    if not has_cuda_vs and not has_vulkan:
+        stamp.write_text("No CUDA VS integration or Vulkan SDK found.\n")
+        log.warning(
+            "llama-cpp-python GPU build skipped — no compatible GPU SDK found.\n"
+            "  To enable GPU, install one of the following then delete .llamacpp_gpu_failed:\n"
+            "  CUDA:   install CUDA 12.x from https://developer.nvidia.com/cuda-toolkit-archive\n"
+            "          (select 'Visual Studio Integration' during install)\n"
+            "  Vulkan: install Vulkan SDK from https://vulkan.lunarg.com/sdk/home\n"
+            "  Running on CPU until then."
+        )
+        return
+
+    subprocess.call([sys.executable, "-m", "pip", "install",
+                     "cmake==3.30.5", "scikit-build-core", "pyproject-metadata", "ninja",
+                     "--quiet"])
+
+    def _try_build(label: str, cmake_args: str) -> bool:
+        log.info(f"llama-cpp-python: building with {label}...")
+        env = {**os.environ, "CMAKE_ARGS": cmake_args}
+        rc = subprocess.call(
+            [sys.executable, "-m", "pip", "install", "llama-cpp-python",
+             "--no-build-isolation", "--no-cache-dir", "--force-reinstall"],
+            env=env,
+        )
+        if rc == 0:
+            log.info(f"llama-cpp-python built with {label}. Restarting...")
+            _restart_self()
+        return rc == 0
+
+    if has_cuda_vs and _try_build("CUDA", "-DGGML_CUDA=on"):
+        return
+    if has_vulkan and _try_build("Vulkan", "-DGGML_VULKAN=on"):
+        return
+
+    stamp.write_text("GPU build failed — delete this file to retry.\n")
+    log.warning(
+        "llama-cpp-python GPU build failed — running on CPU.\n"
+        "  CUDA: ensure CUDA 12.x is installed with Visual Studio Integration component.\n"
+        "  Vulkan: ensure Vulkan SDK glslc is in PATH."
+    )
+
+_ensure_llamacpp_gpu()
+
+
 def resolve_service_device(cfg_value: str) -> str:
     """Resolve per-service device. 'auto' uses the globally detected device."""
     if cfg_value in ("auto", ""):
@@ -157,7 +363,11 @@ _CONFIG_DEFAULTS = {
     "services":   {"stt": "true", "tts": "true", "llm": "true", "vision": "true",
                    "imagegen": "false", "embeddings": "false"},
     "stt":        {"whisper_model": "large-v3", "compute_type": "auto", "vad_filter": "true", "device": "auto"},
-    "llm":        {"model": "Qwen/Qwen3-4B", "dtype": "auto", "quantize": "8bit", "kv_cache_sessions": "2", "kv_cache_ttl": "300", "device": "auto"},
+    "llm":        {"model": "Qwen/Qwen3-4B",
+                   "dtype": "auto", "quantize": "none", "backend": "auto",
+                   "n_ctx": "4096", "n_gpu_layers": "-1",
+                   "n_batch": "2048", "flash_attn": "true",
+                   "kv_cache_sessions": "2", "kv_cache_ttl": "300", "device": "auto"},
     "tts":        {"voices_dir": "", "cache_size": "100"},
     "vision":     {"model": "Salesforce/blip-image-captioning-base", "device": "auto"},
     "imagegen":   {"model": "stabilityai/stable-diffusion-xl-base-1.0", "default_steps": "20", "default_cfg": "7.0", "device": "auto"},
@@ -375,7 +585,7 @@ class TTSService:
     }
 
     def __init__(self, voices_dir: str = None, cache_size: int = 100):
-        self.voices_dir = Path(voices_dir) if voices_dir else Path(__file__).parent / "tts" / "voices"
+        self.voices_dir = Path(voices_dir) if voices_dir else Path(__file__).parent / "tts"
         self.voices_dir.mkdir(parents=True, exist_ok=True)
         self._voices: dict = {}
         self._cache: collections.OrderedDict = collections.OrderedDict()
@@ -385,12 +595,7 @@ class TTSService:
 
     def _ensure_default_voice(self):
         """Download the default TARS Piper voice if no .onnx files exist yet."""
-        # Skip if any voice already present in voices_dir or character dir
-        has_voice = any(self.voices_dir.rglob("*.onnx"))
-        if not has_voice:
-            char_dir = Path(__file__).parent / "character"
-            has_voice = char_dir.exists() and any(char_dir.rglob("*.onnx"))
-        if has_voice:
+        if any(self.voices_dir.rglob("*.onnx")):
             return
 
         import urllib.request
@@ -414,14 +619,6 @@ class TTSService:
             if json_file.exists():
                 name = onnx_file.stem
                 self._voices[name] = {"model": str(onnx_file), "config": str(json_file)}
-        char_dir = Path(__file__).parent / "character"
-        if char_dir.exists():
-            for onnx_file in char_dir.rglob("*.onnx"):
-                json_file = onnx_file.with_suffix(".onnx.json")
-                if json_file.exists():
-                    name = onnx_file.stem
-                    if name not in self._voices:
-                        self._voices[name] = {"model": str(onnx_file), "config": str(json_file)}
         log.info(f"Found {len(self._voices)} Piper voice(s): {list(self._voices.keys())}")
 
     def list_voices(self) -> list[str]:
@@ -484,7 +681,13 @@ class LLMService:
 
         device = device or DEVICE
         if dtype == "auto":
-            dtype = torch.float16 if device == "cuda" else torch.float32
+            # Prefer bfloat16 on Ampere+ (RTX 30xx/40xx) for better numerics at same speed
+            if device == "cuda" and torch.cuda.is_bf16_supported():
+                dtype = torch.bfloat16
+            elif device == "cuda":
+                dtype = torch.float16
+            else:
+                dtype = torch.float32
         elif dtype == "float16":
             dtype = torch.float16
         elif dtype == "bfloat16":
@@ -507,8 +710,10 @@ class LLMService:
             dtype = torch.float32
             quantize = "none"
 
+        # Only use device_map="auto" for quantized models (BnB requires it).
+        # For non-quantized, use explicit .to(device) — avoids accelerate dispatch overhead.
+        _use_device_map = False
         load_kwargs = dict(
-            device_map="auto" if device == "cuda" else None,
             trust_remote_code=True, cache_dir=str(llm_dir),
         )
 
@@ -525,6 +730,8 @@ class LLMService:
                     )
                 else:
                     load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+                load_kwargs["device_map"] = "auto"  # Required for BnB
+                _use_device_map = True
                 log.info(f"LLM quantization: {quantize}")
             except ImportError:
                 log.warning("bitsandbytes not installed — quantization skipped. pip install bitsandbytes")
@@ -535,6 +742,7 @@ class LLMService:
         # Try attention backends from fastest to most compatible
         attn_impls = (["flash_attention_2", "sdpa"] if device == "cuda" else ["sdpa"])
         self.model = None
+        last_exc = None
         for attn in attn_impls + [None]:
             try:
                 kw = {**load_kwargs, **({"attn_implementation": attn} if attn else {})}
@@ -542,9 +750,14 @@ class LLMService:
                 if attn:
                     log.info(f"LLM attention: {attn}")
                 break
-            except Exception:
+            except Exception as e:
+                last_exc = e
+                log.debug(f"LLM load attempt (attn={attn}) failed: {e}")
                 continue
-        if device != "cuda":
+        if self.model is None:
+            raise RuntimeError(f"LLM failed to load: {last_exc}") from last_exc
+        # Place model on device — skip if accelerate already did it (device_map="auto")
+        if not _use_device_map:
             self.model = self.model.to(device)
         self.model.eval()
 
@@ -559,16 +772,36 @@ class LLMService:
         except Exception:
             pass
 
-        # Warmup: one forward pass so CUDA kernels are compiled before first real request
+        # torch.compile + static KV cache for CUDA graphs (2-3x speedup on non-quantized)
+        # Skipped on Windows: inductor backend requires Triton which is Linux-only
+        self._compiled = False
+        if device == "cuda" and quantize in ("none", "") and sys.platform != "win32":
+            try:
+                _orig_model = self.model
+                self.model.generation_config.cache_implementation = "static"
+                self.model = torch.compile(self.model, mode="reduce-overhead", fullgraph=True)
+                # Test with actual inference to catch Triton/inductor errors early
+                _warm = self.tokenizer("compile test", return_tensors="pt").input_ids.to(device)
+                with torch.inference_mode():
+                    self.model.generate(_warm, attention_mask=torch.ones_like(_warm),
+                                        max_new_tokens=2, do_sample=False, use_cache=True)
+                self._compiled = True
+                log.info("LLM torch.compile enabled (reduce-overhead + static cache)")
+            except Exception as e:
+                log.info(f"torch.compile skipped: {e}")
+                self.model = _orig_model
+                self.model.generation_config.cache_implementation = None
+
+        # Warmup: run a forward pass to pre-allocate CUDA memory
         if device == "cuda":
             try:
                 _warm = self.tokenizer("warmup", return_tensors="pt").input_ids.to(self.model.device)
                 with torch.inference_mode():
                     self.model.generate(_warm, attention_mask=torch.ones_like(_warm),
-                                        max_new_tokens=1, do_sample=False, use_cache=True)
+                                        max_new_tokens=2, do_sample=False, use_cache=True)
                 log.info("LLM warmup complete")
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug(f"Warmup issue: {e}")
 
         # KV cache for prompt reuse
         self._kv_cache: dict = {}  # session_id -> (token_count, past_kv, timestamp)
@@ -619,9 +852,14 @@ class LLMService:
             return self._batch_chat(messages, max_tokens, temperature, top_p, session_id)
 
     def _batch_chat(self, messages, max_tokens, temperature, top_p, session_id=None) -> dict:
-        result = self.tokenizer.apply_chat_template(
-            messages, return_tensors="pt", add_generation_prompt=True
-        )
+        # Disable thinking/reasoning for models that support it (Qwen3, etc.)
+        template_kwargs = dict(return_tensors="pt", add_generation_prompt=True)
+        try:
+            result = self.tokenizer.apply_chat_template(
+                messages, enable_thinking=False, **template_kwargs
+            )
+        except TypeError:
+            result = self.tokenizer.apply_chat_template(messages, **template_kwargs)
         full_ids = (result if isinstance(result, torch.Tensor) else result["input_ids"]).to(self.model.device)
 
         input_ids, past_kv = self._try_reuse_kv(full_ids, session_id)
@@ -632,6 +870,7 @@ class LLMService:
                 "input_ids": input_ids,
                 "attention_mask": torch.ones_like(input_ids),
                 "max_new_tokens": max_tokens,
+                "max_length": None,
                 "do_sample": do_sample,
                 "use_cache": True,
                 "pad_token_id": self.tokenizer.eos_token_id,
@@ -657,9 +896,14 @@ class LLMService:
     def _stream_chat(self, messages, max_tokens, temperature, top_p, session_id=None):
         from transformers import TextIteratorStreamer
 
-        result = self.tokenizer.apply_chat_template(
-            messages, return_tensors="pt", add_generation_prompt=True
-        )
+        # Disable thinking/reasoning for models that support it (Qwen3, etc.)
+        template_kwargs = dict(return_tensors="pt", add_generation_prompt=True)
+        try:
+            result = self.tokenizer.apply_chat_template(
+                messages, enable_thinking=False, **template_kwargs
+            )
+        except TypeError:
+            result = self.tokenizer.apply_chat_template(messages, **template_kwargs)
         full_ids = (result if isinstance(result, torch.Tensor) else result["input_ids"]).to(self.model.device)
 
         input_ids, past_kv = self._try_reuse_kv(full_ids, session_id)
@@ -674,6 +918,7 @@ class LLMService:
             "input_ids": input_ids,
             "attention_mask": torch.ones_like(input_ids),
             "max_new_tokens": max_tokens,
+            "max_length": None,
             "do_sample": do_sample,
             "use_cache": True,
             "streamer": streamer,
@@ -690,15 +935,17 @@ class LLMService:
 
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         created = int(time.time())
-        token_count = [0]
-        gen_start = [time.perf_counter()]
+        output_text = []
+        decode_start = None  # set on first token — excludes prefill
 
         def generate():
-            gen_start[0] = time.perf_counter()
+            nonlocal decode_start
             for token_text in streamer:
                 if not token_text:
                     continue
-                token_count[0] += 1
+                if decode_start is None:
+                    decode_start = time.perf_counter()  # first token = prefill done
+                output_text.append(token_text)
                 chunk = {
                     "id": completion_id, "object": "chat.completion.chunk",
                     "created": created, "model": self.model_name,
@@ -706,15 +953,21 @@ class LLMService:
                 }
                 yield f"data: {json.dumps(chunk)}\n\n"
 
-            elapsed_ms = int((time.perf_counter() - gen_start[0]) * 1000)
+            # decode_ms = time from first token to last token (pure decode speed)
+            elapsed_ms = max(1, int((time.perf_counter() - (decode_start or time.perf_counter())) * 1000))
+            # count real tokens by encoding the full generated text
+            try:
+                completion_tokens = len(self.tokenizer.encode("".join(output_text), add_special_tokens=False))
+            except Exception:
+                completion_tokens = len(output_text)
             final = {
                 "id": completion_id, "object": "chat.completion.chunk",
                 "created": created, "model": self.model_name,
                 "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
                 "usage": {
                     "prompt_tokens": prompt_tokens,
-                    "completion_tokens": token_count[0],
-                    "total_tokens": prompt_tokens + token_count[0],
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
                     "elapsed_ms": elapsed_ms,
                 },
             }
@@ -768,6 +1021,161 @@ class LLMService:
         del self.tokenizer
         self.model = None
         self.tokenizer = None
+
+
+# ===================================================================
+# LLM Service — llama.cpp backend (GGUF models)
+# ===================================================================
+class LlamaCppService:
+    """Fast LLM inference via llama.cpp using GGUF models (same engine as LM Studio)."""
+
+    def __init__(self, model_path: str, n_ctx: int = 4096, n_gpu_layers: int = -1,
+                 n_batch: int = 2048, flash_attn: bool = True,
+                 kv_cache_sessions: int = 2, kv_cache_ttl: int = 300):  # noqa: ARG002
+        try:
+            from llama_cpp import Llama
+        except ImportError:
+            raise RuntimeError(
+                "llama-cpp-python not installed. Run: pip install llama-cpp-python"
+            )
+
+        self.supports_vision = False
+
+        # Determine load method:
+        #   Local file:          C:\path\to\model.gguf  or  /path/to/model.gguf
+        #   HF repo (auto GGUF): owner/repo-name
+        #   HF repo + filename:  owner/repo-name::file.gguf
+        if os.path.isfile(model_path):
+            self.model_name = os.path.basename(model_path)
+            log.info(f"Loading llama.cpp model: {self.model_name} (n_gpu_layers={n_gpu_layers}, n_ctx={n_ctx})...")
+            self._llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers,
+                              n_ctx=n_ctx, n_batch=n_batch, flash_attn=flash_attn,
+                              verbose=False)
+        elif "::" in model_path:
+            repo_id, filename = model_path.split("::", 1)
+            self.model_name = filename
+            log.info(f"Downloading GGUF from HuggingFace: {repo_id} / {filename} ...")
+            self._llm = Llama.from_pretrained(repo_id=repo_id, filename=filename,
+                                              n_gpu_layers=n_gpu_layers, n_ctx=n_ctx,
+                                              n_batch=n_batch, flash_attn=flash_attn,
+                                              verbose=False)
+        elif "/" in model_path and not model_path.startswith(("C:", "D:", "/")):
+            # HuggingFace repo ID — auto-pick best available GGUF (prefer Q4_K_M)
+            self.model_name = model_path.split("/")[-1]
+            log.info(f"Downloading GGUF from HuggingFace: {model_path} (searching for Q4_K_M.gguf) ...")
+            for pattern in ("*Q4_K_M.gguf", "*Q4_K_S.gguf", "*Q5_K_M.gguf", "*.gguf"):
+                try:
+                    self._llm = Llama.from_pretrained(repo_id=model_path, filename=pattern,
+                                                      n_gpu_layers=n_gpu_layers, n_ctx=n_ctx,
+                                                      n_batch=n_batch, flash_attn=flash_attn,
+                                                      verbose=False)
+                    break
+                except Exception:
+                    continue
+            else:
+                raise FileNotFoundError(f"No GGUF file found in HuggingFace repo: {model_path}")
+        else:
+            raise FileNotFoundError(
+                f"GGUF model not found: {model_path}\n"
+                "  Local file: use full path ending in .gguf\n"
+                "  HuggingFace: use  owner/repo  or  owner/repo::filename.gguf"
+            )
+
+        log.info(f"llama.cpp model loaded: {self.model_name}")
+
+    def chat(self, messages, max_tokens=512, temperature=0.7, top_p=0.95,
+             stream=False, session_id=None):  # noqa: ARG002
+        if stream:
+            return self._stream_chat(messages, max_tokens, temperature, top_p)
+        return self._batch_chat(messages, max_tokens, temperature, top_p)
+
+    def _batch_chat(self, messages, max_tokens, temperature, top_p) -> dict:
+        do_sample = temperature > 0
+        output = self._llm.create_chat_completion(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=max(temperature, 0.01) if do_sample else 0.0,
+            top_p=top_p if do_sample else 1.0,
+            stream=False,
+        )
+        text = output["choices"][0]["message"]["content"] or ""
+        usage = output.get("usage", {})
+        return self._format_response(text, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+
+    def _stream_chat(self, messages, max_tokens, temperature, top_p):
+        do_sample = temperature > 0
+        completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+        created = int(time.time())
+
+        def generate():
+            decode_start = None
+            output_text = []
+            prompt_tokens = 0
+            completion_tokens = 0
+
+            for chunk in self._llm.create_chat_completion(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=max(temperature, 0.01) if do_sample else 0.0,
+                top_p=top_p if do_sample else 1.0,
+                stream=True,
+            ):
+                choice = chunk["choices"][0]
+                token_text = choice.get("delta", {}).get("content", "")
+                finish_reason = choice.get("finish_reason")
+
+                if token_text:
+                    if decode_start is None:
+                        decode_start = time.perf_counter()
+                    output_text.append(token_text)
+                    yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': self.model_name, 'choices': [{'index': 0, 'delta': {'content': token_text}, 'finish_reason': None}]})}\n\n"
+
+                if finish_reason is not None:
+                    usage = chunk.get("usage") or {}
+                    prompt_tokens = usage.get("prompt_tokens", 0)
+                    completion_tokens = usage.get("completion_tokens", 0)
+                    break
+
+            elapsed_ms = max(1, int((time.perf_counter() - (decode_start or time.perf_counter())) * 1000))
+            if not completion_tokens:
+                try:
+                    completion_tokens = len(self._llm.tokenize("".join(output_text).encode()))
+                except Exception:
+                    completion_tokens = len(output_text)
+
+            final = {
+                "id": completion_id, "object": "chat.completion.chunk",
+                "created": created, "model": self.model_name,
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                "usage": {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                    "elapsed_ms": elapsed_ms,
+                },
+            }
+            yield f"data: {json.dumps(final)}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return generate()
+
+    def _format_response(self, text: str, prompt_tokens: int = 0, completion_tokens: int = 0) -> dict:
+        return {
+            "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": self.model_name,
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+            },
+        }
+
+    def unload(self):
+        del self._llm
+        self._llm = None
 
 
 # ===================================================================
@@ -927,8 +1335,14 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 # Pages that need a browser session cookie (web UI)
 _WEB_PAGES = {"/", "/ui", "/playground"}
-# API paths called by the web UI — accept session cookie OR Bearer token
-_WEB_API_PATHS = {"/api/tunnel", "/api/settings"}
+# API paths callable from the web UI — accept session cookie OR Bearer token
+_WEB_API_PATHS = {
+    "/api/tunnel", "/api/settings",
+    "/v1",           # LLM chat completions + embeddings
+    "/tts",          # TTS generate + voices
+    "/save_audio", "/transcribe",  # STT
+    "/caption", "/generate_image", "/sdapi",  # Vision + ImageGen
+}
 # Paths exempt from ALL auth (health check, login, static API schema)
 _AUTH_EXEMPT = {"/health", "/login", "/logout", "/docs", "/openapi.json", "/redoc", "/ws/dashboard"}
 
@@ -1918,7 +2332,7 @@ label{font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-trans
 .hud-btn.danger:hover{background:rgba(255,68,68,0.12);border-color:rgba(255,68,68,0.5);box-shadow:0 0 20px rgba(255,68,68,0.15)}
 .hud-btn.recording{border-color:rgba(255,68,68,0.6);color:var(--red);background:rgba(255,68,68,0.1);animation:recPulse 1s ease-in-out infinite}
 @keyframes recPulse{0%,100%{box-shadow:0 0 8px rgba(255,68,68,0.2)}50%{box-shadow:0 0 20px rgba(255,68,68,0.5)}}
-.output{background:rgba(0,0,0,0.3);border:1px solid rgba(0,229,255,0.1);border-radius:var(--radius-sm);padding:16px 18px;margin-top:12px;min-height:140px;max-height:500px;overflow-y:auto;font-size:13px;color:var(--text-dim);scrollbar-width:thin;scrollbar-color:rgba(0,229,255,0.2) transparent;white-space:pre-wrap}
+.output{background:rgba(0,0,0,0.3);border:1px solid rgba(0,229,255,0.1);border-radius:var(--radius-sm);padding:16px 18px;margin-top:12px;min-height:140px;max-height:500px;overflow-y:auto;font-size:15px;color:var(--text-dim);scrollbar-width:thin;scrollbar-color:rgba(0,229,255,0.2) transparent;white-space:pre-wrap}
 .msg{margin:6px 0;padding:8px 12px;border-radius:var(--radius-sm);line-height:1.5}
 .msg.user{background:rgba(0,229,255,0.06);border-left:2px solid var(--cyan);color:var(--cyan)}
 .msg.assistant{background:rgba(180,77,255,0.06);border-left:2px solid var(--purple);color:var(--text)}
@@ -1942,11 +2356,16 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   <div class="tab" onclick="switchTab('tts')">TTS</div>
   <div class="tab" onclick="switchTab('img')">Image Gen</div>
 </div>
-<div id="p-chat" class="panel active"><div class="glass">
-  <textarea id="chat-input" placeholder="Type a message..."></textarea>
-  <button class="hud-btn" onclick="sendChat()">Send</button>
-  <button class="hud-btn danger" onclick="document.getElementById('chat-out').innerHTML=''">Clear</button>
-  <div class="output" id="chat-out"></div>
+<div id="p-chat" class="panel active"><div class="glass" style="display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border)">
+    <span style="font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim)">Chat</span>
+    <button class="hud-btn danger" style="padding:4px 12px;font-size:9px;margin:0" onclick="document.getElementById('chat-out').innerHTML=''">Clear</button>
+  </div>
+  <div class="output" id="chat-out" style="flex:1;min-height:300px;max-height:460px;border:none;border-radius:0;margin:0;padding:14px 16px"></div>
+  <div style="display:flex;gap:8px;align-items:flex-end;padding:10px 14px;border-top:1px solid var(--border);background:rgba(0,0,0,0.15)">
+    <textarea id="chat-input" placeholder="Type a message..." style="flex:1;height:44px;min-height:44px;max-height:120px;resize:vertical;margin:0;padding:10px 14px;font-size:15px"></textarea>
+    <button class="hud-btn" style="margin:0;height:44px;padding:0 20px;flex-shrink:0" onclick="sendChat()">Send</button>
+  </div>
 </div></div>
 <div id="p-stt" class="panel"><div class="glass">
   <input type="file" id="stt-file" accept="audio/*">
@@ -1970,6 +2389,12 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   <div class="output" id="img-out">Enter a prompt and click Generate.</div>
   <img class="preview" id="img-preview" style="display:none">
 </div></div>
+<div style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+  <a href="/" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Dashboard</a>
+  <a href="/ui" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Settings</a>
+  <a href="/docs" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">API Docs</a>
+  <a href="/logout" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(255,68,68,0.06);border:1px solid rgba(255,68,68,0.3);border-radius:8px;color:#ff6666;text-decoration:none">Logout</a>
+</div>
 </div>
 <script>
 const base='';
@@ -1988,12 +2413,13 @@ function switchTab(name){
 async function sendChat(){
   const input=document.getElementById('chat-input');const out=document.getElementById('chat-out');
   const text=input.value.trim();if(!text)return;
-  out.innerHTML+='<div class="msg user">'+text+'</div>';
   input.value='';
-  out.innerHTML+='<div class="msg assistant" id="stream-msg"></div>';
+  const userDiv=document.createElement('div');userDiv.className='msg user';userDiv.textContent=text;out.appendChild(userDiv);
+  const msgDiv=document.createElement('div');msgDiv.className='msg assistant';out.appendChild(msgDiv);
   try{
     const resp=await fetch(base+'/v1/chat/completions',{method:'POST',headers:hdr(),
       body:JSON.stringify({messages:[{role:'user',content:text}],stream:true,max_tokens:512})});
+    if(!resp.ok){msgDiv.className='msg error';msgDiv.textContent='Error: '+resp.status+' '+resp.statusText;out.scrollTop=out.scrollHeight;return;}
     const reader=resp.body.getReader();const dec=new TextDecoder();let buf='';
     while(true){
       const{done,value}=await reader.read();if(done)break;
@@ -2004,17 +2430,19 @@ async function sendChat(){
         try{
           const c=JSON.parse(line.slice(6));
           const t=c.choices[0].delta.content||'';
-          if(t)document.getElementById('stream-msg').textContent+=t;
+          if(t)msgDiv.textContent+=t;
           if(c.choices[0].finish_reason==='stop'&&c.usage){
             const u=c.usage;const ms=u.elapsed_ms||1;
             const tps=(u.completion_tokens/(ms/1000)).toFixed(1);
-            out.innerHTML+='<div style="text-align:right;font-size:11px;color:var(--text-dim);margin-top:4px;font-family:var(--font-hud);letter-spacing:.08em">'+
-              u.completion_tokens+' tokens · '+tps+' t/s</div>';
+            const stat=document.createElement('div');
+            stat.style.cssText='text-align:right;font-size:11px;color:var(--text-dim);margin-top:4px;font-family:var(--font-hud);letter-spacing:.08em';
+            stat.textContent=u.completion_tokens+' tokens · '+tps+' t/s';
+            out.appendChild(stat);
           }
         }catch(e){}
       }
     }
-  }catch(e){out.innerHTML+='<div class="msg error">Error: '+e+'</div>'}
+  }catch(e){msgDiv.className='msg error';msgDiv.textContent='Error: '+e;}
   out.scrollTop=out.scrollHeight;
 }
 
@@ -2093,12 +2521,6 @@ async function generateImg(){
 
 document.getElementById('chat-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}});
 </script>
-<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-  <a href="/" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Dashboard</a>
-  <a href="/ui" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Settings</a>
-  <a href="/docs" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">API Docs</a>
-  <a href="/logout" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(255,68,68,0.06);border:1px solid rgba(255,68,68,0.3);border-radius:8px;color:#ff6666;text-decoration:none">Logout</a>
-</div>
 </body></html>"""
 
 
@@ -2250,9 +2672,16 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
     <!-- LLM Config -->
     <div class="glass">
       <h2>LLM Configuration</h2>
-      <div class="form-row"><label>Model</label><input type="text" id="s-llm-model"></div>
-      <div class="form-row"><label>dtype</label><select id="s-llm-dtype"><option>auto</option><option>float16</option><option>bfloat16</option><option>float32</option></select></div>
-      <div class="form-row"><label>Quantize</label><select id="s-llm-quantize"><option value="none">none</option><option value="4bit">4-bit (fastest, needs bitsandbytes)</option><option value="8bit">8-bit (balanced, needs bitsandbytes)</option></select></div>
+      <div class="form-row"><label>Backend</label><select id="s-llm-backend" onchange="toggleLlmBackend()"><option value="transformers">transformers (HuggingFace)</option><option value="llamacpp">llamacpp (GGUF — fast)</option></select></div>
+      <div class="form-row"><label id="s-llm-model-lbl">Model</label><input type="text" id="s-llm-model"></div>
+      <div id="llm-transformers-opts">
+        <div class="form-row"><label>dtype</label><select id="s-llm-dtype"><option>auto</option><option>float16</option><option>bfloat16</option><option>float32</option></select></div>
+        <div class="form-row"><label>Quantize</label><select id="s-llm-quantize"><option value="none">none</option><option value="4bit">4-bit (fastest, needs bitsandbytes)</option><option value="8bit">8-bit (balanced, needs bitsandbytes)</option></select></div>
+      </div>
+      <div id="llm-llamacpp-opts" style="display:none">
+        <div class="form-row"><label>Context Length</label><input type="number" id="s-llm-nctx" min="512" step="512"></div>
+        <div class="form-row"><label>GPU Layers</label><input type="number" id="s-llm-ngpu" min="-1"></div>
+      </div>
       <div class="form-row"><label>KV Cache Sessions</label><input type="number" id="s-llm-kvs"></div>
       <div class="form-row"><label>KV Cache TTL (sec)</label><input type="number" id="s-llm-kvt"></div>
     </div>
@@ -2319,9 +2748,13 @@ async function loadSettings(){
     setSelect('s-stt-model',d.stt.whisper_model);
     setSelect('s-stt-compute',d.stt.compute_type);
     document.getElementById('s-stt-vad').checked=d.stt.vad_filter==='true';
+    setSelect('s-llm-backend',d.llm.backend||'transformers');
+    toggleLlmBackend();
     document.getElementById('s-llm-model').value=d.llm.model;
     setSelect('s-llm-dtype',d.llm.dtype);
     setSelect('s-llm-quantize',d.llm.quantize||'none');
+    document.getElementById('s-llm-nctx').value=d.llm.n_ctx||4096;
+    document.getElementById('s-llm-ngpu').value=d.llm.n_gpu_layers||-1;
     document.getElementById('s-llm-kvs').value=d.llm.kv_cache_sessions;
     document.getElementById('s-llm-kvt').value=d.llm.kv_cache_ttl;
     document.getElementById('s-tts-dir').value=d.tts.voices_dir||'';
@@ -2340,6 +2773,12 @@ async function loadSettings(){
   }catch(e){console.error('Failed to load settings',e)}
 }
 function setSelect(id,val){const s=document.getElementById(id);for(let i=0;i<s.options.length;i++){if(s.options[i].value===val){s.selectedIndex=i;return}}}
+function toggleLlmBackend(){
+  const isLlamaCpp=document.getElementById('s-llm-backend').value==='llamacpp';
+  document.getElementById('llm-transformers-opts').style.display=isLlamaCpp?'none':'';
+  document.getElementById('llm-llamacpp-opts').style.display=isLlamaCpp?'':'none';
+  document.getElementById('s-llm-model-lbl').textContent=isLlamaCpp?'GGUF Path':'Model';
+}
 
 async function saveSettings(){
   const st=document.getElementById('save-status');
@@ -2348,7 +2787,7 @@ async function saveSettings(){
     server:{host:document.getElementById('s-host').value,port:document.getElementById('s-port').value,api_key:document.getElementById('s-apikey').value},
     services:{stt:document.getElementById('svc-stt').checked?'true':'false',tts:document.getElementById('svc-tts').checked?'true':'false',llm:document.getElementById('svc-llm').checked?'true':'false',vision:document.getElementById('svc-vision').checked?'true':'false',imagegen:document.getElementById('svc-imagegen').checked?'true':'false',embeddings:document.getElementById('svc-embeddings').checked?'true':'false'},
     stt:{whisper_model:document.getElementById('s-stt-model').value,compute_type:document.getElementById('s-stt-compute').value,vad_filter:document.getElementById('s-stt-vad').checked?'true':'false',device:document.getElementById('dev-stt').value},
-    llm:{model:document.getElementById('s-llm-model').value,dtype:document.getElementById('s-llm-dtype').value,quantize:document.getElementById('s-llm-quantize').value,kv_cache_sessions:document.getElementById('s-llm-kvs').value,kv_cache_ttl:document.getElementById('s-llm-kvt').value,device:document.getElementById('dev-llm').value},
+    llm:{model:document.getElementById('s-llm-model').value,backend:document.getElementById('s-llm-backend').value,dtype:document.getElementById('s-llm-dtype').value,quantize:document.getElementById('s-llm-quantize').value,n_ctx:document.getElementById('s-llm-nctx').value,n_gpu_layers:document.getElementById('s-llm-ngpu').value,kv_cache_sessions:document.getElementById('s-llm-kvs').value,kv_cache_ttl:document.getElementById('s-llm-kvt').value,device:document.getElementById('dev-llm').value},
     tts:{voices_dir:document.getElementById('s-tts-dir').value,cache_size:document.getElementById('s-tts-cache').value},
     vision:{model:document.getElementById('s-vision-model').value,device:document.getElementById('dev-vision').value},
     imagegen:{model:document.getElementById('s-imagegen-model').value,default_steps:document.getElementById('s-imagegen-steps').value,default_cfg:document.getElementById('s-imagegen-cfg').value,device:document.getElementById('dev-imagegen').value},
@@ -2420,6 +2859,25 @@ def resolve_services(args) -> list[str]:
     return services
 
 
+def _detect_llm_backend(model_path: str) -> str:
+    """Auto-detect best LLM backend based on model format."""
+    model_lower = model_path.lower()
+    # Explicit GGUF file or repo::file.gguf syntax
+    if model_lower.endswith(".gguf") or "::" in model_path:
+        return "llamacpp"
+    # Local file (assumed GGUF)
+    if os.path.isfile(model_path):
+        return "llamacpp"
+    # HF repo name contains GGUF
+    if "gguf" in model_lower:
+        return "llamacpp"
+    # BnB / quantization format indicators -> needs transformers
+    if any(hint in model_lower for hint in ("bnb", "4bit", "8bit", "gptq", "awq")):
+        return "transformers"
+    # Default: transformers (handles the widest range of HF models)
+    return "transformers"
+
+
 def _load_single_service(name: str, args):
     cfg = _active_config or load_config()
     if name == "stt":
@@ -2434,9 +2892,25 @@ def _load_single_service(name: str, args):
         kvs = cfg.getint("llm", "kv_cache_sessions", fallback=2)
         kvt = cfg.getint("llm", "kv_cache_ttl", fallback=300)
         dev = resolve_service_device(cfg.get("llm", "device", fallback="auto"))
-        quant = cfg.get("llm", "quantize", fallback="none")
-        SERVICES["llm"] = LLMService(model_name=args.llm_model, dtype=args.llm_dtype,
-                                      quantize=quant, kv_cache_sessions=kvs, kv_cache_ttl=kvt, device=dev)
+        backend = cfg.get("llm", "backend", fallback="auto")
+        n_ctx = cfg.getint("llm", "n_ctx", fallback=4096)
+        n_gpu = cfg.getint("llm", "n_gpu_layers", fallback=-1)
+        n_batch = cfg.getint("llm", "n_batch", fallback=2048)
+        flash_attn = cfg.getboolean("llm", "flash_attn", fallback=True)
+
+        if backend == "auto":
+            backend = _detect_llm_backend(args.llm_model)
+            log.info(f"LLM backend auto-detected: {backend}")
+
+        if backend == "llamacpp":
+            SERVICES["llm"] = LlamaCppService(
+                model_path=args.llm_model, n_ctx=n_ctx, n_gpu_layers=n_gpu,
+                n_batch=n_batch, flash_attn=flash_attn,
+                kv_cache_sessions=kvs, kv_cache_ttl=kvt)
+        else:
+            quant = cfg.get("llm", "quantize", fallback="none")
+            SERVICES["llm"] = LLMService(model_name=args.llm_model, dtype=args.llm_dtype,
+                                          quantize=quant, kv_cache_sessions=kvs, kv_cache_ttl=kvt, device=dev)
     elif name == "vision":
         dev = resolve_service_device(cfg.get("vision", "device", fallback="auto"))
         SERVICES["vision"] = VisionService(model_name=args.vision_model, device=dev)
@@ -2448,12 +2922,39 @@ def _load_single_service(name: str, args):
         SERVICES["embeddings"] = EmbeddingsService(model_name=args.embeddings_model, device=dev)
 
 
+_SERVICE_PACKAGES = {
+    "stt":        ["faster-whisper>=1.0.0"],
+    "tts":        ["piper-tts>=1.2.0"],
+    "imagegen":   ["diffusers>=0.27.0"],
+    "embeddings": ["sentence-transformers>=2.2.0"],
+}
+
+def _try_install_service_deps(name: str) -> bool:
+    """Auto-install missing packages for a service. Returns True if something was installed."""
+    import subprocess as _sp
+    pkgs = _SERVICE_PACKAGES.get(name)
+    if not pkgs:
+        return False
+    log.info(f"Installing missing packages for {name.upper()}: {', '.join(pkgs)}")
+    rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet"] + pkgs)
+    return rc == 0
+
 def load_services(args):
     to_load = resolve_services(args)
     log.info(f"Services to load: {', '.join(s.upper() for s in to_load)}")
     for name in to_load:
         try:
             _load_single_service(name, args)
+        except (ImportError, ModuleNotFoundError):
+            # Missing package — try to auto-install and retry once
+            if _try_install_service_deps(name):
+                try:
+                    _load_single_service(name, args)
+                    continue
+                except Exception:
+                    pass
+            log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
+            log.warning(f"Continuing without {name.upper()}")
         except Exception:
             log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
             log.warning(f"Continuing without {name.upper()}")
@@ -2485,7 +2986,11 @@ def _shutdown_handler(signum, frame):
 # Main
 # ===================================================================
 if __name__ == "__main__":
-    print(BANNER)
+    try:
+        print(BANNER)
+    except UnicodeEncodeError:
+        print("[ TARS-AI SERVER MODULE v2.0 ]")
+        print("=" * 37)
     args = parse_args()
     _LAUNCH_ARGS = args
     _LLM_SEMAPHORE = asyncio.Semaphore(1)
