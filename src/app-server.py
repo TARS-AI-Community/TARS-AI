@@ -2881,6 +2881,11 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
 .save-status.ok{color:var(--green)}.save-status.err{color:var(--red)}
 .hint{font-size:10px;color:var(--text-dim);margin-top:2px}
 .section-note{font-size:11px;color:var(--text-dim);margin-bottom:10px}
+.info-i{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--cyan-dim);color:var(--cyan);font-family:var(--font-body);font-size:11px;font-weight:700;font-style:italic;cursor:help;flex-shrink:0;position:relative;opacity:.7;transition:opacity .2s}
+.info-i:hover{opacity:1}
+.info-i .tip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);width:280px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border-hi);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:11px;font-style:normal;font-weight:400;color:var(--text);line-height:1.5;z-index:100;box-shadow:0 8px 32px rgba(0,0,0,0.5);pointer-events:none;white-space:normal}
+.info-i:hover .tip{display:block}
+.info-i .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--border-hi)}
 .nav-links{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
 .nav-links a{font-family:var(--font-hud);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:var(--radius-sm);color:var(--cyan);text-decoration:none;transition:all .25s}
 .nav-links a:hover{background:rgba(0,229,255,0.12);border-color:var(--border-hi)}
@@ -2896,7 +2901,7 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
 <div class="glass">
   <h2>Access &amp; Security</h2>
   <div class="form-row">
-    <label>API Key</label>
+    <label>API Key <span class="info-i">i<span class="tip">Bearer token required for all API requests. Auto-generated on first boot. Copy this to your TARS RPi .env file as EXTERNAL_API_KEY so it can authenticate with this server.</span></span></label>
     <input type="password" id="s-apikey" placeholder="auto-generated on first boot">
     <button class="hud-btn-sm" onclick="const i=document.getElementById('s-apikey');i.type=i.type==='password'?'text':'password'">Show</button>
   </div>
@@ -2906,16 +2911,16 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
 <!-- Services & Devices -->
 <div class="glass">
   <h2>Services &amp; Devices</h2>
-  <div class="section-note">Enable/disable services and choose CPU or GPU per service. Restart required.</div>
+  <div class="section-note">Enable/disable services and choose CPU or GPU per service. Restart required. <span class="info-i">i<span class="tip">Each service runs independently. Disable unused services to save GPU memory and speed up startup. Device 'auto' uses GPU if available, falls back to CPU.</span></span></div>
   <table>
     <thead><tr><th>Service</th><th>Enabled</th><th>Device</th></tr></thead>
     <tbody>
-      <tr><td class="svc-name">STT</td><td><input type="checkbox" id="svc-stt"></td><td><select id="dev-stt"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
-      <tr><td class="svc-name">TTS</td><td><input type="checkbox" id="svc-tts"></td><td><span style="color:var(--text-dim);font-size:11px">CPU only (Piper ONNX)</span></td></tr>
-      <tr><td class="svc-name">LLM</td><td><input type="checkbox" id="svc-llm"></td><td><select id="dev-llm"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
-      <tr><td class="svc-name">Vision</td><td><input type="checkbox" id="svc-vision"></td><td><select id="dev-vision"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
-      <tr><td class="svc-name">ImageGen</td><td><input type="checkbox" id="svc-imagegen"></td><td><select id="dev-imagegen"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
-      <tr><td class="svc-name">Embeddings</td><td><input type="checkbox" id="svc-embeddings"></td><td><select id="dev-embeddings"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">STT <span class="info-i">i<span class="tip">Speech-to-Text: Transcribes audio to text using Faster-Whisper. Your TARS RPi sends recorded audio here for transcription.</span></span></td><td><input type="checkbox" id="svc-stt"></td><td><select id="dev-stt"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">TTS <span class="info-i">i<span class="tip">Text-to-Speech: Converts text to spoken audio using Piper ONNX voices. Runs on CPU only. Supports response caching for instant repeat playback.</span></span></td><td><input type="checkbox" id="svc-tts"></td><td><span style="color:var(--text-dim);font-size:11px">CPU only (Piper ONNX)</span></td></tr>
+      <tr><td class="svc-name">LLM <span class="info-i">i<span class="tip">Large Language Model: Runs a local AI model for chat responses. Supports HuggingFace transformers or llama.cpp GGUF models. Most GPU-intensive service.</span></span></td><td><input type="checkbox" id="svc-llm"></td><td><select id="dev-llm"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">Vision <span class="info-i">i<span class="tip">Image captioning: Analyzes images and generates text descriptions. Supports BLIP, BLIP-2, Moondream, Florence-2, and other HuggingFace vision models.</span></span></td><td><input type="checkbox" id="svc-vision"></td><td><select id="dev-vision"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">ImageGen <span class="info-i">i<span class="tip">Image generation: Creates images from text prompts using Stable Diffusion. Very GPU-intensive — requires significant VRAM.</span></span></td><td><input type="checkbox" id="svc-imagegen"></td><td><select id="dev-imagegen"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">Embeddings <span class="info-i">i<span class="tip">Text embeddings: Converts text into numerical vectors for semantic search. Used by TARS memory system (RAG). Lightweight — works well on CPU.</span></span></td><td><input type="checkbox" id="svc-embeddings"></td><td><select id="dev-embeddings"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
     </tbody>
   </table>
 </div>
@@ -2925,55 +2930,55 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
     <!-- Server -->
     <div class="glass">
       <h2>Server</h2>
-      <div class="form-row"><label>Port</label><input type="number" id="s-port"></div>
+      <div class="form-row"><label>Port <span class="info-i">i<span class="tip">Network port the server listens on. Default is 5678. Make sure this matches the port in your TARS RPi configuration URLs (e.g. http://server-ip:5678).</span></span></label><input type="number" id="s-port"></div>
     </div>
     <!-- STT Config -->
     <div class="glass">
       <h2>STT Configuration</h2>
-      <div class="form-row"><label>Whisper Model</label><select id="s-stt-model"><option>tiny</option><option>base</option><option>small</option><option>medium</option><option>large-v2</option><option>large-v3</option></select></div>
-      <div class="form-row"><label>Compute Type</label><select id="s-stt-compute"><option>auto</option><option>float16</option><option>int8</option><option>int8_float16</option><option>float32</option></select></div>
-      <div class="form-row"><label>VAD Pre-filter</label><input type="checkbox" id="s-stt-vad"></div>
+      <div class="form-row"><label>Whisper Model <span class="info-i">i<span class="tip">Larger models are more accurate but use more memory and are slower. 'large-v3' is best for accuracy, 'base' or 'small' for lower-resource systems. Model is downloaded automatically on first use.</span></span></label><select id="s-stt-model"><option>tiny</option><option>base</option><option>small</option><option>medium</option><option>large-v2</option><option>large-v3</option></select></div>
+      <div class="form-row"><label>Compute Type <span class="info-i">i<span class="tip">Precision for inference. 'auto' picks the best for your hardware. 'float16' is fast on GPU, 'int8' uses less memory, 'int8_float16' balances both, 'float32' is most compatible but slowest.</span></span></label><select id="s-stt-compute"><option>auto</option><option>float16</option><option>int8</option><option>int8_float16</option><option>float32</option></select></div>
+      <div class="form-row"><label>VAD Pre-filter <span class="info-i">i<span class="tip">Voice Activity Detection. Skips silent audio chunks before running Whisper, reducing unnecessary processing and improving speed. Recommended ON.</span></span></label><input type="checkbox" id="s-stt-vad"></div>
     </div>
     <!-- LLM Config -->
     <div class="glass">
       <h2>LLM Configuration</h2>
-      <div class="form-row"><label>Backend</label><select id="s-llm-backend" onchange="toggleLlmBackend()"><option value="transformers">transformers (HuggingFace)</option><option value="llamacpp">llamacpp (GGUF — fast)</option></select></div>
-      <div class="form-row"><label id="s-llm-model-lbl">Model</label><input type="text" id="s-llm-model"></div>
+      <div class="form-row"><label>Backend <span class="info-i">i<span class="tip">'transformers' loads HuggingFace models with GPU acceleration and optional quantization. 'llamacpp' loads pre-quantized GGUF files — very fast and memory efficient.</span></span></label><select id="s-llm-backend" onchange="toggleLlmBackend()"><option value="transformers">transformers (HuggingFace)</option><option value="llamacpp">llamacpp (GGUF — fast)</option></select></div>
+      <div class="form-row"><label id="s-llm-model-lbl">Model <span class="info-i">i<span class="tip">For transformers: a HuggingFace model ID (e.g. 'Qwen/Qwen3-4B'). For llamacpp: path to a .gguf file. Model is downloaded automatically on first use.</span></span></label><input type="text" id="s-llm-model"></div>
       <div id="llm-transformers-opts">
-        <div class="form-row"><label>dtype</label><select id="s-llm-dtype"><option>auto</option><option>float16</option><option>bfloat16</option><option>float32</option></select></div>
-        <div class="form-row"><label>Quantize</label><select id="s-llm-quantize"><option value="none">none</option><option value="4bit">4-bit (fastest, needs bitsandbytes)</option><option value="8bit">8-bit (balanced, needs bitsandbytes)</option></select></div>
+        <div class="form-row"><label>dtype <span class="info-i">i<span class="tip">Model precision. 'auto' picks the best for your GPU. 'float16' for most GPUs, 'bfloat16' for newer GPUs (Ampere+, RTX 30/40 series), 'float32' for CPU-only (slowest).</span></span></label><select id="s-llm-dtype"><option>auto</option><option>float16</option><option>bfloat16</option><option>float32</option></select></div>
+        <div class="form-row"><label>Quantize <span class="info-i">i<span class="tip">Reduces model size and memory usage. '4-bit' is smallest and fastest (requires bitsandbytes). '8-bit' is a balanced middle ground. 'none' loads at full precision — best quality but most VRAM.</span></span></label><select id="s-llm-quantize"><option value="none">none</option><option value="4bit">4-bit (fastest, needs bitsandbytes)</option><option value="8bit">8-bit (balanced, needs bitsandbytes)</option></select></div>
       </div>
       <div id="llm-llamacpp-opts" style="display:none">
-        <div class="form-row"><label>Context Length</label><input type="number" id="s-llm-nctx" min="512" step="512"></div>
-        <div class="form-row"><label>GPU Layers</label><input type="number" id="s-llm-ngpu" min="-1"></div>
+        <div class="form-row"><label>Context Length <span class="info-i">i<span class="tip">Maximum tokens the model can process at once. Higher values allow longer conversations but use more memory. 4096 is a good default, increase if conversations get cut off.</span></span></label><input type="number" id="s-llm-nctx" min="512" step="512"></div>
+        <div class="form-row"><label>GPU Layers <span class="info-i">i<span class="tip">Number of model layers to offload to GPU. -1 = all layers on GPU (fastest). 0 = CPU only. Reduce if you run out of VRAM — each layer freed saves memory at the cost of speed.</span></span></label><input type="number" id="s-llm-ngpu" min="-1"></div>
       </div>
-      <div class="form-row"><label>KV Cache Sessions</label><input type="number" id="s-llm-kvs"></div>
-      <div class="form-row"><label>KV Cache TTL (sec)</label><input type="number" id="s-llm-kvt"></div>
+      <div class="form-row"><label>KV Cache Sessions <span class="info-i">i<span class="tip">Number of conversation contexts to keep cached in memory. Each session preserves the conversation state so follow-up requests are faster. Higher values use more RAM/VRAM.</span></span></label><input type="number" id="s-llm-kvs"></div>
+      <div class="form-row"><label>KV Cache TTL (sec) <span class="info-i">i<span class="tip">Seconds before an idle cached session expires and is freed from memory. Default 300 (5 minutes). Set higher if conversations have long pauses between messages.</span></span></label><input type="number" id="s-llm-kvt"></div>
     </div>
   </div>
   <div>
     <!-- TTS Config -->
     <div class="glass">
       <h2>TTS Configuration</h2>
-      <div class="form-row"><label>Voice Model</label><select id="s-tts-voice"><option value="">Loading...</option></select></div>
-      <div class="form-row"><label>Cache Size</label><input type="number" id="s-tts-cache"></div>
+      <div class="form-row"><label>Voice Model <span class="info-i">i<span class="tip">Piper ONNX voice to use for speech synthesis. Place .onnx voice files in the voices directory to add more options. The default TARS voice is downloaded automatically.</span></span></label><select id="s-tts-voice"><option value="">Loading...</option></select></div>
+      <div class="form-row"><label>Cache Size <span class="info-i">i<span class="tip">Number of generated audio clips to keep cached in memory. Cached responses are served instantly on repeat requests. Higher values use more RAM but improve response time for repeated phrases.</span></span></label><input type="number" id="s-tts-cache"></div>
     </div>
     <!-- Vision Config -->
     <div class="glass">
       <h2>Vision Configuration</h2>
-      <div class="form-row"><label>Model <span style="opacity:.5;font-size:11px">(BLIP, BLIP-2, Moondream, Florence-2, or any HF vision model)</span></label><input type="text" id="s-vision-model"></div>
+      <div class="form-row"><label>Model <span class="info-i">i<span class="tip">HuggingFace model ID for image captioning. Supports BLIP, BLIP-2, Moondream, Florence-2, or any compatible vision model. Downloaded automatically on first use. Larger models give better descriptions but use more VRAM.</span></span></label><input type="text" id="s-vision-model"></div>
     </div>
     <!-- ImageGen Config -->
     <div class="glass">
       <h2>ImageGen Configuration</h2>
-      <div class="form-row"><label>Diffusers Model</label><input type="text" id="s-imagegen-model"></div>
-      <div class="form-row"><label>Default Steps</label><input type="number" id="s-imagegen-steps"></div>
-      <div class="form-row"><label>Default CFG</label><input type="number" id="s-imagegen-cfg" step="0.1"></div>
+      <div class="form-row"><label>Diffusers Model <span class="info-i">i<span class="tip">HuggingFace model ID for image generation (e.g. 'stabilityai/stable-diffusion-xl-base-1.0'). Downloaded automatically on first use. Requires significant VRAM (4-8+ GB).</span></span></label><input type="text" id="s-imagegen-model"></div>
+      <div class="form-row"><label>Default Steps <span class="info-i">i<span class="tip">Number of diffusion steps per image. More steps = higher quality but slower generation. 20-30 is typical for good results. Can be overridden per request via the API.</span></span></label><input type="number" id="s-imagegen-steps"></div>
+      <div class="form-row"><label>Default CFG <span class="info-i">i<span class="tip">Classifier-free guidance scale. Higher values follow the text prompt more closely but can look artificial. Lower values are more creative but may drift from the prompt. 7-8 is a good default.</span></span></label><input type="number" id="s-imagegen-cfg" step="0.1"></div>
     </div>
     <!-- Embeddings Config -->
     <div class="glass">
       <h2>Embeddings Configuration</h2>
-      <div class="form-row"><label>Model</label><input type="text" id="s-embeddings-model"></div>
+      <div class="form-row"><label>Model <span class="info-i">i<span class="tip">Sentence-transformers model for generating text embeddings. Used by TARS memory system for semantic search and similarity matching. The default 'all-MiniLM-L6-v2' is lightweight and fast. Changing this requires rebuilding memory databases.</span></span></label><input type="text" id="s-embeddings-model"></div>
     </div>
   </div>
 </div>
