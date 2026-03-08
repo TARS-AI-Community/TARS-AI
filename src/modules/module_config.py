@@ -879,7 +879,7 @@ CONFIG_METADATA = {
             'label': 'Embedding Source',
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'options': ['local', 'openai', 'external'],
-            'description': 'Where to generate text embeddings for memory search. "local" runs the embedding model on this device (uses ~500MB RAM). "openai" uses the OpenAI Embeddings API (requires OPENAI_API_KEY, uses text-embedding-3-small). "external" sends text to your TARS app-server instance to generate embeddings — much faster and frees up resources on the Pi.'
+            'description': 'Where to generate text embeddings for memory search. "local" runs the embedding model on this device (uses ~500MB RAM). "openai" uses the OpenAI Embeddings API (requires OPENAI_API_KEY, uses text-embedding-3-small). "external" sends text to your TARS app-server instance to generate embeddings — much faster and frees up resources on the Pi. WARNING: If you switch between sources (e.g. local to openai), the existing memory database will have vectors of the wrong size (local=384 dimensions, openai=1536) and you will need to rebuild it. Same applies to external — dimensions depend on what model the app-server is running.'
         },
         'embedding_url': {
             'label': 'Embedding Server URL',
