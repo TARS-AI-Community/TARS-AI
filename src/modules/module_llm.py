@@ -308,7 +308,7 @@ def process_completion(prompt, image_b64=None):
 
         response = requests.post(url, headers=headers, json=data, stream=True)
         response.raise_for_status()
-        _t_first_byte = time.perf_counter()
+        _t_first_byte = None
 
         full_content = ""
         _extractor = _ReplyExtractor()
@@ -327,6 +327,8 @@ def process_completion(prompt, image_b64=None):
                     token = chunk['choices'][0]['delta'].get('content', '')
                     if not token:
                         continue
+                    if _t_first_byte is None:
+                        _t_first_byte = time.perf_counter()
                     full_content += token
                     # Extract visible reply text and invoke callback if set
                     cb = _reply_chunk_callback
@@ -344,6 +346,8 @@ def process_completion(prompt, image_b64=None):
         except Exception:
             pass
         _t_llm_done = time.perf_counter()
+        if _t_first_byte is None:
+            _t_first_byte = _t_prompt  # no tokens received
 
         if not full_content.strip():
             try:

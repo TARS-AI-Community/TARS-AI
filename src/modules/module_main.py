@@ -327,6 +327,7 @@ def utterance_callback(message):
 
         # Handle side effects (vision/search/photo run inline, others in background)
         _followup_reply = None
+        tools_dur = 0
         if not isinstance(parsed, str):
             func_calls = parsed.get("function_calls", [])
             new_mems = parsed.get("new_memories", [])
@@ -337,7 +338,9 @@ def utterance_callback(message):
             )
             if has_blocking_tool:
                 queue_message(f"DEBUG VOICE: Running blocking side effects inline")
+                speed.start('tools')
                 llm_execute_side_effects(parsed, user_text)
+                tools_dur = speed.stop('tools')
                 # Check if side effects updated the reply (e.g. vision result, search summary)
                 updated_reply = parsed.get("reply", "") or ""
                 if updated_reply and updated_reply != reply:
@@ -376,6 +379,7 @@ def utterance_callback(message):
 
         # Speak follow-up if side effects produced new content (vision result, search summary)
         queue_message(f"DEBUG VOICE: followup_reply={'yes' if _followup_reply else 'no'}, was_interrupted={was_interrupted}")
+        followup_tts_dur = 0
         if _followup_reply and not was_interrupted:
             followup_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', _followup_reply)
             # Update OpenGL UI with follow-up content
@@ -383,7 +387,9 @@ def utterance_callback(message):
             ui_manager.set_tars_status("TALKING")
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=followup_clean)
+            speed.start('followup_tts')
             was_interrupted = asyncio.run(play_audio_chunks(followup_clean, CONFIG['TTS']['ttsoption']))
+            followup_tts_dur = speed.stop('followup_tts')
             if stt_manager:
                 stt_manager.stop_bargein_monitor()
             reply = _followup_reply  # Update for web UI display
@@ -443,6 +449,10 @@ def utterance_callback(message):
                 sp.append(f"llm_total({speed.fmt(llm_total_dur)})")
             sp.append(f"emotion({speed.fmt(emo_dur)})")
             sp.append(f"tts({speed.fmt(pipeline.duration)})")
+            if tools_dur:
+                sp.append(f"tools({speed.fmt(tools_dur)})")
+            if followup_tts_dur:
+                sp.append(f"followup_tts({speed.fmt(followup_tts_dur)})")
             sp.append(f"total({speed.fmt(total_dur)})")
             queue_message(f"SPEED: {', '.join(sp)}")
 
