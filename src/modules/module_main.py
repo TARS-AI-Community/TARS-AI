@@ -378,6 +378,8 @@ def utterance_callback(message):
         queue_message(f"DEBUG VOICE: followup_reply={'yes' if _followup_reply else 'no'}, was_interrupted={was_interrupted}")
         if _followup_reply and not was_interrupted:
             followup_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', _followup_reply)
+            # Update OpenGL UI with follow-up content
+            ui_manager.update_streaming_data(_followup_reply)
             ui_manager.set_tars_status("TALKING")
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=followup_clean)

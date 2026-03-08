@@ -213,8 +213,8 @@ class STTManager:
         self._bargein_broad_threshold = 0.80 - t * 0.10   # 0.80 (sens=1) to 0.70 (sens=10)
         self._bargein_min_novel = 3 if sensitivity <= 3 else 2
         # Voiceprint mode: higher sensitivity = lower confidence required to match
-        # Bleed scores 0.50-0.55, mixed voice+bleed scores 0.58-0.82
-        self._bargein_voiceprint_threshold = 0.95 - t * 0.45  # 0.95 (sens=1) to 0.50 (sens=10)
+        # Bleed scores 0.50-0.65, mixed voice+bleed scores 0.58-0.82
+        self._bargein_voiceprint_threshold = 0.90 - t * 0.25  # 0.90 (sens=1) to 0.65 (sens=10)
 
         # Last recorded audio for speaker ID (set by transcription backends)
         self._last_audio_float32 = None
