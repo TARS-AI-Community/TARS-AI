@@ -105,9 +105,9 @@ silence_margin = 3.0
 [TTS]
 # Use voice settings from character card instead of settings above
 toggle_charvoice = True
-# TTS engine: espeak | piper | silero | elevenlabs | openai | other
+# TTS engine: espeak | piper | silero | elevenlabs | openai | other | external
 ttsoption = piper
-# External TTS server URL (ttsoption = other only)
+# External TTS server URL (ttsoption = other or external)
 ttsurl =
 # Voice name/ID for external TTS server
 tts_voice =
