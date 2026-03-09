@@ -370,7 +370,7 @@ document.addEventListener('DOMContentLoaded', function () {
       _streamRow = null;
       _streamText = null;
     } else {
-      if (d.message) displayBotMessage(d.message);
+      if (d.message) displayBotMessage(d.message, false, d.audio_streamed);
     }
   });
 
@@ -429,7 +429,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch('/process_llm', { method: 'POST', body: fd }).catch(console.error);
   }
 
-  function displayBotMessage(message, isTyping = false) {
+  function displayBotMessage(message, isTyping = false, audioStreamed = false) {
     const chatBody = document.querySelector('.chat-messages');
     const row = document.createElement('div');
     row.className = 'msg-row msg-bot';
@@ -448,7 +448,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     chatBody.appendChild(row);
     chatBody.scrollTop = chatBody.scrollHeight;
-    if (!isTyping) startAudioStream();
+    if (!isTyping && !audioStreamed) startAudioStream();
   }
 
   function removeTypingMessage() {

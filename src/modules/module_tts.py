@@ -230,7 +230,9 @@ class SentenceTTSPipeline:
     """
 
     _SENT_RE = _re.compile(r'(?<=[.!?])\s+')
+    _CLAUSE_RE = _re.compile(r'(?<=[.!?;:,])\s+')
     _MIN_SENT = 20
+    _MIN_CLAUSE = 12      # ~3 words; first chunk only for lower latency
 
     def __init__(self, tts_option, sanitize=None, on_first_play=None, play_func=None):
         self._tts_option = tts_option
@@ -241,6 +243,7 @@ class SentenceTTSPipeline:
         self._play_func = play_func
         self._queue = _queue.Queue()
         self._remainder = ''
+        self._first_queued = False
         self._interrupted = False
         self._duration = 0.0
         self._thread = None
@@ -286,21 +289,37 @@ class SentenceTTSPipeline:
         return self._duration
 
     def _extract_sentences(self, text):
-        """Split text at sentence boundaries, queue complete sentences, return remainder."""
+        """Split text at boundaries, queue complete chunks, return remainder.
+
+        First chunk splits at clause boundaries (,;:) with a shorter
+        threshold for lower initial latency.  Subsequent chunks use full
+        sentence boundaries (.!?) for better prosody.
+        """
         while True:
             pos = 0
             m = None
-            while True:
-                m = self._SENT_RE.search(text, pos)
-                if not m or m.start() >= self._MIN_SENT:
-                    break
-                pos = m.end()
+            if self._first_queued:
+                # Sentence boundaries for subsequent chunks
+                while True:
+                    m = self._SENT_RE.search(text, pos)
+                    if not m or m.start() >= self._MIN_SENT:
+                        break
+                    pos = m.end()
+            else:
+                # Clause boundaries for first chunk (lower latency)
+                while True:
+                    m = self._CLAUSE_RE.search(text, pos)
+                    if not m or m.start() >= self._MIN_CLAUSE:
+                        break
+                    pos = m.end()
             if not m:
                 break
             sentence = self._sanitize(text[:m.start() + 1])
             text = text[m.end():]
             if sentence:
                 self._queue.put(sentence)
+                if not self._first_queued:
+                    self._first_queued = True
         return text
 
     def _worker(self):
