@@ -234,9 +234,14 @@ def _prepare_request_data(llm_backend, prompt, image_b64=None):
         "max_tokens": CONFIG['LLM']['max_tokens'],
         "temperature": CONFIG['LLM']['temperature'],
         "top_p": CONFIG['LLM']['top_p'],
-        "response_format": {"type": "json_object"},
         "stream": True
     }
+
+    if llm_backend in ["openai", "grok", "deepinfra"]:
+        data["response_format"] = {"type": "json_object"}
+    else:
+        if CONFIG['LLM'].get('json_mode', True):
+            data["response_format"] = {"type": "json_object"}  
 
     return url, data
 
@@ -311,6 +316,7 @@ def process_completion(prompt, image_b64=None):
         _t_first_byte = None
 
         full_content = ""
+        _token_count = 0
         _extractor = _ReplyExtractor()
         try:
             for line in response.iter_lines():
@@ -330,6 +336,7 @@ def process_completion(prompt, image_b64=None):
                     if _t_first_byte is None:
                         _t_first_byte = time.perf_counter()
                     full_content += token
+                    _token_count += 1
                     # Extract visible reply text and invoke callback if set
                     cb = _reply_chunk_callback
                     if cb is not None:
@@ -374,6 +381,7 @@ def process_completion(prompt, image_b64=None):
                 'llm_first_byte': _t_first_byte - _t_prompt,
                 'llm_stream': _t_llm_done - _t_first_byte,
                 'parse': _t_parse - _t_llm_done,
+                'token_count': _token_count,
             }
         return result
 

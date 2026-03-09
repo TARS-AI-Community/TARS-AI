@@ -413,6 +413,7 @@ def load_config():
             "seed": int(config['LLM']['seed']),
             "temperature": float(config['LLM']['temperature']),
             "top_p": float(config['LLM']['top_p']),
+            "json_mode": config.getboolean('LLM', 'json_mode', fallback=True),
             "override_encoding_model": config['LLM']['override_encoding_model'],
             "api_key": get_api_key(config['LLM']['llm_backend']),
         },
@@ -664,6 +665,11 @@ CONFIG_METADATA = {
             'label': 'model',
             'depends_on': [{'field': 'llm_backend', 'values': ['other']}],
             'description': 'The model identifier sent to your custom OpenAI-compatible endpoint. The exact format depends on the service you are using. Featherless.ai: use the full HuggingFace path like "meta-llama/Meta-Llama-3.1-8B-Instruct". Ollama: use just the model name you pulled, like "llama3.1:8b" or "qwen2.5:3b". LM Studio: use the model name shown in the app. OpenRouter: use the provider/model format like "mistralai/mistral-7b-instruct". If you get a 404 or "model not found" error, check that the model name exactly matches what your server expects.'
+        },
+        'json_mode': {
+            'label': 'JSON Mode',
+            'depends_on': [{'field': 'llm_backend', 'values': ['other']}],
+            'description': 'When ON, TARS tells the AI to respond in structured JSON format using the API\'s response_format parameter. Turn OFF if your backend doesn\'t support it (like LM Studio or Ollama) — you\'ll see a 400 Bad Request error if unsupported. TARS will still work without it since the system prompt already asks for JSON, but responses may occasionally need more repair. OpenAI, Grok, and DeepInfra always use JSON mode regardless of this setting.'
         },
         'grok_model': {
             'depends_on': [{'field': 'llm_backend', 'values': ['grok']}],
