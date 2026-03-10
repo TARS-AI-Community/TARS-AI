@@ -170,6 +170,108 @@ def handle_connect():
 def handle_disconnect():
     pass
 
+@socketio.on('client_debug')
+def handle_client_debug(msg):
+    queue_message(f"[BROWSER] {msg}")
+
+@socketio.on('browser_audio')
+def handle_browser_audio(data):
+    """Receive audio from browser, transcribe with local STT (sherpa-onnx) or OpenAI Whisper."""
+    import numpy as np
+    try:
+        audio_b64 = data.get('audio', '') if isinstance(data, dict) else ''
+        if not audio_b64:
+            socketio.emit('browser_transcription', {'text': '', 'error': 'No audio data'})
+            return
+
+        audio_bytes = base64.b64decode(audio_b64)
+        if len(audio_bytes) < 1000:
+            socketio.emit('browser_transcription', {'text': ''})
+            return
+
+        sample_rate = int(data.get('sample_rate', 16000))
+
+        # Check RMS — reject silence
+        audio_np = np.frombuffer(audio_bytes, dtype=np.int16)
+        rms = np.sqrt(np.mean(audio_np.astype(np.float64) ** 2))
+        if rms < 200:
+            socketio.emit('browser_transcription', {'text': ''})
+            return
+
+        # Try local STT first (sherpa-onnx via the existing STTManager)
+        text = _browser_transcribe_local(audio_np, sample_rate)
+
+        # Fall back to OpenAI Whisper if local STT unavailable
+        if text is None:
+            text = _browser_transcribe_openai(audio_bytes, sample_rate)
+
+        if text is None:
+            socketio.emit('browser_transcription', {'text': '', 'error': 'No STT backend available (no local sherpa-onnx and no OPENAI_API_KEY)'})
+            return
+
+        text = text.strip()
+        if text:
+            queue_message(f"[BROWSER STT] {text}")
+        socketio.emit('browser_transcription', {'text': text})
+
+    except Exception as e:
+        queue_message(f"ERROR: browser_audio transcription failed: {e}")
+        socketio.emit('browser_transcription', {'text': '', 'error': str(e)})
+
+
+def _browser_transcribe_local(audio_np, sample_rate):
+    """Transcribe using the local STTManager's sherpa-onnx recognizer. Returns text or None."""
+    try:
+        from modules.module_main import stt_manager
+        if not stt_manager or not getattr(stt_manager, 'sherpa_recognizer', None):
+            return None
+        # _sherpa_transcribe_audio expects a list of int16 chunks
+        transcript = stt_manager._sherpa_transcribe_audio([audio_np], sample_rate=sample_rate)
+        return transcript if transcript else ''
+    except Exception as e:
+        queue_message(f"WARNING: Local STT failed for browser audio: {e}")
+        return None
+
+
+def _browser_transcribe_openai(audio_bytes, sample_rate):
+    """Transcribe using OpenAI Whisper API. Returns text or None if no API key."""
+    import tempfile, wave
+    api_key = CONFIG['TTS']['openai_api_key'] if 'TTS' in CONFIG else ''
+    if not api_key:
+        api_key = os.environ.get('OPENAI_API_KEY', '')
+    if not api_key:
+        return None
+
+    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+        tmp_path = tmp.name
+        with wave.open(tmp_path, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(audio_bytes)
+
+    from openai import OpenAI as _OAI
+    client = _OAI(api_key=api_key)
+    try:
+        with open(tmp_path, 'rb') as f:
+            response = client.audio.transcriptions.create(
+                model="whisper-1", file=f, response_format="verbose_json"
+            )
+    finally:
+        os.unlink(tmp_path)
+
+    # Reject high no_speech_prob
+    if hasattr(response, 'segments') and response.segments:
+        avg_no_speech = sum(
+            seg.get('no_speech_prob', 0) if isinstance(seg, dict)
+            else getattr(seg, 'no_speech_prob', 0)
+            for seg in response.segments
+        ) / len(response.segments)
+        if avg_no_speech > 0.5:
+            return ''
+
+    return response.text.strip() if hasattr(response, 'text') else ''
+
 @socketio.on('show_qr')
 def handle_show_qr(data):
     """Display QR code on the Pi screen overlay."""
@@ -253,6 +355,82 @@ def logout():
 @flask_app.route('/holo')
 def holo():
     return render_template('holo.html')
+
+@flask_app.route('/test/voice')
+def test_voice():
+    return render_template('test_voice.html')
+
+@flask_app.route('/test/voice_pipeline', methods=['GET', 'POST'])
+def test_voice_pipeline():
+    """Test the server-side audio transcription pipeline without a browser.
+
+    GET:  Generate a synthetic TTS audio clip and transcribe it (round-trip test).
+    POST: Accept raw audio (base64 PCM or WAV file) and transcribe it.
+
+    Returns JSON with the transcription result.
+    Testable via: curl http://localhost/test/voice_pipeline
+    """
+    import tempfile, wave, numpy as np
+
+    api_key = CONFIG['TTS']['openai_api_key'] if 'TTS' in CONFIG else ''
+    if not api_key:
+        api_key = os.environ.get('OPENAI_API_KEY', '')
+    if not api_key:
+        return jsonify({"status": "error", "message": "No OpenAI API key configured"}), 500
+
+    from openai import OpenAI as _OAI
+    client = _OAI(api_key=api_key)
+
+    if request.method == 'POST':
+        # Accept uploaded WAV file or base64 audio
+        file = request.files.get('file')
+        audio_b64 = request.form.get('audio', '')
+        if file:
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                tmp_path = tmp.name
+                file.save(tmp_path)
+        elif audio_b64:
+            audio_bytes = base64.b64decode(audio_b64)
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                tmp_path = tmp.name
+                with wave.open(tmp_path, 'wb') as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(16000)
+                    wf.writeframes(audio_bytes)
+        else:
+            return jsonify({"status": "error", "message": "No audio provided"}), 400
+    else:
+        # GET: Generate a test phrase with OpenAI TTS, then transcribe it
+        test_phrase = "Hello, this is a voice pipeline test."
+        queue_message(f"[TEST] Generating TTS for: {test_phrase}")
+        tts_response = client.audio.speech.create(
+            model="tts-1", voice="alloy", input=test_phrase,
+            response_format="wav"
+        )
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+            tmp_path = tmp.name
+            tmp.write(tts_response.content)
+
+    try:
+        with open(tmp_path, 'rb') as f:
+            response = client.audio.transcriptions.create(
+                model="whisper-1", file=f, response_format="verbose_json"
+            )
+        text = response.text.strip() if hasattr(response, 'text') else ''
+        queue_message(f"[TEST] Transcription result: {text}")
+        result = {"status": "success", "transcription": text}
+        if request.method == 'GET':
+            result["test_phrase"] = test_phrase
+            result["match"] = test_phrase.lower().rstrip('.') in text.lower()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
 
 @flask_app.route('/get_ip')
 def get_config_variable():
@@ -538,12 +716,13 @@ def _process_chat_message(msg, img_b64):
         else:
             reply = parsed or ""
 
-        # Only mark as streamed if tokens actually flowed through the pipeline
+        # Always mark as streamed so browser never falls back to legacy audio path
+        # (which doesn't properly restart voice mode mic)
         _audio_streamed = bool(_acc_raw[0])
 
         # Send the streamed reply (what the user already saw) — keeps original bubble
         latest_text_to_read = reply
-        socketio.emit('bot_message', {'message': reply or '', 'audio_streamed': _audio_streamed})
+        socketio.emit('bot_message', {'message': reply or '', 'audio_streamed': True})
 
         if CONFIG['EMOTION']['enabled'] and reply:
             detected = detect_emotion(reply)
@@ -567,13 +746,15 @@ def _process_chat_message(msg, img_b64):
             socketio.emit('bot_message', {'message': _followup_reply, 'audio_streamed': True})
             followup.join()
 
-        if _audio_streamed or (_reply_changed and _followup_reply):
-            socketio.emit('bot_audio_done', {})
-            socketio.emit('talking_state', {'talking': False})
+        # Always emit bot_audio_done so voice mode mic can restart
+        socketio.emit('bot_audio_done', {})
+        socketio.emit('talking_state', {'talking': False})
 
     except Exception as e:
         queue_message(f"ERROR: process_llm failed: {e}")
-        socketio.emit('bot_message', {'message': f'Error processing message: {e}'})
+        socketio.emit('bot_message', {'message': f'Error processing message: {e}', 'audio_streamed': True})
+        socketio.emit('bot_audio_done', {})
+        socketio.emit('talking_state', {'talking': False})
 
 @flask_app.route('/process_llm', methods=['POST'])
 def receive_user_message():

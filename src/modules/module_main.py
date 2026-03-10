@@ -401,9 +401,14 @@ def utterance_callback(message):
             ui_manager.set_tars_status("STANDBY")
 
         # Push final reply to web UI (finalizes streaming bubble or creates one for preemptive)
+        # Mark audio_streamed=True since audio was played on Pi speakers — prevents
+        # browser from also fetching legacy /audio_stream (double-play) and ensures
+        # voice mode mic restarts properly via bot_audio_done
         try:
             from modules.module_chatui import socketio
-            socketio.emit('bot_message', {'message': reply})
+            socketio.emit('bot_message', {'message': reply, 'audio_streamed': True})
+            socketio.emit('bot_audio_done', {})
+            socketio.emit('talking_state', {'talking': False})
         except Exception:
             pass
 
@@ -443,7 +448,13 @@ def utterance_callback(message):
                 if prompt_other > 0.001:
                     sp.append(f"prompt_other({speed.fmt(prompt_other)})")
                 sp.append(f"llm_wait({speed.fmt(llm_timings.get('llm_first_byte', 0))})")
-                sp.append(f"llm_stream({speed.fmt(llm_timings.get('llm_stream', 0))})")
+                llm_stream_dur = llm_timings.get('llm_stream', 0)
+                token_count = llm_timings.get('token_count', 0)
+                if token_count and llm_stream_dur > 0:
+                    tps = token_count / llm_stream_dur
+                    sp.append(f"llm_stream({speed.fmt(llm_stream_dur)}, {token_count}tok, {tps:.1f} t/s)")
+                else:
+                    sp.append(f"llm_stream({speed.fmt(llm_stream_dur)})")
                 sp.append(f"llm_parse({speed.fmt(llm_timings.get('parse', 0))})")
             else:
                 sp.append(f"llm_total({speed.fmt(llm_total_dur)})")
