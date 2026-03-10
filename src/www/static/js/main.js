@@ -5,6 +5,23 @@
 
 'use strict';
 
+// Forward debug logs to Python terminal via SocketIO (for phone testing)
+// Batches messages to avoid "Too many packets in payload" SocketIO errors
+let _dbgQueue = [];
+let _dbgTimer = null;
+function _dbg() {
+  const msg = Array.prototype.slice.call(arguments).join(' ');
+  console.log(msg);
+  _dbgQueue.push(msg);
+  if (!_dbgTimer) {
+    _dbgTimer = setTimeout(() => {
+      _dbgTimer = null;
+      const batch = _dbgQueue.splice(0);
+      try { if (window.socket) window.socket.emit('client_debug', batch.join('\n')); } catch(e) {}
+    }, 250);
+  }
+}
+
 // ── WIFI ────────────────────────────────────────────────────────────────────
 (function () {
   let wfSelected = null;
@@ -181,83 +198,156 @@ fetch('/avatar_sprites').then(r => r.json()).then(d => {
 
 // ── AUDIO ───────────────────────────────────────────────────────────────────
 let isMuted = true;
+let _audioUnlocked = false;
 
 function start_talking() { if (!isMuted) avatarIsTalking = true; }
 function stop_talking()  { avatarIsTalking = false; }
+
+// Unlock the <audio> element on first user gesture.
+// Chrome blocks play() on <audio> until a user gesture triggers play() at least once.
+function _unlockAudioElement() {
+  if (_audioUnlocked) return;
+  _audioUnlocked = true;
+  const el = $('audioPlayer');
+  if (!el) return;
+  const wav = new Uint8Array([
+    0x52,0x49,0x46,0x46, 0x26,0x00,0x00,0x00, 0x57,0x41,0x56,0x45,
+    0x66,0x6D,0x74,0x20, 0x10,0x00,0x00,0x00, 0x01,0x00,0x01,0x00,
+    0x44,0xAC,0x00,0x00, 0x88,0x58,0x01,0x00, 0x02,0x00,0x10,0x00,
+    0x64,0x61,0x74,0x61, 0x02,0x00,0x00,0x00, 0x00,0x00
+  ]);
+  const blob = new Blob([wav], { type: 'audio/wav' });
+  const url = URL.createObjectURL(blob);
+  el.muted = true;
+  el.src = url;
+  el.play().then(() => {
+    _dbg('[AUDIO] Audio element unlocked');
+    URL.revokeObjectURL(url);
+    el.muted = isMuted;
+    if (!_audioPlaying && _audioQueue.length) _playNextFromQueue();
+  }).catch(e => {
+    if (e.name !== 'AbortError') _audioUnlocked = false;
+    URL.revokeObjectURL(url);
+    _dbg('[AUDIO] Unlock:', e.name, e.message);
+  });
+}
+document.addEventListener('click', _unlockAudioElement);
+document.addEventListener('touchend', _unlockAudioElement);
+document.addEventListener('keydown', _unlockAudioElement);
+
+// Global audioPlayer reference (element exists in DOM before this script loads)
+const audioPlayer = $('audioPlayer');
+let audioStarted = false;
+
+// ── Audio state ──
+const _audioQueue = [];
+let _audioPlaying = false;
+let _audioDone = false;
+// True while bot is generating/playing audio (from bot_stream_start to all audio done)
+let _botResponding = false;
+// Voice mode state — set by DOMContentLoaded closure, read by audio pipeline
+let voiceActive = false;
+// Mic control functions — assigned by DOMContentLoaded closure
+let _micPause = function() {};
+let _micRestart = function() {};
+
+// Called when ALL bot audio finishes — restarts mic in voice mode
+function _fireAllAudioDone() {
+  _botResponding = false;
+  stop_talking();
+  _dbg('[AUDIO] All audio done | voiceActive:', voiceActive);
+  if (voiceActive) _micRestart();
+}
 
 document.addEventListener('DOMContentLoaded', function () {
   const audioPlayer = $('audioPlayer');
   const muteBtn = $('muteButton');
 
-  // Default to muted on load — use volume=0 so audio still plays through
-  // in real time (prevents queue buildup when muted)
-  audioPlayer.volume = 0;
-
   muteBtn.addEventListener('click', function () {
     const icon = this.querySelector('i');
+    isMuted = !isMuted;
+    audioPlayer.muted = isMuted;
     if (isMuted) {
-      audioPlayer.volume = 1;
-      icon.className = 'bi bi-volume-up-fill';
-      if (!audioPlayer.paused) start_talking();
-    } else {
-      audioPlayer.volume = 0;
       icon.className = 'bi bi-volume-mute-fill';
       stop_talking();
+    } else {
+      icon.className = 'bi bi-volume-up-fill';
+      _unlockAudioElement();
+      if (_audioPlaying) start_talking();
+      if (!_audioPlaying && _audioQueue.length) _playNextFromQueue();
     }
-    isMuted = !isMuted;
+  });
+
+  audioPlayer.addEventListener('ended', stop_talking);
+
+  // When phone app returns from background, reset stale audio state
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      if (_audioPlaying && audioPlayer.paused) {
+        _dbg('[DEBUG] Page resumed with stale _audioPlaying flag — resetting');
+        _audioPlaying = false;
+        audioStarted = false;
+        _playNextFromQueue();
+      }
+    }
   });
 });
 
-const audioPlayer = $('audioPlayer');
-if (audioPlayer) audioPlayer.addEventListener('ended', stop_talking);
-
-let audioStarted = false;
-
 // Legacy full-response audio (used for image uploads / non-streaming paths)
+function _legacyAudioDone() {
+  stop_talking();
+  audioStarted = false;
+  _fireAllAudioDone();
+}
+
 function startAudioStream() {
   if (audioStarted) return;
+  if (_audioQueue.length || _audioPlaying) return;
   audioStarted = true;
   fetch('/audio_stream').then(r => r.blob()).then(blob => {
-    if (!blob.size) { audioStarted = false; return; }
+    if (!blob.size) { _legacyAudioDone(); return; }
     const url = URL.createObjectURL(blob);
     audioPlayer.src = url; audioPlayer.load();
     audioPlayer.play().then(() => {
       start_talking();
       audioPlayer.onended = () => { URL.revokeObjectURL(url); setTimeout(playNextAudioChunk, 500); };
-    }).catch(e => { audioStarted = false; console.error(e); });
-  }).catch(e => { audioStarted = false; console.error(e); });
+    }).catch(e => { console.error(e); _legacyAudioDone(); });
+  }).catch(e => { console.error(e); _legacyAudioDone(); });
 }
 
 function playNextAudioChunk() {
   fetch('/get_next_audio_chunk').then(r => {
-    if (r.status === 204) { stop_talking(); audioStarted = false; return null; }
+    if (r.status === 204) { _legacyAudioDone(); return null; }
     return r.blob();
   }).then(blob => {
-    if (!blob) return;
+    if (!blob || !blob.size) { _legacyAudioDone(); return; }
     const url = URL.createObjectURL(blob);
     audioPlayer.src = url; audioPlayer.load();
     audioPlayer.play().then(() => {
       start_talking();
       audioPlayer.onended = () => { URL.revokeObjectURL(url); setTimeout(playNextAudioChunk, 500); };
-    });
-  }).catch(console.error);
+    }).catch(e => { console.error('Legacy chunk play failed:', e); _legacyAudioDone(); });
+  }).catch(e => { console.error('Legacy chunk fetch failed:', e); _legacyAudioDone(); });
 }
 
-// Sentence-by-sentence SocketIO audio queue (used for streaming text responses)
-const _audioQueue = [];
-let _audioPlaying = false;
-let _audioDone = false;
+let _audioSafetyTimer = null;
 
 function _playNextFromQueue() {
+  if (!_audioUnlocked) {
+    _dbg('[DEBUG] _playNextFromQueue → blocked (audioUnlocked=false) | queued:', _audioQueue.length);
+    return;
+  }
   if (_audioPlaying || !_audioQueue.length) {
-    // If queue empty and server signalled done, finish up
     if (!_audioQueue.length && _audioDone) {
+      _dbg('[DEBUG] _playNextFromQueue → queue drained + audioDone → firing _fireAllAudioDone');
       _audioDone = false;
-      stop_talking();
+      _fireAllAudioDone();
     }
     return;
   }
+  _dbg('[DEBUG] _playNextFromQueue → playing chunk | queueLen:', _audioQueue.length);
   _audioPlaying = true;
+  if (_audioSafetyTimer) clearTimeout(_audioSafetyTimer);
   const b64 = _audioQueue.shift();
   const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
   const blob = new Blob([bytes]);
@@ -266,13 +356,30 @@ function _playNextFromQueue() {
   audioPlayer.load();
   audioPlayer.play().then(() => {
     start_talking();
-    audioPlayer.onended = () => {
+    _audioSafetyTimer = setTimeout(() => {
+      if (_audioPlaying && _audioSafetyTimer) {
+        _dbg('[DEBUG] Audio safety timeout — forcing queue advance');
+        _audioSafetyTimer = null;
+        URL.revokeObjectURL(url);
+        _audioPlaying = false;
+        _playNextFromQueue();
+      }
+    }, 30000);
+
+    function _advanceQueue() {
+      if (!_audioPlaying) return;
+      if (_audioSafetyTimer) { clearTimeout(_audioSafetyTimer); _audioSafetyTimer = null; }
       URL.revokeObjectURL(url);
       _audioPlaying = false;
+      _dbg('[DEBUG] _advanceQueue → chunk done, queueLen:', _audioQueue.length, '| audioDone:', _audioDone);
       _playNextFromQueue();
-    };
+    }
+
+    audioPlayer.onended = () => { _dbg('[DEBUG] audioPlayer.onended fired'); _advanceQueue(); };
+    audioPlayer.onerror = (e) => { _dbg('[DEBUG] audioPlayer.onerror:', e); _advanceQueue(); };
   }).catch(e => {
-    console.error('Audio chunk play failed:', e);
+    if (_audioSafetyTimer) { clearTimeout(_audioSafetyTimer); _audioSafetyTimer = null; }
+    _dbg('[DEBUG] audioPlayer.play() REJECTED:', e.name, e.message);
     _audioPlaying = false;
     _playNextFromQueue();
   });
@@ -290,7 +397,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!f) return;
     selectedImageFile = f;
     if (voiceActive) {
-      // In voice mode, send image instantly
       sendMessage();
       return;
     }
@@ -312,26 +418,28 @@ document.addEventListener('DOMContentLoaded', function () {
   // Socket.IO
   const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
   window.socket = socket;
-  // Streaming bot response
   let _streamRow = null;
   let _streamText = null;
   let _streamActive = false;
 
   socket.on('bot_stream_start', () => {
+    _dbg('[DEBUG] bot_stream_start received');
     removeTypingMessage();
+    if (_streamRow) { _streamRow = null; _streamText = null; }
     _streamActive = true;
+    _botResponding = true;
     // Flush audio state from previous message
     _audioQueue.length = 0;
     _audioDone = false;
     _audioPlaying = false;
     audioStarted = false;
-    // Bubble created lazily on first bot_token to avoid empty flash
+    // Pause mic during bot response to prevent restart cycles
+    if (voiceActive) _micPause();
   });
 
   socket.on('bot_token', d => {
     removeTypingMessage();
     if (!_streamActive) return;
-    // Create bubble on first token
     if (!_streamRow) {
       const chatBody = document.querySelector('.chat-messages');
       _streamRow = document.createElement('div');
@@ -346,24 +454,50 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   socket.on('bot_audio_chunk', d => {
+    _dbg('[AUDIO] bot_audio_chunk received | queueLen:', _audioQueue.length + 1, '| playing:', _audioPlaying);
     _audioQueue.push(d.data);
     _playNextFromQueue();
   });
 
   socket.on('bot_audio_done', () => {
+    _dbg('[DEBUG] bot_audio_done | playing:', _audioPlaying, '| queueLen:', _audioQueue.length, '| audioUnlocked:', _audioUnlocked);
     _audioDone = true;
-    // If nothing playing and queue empty, stop talking now
-    if (!_audioPlaying && !_audioQueue.length) stop_talking();
+    if (!_audioPlaying && !_audioQueue.length) {
+      _dbg('[DEBUG] bot_audio_done → all complete immediately');
+      _fireAllAudioDone();
+    } else if (!_audioUnlocked && _audioQueue.length) {
+      // Audio element never unlocked (mobile autoplay policy) — chunks will never play.
+      // Drain the queue and restart mic immediately.
+      _dbg('[DEBUG] bot_audio_done → audio locked, flushing queue and firing allAudioDone');
+      _audioQueue.length = 0;
+      _audioDone = false;
+      _fireAllAudioDone();
+    } else {
+      _dbg('[DEBUG] bot_audio_done → waiting for queue to drain');
+      // Safety: if queue hasn't drained in 15s, something is stuck — force recovery
+      setTimeout(() => {
+        if (_botResponding && voiceActive) {
+          _dbg('[DEBUG] bot_audio_done safety timeout — forcing _fireAllAudioDone | playing:', _audioPlaying, '| queueLen:', _audioQueue.length);
+          _audioQueue.length = 0;
+          _audioPlaying = false;
+          _audioDone = false;
+          _fireAllAudioDone();
+        }
+      }, 15000);
+    }
   });
 
   socket.on('bot_message', d => {
+    _dbg('[DEBUG] bot_message | audio_streamed:', d.audio_streamed, '| hasStreamRow:', !!_streamRow, '| msgLen:', (d.message||'').length);
     removeTypingMessage();
     _streamActive = false;
     if (_streamRow) {
       if (d.message) {
         _streamText.innerHTML = formatText(d.message);
-        // Only use legacy audio fetch if audio wasn't already streamed via SocketIO
-        if (!d.audio_streamed) startAudioStream();
+        if (!d.audio_streamed) {
+          _dbg('[DEBUG] bot_message → triggering legacy startAudioStream');
+          startAudioStream();
+        }
       } else {
         _streamRow.remove();
       }
@@ -375,16 +509,22 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   socket.on('user_message',   d => displayUserMessage(d.message));
-  socket.on('talking_state',  d => { avatarIsTalking = d.talking; });
+  socket.on('talking_state',  d => { _dbg('[DEBUG] talking_state:', d.talking); avatarIsTalking = d.talking; });
   socket.on('emotion_change', d => preloadAvatarSprites(d));
 
-  // Connection status indicator
+  // Connection status
   const connDot = document.getElementById('connDot');
   socket.on('connect', () => {
-    if (connDot) { connDot.className = 'conn-dot'; }
+    if (connDot) connDot.className = 'conn-dot';
   });
   socket.on('disconnect', () => {
-    if (connDot) { connDot.className = 'conn-dot disconnected'; }
+    if (connDot) connDot.className = 'conn-dot disconnected';
+    _audioQueue.length = 0;
+    _audioDone = false;
+    _audioPlaying = false;
+    _botResponding = false;
+    audioStarted = false;
+    stop_talking();
     if (window.showToast) showToast('Connection lost — reconnecting...', 'error');
     setTimeout(() => {
       if (connDot) connDot.className = 'conn-dot reconnecting';
@@ -392,7 +532,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 2000);
   });
   socket.on('reconnect_attempt', () => {
-    if (connDot) { connDot.className = 'conn-dot reconnecting'; }
+    if (connDot) connDot.className = 'conn-dot reconnecting';
   });
 
   function formatText(text) {
@@ -404,7 +544,7 @@ document.addEventListener('DOMContentLoaded', function () {
       .replace(/\\u([\dA-F]{4})/gi, (m, g) => String.fromCharCode(parseInt(g, 16)));
   }
 
-  const prompt   = $('prompt');
+  const prompt = $('prompt');
 
   function sendMessage() {
     const txt = prompt.value.trim();
@@ -416,11 +556,10 @@ document.addEventListener('DOMContentLoaded', function () {
     $('imagePreviewContainer').style.display = 'none';
     $('imagePreview').src = '';
     updateMicSendButton();
-    // show typing indicator after 1s
     setTimeout(() => displayBotMessage('', true), 1000);
   }
 
-  if (prompt)  prompt.addEventListener('keyup', e => { if (e.key === 'Enter') sendMessage(); });
+  if (prompt) prompt.addEventListener('keyup', e => { if (e.key === 'Enter') sendMessage(); });
 
   function sendUserMessage(message, file) {
     const fd = new FormData();
@@ -485,7 +624,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const nameEl = document.getElementById('bot-name');
   if (nameEl && window.APP_CONFIG?.charName) nameEl.textContent = window.APP_CONFIG.charName;
 
-  // Avatar toggle — click to collapse/expand
+  // Avatar toggle
   const avatarHeader = document.querySelector('.avatar-header');
   if (avatarHeader) {
     if (localStorage.getItem('avatarHidden') === '1') avatarHeader.classList.add('collapsed');
@@ -502,19 +641,29 @@ document.addEventListener('DOMContentLoaded', function () {
   const voiceCanvas  = $('voiceWaveform');
   const voiceStatus  = $('voiceStatus');
 
-  let voiceActive = false;
-  let recognition = null;
   let voiceAnimFrame = null;
   let voiceAnimLevel = 0;
-  let voiceDebounceTimer = null;
-  let voicePendingTranscript = '';
-  let voiceLastSent = '';
   let isSendMode = false;
 
-  // Check browser support for SpeechRecognition
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  // MediaRecorder voice mode state
+  let _micStream = null;       // MediaStream — stays alive entire voice session
+  let _micContext = null;       // AudioContext for VAD
+  let _micAnalyser = null;      // AnalyserNode for volume detection
+  let _micProcessor = null;     // ScriptProcessorNode for PCM capture
+  let _micRecording = false;    // Currently capturing speech audio
+  let _micChunks = [];          // Int16 PCM chunks accumulated during speech
+  let _vadSpeaking = false;     // VAD: user is currently speaking
+  let _vadSilenceStart = 0;     // Timestamp when silence began
+  let _waitingForSTT = false;   // Waiting for server transcription result
 
-  // Toggle mic icon ↔ send icon based on text input
+  // VAD thresholds
+  const VAD_SPEECH_THRESH = 0.015;  // RMS level to detect speech start
+  const VAD_SILENCE_THRESH = 0.01;  // RMS level to detect speech end
+  const VAD_SILENCE_MS = 800;       // ms of silence before sending audio
+  const VAD_MIN_SPEECH_MS = 300;    // minimum speech duration to send
+  let _vadSpeechStart = 0;
+  let _micHealthTimer = null;     // Periodic AudioContext health check
+
   function updateMicSendButton() {
     if (!voiceModeBtn || !prompt || voiceActive) return;
     const hasText = prompt.value.trim().length > 0 || selectedImageFile;
@@ -531,9 +680,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  if (prompt) {
-    prompt.addEventListener('input', updateMicSendButton);
-  }
+  if (prompt) prompt.addEventListener('input', updateMicSendButton);
 
   if (voiceModeBtn) {
     voiceModeBtn.addEventListener('click', () => {
@@ -547,82 +694,187 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  function startVoiceMode() {
-    if (!SpeechRecognition) {
-      if (window.showToast) showToast('Speech recognition not supported in this browser. Use Chrome or Edge.', 'error');
+  // ── MediaRecorder + Server STT voice pipeline ───────────────────────────
+  //
+  // Strategy: Use Web Audio API for VAD, capture raw PCM, send to server
+  // for Whisper transcription. No Chrome SpeechRecognition at all.
+  //
+  //   1. getUserMedia → MediaStream (stays alive entire session)
+  //   2. AudioContext + ScriptProcessorNode captures 16kHz mono Int16 PCM
+  //   3. AnalyserNode monitors RMS volume for VAD
+  //   4. Speech detected → accumulate PCM chunks
+  //   5. Silence detected → base64-encode PCM, emit 'browser_audio' via SocketIO
+  //   6. Server transcribes with Whisper, emits 'browser_transcription' back
+  //   7. During bot response: just stop accumulating (stream stays alive)
+  //
+
+  // Pause mic — stop recording during bot response. Stream stays alive.
+  _micPause = function() {
+    _dbg('[MIC] paused — stopping recording (stream alive)');
+    _micRecording = false;
+    _vadSpeaking = false;
+    _micChunks = [];
+    if (voiceStatus) voiceStatus.textContent = '';
+  };
+
+  // Restart mic — resume recording after bot audio finishes.
+  _micRestart = function() {
+    if (!voiceActive) return;
+    _dbg('[MIC] restarting — resuming recording | ctxState:', _micContext ? _micContext.state : 'null');
+    _micRecording = true;
+    _vadSpeaking = false;
+    _micChunks = [];
+    // CRITICAL: Chrome suspends AudioContext when another audio source plays.
+    // If suspended, onaudioprocess silently stops firing and the mic appears dead.
+    if (_micContext && _micContext.state === 'suspended') {
+      _micContext.resume().then(() => {
+        _dbg('[MIC] AudioContext resumed from suspended state');
+      }).catch(e => {
+        _dbg('[MIC] AudioContext resume failed:', e.message);
+      });
+    }
+    if (voiceStatus) voiceStatus.textContent = 'Listening...';
+  };
+
+  // Handle transcription result from server
+  socket.on('browser_transcription', function(d) {
+    _waitingForSTT = false;
+    const text = (d.text || '').trim();
+    if (d.error) _dbg('[MIC] STT error:', d.error);
+    if (!text) {
+      _dbg('[MIC] STT returned empty');
+      if (voiceActive && !_botResponding) {
+        voiceStatus.textContent = 'Listening...';
+      }
+      return;
+    }
+    _dbg('[MIC] STT result:', text);
+    voiceStatus.textContent = 'Processing...';
+    displayUserMessage(text);
+    sendUserMessage(text);
+    setTimeout(() => displayBotMessage('', true), 500);
+  });
+
+  function _sendAudioToServer(chunks) {
+    if (!chunks.length) return;
+    // Merge Int16 chunks into single buffer
+    let totalLen = 0;
+    for (let i = 0; i < chunks.length; i++) totalLen += chunks[i].length;
+    const merged = new Int16Array(totalLen);
+    let offset = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      merged.set(chunks[i], offset);
+      offset += chunks[i].length;
+    }
+    // Base64 encode
+    const bytes = new Uint8Array(merged.buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const b64 = btoa(binary);
+    _dbg('[MIC] Sending audio to server |', merged.length, 'samples |', Math.round(merged.length / 16000 * 10) / 10, 's');
+    _waitingForSTT = true;
+    voiceStatus.textContent = 'Transcribing...';
+    socket.emit('browser_audio', { audio: b64, sample_rate: 16000 });
+  }
+
+  async function startVoiceMode() {
+    _dbg('[MIC] startVoiceMode called (MediaRecorder pipeline)');
+
+    // Request mic permission
+    try {
+      _micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+      });
+    } catch(e) {
+      _dbg('[MIC] getUserMedia FAILED:', e.name, e.message);
+      if (window.showToast) showToast('Microphone access denied', 'error');
       return;
     }
 
-    recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    // Set up AudioContext for VAD + PCM capture
+    _micContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+    // Ensure AudioContext is running (some browsers start suspended)
+    if (_micContext.state === 'suspended') {
+      await _micContext.resume();
+      _dbg('[MIC] AudioContext was suspended on creation, resumed');
+    }
+    _dbg('[MIC] AudioContext created | state:', _micContext.state, '| sampleRate:', _micContext.sampleRate);
+    const source = _micContext.createMediaStreamSource(_micStream);
 
-    recognition.onresult = function(event) {
-      let interimTranscript = '';
-      let finalTranscript = '';
+    // AnalyserNode for RMS volume detection
+    _micAnalyser = _micContext.createAnalyser();
+    _micAnalyser.fftSize = 2048;
+    source.connect(_micAnalyser);
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript;
-        } else {
-          interimTranscript += transcript;
+    // ScriptProcessorNode to capture raw PCM at 16kHz
+    // bufferSize=4096 at 16kHz = ~256ms per callback
+    _micProcessor = _micContext.createScriptProcessor(4096, 1, 1);
+    source.connect(_micProcessor);
+    _micProcessor.connect(_micContext.destination); // required for processing to run
+
+    _micProcessor.onaudioprocess = function(e) {
+      if (!voiceActive || !_micRecording || _botResponding) return;
+
+      const input = e.inputBuffer.getChannelData(0); // Float32 -1..1
+      // Calculate RMS
+      let sum = 0;
+      for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+      const rms = Math.sqrt(sum / input.length);
+
+      // Update waveform animation
+      voiceAnimLevel = Math.min(1.0, rms * 10);
+
+      const now = Date.now();
+
+      if (!_vadSpeaking) {
+        // Waiting for speech to start
+        if (rms > VAD_SPEECH_THRESH) {
+          _vadSpeaking = true;
+          _vadSpeechStart = now;
+          _vadSilenceStart = 0;
+          _micChunks = [];
+          _dbg('[MIC] VAD: speech started | rms:', rms.toFixed(4));
+          voiceStatus.textContent = 'Listening...';
         }
       }
 
-      // Animate waveform when hearing speech
-      if (interimTranscript) {
-        voiceAnimLevel = 1.0;
-      }
+      if (_vadSpeaking) {
+        // Convert Float32 to Int16 and accumulate
+        const int16 = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          const s = Math.max(-1, Math.min(1, input[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        _micChunks.push(int16);
 
-      // When we get a final result, debounce before sending.
-      // On Android Chrome, each final result is cumulative (contains all words so far),
-      // so we replace rather than accumulate to avoid word duplication.
-      if (finalTranscript.trim()) {
-        voicePendingTranscript = finalTranscript.trim();
-        if (voiceDebounceTimer) clearTimeout(voiceDebounceTimer);
-        voiceDebounceTimer = setTimeout(() => {
-          const text = voicePendingTranscript.trim();
-          voicePendingTranscript = '';
-          if (text && text !== voiceLastSent) {
-            voiceLastSent = text;
-            displayUserMessage(text);
-            sendUserMessage(text);
-            setTimeout(() => displayBotMessage('', true), 500);
-            setTimeout(() => { if (voiceActive) voiceStatus.textContent = 'Listening...'; }, 1500);
+        if (rms > VAD_SILENCE_THRESH) {
+          // Still speaking
+          _vadSilenceStart = 0;
+        } else {
+          // Silence detected
+          if (!_vadSilenceStart) _vadSilenceStart = now;
+          if (now - _vadSilenceStart >= VAD_SILENCE_MS) {
+            // End of utterance
+            _vadSpeaking = false;
+            const speechDuration = now - _vadSpeechStart;
+            _dbg('[MIC] VAD: silence detected | speech duration:', speechDuration, 'ms | chunks:', _micChunks.length);
+            if (speechDuration >= VAD_MIN_SPEECH_MS && _micChunks.length > 0) {
+              _sendAudioToServer(_micChunks);
+            } else {
+              _dbg('[MIC] VAD: too short, discarding');
+              voiceStatus.textContent = 'Listening...';
+            }
+            _micChunks = [];
           }
-        }, 600);
+        }
       }
     };
-
-    recognition.onerror = function(event) {
-      console.error('Speech recognition error:', event.error);
-      if (event.error === 'not-allowed') {
-        if (window.showToast) showToast('Microphone access denied', 'error');
-        stopVoiceMode();
-        return;
-      }
-      // For transient errors (network, no-speech), keep listening
-      voiceStatus.textContent = 'Error: ' + event.error;
-      setTimeout(() => { if (voiceActive) voiceStatus.textContent = 'Listening...'; }, 2000);
-    };
-
-    recognition.onend = function() {
-      // Auto-restart if voice mode is still active (browser stops after silence)
-      if (voiceActive && recognition) {
-        try { recognition.start(); } catch(e) { /* already started */ }
-      }
-    };
-
-    try {
-      recognition.start();
-    } catch(e) {
-      console.error('Failed to start speech recognition:', e);
-      return;
-    }
 
     voiceActive = true;
+    _micRecording = true;
+    _vadSpeaking = false;
+    _micChunks = [];
+
     voiceOverlay.style.display = 'flex';
     inputPill.classList.add('voice-active');
     voiceModeBtn.classList.add('voice-active');
@@ -630,16 +882,49 @@ document.addEventListener('DOMContentLoaded', function () {
     voiceModeBtn.setAttribute('aria-label', 'Stop voice');
     voiceStatus.textContent = 'Listening...';
 
+    // Periodic health check — auto-resume AudioContext if it gets suspended
+    if (_micHealthTimer) clearInterval(_micHealthTimer);
+    _micHealthTimer = setInterval(() => {
+      if (!voiceActive || !_micContext) { clearInterval(_micHealthTimer); _micHealthTimer = null; return; }
+      if (_micContext.state === 'suspended' && _micRecording && !_botResponding) {
+        _dbg('[MIC] Health check: AudioContext suspended while should be listening — resuming');
+        _micContext.resume().catch(e => _dbg('[MIC] Health check resume failed:', e.message));
+      }
+    }, 2000);
+
     drawVoiceWaveform();
+    _dbg('[MIC] Voice mode started (MediaRecorder pipeline)');
   }
 
   function stopVoiceMode() {
+    _dbg('[MIC] stopVoiceMode called');
     voiceActive = false;
-    if (voiceDebounceTimer) { clearTimeout(voiceDebounceTimer); voiceDebounceTimer = null; }
-    voicePendingTranscript = '';
-    voiceLastSent = '';
+    _micRecording = false;
+    _vadSpeaking = false;
+    _micChunks = [];
 
-    if (recognition) { recognition.onend = null; recognition.onerror = null; recognition.onresult = null; recognition.abort(); recognition = null; }
+    // Stop health check timer
+    if (_micHealthTimer) { clearInterval(_micHealthTimer); _micHealthTimer = null; }
+
+    // Tear down audio pipeline
+    if (_micProcessor) {
+      _micProcessor.onaudioprocess = null;
+      try { _micProcessor.disconnect(); } catch(e) {}
+      _micProcessor = null;
+    }
+    if (_micAnalyser) {
+      try { _micAnalyser.disconnect(); } catch(e) {}
+      _micAnalyser = null;
+    }
+    if (_micContext) {
+      try { _micContext.close(); } catch(e) {}
+      _micContext = null;
+    }
+    if (_micStream) {
+      _micStream.getTracks().forEach(t => t.stop());
+      _micStream = null;
+    }
+
     if (voiceAnimFrame) { cancelAnimationFrame(voiceAnimFrame); voiceAnimFrame = null; }
 
     voiceModeBtn.classList.remove('voice-active');
@@ -650,7 +935,6 @@ document.addEventListener('DOMContentLoaded', function () {
     inputPill.classList.remove('voice-active');
     isSendMode = false;
     updateMicSendButton();
-    voiceStatus.textContent = 'Listening...';
   }
 
   function drawVoiceWaveform() {
@@ -662,7 +946,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const h = voiceCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    // Animated pulse based on activity
     voiceAnimLevel *= 0.92;
     const barCount = 40;
     const barWidth = (w / barCount) * 0.7;

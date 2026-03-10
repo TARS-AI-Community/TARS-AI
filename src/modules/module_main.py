@@ -401,9 +401,14 @@ def utterance_callback(message):
             ui_manager.set_tars_status("STANDBY")
 
         # Push final reply to web UI (finalizes streaming bubble or creates one for preemptive)
+        # Mark audio_streamed=True since audio was played on Pi speakers — prevents
+        # browser from also fetching legacy /audio_stream (double-play) and ensures
+        # voice mode mic restarts properly via bot_audio_done
         try:
             from modules.module_chatui import socketio
-            socketio.emit('bot_message', {'message': reply})
+            socketio.emit('bot_message', {'message': reply, 'audio_streamed': True})
+            socketio.emit('bot_audio_done', {})
+            socketio.emit('talking_state', {'talking': False})
         except Exception:
             pass
 
