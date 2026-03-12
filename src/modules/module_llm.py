@@ -116,15 +116,15 @@ if CONFIG['EMOTION']['enabled']:
     except ImportError:
         pass
 
-def get_completion(user_prompt, istext=True, image_b64=None, source="voice"):
 
-    if memory_manager is None or character_manager is None:
-        raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
-
+def _maybe_play_thinking_response():
+    """Play a random thinking-response audio clip in a background thread (fire-and-forget)."""
     try:
         enable_thinking = CONFIG["CHAR"].get('enable_thinking_responses', True)
         if isinstance(enable_thinking, str):
             enable_thinking = enable_thinking.lower() in ('true', '1', 'yes')
+        if not enable_thinking:
+            return
 
         thinking_responses_raw = CONFIG["CHAR"].get('thinking_responses', '[]')
         try:
@@ -134,22 +134,34 @@ def get_completion(user_prompt, istext=True, image_b64=None, source="voice"):
         if not isinstance(thinking_responses, list):
             thinking_responses = []
 
-        if enable_thinking and thinking_responses and len(thinking_responses) > 0:
-            thinking_text = random.choice(thinking_responses)
-            if thinking_text and isinstance(thinking_text, str) and thinking_text.strip():
-                queue_message(f"{thinking_text}")
-                def play_thinking():
-                    try:
-                        from modules.module_tts import play_audio_chunks
-                        asyncio.run(play_audio_chunks(thinking_text, CONFIG['TTS']['ttsoption'], is_wakeword=True))
-                    except Exception as e:
-                        queue_message(f"ERROR: Failed to play thinking response: {e}")
+        if not thinking_responses:
+            return
 
-                thinking_thread = threading.Thread(target=play_thinking, daemon=True)
-                thinking_thread.start()
-                time.sleep(0.1)
-    except Exception as e:
+        thinking_text = random.choice(thinking_responses)
+        if not (thinking_text and isinstance(thinking_text, str) and thinking_text.strip()):
+            return
+
+        queue_message(f"{thinking_text}")
+
+        def _play():
+            try:
+                from modules.module_tts import play_audio_chunks
+                asyncio.run(play_audio_chunks(thinking_text, CONFIG['TTS']['ttsoption'], is_wakeword=True))
+            except Exception as e:
+                queue_message(f"ERROR: Failed to play thinking response: {e}")
+
+        threading.Thread(target=_play, daemon=True).start()
+        time.sleep(0.1)
+    except Exception:
         pass
+
+
+def get_completion(user_prompt, istext=True, image_b64=None, source="voice"):
+
+    if memory_manager is None or character_manager is None:
+        raise ValueError("MemoryManager and CharacterManager must be initialized before generating completions.")
+
+    _maybe_play_thinking_response()
 
     prompt = build_prompt(user_prompt, character_manager, memory_manager, CONFIG, debug=False)
     headers = {
@@ -266,38 +278,10 @@ def process_completion(prompt, image_b64=None):
     or a plain string on error.
     """
     def _get_parsed(prompt):
-        # Duplicate the get_completion flow but return parsed dict
         if memory_manager is None or character_manager is None:
             raise ValueError("Managers must be initialized")
 
-        try:
-            enable_thinking = CONFIG["CHAR"].get('enable_thinking_responses', True)
-            if isinstance(enable_thinking, str):
-                enable_thinking = enable_thinking.lower() in ('true', '1', 'yes')
-
-            thinking_responses_raw = CONFIG["CHAR"].get('thinking_responses', '[]')
-            try:
-                thinking_responses = json.loads(thinking_responses_raw)
-            except (json.JSONDecodeError, TypeError):
-                thinking_responses = []
-            if not isinstance(thinking_responses, list):
-                thinking_responses = []
-
-            if enable_thinking and thinking_responses and len(thinking_responses) > 0:
-                thinking_text = random.choice(thinking_responses)
-                if thinking_text and isinstance(thinking_text, str) and thinking_text.strip():
-                    queue_message(f"{thinking_text}")
-                    def play_thinking():
-                        try:
-                            from modules.module_tts import play_audio_chunks
-                            asyncio.run(play_audio_chunks(thinking_text, CONFIG['TTS']['ttsoption'], is_wakeword=True))
-                        except Exception as e:
-                            queue_message(f"ERROR: Failed to play thinking response: {e}")
-                    thinking_thread = threading.Thread(target=play_thinking, daemon=True)
-                    thinking_thread.start()
-                    time.sleep(0.1)
-        except Exception:
-            pass
+        _maybe_play_thinking_response()
 
         import modules.module_speed as speed
         _t0 = time.perf_counter()
@@ -527,6 +511,24 @@ def llm_execute_side_effects(parsed, user_input, source="voice", has_image=False
     try:
         fc = parsed.get("function_calls")
         if fc:
+            # Filter out no-op identify_speaker_name calls when the name matches
+            # the already-identified speaker. Allow calls with a DIFFERENT name
+            # through — those may be legitimate rename corrections.
+            try:
+                from modules.module_speaker_id import get_speaker_id_manager
+                _sid = get_speaker_id_manager()
+                if _sid:
+                    _cur = _sid.get_current_speaker()
+                    if _cur and not _cur.startswith("Unknown"):
+                        before = len(fc)
+                        fc = [f for f in fc if not (
+                            f.get("function") == "identify_speaker_name"
+                            and f.get("parameters", {}).get("name", "").strip() == _cur
+                        )]
+                        if len(fc) < before:
+                            queue_message(f"DEBUG: Filtered {before - len(fc)} identify_speaker_name call(s) — name matches current speaker '{_cur}'")
+            except Exception:
+                pass
             queue_message(f"DEBUG: Executing {len(fc)} function call(s): {fc}")
             for func_call in fc:
                 queue_message(f"DEBUG: execute_function_call -> {func_call}")
@@ -648,10 +650,8 @@ def _summarize_search_results(search_results, user_question):
 
         result = response.json()
         if 'choices' in result:
-            if llm_backend in ["openai", "grok", "deepinfra", "other"]:
-                text = result['choices'][0]['message']['content'].strip()
-            else:
-                text = result['choices'][0]['text'].strip()
+            # All supported backends return message.content in chat completions format
+            text = result['choices'][0]['message']['content'].strip()
 
             if text.startswith('{') and text.endswith('}'):
                 try:
@@ -781,16 +781,11 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
                     if not has_real_reply:
                         bot_response["reply"] = "I searched but couldn't find good results for that. Could you try rephrasing?"
                 else:
-                    if has_real_reply:
-                        summary = _summarize_search_results(search_results, user_input)
-                        if summary:
-                            bot_response["reply"] = summary
-                    else:
-                        summary = _summarize_search_results(search_results, user_input)
-                        if summary:
-                            bot_response["reply"] = summary
-                        else:
-                            bot_response["reply"] = f"Here's what I found: {search_results[:500]}"
+                    summary = _summarize_search_results(search_results, user_input)
+                    if summary:
+                        bot_response["reply"] = summary
+                    elif not has_real_reply:
+                        bot_response["reply"] = f"Here's what I found: {search_results[:500]}"
 
         elif function_name == "adjust_volume":
             from modules.module_volume import get_volume_control
@@ -1180,19 +1175,17 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
         elif function_name == "identify_speaker_name":
             from modules.module_speaker_id import get_speaker_id_manager
             name = parameters.get("name", "").strip()
+            # Reject invalid names the LLM sometimes hallucinates
+            _INVALID_NAMES = {"null", "none", "unknown", "undefined", "n/a", "na", ""}
+            if name.lower() in _INVALID_NAMES or name.startswith("Unknown_"):
+                queue_message(f"WARNING: identify_speaker_name rejected invalid name '{name}'")
+                name = ""
             if name:
                 sid = get_speaker_id_manager()
                 if sid is not None:
-                    # Rename the enrolled "Unknown" voice profile
-                    sid.rename_speaker("Unknown", name)
-                    # Also rename any Unknown_<timestamp> session tags in memories
-                    with sid._lock:
-                        old_session = sid._unknown_session_id
-                        sid._unknown_session_id = None
-                        sid._pending_name_request = False
-                    if old_session:
-                        sid._rename_speaker_in_memories(old_session, name)
-                    queue_message(f"INFO: Speaker identified as '{name}' via LLM")
+                    result = sid.name_current_speaker(name)
+                    queue_message(f"INFO: identify_speaker_name('{name}'): {result}")
+
                     # Auto-train face if unknown face is on camera
                     try:
                         from modules.module_identity import get_identity_manager

@@ -7,6 +7,7 @@ The server serves sprite image files and pushes talking/emotion state via Socket
 """
 
 import os
+import shutil
 import threading
 import time
 import logging
@@ -19,6 +20,8 @@ from io import BytesIO
 
 from PIL import Image, UnidentifiedImageError
 
+import configparser
+
 from flask import (
     Flask,
     jsonify,
@@ -28,7 +31,8 @@ from flask import (
     session,
     redirect,
     url_for,
-    send_file
+    send_file,
+    send_from_directory,
 )
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -97,6 +101,7 @@ sprite = character_name
 latest_text_to_read = ""
 audio_chunks_dict = OrderedDict()
 current_chunk_index = 0
+_audio_state_lock = threading.Lock()  # Protects audio_chunks_dict + current_chunk_index
 
 def _get_sprite_urls(emo):
     """Return the 4 sprite filenames for a given emotion."""
@@ -212,6 +217,17 @@ def handle_browser_audio(data):
         text = text.strip()
         if text:
             queue_message(f"[BROWSER STT] {text}")
+
+            # Submit audio to speaker ID for voice identification (browser voice mode)
+            try:
+                from modules.module_speaker_id import get_speaker_id_manager
+                sid = get_speaker_id_manager()
+                if sid and sid.enabled:
+                    audio_float32 = audio_np.astype(np.float32) / 32768.0
+                    sid.submit_audio(audio_float32, sample_rate)
+            except Exception as e:
+                queue_message(f"WARNING: Browser speaker ID failed: {e}")
+
         socketio.emit('browser_transcription', {'text': text})
 
     except Exception as e:
@@ -330,7 +346,8 @@ def index():
                            char_name=character_name,
                            char_greeting='Welcome back',
                            talkinghead_base_url=ipadd,
-                           port=CONFIG['ACCESS'].get('webui_port', 80))
+                           port=CONFIG['ACCESS'].get('webui_port', 80),
+                           user_name=CONFIG['CHAR'].get('user_name', 'User'))
 
 @flask_app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -456,7 +473,6 @@ def avatar_sprites():
 @flask_app.route('/character_sprite/<emo>/animation/<filename>')
 def character_sprite(emo, filename):
     """Serve a character sprite image file."""
-    from flask import send_from_directory
     sprite_dir = os.path.join(BASE_DIR, "character", character_name, "images", emo, "animation")
     return send_from_directory(sprite_dir, filename)
 
@@ -523,7 +539,6 @@ def update_emotion(detected_emotion):
         return
 
     # Sanitize to prevent path traversal via crafted emotion names
-    import re
     detected_emotion = re.sub(r'[^a-zA-Z0-9_-]', '', detected_emotion)
     if not detected_emotion:
         return
@@ -563,10 +578,21 @@ def stream_reply_token(text):
         pass
 
 
-def push_user_message(text):
-    """Push a voice-mode user message to the web UI chat."""
+def push_user_message(text, speaker_name=None):
+    """Push a voice-mode user message to the web UI chat, including speaker name."""
+    if not speaker_name:
+        speaker_name = CONFIG['CHAR'].get('user_name', 'User')
+        try:
+            from modules.module_speaker_id import get_speaker_id_manager
+            sid = get_speaker_id_manager()
+            if sid and sid.enabled:
+                name = sid.get_current_speaker()
+                if name and not name.startswith("Unknown"):
+                    speaker_name = name
+        except Exception:
+            pass
     try:
-        socketio.emit('user_message', {'message': text})
+        socketio.emit('user_message', {'message': text, 'speaker': speaker_name})
     except Exception:
         pass
 
@@ -589,16 +615,26 @@ def _process_chat_message(msg, img_b64):
     """Shared pipeline for WebUI text chat and voice mode — sends to LLM and emits response."""
     global latest_text_to_read
     try:
-        # WebUI messages always come from the configured user
+        # Resolve speaker for this WebUI message.
+        # If speaker ID was just set by browser voice (handle_browser_audio),
+        # use that result. Otherwise default to configured user for typed messages.
         try:
             from modules.module_speaker_id import get_speaker_id_manager
             sid = get_speaker_id_manager()
             if sid and sid.enabled:
                 import time as _time
-                with sid._lock:
-                    sid.current_speaker = CONFIG['CHAR']['user_name']
-                    sid.current_confidence = 1.0
-                    sid.last_identified_time = _time.time()
+                # Wait for any in-progress speaker ID (e.g. from browser voice)
+                identified = sid.wait_for_identification(timeout=1.5)
+                if not identified:
+                    queue_message("DEBUG: Browser speaker ID timed out (1.5s)")
+                current = sid.get_current_speaker()
+                # If no recent voice ID (typed message), set to config user
+                age = _time.time() - (sid.last_identified_time or 0)
+                if not current or current.startswith("Unknown") or age > 10:
+                    with sid._lock:
+                        sid.current_speaker = CONFIG['CHAR']['user_name']
+                        sid.current_confidence = 1.0
+                        sid.last_identified_time = _time.time()
         except Exception:
             pass
         _audio_streamed = False
@@ -833,29 +869,19 @@ def audio_stream():
     global current_chunk_index
     socketio.emit('talking_state', {'talking': True})
 
-    # ✅ Reset chunk tracking for new requests
-    audio_chunks_dict.clear()  
-    current_chunk_index = 0  
+    with _audio_state_lock:
+        audio_chunks_dict.clear()
+        current_chunk_index = 0
 
-    def get_final_text():
-        return latest_text_to_read if 'latest_text_to_read' in globals() else "No response available."
-
-    final_text = get_final_text()
-    #queue_message("Audio stream starting with final text:", final_text)
+    final_text = latest_text_to_read or "No response available."
 
     async def generate_mp3_chunks():
-        """
-        Generate text-to-speech audio chunks and store them in the dictionary.
-        """
         index = 0
         async for chunk in generate_tts_audio(final_text, CONFIG['TTS']['ttsoption']):
-            audio_chunks_dict[index] = chunk.getvalue()  # Store chunk with its order
+            audio_chunks_dict[index] = chunk.getvalue()
             index += 1
+        audio_chunks_dict[index] = None  # Sentinel: end of chunks
 
-        #queue_message(f"Generated {len(audio_chunks_dict)} chunks.")
-        audio_chunks_dict[index] = None  # Mark end of chunks
-
-    # Run the async generator in a background thread
     def run_async_generator():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -864,48 +890,40 @@ def audio_stream():
 
     threading.Thread(target=run_async_generator, daemon=True).start()
 
-    # ✅ Wait for the first chunk to be available
-    max_wait_time = 5  # Max time to wait for the first chunk (seconds)
+    # Wait for the first chunk (max 5 s)
+    max_wait_time = 5
     waited = 0
     while 0 not in audio_chunks_dict:
         if waited >= max_wait_time:
-            #queue_message("First chunk did not generate in time.")
             return Response(status=204)
         time.sleep(0.1)
         waited += 0.1
 
-    # ✅ Serve the first MP3 chunk and update index **before returning**
-    #queue_message("Serving first chunk.")
-    first_chunk = audio_chunks_dict[0]
-    current_chunk_index = 1  # ✅ Update chunk index immediately
+    with _audio_state_lock:
+        first_chunk = audio_chunks_dict[0]
+        current_chunk_index = 1
     return Response(first_chunk, mimetype="audio/mp3", headers={'Content-Type': 'audio/mp3'})
 
 @flask_app.route('/get_next_audio_chunk')
 def get_next_audio_chunk():
-    """
-    Serve the next MP3 chunk by index from the dictionary.
-    """
+    """Serve the next MP3 chunk by index from the dictionary."""
     global current_chunk_index
 
-    if current_chunk_index in audio_chunks_dict:
-        next_chunk = audio_chunks_dict[current_chunk_index]
-        
+    with _audio_state_lock:
+        idx = current_chunk_index
+        if idx not in audio_chunks_dict:
+            return Response(status=204)  # Not ready yet
+
+        next_chunk = audio_chunks_dict[idx]
         if next_chunk is None:
-            #queue_message(f"End of chunks at index {current_chunk_index}.")
-            return Response(status=204)  # No more audio
+            return Response(status=204)  # End of stream
 
-        #queue_message(f"Serving chunk {current_chunk_index}.")
-        response = Response(next_chunk, mimetype="audio/mp3", headers={
-            'Content-Type': 'audio/mp3',
-            'Content-Length': str(len(next_chunk)),  # Ensure correct content size
-        })
-
-        # ✅ Update `current_chunk_index` **AFTER** the chunk is sent
         current_chunk_index += 1
-        return response
-    else:
-        #queue_message(f"Chunk {current_chunk_index} not available yet.")
-        return Response(status=204)  # No content available yet
+
+    return Response(next_chunk, mimetype="audio/mp3", headers={
+        'Content-Type': 'audio/mp3',
+        'Content-Length': str(len(next_chunk)),
+    })
 
 # Add these routes to your Flask application
 
@@ -1313,8 +1331,6 @@ def parse_config_with_comments(file_path):
 
 @flask_app.route('/get_config', methods=['GET'])
 def get_config():
-    import configparser
-    
     try:
         config_file = os.path.join(BASE_DIR, 'config.ini')
         template_file = os.path.join(BASE_DIR, 'config.ini.template')
@@ -1523,9 +1539,6 @@ def wifi_hotspot():
 # ── CLOUDFLARE QUICK TUNNEL (REMOTE ACCESS) ──────────────────────────────
 
 import subprocess as _sp
-import shutil
-import threading
-import re
 
 _tunnel_process = None
 _tunnel_url = None

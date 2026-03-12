@@ -30,14 +30,17 @@ from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
 
+# Anchor memory directory relative to this file (src/modules/ -> src/memory/)
+_MEMORY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
+
 class MemoryManager:
     def __init__(self, config, char_name, char_greeting, ui_manager):
         self.config = config
         self.char_name = char_name
         self.char_greeting = char_greeting
-        self.memory_db_path = os.path.abspath(os.path.join(os.path.join("..", "memory"), f"{self.char_name}.pickle.gz"))
+        self.memory_db_path = os.path.join(_MEMORY_DIR, f"{self.char_name}.pickle.gz")
 
-        self.topic_index_path = os.path.abspath(os.path.join(os.path.join("..", "memory"), f"{self.char_name}_topics.json"))
+        self.topic_index_path = os.path.join(_MEMORY_DIR, f"{self.char_name}_topics.json")
 
         rag_config = self.config.get('RAG', {})
         self.rag_strategy = rag_config.get('strategy', 'naive')
@@ -50,7 +53,7 @@ class MemoryManager:
 
         self.hyper_db = HyperDB(rag_strategy=self.rag_strategy)
         self.long_mem_use = True
-        self.initial_memory_path = os.path.abspath(os.path.join(os.path.join("..", "memory", "initial_memory.json")))
+        self.initial_memory_path = os.path.join(_MEMORY_DIR, "initial_memory.json")
 
         self.ui_manager = ui_manager
 
@@ -369,10 +372,12 @@ class MemoryManager:
             relative_time = self._get_relative_time(timestamp)
             relevance_marker = "★" if mem.get('is_primary', False) else "•"
 
+            speaker = doc.get('speaker', '')
+            speaker_label = speaker if (speaker and not speaker.startswith("Unknown")) else "User"
             if user_input and bot_response:
                 formatted_parts.append(
                     f"{relevance_marker} [{relative_time}]\n"
-                    f"  User: {user_input}\n"
+                    f"  {speaker_label}: {user_input}\n"
                     f"  {self.char_name}: {bot_response}\n"
                 )
             elif bot_response:
@@ -464,6 +469,7 @@ class MemoryManager:
             user_input = entry['document'].get('user_input', "")
             bot_response = entry['document'].get('bot_response', "")
             timestamp = entry['document'].get('timestamp', "")
+            speaker = entry['document'].get('speaker', "")
 
             if not user_input or not bot_response:
                 continue
@@ -471,17 +477,19 @@ class MemoryManager:
             time_label = self._get_relative_time(timestamp) if timestamp else ""
             time_prefix = f"[{time_label}] " if time_label else ""
 
-            text_str = f"{time_prefix}{{user}}: {user_input}\n{{char}}: {bot_response}"
+            # Use stored speaker name if available, otherwise fall back to {user} placeholder
+            speaker_tag = speaker if (speaker and not speaker.startswith("Unknown")) else "{user}"
+            text_str = f"{time_prefix}{speaker_tag}: {user_input}\n{{char}}: {bot_response}"
             text_length = self.token_count(text_str)['length']
 
             if accumulated_length + text_length > token_limit:
                 break
 
-            accumulated_documents.append((user_input, bot_response, time_prefix))
+            accumulated_documents.append((user_input, bot_response, time_prefix, speaker_tag))
             accumulated_length += text_length
 
         formatted_output = '\n'.join(
-            [f"{tp}{{user}}: {ui}\n{{char}}: {br}" for ui, br, tp in reversed(accumulated_documents)]
+            [f"{tp}{spk}: {ui}\n{{char}}: {br}" for ui, br, tp, spk in reversed(accumulated_documents)]
         )
         return formatted_output
 

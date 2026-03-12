@@ -116,7 +116,7 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
                     audio_data = np.frombuffer(chunk, dtype='int16')
 
                     # Resample to 16kHz if needed
-                    if samplerate != target_rate:
+                    if samplerate != target_rate and samplerate > 0:
                         ratio = target_rate / samplerate
                         new_len = int(len(audio_data) * ratio)
                         indices = np.linspace(0, len(audio_data) - 1, new_len)

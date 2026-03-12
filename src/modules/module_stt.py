@@ -203,6 +203,7 @@ class STTManager:
         # Barge-in monitoring
         self._bargein_active = False
         self._bargein_thread = None
+        self._bargein_tts_data = {'word_list': [], 'words_all': set()}  # shared with monitor thread
         self._bargein_enabled = CONFIG['STT'].get('enable_bargein', True)
         if isinstance(self._bargein_enabled, str):
             self._bargein_enabled = self._bargein_enabled.lower() in ('true', '1', 'yes')
@@ -567,6 +568,7 @@ class STTManager:
         silent_frames = 0
         speech_frames = 0
         pre_roll_buffer = []
+        pre_roll_added = 0
         audio_chunks = []
         max_silent = self.MAX_SILENT_FRAMES
 
@@ -611,6 +613,7 @@ class STTManager:
                             pre_roll_buffer.pop(0)
                 else:
                     if speech_frames == 0 and pre_roll_buffer:
+                        pre_roll_added = len(pre_roll_buffer)
                         audio_chunks.extend(pre_roll_buffer)
                         pre_roll_buffer = []
                     audio_chunks.append(data)
@@ -623,8 +626,11 @@ class STTManager:
 
         if speech_frames < min_speech_frames or not audio_chunks:
             return None, 0
-        # Stash float32 audio for speaker ID
-        self._last_audio_float32 = self._chunks_to_float32(audio_chunks)
+        # Stash float32 audio for speaker ID — exclude pre-roll chunks which
+        # may contain TARS's own TTS response (using the user's voice model),
+        # contaminating the speaker embedding with the wrong voice.
+        speech_only = audio_chunks[pre_roll_added:] if pre_roll_added else audio_chunks
+        self._last_audio_float32 = self._chunks_to_float32(speech_only) if speech_only else self._chunks_to_float32(audio_chunks)
         return audio_chunks, speech_frames
 
     def _chunks_to_wav_buffer(self, chunks, sample_rate):
@@ -646,10 +652,28 @@ class STTManager:
     # === Result Emission ===
 
     def _emit_result(self, text, extra=None):
-        """Build formatted result dict, fire utterance callback, return result."""
+        """Build formatted result dict, fire utterance callback, return result.
+
+        Submits audio for speaker identification BEFORE firing the utterance
+        callback, so the background observer can process the embedding while
+        the LLM/TTS pipeline runs.  This ensures the ROUND log at the end of
+        utterance_callback can wait on the speaker ID result instead of reading
+        stale state from the previous round.
+        """
         if not self._is_meaningful_text(text):
             queue_message(f"INFO: STT filtered non-speech noise: '{text}'")
             return None
+
+        # Submit audio for speaker ID before the utterance callback blocks
+        if self._last_audio_float32 is not None:
+            try:
+                from modules.module_speaker_id import get_speaker_id_manager
+                sid = get_speaker_id_manager()
+                if sid is not None:
+                    sid.submit_audio(self._last_audio_float32, 16000)
+            except Exception:
+                pass
+
         result = {"text": text}
         if extra:
             result.update(extra)
@@ -721,20 +745,11 @@ class STTManager:
             result = transcribe_fn()
             stt_dur = speed.stop('stt')
 
-            # Submit audio to Speaker ID for passive identification
-            speed.start('speaker_id')
-            if result and self._last_audio_float32 is not None:
-                try:
-                    from modules.module_speaker_id import get_speaker_id_manager
-                    sid = get_speaker_id_manager()
-                    if sid is not None:
-                        sid.submit_audio(self._last_audio_float32, 16000)
-                except Exception:
-                    pass
-            sid_dur = speed.stop('speaker_id')
+            # Speaker ID submission now happens inside _emit_result() so it
+            # runs BEFORE utterance_callback blocks for the full LLM/TTS pipeline.
 
             if result:
-                speed.log(f"stt:{processor}({speed.fmt(stt_dur)}), speaker_id({speed.fmt(sid_dur)})")
+                speed.log(f"stt:{processor}({speed.fmt(stt_dur)})")
                 speed.start('stt_to_llm')  # Measure gap from STT done to LLM start
 
             if self.post_utterance_callback and result:
@@ -940,6 +955,11 @@ class STTManager:
         MIN_SPEECH = 5
         MAX_SILENT = self.MAX_SILENT_FRAMES
 
+        # Track how many pre-roll chunks get prepended to audio_chunks.
+        # Pre-roll may contain TARS's own TTS response (which uses the user's
+        # voice model), contaminating speaker ID embeddings with the wrong voice.
+        pre_roll_added = 0
+
         # Speculative transcription — kicked off when silence first starts
         spec_thread = None
         spec_result = [None]  # Mutable container for thread result
@@ -997,6 +1017,7 @@ class STTManager:
                         pre_roll_buffer.pop(0)
                 else:
                     if speech_frames == 0 and pre_roll_buffer:
+                        pre_roll_added = len(pre_roll_buffer)
                         audio_chunks.extend(pre_roll_buffer)
                         pre_roll_buffer = []
                     audio_chunks.append(data)
@@ -1043,8 +1064,11 @@ class STTManager:
         if not audio_chunks:
             return None
 
-        # Stash float32 audio for speaker ID
-        self._last_audio_float32 = self._chunks_to_float32(audio_chunks)
+        # Stash float32 audio for speaker ID — exclude pre-roll chunks which
+        # may contain TARS's own TTS response (using the user's voice model),
+        # contaminating the speaker embedding with the wrong voice.
+        speech_only = audio_chunks[pre_roll_added:] if pre_roll_added else audio_chunks
+        self._last_audio_float32 = self._chunks_to_float32(speech_only) if speech_only else self._chunks_to_float32(audio_chunks)
 
         # Check if speculative transcription covers all audio
         if spec_thread is not None and spec_snapshot_len == len(audio_chunks):
@@ -1556,13 +1580,18 @@ class STTManager:
         """Fuzzy word-matching barge-in monitor."""
         from modules.module_tts import stop_tts_playback
 
-        # Build ordered word list for sliding window + full set for broad matching
-        tts_word_list = []
-        tts_words_all = set()
+        # Build initial word list from whatever text we have; during streaming
+        # this may be empty and will be updated via update_bargein_tts_text().
         if tts_text:
             cleaned = _NON_ALNUM_SPACE_RE.sub('', tts_text.lower())
-            tts_word_list = cleaned.split()
-            tts_words_all = set(tts_word_list)
+            self._bargein_tts_data = {
+                'word_list': cleaned.split(),
+                'words_all': set(cleaned.split()),
+            }
+        else:
+            self._bargein_tts_data = {'word_list': [], 'words_all': set()}
+
+        tts_data = self._bargein_tts_data  # local ref for monitor thread
 
         def _monitor():
             bargein_threshold = self.silence_threshold
@@ -1600,6 +1629,10 @@ class STTManager:
                             buf_len = len(audio_buf)
                             audio_buf.clear()
                             if transcript:
+                                # Read current TTS words (may be updated by streaming thread)
+                                tts_word_list = tts_data['word_list']
+                                tts_words_all = tts_data['words_all']
+
                                 # Build sliding window of TTS words near current playback position
                                 elapsed = time.time() - start_time
                                 pos = int(elapsed * WORDS_PER_SEC)
@@ -1636,10 +1669,11 @@ class STTManager:
 
         def _monitor():
             bargein_threshold = self.silence_threshold
-            audio_buf = []
-            CHECK_EVERY = 8  # Check every ~1s (8 x 125ms)
+            speech_buf = []       # Rolling buffer of speech frames (kept across checks)
+            MAX_BUF = 16          # Keep last ~2s of speech frames (16 x 125ms)
+            CHECK_EVERY = 4       # Check every ~0.5s (4 x 125ms)
+            MIN_SPEECH = 8        # Need >=8 speech frames (~1s) for usable embedding
             frame_count = 0
-            recent_results = []  # Sliding window: require 2 out of 3 matches
 
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
@@ -1651,22 +1685,19 @@ class STTManager:
                         data, _ = stream.read(2000)  # ~125ms frame
                         frame_count += 1
 
-                        # Collect frames with speech energy
+                        # Collect frames with speech energy into rolling buffer
                         rms = self._compute_rms_fast(data)
                         if rms and rms > bargein_threshold:
-                            audio_buf.append(data)
+                            speech_buf.append(data)
+                            if len(speech_buf) > MAX_BUF:
+                                speech_buf = speech_buf[-MAX_BUF:]
 
                         if frame_count % CHECK_EVERY == 0:
-                            if len(audio_buf) < 4:
-                                # Not enough speech frames for a usable embedding (~0.5s)
-                                recent_results.append(False)
-                                recent_results = recent_results[-3:]
-                                audio_buf.clear()
+                            if len(speech_buf) < MIN_SPEECH:
                                 continue
 
-                            # Convert to float32 for embedding extraction
-                            audio_int16 = np.concatenate(audio_buf)
-                            audio_buf.clear()
+                            # Use last MIN_SPEECH..MAX_BUF speech frames for embedding
+                            audio_int16 = np.concatenate(speech_buf[-MAX_BUF:])
                             audio_float32 = audio_int16.astype(np.float32).flatten() / 32768.0
 
                             sid = get_speaker_id_manager()
@@ -1675,23 +1706,42 @@ class STTManager:
 
                             embedding = sid.extract_embedding(audio_float32, 16000)
                             if embedding is None:
-                                recent_results.append(False)
-                                recent_results = recent_results[-3:]
                                 continue
 
-                            name, confidence = sid.identify_speaker(embedding)
+                            # Identify speaker (skip normal margin check — we do our own below)
+                            name, confidence = sid.identify_speaker(embedding, skip_margin=True)
+
+                            # Ignore Unknown_* profiles — they may be TARS bleed
+                            # that got auto-enrolled. Only named speakers matter.
+                            if name and name.startswith("Unknown_"):
+                                name = ""
+                                confidence = 0.0
+
+                            # Bleed filter: TTS audio bleeds into mic and can weakly
+                            # match enrolled speakers. Real speech has a clear margin
+                            # over runner-up; bleed does not.
+                            margin = 1.0  # default if only one speaker enrolled
+                            if name and confidence > 0:
+                                enrolled = sid.get_enrolled_speakers()
+                                if len(enrolled) > 1:
+                                    runner_up = 0.0
+                                    for spk in enrolled:
+                                        if spk != name:
+                                            s = sid._compute_best_score(embedding, spk)
+                                            if s > runner_up:
+                                                runner_up = s
+                                    margin = confidence - runner_up
+
                             if self.DEBUG and name and confidence > 0.01:
-                                queue_message(f"DEBUG: Barge-in voiceprint: speaker='{name}' confidence={confidence:.2f} threshold={self._bargein_voiceprint_threshold:.2f}")
+                                queue_message(f"DEBUG: Barge-in voiceprint: speaker='{name}' confidence={confidence:.2f} threshold={self._bargein_voiceprint_threshold:.2f} margin={margin:.3f}")
 
-                            matched = bool(name and confidence >= self._bargein_voiceprint_threshold)
-                            recent_results.append(matched)
-                            recent_results = recent_results[-3:]
+                            # Match requires: above threshold AND margin > 0.05
+                            # (bleed typically has margin < 0.04, real speech > 0.10)
+                            matched = bool(name and confidence >= self._bargein_voiceprint_threshold and margin > 0.05)
 
-                            # High confidence = instant trigger, otherwise require 2/3
-                            high_conf = name and confidence >= min(self._bargein_voiceprint_threshold + 0.15, 0.95)
-                            if high_conf or sum(recent_results) >= 2:
+                            if matched:
                                 if self.DEBUG:
-                                    queue_message(f"DEBUG: Barge-in detected! Voice matched '{name}' (confidence: {confidence:.2f})")
+                                    queue_message(f"DEBUG: Barge-in detected! Voice matched '{name}' (confidence: {confidence:.2f}, margin: {margin:.3f})")
                                 stop_tts_playback()
                                 break
             except Exception as e:
@@ -1771,6 +1821,18 @@ class STTManager:
 
         # Require minimum novel words — fewer = more sensitive to interrupts
         return novel if len(novel) >= self._bargein_min_novel else []
+
+    def update_bargein_tts_text(self, tts_text):
+        """Update the TTS text used by the fuzzy barge-in monitor.
+
+        Called during streaming TTS to feed newly-generated text so the
+        monitor can distinguish speaker bleed from real user speech."""
+        if not self._bargein_active:
+            return
+        cleaned = _NON_ALNUM_SPACE_RE.sub('', tts_text.lower())
+        word_list = cleaned.split()
+        self._bargein_tts_data['word_list'] = word_list
+        self._bargein_tts_data['words_all'] = set(word_list)
 
     def stop_bargein_monitor(self):
         """Stop the barge-in monitor thread and wait for mic stream to close."""

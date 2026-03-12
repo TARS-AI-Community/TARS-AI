@@ -388,16 +388,20 @@ class MemoryManagerLite:
             for ctx in memory.get('context_before', []):
                 user = ctx.get('user_input', '')
                 bot = ctx.get('bot_response', '')
+                ctx_speaker = ctx.get('speaker', '')
+                ctx_label = ctx_speaker if (ctx_speaker and not ctx_speaker.startswith("Unknown")) else "User"
                 if user or bot:
-                    formatted_parts.append(f"[context] User: {user}")
+                    formatted_parts.append(f"[context] {ctx_label}: {user}")
                     formatted_parts.append(f"[context] {self.char_name}: {bot}")
 
             user_input = main_doc.get('user_input', '')
             bot_response = main_doc.get('bot_response', '')
             timestamp = main_doc.get('timestamp', '')
+            speaker = main_doc.get('speaker', '')
+            speaker_label = speaker if (speaker and not speaker.startswith("Unknown")) else "User"
 
             if user_input or bot_response:
-                formatted_parts.append(f"User: {user_input}")
+                formatted_parts.append(f"{speaker_label}: {user_input}")
                 formatted_parts.append(f"{self.char_name}: {bot_response}")
                 if timestamp:
                     formatted_parts.append(f"(from: {timestamp})")
@@ -405,8 +409,10 @@ class MemoryManagerLite:
             for ctx in memory.get('context_after', []):
                 user = ctx.get('user_input', '')
                 bot = ctx.get('bot_response', '')
+                ctx_speaker = ctx.get('speaker', '')
+                ctx_label = ctx_speaker if (ctx_speaker and not ctx_speaker.startswith("Unknown")) else "User"
                 if user or bot:
-                    formatted_parts.append(f"[context] User: {user}")
+                    formatted_parts.append(f"[context] {ctx_label}: {user}")
                     formatted_parts.append(f"[context] {self.char_name}: {bot}")
 
         formatted_parts.append("\n===")
@@ -469,6 +475,7 @@ class MemoryManagerLite:
             user_input = entry.get('user_input', "")
             bot_response = entry.get('bot_response', "")
             timestamp = entry.get('timestamp', "")
+            speaker = entry.get('speaker', "")
 
             if not user_input or not bot_response:
                 continue
@@ -476,17 +483,19 @@ class MemoryManagerLite:
             time_label = self._get_relative_time(timestamp) if timestamp else ""
             time_prefix = f"[{time_label}] " if time_label else ""
 
-            text_str = f"{time_prefix}{{user}}: {user_input}\n{{char}}: {bot_response}"
+            # Use stored speaker name if available, otherwise fall back to {user} placeholder
+            speaker_tag = speaker if (speaker and not speaker.startswith("Unknown")) else "{user}"
+            text_str = f"{time_prefix}{speaker_tag}: {user_input}\n{{char}}: {bot_response}"
             text_length = self.token_count(text_str)['length']
 
             if accumulated_length + text_length > token_limit:
                 break
 
-            accumulated_documents.append((user_input, bot_response, time_prefix))
+            accumulated_documents.append((user_input, bot_response, time_prefix, speaker_tag))
             accumulated_length += text_length
 
         formatted_output = '\n'.join(
-            [f"{tp}{{user}}: {ui}\n{{char}}: {br}" for ui, br, tp in reversed(accumulated_documents)]
+            [f"{tp}{spk}: {ui}\n{{char}}: {br}" for ui, br, tp, spk in reversed(accumulated_documents)]
         )
         return formatted_output
 
