@@ -2687,11 +2687,11 @@ function $(id) { return document.getElementById(id); }
     }, 1000);
   }
 
-  if (typeof socket !== 'undefined') {
-    socket.on('emotion_change', function () {
+  if (window.socket) {
+    window.socket.on('emotion_change', function () {
       debouncedDashRefresh();
     });
-    socket.on('bot_message', function () {
+    window.socket.on('bot_message', function () {
       debouncedDashRefresh();
     });
   }
