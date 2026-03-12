@@ -630,7 +630,12 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
             result = skills.execute(function_name, parameters, context)
             # If skill returns a string, update the reply
             if result is not None:
-                bot_response["reply"] = result
+                if bot_response.get("_skill_replied"):
+                    # Multiple skills returning replies — append instead of overwrite
+                    bot_response["reply"] = f"{bot_response['reply']} {result}"
+                else:
+                    bot_response["reply"] = result
+                    bot_response["_skill_replied"] = True
         else:
             queue_message(f"Unknown function: {function_name}")
 
