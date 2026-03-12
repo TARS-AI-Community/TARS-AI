@@ -38,6 +38,31 @@ def _get_skills_prompt_text():
     return "(No skills loaded)"
 
 
+def _get_emotion_schema_field(config):
+    """Return the emotion JSON field for the prompt schema, or empty string if not using LLM emotions."""
+    try:
+        if config['EMOTION']['enabled'] and config['EMOTION'].get('emotion_method', 'classifier') == 'llm':
+            return ',\n  "emotion": "string (one of: joy, anger, sadness, fear, love, curiosity, surprise, neutral)"'
+    except (KeyError, TypeError):
+        pass
+    return ""
+
+
+def _get_emotion_prompt_instruction(config):
+    """Return the emotion instruction block when LLM emotion mode is active."""
+    try:
+        if config['EMOTION']['enabled'] and config['EMOTION'].get('emotion_method', 'classifier') == 'llm':
+            return """
+   emotion (REQUIRED field)
+   Set this to the single emotion that best describes your reply's tone.
+   Must be one of: joy, anger, sadness, fear, love, curiosity, surprise, neutral
+   Pick the most fitting one — do not overthink it.
+"""
+    except (KeyError, TypeError):
+        pass
+    return ""
+
+
 def _get_skills_examples_text():
     """Get skill-specific examples from the skills system for LLM prompt injection."""
     try:
@@ -210,6 +235,13 @@ def _get_active_user_name(config_user_name: str) -> str:
 # Speed profiling data from the last build_prompt call (read by module_llm)
 _last_prompt_timings = {}
 
+# In-memory cache of the last built prompt (replaces last_prompt.txt file IPC)
+_last_built_prompt = None
+
+def get_last_prompt():
+    """Return the most recently built prompt text (in-memory, no file I/O)."""
+    return _last_built_prompt
+
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
     global _last_prompt_timings
     import modules.module_speed as speed
@@ -251,7 +283,7 @@ Schema:
   "function_calls": [
     {{"function": "string", "parameters": {{}}}}
   ],
-  "new_memories": ["string"]
+  "new_memories": ["string"]{_get_emotion_schema_field(config)}
 }}
 
 === PART 1: FUNCTION CALLING (MANDATORY) ===
@@ -278,7 +310,7 @@ When user requests match these patterns, you MUST call the function:
    Bad examples: "designing unique maze", "working on first level", "still building"
    If no NEW high-level facts, use empty array: []
    Example: "new_memories": ["building Pac-Man game", "has 5 year old kid"]
-
+{_get_emotion_prompt_instruction(config)}
 FUNCTION CALLING RULES:
 - If pattern matches, function_calls MUST contain that function
 - Do NOT just respond with text - MUST include function call
@@ -525,14 +557,9 @@ Current Time: {now.strftime('%H:%M:%S')}
     if debug:
         queue_message(f"DEBUG PROMPT:\n{final_prompt}")
 
-    try:
-        dump_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
-        os.makedirs(dump_dir, exist_ok=True)
-        dump_path = os.path.join(dump_dir, "last_prompt.txt")
-        with open(dump_path, "w", encoding="utf-8") as f:
-            f.write(clean_text(final_prompt))
-    except Exception as e:
-        queue_message(f"[PROMPT DUMP] Failed to write prompt: {e}")
+    # Cache the last prompt in-memory (replaces old last_prompt.txt file IPC)
+    global _last_built_prompt
+    _last_built_prompt = clean_text(final_prompt)
 
     total_dur = speed.stop('prompt_build')
     _last_prompt_timings = {
@@ -541,7 +568,7 @@ Current Time: {now.strftime('%H:%M:%S')}
         'total': total_dur,
     }
 
-    return clean_text(final_prompt)
+    return _last_built_prompt
 
 def clean_text(text):
     return (

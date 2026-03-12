@@ -107,7 +107,8 @@ class _ReplyExtractor:
 
 
 classifier = None
-if CONFIG['EMOTION']['enabled']:
+_emotion_method = CONFIG['EMOTION'].get('emotion_method', 'classifier')
+if CONFIG['EMOTION']['enabled'] and _emotion_method == 'classifier':
     try:
         _emotion_model = CONFIG['EMOTION'].get('emotion_model', 'SamLowe/roberta-base-go_emotions')
         if _emotion_model.endswith('-onnx'):
@@ -413,7 +414,53 @@ def detect_emotion(text):
         return top_axis, raw_label, axis_scores
     except Exception:
         return None, None, {}
-    
+
+
+_LLM_EMOTION_SYNONYMS = {
+    "happy": "joy", "excited": "joy", "cheerful": "joy", "pleased": "joy",
+    "delighted": "joy", "content": "joy", "glad": "joy",
+    "mad": "anger", "furious": "anger", "irritated": "anger", "frustrated": "anger",
+    "annoyed": "anger",
+    "sad": "sadness", "unhappy": "sadness", "depressed": "sadness", "melancholy": "sadness",
+    "scared": "fear", "anxious": "fear", "worried": "fear", "terrified": "fear",
+    "nervous": "fear",
+    "affection": "love", "caring": "love", "grateful": "love", "thankful": "love",
+    "fond": "love",
+    "curious": "curiosity", "interested": "curiosity", "intrigued": "curiosity",
+    "confused": "curiosity",
+    "surprised": "surprise", "shocked": "surprise", "amazed": "surprise",
+    "astonished": "surprise",
+    "calm": "neutral", "indifferent": "neutral",
+}
+
+
+def detect_emotion_from_llm(emotion_str):
+    """Convert an LLM-provided emotion label into (top_axis, raw_label, axis_scores).
+
+    The LLM returns a single emotion word.  Map it to the 8-axis radar and
+    generate synthetic axis_scores (dominant axis gets 0.8, rest get 0.0).
+    """
+    if not emotion_str or not isinstance(emotion_str, str):
+        return None, None, {}
+    try:
+        from modules.module_dashboard_data import _EMOTION_TO_AXIS, _RADAR_AXES
+        label = emotion_str.strip().lower()
+        # Try GoEmotions mapping first, then axis names, then common synonyms
+        axis = _EMOTION_TO_AXIS.get(label, None)
+        if axis is None:
+            if label in _RADAR_AXES:
+                axis = label
+            else:
+                axis = _LLM_EMOTION_SYNONYMS.get(label, None)
+        if axis is None:
+            return None, None, {}
+        axis_scores = {a: 0.0 for a in _RADAR_AXES}
+        axis_scores[axis] = 0.8
+        return axis, label, axis_scores
+    except Exception:
+        return None, None, {}
+
+
 def _repair_truncated_json(s):
     """Repair truncated JSON by closing unclosed strings, brackets, and braces."""
     in_string = False

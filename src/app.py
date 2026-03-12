@@ -269,6 +269,13 @@ def start_discord_in_thread():
 if __name__ == "__main__":
     init_app()
 
+    # === Heartbeat (central scheduler for timed tasks) ===
+    try:
+        import modules.module_heartbeat
+        queue_message("LOAD: Heartbeat module ready")
+    except Exception as e:
+        queue_message(f"WARNING: Heartbeat module not available: {e}")
+
     # === Skills System (auto-discover tool plugins) ===
     initialize_skills()
 
@@ -416,6 +423,16 @@ if __name__ == "__main__":
         shutdown_event.set()
 
     finally:
+        # Flush all deferred writes to disk before shutdown
+        try:
+            from modules.module_dashboard_data import flush_log
+            flush_log()
+        except Exception:
+            pass
+        try:
+            memory_manager.flush()
+        except Exception:
+            pass
         stt_manager.stop()
         # Stop speaker ID if running
         try:

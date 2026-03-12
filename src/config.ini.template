@@ -122,8 +122,12 @@ openai_voice = onyx
 
 [EMOTION]
 # Enable emotion detection for facial expressions on display
-enabled = False
-# HuggingFace model for emotion analysis (~500MB download on first use)
+enabled = True
+# Emotion detection method: classifier | llm
+# classifier = local HuggingFace model (~500MB RAM, 28 fine-grained emotions)
+# llm = LLM returns emotion in its JSON response (zero extra RAM, uses your existing LLM)
+emotion_method = llm
+# HuggingFace model for emotion analysis (only used when emotion_method = classifier)
 # Use the ONNX variant for faster CPU inference: SamLowe/roberta-base-go_emotions-onnx
 emotion_model = SamLowe/roberta-base-go_emotions-onnx
 
@@ -177,7 +181,6 @@ webui_enabled = True
 webui_port = 80
 # Web interface login password
 webui_password = tarspassword
-
 
 [UI]
 # On-device display width in pixels (3.5" = 480, 5–7" = 800)

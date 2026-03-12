@@ -2687,12 +2687,22 @@ function $(id) { return document.getElementById(id); }
     }, 1000);
   }
 
-  if (typeof socket !== 'undefined') {
-    socket.on('emotion_change', function () {
+  function _bindDashSocketListeners() {
+    if (!window.socket) return;
+    window.socket.on('emotion_change', function () {
       debouncedDashRefresh();
     });
-    socket.on('bot_message', function () {
+    window.socket.on('bot_message', function () {
       debouncedDashRefresh();
+    });
+  }
+  // Socket may not exist yet (created in DOMContentLoaded), so defer binding
+  if (window.socket) {
+    _bindDashSocketListeners();
+  } else {
+    document.addEventListener('DOMContentLoaded', function () {
+      // Small delay to ensure socket is created first
+      setTimeout(_bindDashSocketListeners, 100);
     });
   }
 
@@ -3471,6 +3481,9 @@ function $(id) { return document.getElementById(id); }
 
         // Parse prompt into sections
         renderPromptSections(_currentPromptText, meta);
+
+        // Render LLM response section below the prompt
+        renderLLMResponse(data.llm_raw || '', meta);
       })
       .catch(function () {
         sections.innerHTML = '<div class="dash-prompt-empty"><i class="bi bi-x-circle" style="font-size:1.5rem;color:#ef5350"></i><div>Failed to load prompt</div></div>';
@@ -3488,8 +3501,8 @@ function $(id) { return document.getElementById(id); }
     parsed.forEach(function (sec, idx) {
       var secId = 'prompt-sec-' + idx;
       var lineCount = sec.content.split('\n').length;
-      // All sections start collapsed except the first
-      var collapsed = idx > 0;
+      // All prompt sections start collapsed
+      var collapsed = true;
       html += '<div class="dash-prompt-section">';
       html += '<div class="dash-prompt-section-title' + (collapsed ? ' collapsed' : '') + '" data-collapse="' + secId + '">';
       html += '<i class="bi bi-chevron-down"></i> ' + escapeHtml(sec.name);
@@ -3500,18 +3513,6 @@ function $(id) { return document.getElementById(id); }
     });
 
     sections.innerHTML = html;
-
-    // Wire up collapse toggles
-    sections.querySelectorAll('.dash-prompt-section-title').forEach(function (title) {
-      title.addEventListener('click', function () {
-        var targetId = title.getAttribute('data-collapse');
-        var target = document.getElementById(targetId);
-        if (target) {
-          target.classList.toggle('collapsed');
-          title.classList.toggle('collapsed');
-        }
-      });
-    });
   }
 
   function parsePromptSections(text) {
@@ -3571,6 +3572,74 @@ function $(id) { return document.getElementById(id); }
     // Highlight JSON keys
     safe = safe.replace(/"([^"]+)":/g, '<span style="color:#ffca28">"$1"</span>:');
     return safe;
+  }
+
+  function renderLLMResponse(rawText, meta) {
+    var sections = document.getElementById('dshPromptSections');
+    if (!sections || !rawText) return;
+
+    var html = '<div class="dash-prompt-response-divider"><span>LLM RESPONSE</span></div>';
+
+    // Try to parse as JSON to show individual fields
+    var parsed = null;
+    try { parsed = JSON.parse(rawText); } catch (e) {}
+
+    if (parsed && typeof parsed === 'object') {
+      // Render each key as its own collapsible section
+      var keys = Object.keys(parsed);
+      keys.forEach(function (key) {
+        var val = parsed[key];
+        var display = typeof val === 'string' ? val : JSON.stringify(val, null, 2);
+        var secId = 'llm-field-' + key;
+        var collapsed = key !== 'reply' && key !== 'question';
+        html += '<div class="dash-prompt-section">';
+        html += '<div class="dash-prompt-section-title' + (collapsed ? ' collapsed' : '') + '" data-collapse="' + secId + '">';
+        html += '<i class="bi bi-chevron-down"></i> ' + escapeHtml(key);
+        if (typeof val === 'string') {
+          html += '<span class="prompt-sec-lines">' + val.length + ' chars</span>';
+        } else if (Array.isArray(val)) {
+          html += '<span class="prompt-sec-lines">' + val.length + ' items</span>';
+        }
+        html += '</div>';
+        html += '<pre class="dash-prompt-pre' + (collapsed ? ' collapsed' : '') + '" id="' + secId + '">' + highlightPrompt(display) + '</pre>';
+        html += '</div>';
+      });
+
+      // Full raw JSON (collapsed)
+      html += '<div class="dash-prompt-section">';
+      html += '<div class="dash-prompt-section-title collapsed" data-collapse="llm-field-raw">';
+      html += '<i class="bi bi-chevron-down"></i> Raw JSON';
+      html += '<span class="prompt-sec-lines">' + rawText.length + ' chars</span>';
+      html += '</div>';
+      html += '<pre class="dash-prompt-pre collapsed" id="llm-field-raw">' + highlightPrompt(rawText) + '</pre>';
+      html += '</div>';
+    } else {
+      // Not valid JSON — show as plain text
+      html += '<div class="dash-prompt-section">';
+      html += '<div class="dash-prompt-section-title" data-collapse="llm-field-raw">';
+      html += '<i class="bi bi-chevron-down"></i> Raw Response';
+      html += '<span class="prompt-sec-lines">' + rawText.length + ' chars</span>';
+      html += '</div>';
+      html += '<pre class="dash-prompt-pre" id="llm-field-raw">' + escapeHtml(rawText) + '</pre>';
+      html += '</div>';
+    }
+
+    sections.innerHTML += html;
+  }
+
+  // Delegated collapse toggle for all prompt/response sections
+  var promptContainer = document.getElementById('dshPromptSections');
+  if (promptContainer) {
+    promptContainer.addEventListener('click', function (e) {
+      var title = e.target.closest('.dash-prompt-section-title[data-collapse]');
+      if (!title) return;
+      var targetId = title.getAttribute('data-collapse');
+      var target = document.getElementById(targetId);
+      if (target) {
+        target.classList.toggle('collapsed');
+        title.classList.toggle('collapsed');
+      }
+    });
   }
 
   // Dropdown change handler

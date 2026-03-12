@@ -24,6 +24,9 @@ load_dotenv()
 
 character_name = "TARS"
 
+# ── Config cache (avoids re-reading config.ini on every load_config() call) ──
+_config_cache = None
+
 
 class DeviceProfile(Enum):
     PI5 = "pi5"
@@ -314,7 +317,9 @@ def _format_screensaver_list(value) -> str:
 
 
 def load_config():
-    global character_name
+    global character_name, _config_cache
+    if _config_cache is not None:
+        return _config_cache
     base_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(base_dir)
     sys.path.insert(0, base_dir)
@@ -429,6 +434,7 @@ def load_config():
         },
         "EMOTION": {
             "enabled": config.getboolean('EMOTION', 'enabled'),
+            "emotion_method": config.get('EMOTION', 'emotion_method', fallback='classifier'),
             "emotion_model": config['EMOTION']['emotion_model'],
         },
         "TTS": TTSConfig.from_config_dict({
@@ -551,7 +557,7 @@ def load_config():
     }
 
     config_dict = apply_device_overrides(config_dict, capabilities)
-    
+    _config_cache = config_dict
     return config_dict
 
 
@@ -572,18 +578,28 @@ def get_api_key(llm_backend: str) -> str:
     return api_key
 
 
+_persona_cache = None       # cached persona traits dict
+_persona_mtime = 0.0        # mtime of persona.ini when last read
+
+
 def reload_persona_settings():
-    global character_name
+    global character_name, _persona_cache, _persona_mtime
     try:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         persona_path = os.path.join(base_dir, 'character', character_name, 'persona.ini')
         if not os.path.exists(persona_path):
             queue_message(f"WARNING: persona.ini not found at {persona_path}")
             return None
+        # Only re-read if the file has actually changed
+        mtime = os.path.getmtime(persona_path)
+        if _persona_cache is not None and mtime == _persona_mtime:
+            return _persona_cache
         persona_config = configparser.ConfigParser()
         persona_config.read(persona_path)
         if 'PERSONA' in persona_config:
-            return {key: int(value) for key, value in persona_config['PERSONA'].items()}
+            _persona_cache = {key: int(value) for key, value in persona_config['PERSONA'].items()}
+            _persona_mtime = mtime
+            return _persona_cache
         return None
     except Exception as e:
         queue_message(f"ERROR: Failed to reload persona settings: {e}")
@@ -591,7 +607,7 @@ def reload_persona_settings():
 
 
 def update_character_setting(trait: str, value: int):
-    global character_name
+    global character_name, _persona_cache, _persona_mtime
     try:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         persona_path = os.path.join(base_dir, 'character', character_name, 'persona.ini')
@@ -605,6 +621,9 @@ def update_character_setting(trait: str, value: int):
         persona_config['PERSONA'][trait] = str(value)
         with open(persona_path, 'w') as f:
             persona_config.write(f)
+        # Invalidate persona cache so next reload picks up the change
+        _persona_cache = None
+        _persona_mtime = 0.0
         queue_message(f"INFO: Updated {trait} to {value}")
         return True
     except Exception as e:
@@ -801,10 +820,20 @@ CONFIG_METADATA = {
     'EMOTION': {
         '__description__': 'Controls whether TARS shows emotions on its face/display based on what it says',
         'enabled': {
-            'description': 'When ON, TARS analyzes its own responses to figure out the emotion behind them (happy, sad, angry, surprised, etc.) and then shows matching facial expressions on its screen. This makes TARS feel more alive and expressive. Turn this OFF if you are not using the TARS display screen, or if you want to save processing power on weaker Pi models. The emotion detection runs a small AI model that uses some RAM and CPU.'
+            'description': 'When ON, TARS analyzes its own responses to figure out the emotion behind them (happy, sad, angry, surprised, etc.) and then shows matching facial expressions on its screen. This makes TARS feel more alive and expressive. Turn this OFF if you are not using the TARS display screen, or if you want to save processing power on weaker Pi models.'
+        },
+        'emotion_method': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'options': ['classifier', 'llm'],
+            'option_labels': {'classifier': 'Classifier (local model)', 'llm': 'LLM (from response)'},
+            'label': 'Detection Method',
+            'description': 'How TARS detects emotions. "Classifier" downloads and runs a dedicated AI model locally (~500MB RAM, 28 fine-grained emotions). "LLM" asks your existing LLM to include the emotion in its response — zero extra RAM, but less granular (8 categories). Use LLM on Pi3/PiZero2 to save resources.'
         },
         'emotion_model': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'depends_on': [
+                {'field': 'enabled', 'values': ['True', 'true']},
+                {'field': 'emotion_method', 'values': ['classifier']}
+            ],
             'description': 'The name of the AI model used to detect emotions in text. The default model can recognize 28 different emotions like joy, sadness, anger, surprise, fear, and more. It gets downloaded automatically the first time you enable emotion detection (about 500MB download). You should not need to change this unless you want to experiment with a different emotion model from HuggingFace.'
         },
     },
@@ -1120,9 +1149,12 @@ def update_config_from_web_ui(data: dict, create_backup: bool = True) -> dict:
     """
     Update configuration using TARS CMS (Programmatic Access)
     """
+    global _config_cache
     try:
         cms = TarsConfigManager()
         success, message, actions_taken = cms.update_config_programmatically(data, create_backup)
+        if success:
+            _config_cache = None  # Invalidate so next load_config() re-reads disk
         return {
             "success": success,
             "message": message,

@@ -170,6 +170,7 @@ class HyperDB:
         """
         self.documents = []
         self.vectors = None
+        self.extra_data = {}  # arbitrary metadata persisted alongside vectors/documents
         self.embedding_function = embedding_function or (
             lambda docs: get_embedding(docs)
         )
@@ -304,7 +305,8 @@ class HyperDB:
         """
         data = {
             "vectors": self.vectors,
-            "documents": self.documents
+            "documents": self.documents,
+            "extra_data": self.extra_data,
         }
         
         try:
@@ -337,7 +339,8 @@ class HyperDB:
                 self.vectors = None
 
             self.documents = data.get("documents", [])
-            
+            self.extra_data = data.get("extra_data", {})
+
             # Re-initialize BM25 if we're in hybrid mode
             if self.rag_strategy == "hybrid" and self.documents:
                 self._init_bm25_index()
