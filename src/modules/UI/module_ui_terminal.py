@@ -118,7 +118,7 @@ class TerminalSystem:
         self.scroll_up_rect = None
         self.scroll_down_rect = None
 
-        self.log_dir = Path.home() / ".local" / "share" / "tars_ai"
+        self.log_dir = Path(__file__).resolve().parent.parent.parent / "memory"
         self.log_file = self.log_dir / "terminal_log.json"
         self.max_log_messages = 100
 

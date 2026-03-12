@@ -124,7 +124,8 @@ openai_voice = onyx
 # Enable emotion detection for facial expressions on display
 enabled = False
 # HuggingFace model for emotion analysis (~500MB download on first use)
-emotion_model = SamLowe/roberta-base-go_emotions
+# Use the ONNX variant for faster CPU inference: SamLowe/roberta-base-go_emotions-onnx
+emotion_model = SamLowe/roberta-base-go_emotions-onnx
 
 [VISION]
 # Enable camera vision (~1GB RAM when active)

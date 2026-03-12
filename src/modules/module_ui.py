@@ -102,7 +102,7 @@ class UIManager(threading.Thread):
         self.next_background = None
 
         from pathlib import Path
-        self.settings_dir = Path.home() / ".local" / "share" / "tars_ai"
+        self.settings_dir = Path(__file__).resolve().parent.parent / "memory"
         self.settings_file = self.settings_dir / "ui_settings.json"
         self.spectrum_style = 'bars'  
 

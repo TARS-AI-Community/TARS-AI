@@ -162,6 +162,13 @@ TARS_lite.json
 initial_memory.loaded
 initial_memory.json
 voice_memory.json
+last_prompt.txt
+ui_settings.json
+terminal_log.json
+pi_version
+interaction_log.json
+emotional_state.json
+prompt_history/
 
 # Character Data & Personas
 *persona.ini
@@ -188,6 +195,8 @@ dashboard.ini
 stt/
 !stt/hey-tars_en_raspberry-pi_v4_0_0.ppn
 src/tts/kokoro*
+src/tts/cache/
+src/tts/*_templates.pkl
 
 # Character Image Exceptions
 character/
@@ -195,3 +204,5 @@ character/
 !character/KIPP/images/neutral/**
 !character/CASE/images/neutral/**
 !character/PLEX/images/neutral/**
+
+tarsdiscordbot/

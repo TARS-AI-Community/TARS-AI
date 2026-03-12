@@ -109,9 +109,17 @@ class _ReplyExtractor:
 classifier = None
 if CONFIG['EMOTION']['enabled']:
     try:
-        from transformers import pipeline
-        classifier = pipeline("text-classification", model="SamLowe/roberta-base-go_emotions", top_k=None)
-    except ImportError:
+        _emotion_model = CONFIG['EMOTION'].get('emotion_model', 'SamLowe/roberta-base-go_emotions')
+        if _emotion_model.endswith('-onnx'):
+            from optimum.onnxruntime import ORTModelForSequenceClassification
+            from transformers import pipeline, AutoTokenizer
+            _ort_model = ORTModelForSequenceClassification.from_pretrained(_emotion_model)
+            _tokenizer = AutoTokenizer.from_pretrained(_emotion_model)
+            classifier = pipeline("text-classification", model=_ort_model, tokenizer=_tokenizer, top_k=None)
+        else:
+            from transformers import pipeline
+            classifier = pipeline("text-classification", model=_emotion_model, top_k=None)
+    except Exception:
         pass
 
 
@@ -371,11 +379,40 @@ def process_completion(prompt, image_b64=None):
     return future.result()
 
 def detect_emotion(text):
-    if classifier is None:
-        return None
-    model_outputs = classifier(text)
-    emotion_detected = max(model_outputs[0], key=lambda x: x['score'])['label']
-    return emotion_detected
+    """Detect emotion and return (top_axis, raw_label, axis_scores_dict).
+
+    Sums all 28 GoEmotions scores into 8 radar axes, then returns
+    the dominant axis name, the top raw GoEmotions label, and the
+    full {axis: score} dict.
+    """
+    if classifier is None or not text or not text.strip():
+        return None, None, {}
+    try:
+        from modules.module_dashboard_data import _EMOTION_TO_AXIS, _RADAR_AXES
+        model_outputs = classifier(text)
+        if not model_outputs or not model_outputs[0]:
+            return None, None, {}
+        raw_scores = model_outputs[0]
+        # Sum raw scores into grouped radar axes
+        axis_scores = {a: 0.0 for a in _RADAR_AXES}
+        for s in raw_scores:
+            axis = _EMOTION_TO_AXIS.get(s['label'], s['label'])
+            if axis in axis_scores:
+                axis_scores[axis] += s['score']
+        # Pick dominant axis — prefer non-neutral unless nothing else is meaningful
+        non_neutral = {k: v for k, v in axis_scores.items() if k != 'neutral'}
+        top_axis = max(non_neutral, key=non_neutral.get) if non_neutral else 'neutral'
+        if non_neutral.get(top_axis, 0) < 0.05:
+            top_axis = 'neutral'
+        # Top raw label (excluding neutral unless nothing else scores)
+        raw_non_neutral = [s for s in raw_scores if s['label'] != 'neutral']
+        if raw_non_neutral and max(raw_non_neutral, key=lambda x: x['score'])['score'] >= 0.05:
+            raw_label = max(raw_non_neutral, key=lambda x: x['score'])['label']
+        else:
+            raw_label = max(raw_scores, key=lambda x: x['score'])['label']
+        return top_axis, raw_label, axis_scores
+    except Exception:
+        return None, None, {}
     
 def _repair_truncated_json(s):
     """Repair truncated JSON by closing unclosed strings, brackets, and braces."""
