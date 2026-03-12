@@ -1,0 +1,114 @@
+<!-- ── NEXUS DASHBOARD TAB ── -->
+<div class="tab-pane fade" id="dashboard" role="tabpanel">
+  <div class="dash-wrap">
+
+    <!-- Stats strip -->
+    <div class="dash-stats-strip">
+      <div class="dash-stat">
+        <span class="dash-stat-value" id="dshMemories">--</span>
+        <span class="dash-stat-label">Memories</span>
+      </div>
+      <div class="dash-stat">
+        <span class="dash-stat-value" id="dshTopics">--</span>
+        <span class="dash-stat-label">Topics</span>
+      </div>
+      <div class="dash-stat">
+        <span class="dash-stat-value" id="dshInteractions">--</span>
+        <span class="dash-stat-label">Interactions</span>
+      </div>
+      <div class="dash-stat">
+        <span class="dash-stat-value dash-emotion-pill" id="dshEmotion">--</span>
+        <span class="dash-stat-label">Mood</span>
+      </div>
+    </div>
+
+    <!-- Sub-tab switcher -->
+    <div class="dash-subtabs">
+      <button class="dash-subtab active" data-panel="dshGraph">Graph</button>
+      <button class="dash-subtab" data-panel="dshMood">Mood</button>
+      <button class="dash-subtab" data-panel="dshLog">Log</button>
+      <button class="dash-subtab" data-panel="dshTopicsPanel">Topics</button>
+      <button class="dash-subtab" data-panel="dshPrompt">Prompt</button>
+    </div>
+
+    <!-- ── GRAPH panel ── -->
+    <div class="dash-panel active" id="dshGraph">
+      <div class="section-label"><span>Memory &amp; Knowledge Graph</span></div>
+      <div class="dash-graph-layout">
+        <div class="dash-graph-container" id="dshGraphSvg"></div>
+        <div class="dash-detail-panel" id="dshDetailDrawer">
+          <div class="dash-detail-header">
+            <h4 id="dshDetailTitle">--</h4>
+            <button class="dash-detail-close" id="dshDetailClose">&times;</button>
+          </div>
+          <div id="dshDetailBody"></div>
+          <div class="dash-detail-actions" id="dshDetailActions"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MOOD panel ── -->
+    <div class="dash-panel" id="dshMood">
+      <div class="section-label"><span>Mood Analytics</span></div>
+      <div class="dash-mood-grid">
+        <div class="dash-chart-card">
+          <div class="dash-chart-title">Emotional State</div>
+          <div class="dash-chart" id="dshMoodBar"></div>
+        </div>
+        <div class="dash-chart-card">
+          <div class="dash-chart-title">Mood Timeline</div>
+          <div class="dash-chart" id="dshMoodTimeline"></div>
+        </div>
+        <div class="dash-chart-card">
+          <div class="dash-chart-title">Activity Heatmap</div>
+          <div class="dash-chart" id="dshActivityBar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── LOG panel ── -->
+    <div class="dash-panel" id="dshLog">
+      <div class="section-label"><span>Interaction Audit Log</span></div>
+      <div class="dash-log-list" id="dshLogList">
+        <div class="dash-log-empty">No interactions recorded yet.</div>
+      </div>
+    </div>
+
+    <!-- ── TOPICS panel ── -->
+    <div class="dash-panel" id="dshTopicsPanel">
+      <div class="section-label"><span>Knowledge Topics</span></div>
+      <div class="dash-topics-graph" id="dshTopicsGraph"></div>
+      <div class="dash-topics-table-wrap">
+        <table class="dash-topics-table" id="dshTopicsTable">
+          <thead>
+            <tr><th>Topic</th><th>Mentions</th><th>First Seen</th><th>Last Seen</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── PROMPT DEBUGGER panel ── -->
+    <div class="dash-panel" id="dshPrompt">
+      <div class="section-label"><span>Prompt Debugger</span></div>
+      <div class="dash-prompt-toolbar">
+        <select class="dash-prompt-select" id="dshPromptSelect">
+          <option value="">Select interaction to debug...</option>
+        </select>
+        <div class="dash-prompt-btn-group">
+          <button class="dash-prompt-btn" id="dshPromptExpandAll" disabled><i class="bi bi-arrows-expand"></i> Expand</button>
+          <button class="dash-prompt-btn" id="dshPromptCollapseAll" disabled><i class="bi bi-arrows-collapse"></i> Collapse</button>
+          <button class="dash-prompt-btn" id="dshPromptCopy" disabled><i class="bi bi-clipboard"></i> Copy</button>
+        </div>
+      </div>
+      <div class="dash-prompt-info" id="dshPromptInfo"></div>
+      <div class="dash-prompt-sections" id="dshPromptSections">
+        <div class="dash-prompt-empty" id="dshPromptEmpty">
+          <i class="bi bi-bug" style="font-size:2rem;opacity:0.3"></i>
+          <div>Select an interaction above to inspect its prompt</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

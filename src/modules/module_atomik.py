@@ -140,7 +140,7 @@ class WakeWordSystem:
         print("- Say your wake word clearly")
         print("- It automatically stops recording when you finish")
         print("- Augments each recording (speed/pitch variations)")
-        print("- To start over, delete the hey_tars_templates.pkl file in ~/.local/share/tars_ai")
+        print("- To start over, delete the hey_tars_templates.pkl file in src/tts/")
         print()
         print("TIPS FOR BEST RESULTS:")
         print("- Speak naturally at normal volume")
@@ -315,8 +315,7 @@ class WakeWordSystem:
         return False, max_sim
 
     def save_templates(self, filename=None):
-        home = os.path.expanduser("~")
-        data_dir = os.path.join(home, ".local", "share", "tars_ai")
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tts")
         os.makedirs(data_dir, exist_ok=True)
         filename = filename or f"{self.wake_word.replace(' ', '_')}_templates.pkl"
         filepath = os.path.join(data_dir, filename)
@@ -324,8 +323,7 @@ class WakeWordSystem:
             pickle.dump(self.templates, f)
 
     def load_templates(self, filename=None):
-        home = os.path.expanduser("~")
-        data_dir = os.path.join(home, ".local", "share", "tars_ai")
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tts")
         filename = filename or f"{self.wake_word.replace(' ', '_')}_templates.pkl"
         filepath = os.path.join(data_dir, filename)
         if os.path.exists(filepath):
@@ -335,8 +333,7 @@ class WakeWordSystem:
         return False
     
     def delete_templates(self, filename=None):
-        home = os.path.expanduser("~")
-        data_dir = os.path.join(home, ".local", "share", "tars_ai")
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tts")
         filename = filename or f"{self.wake_word.replace(' ', '_')}_templates.pkl"
         filepath = os.path.join(data_dir, filename)
         if os.path.exists(filepath):

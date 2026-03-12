@@ -338,8 +338,10 @@ def utterance_callback(message):
         # Detect emotion (parallel-safe — runs while TTS thread plays sentences)
         speed.start('emotion')
         emotion = None
-        if CONFIG['EMOTION']['enabled'] and reply:
-            emotion = detect_emotion(reply)
+        emotion_raw = None
+        axis_scores = {}
+        if CONFIG['EMOTION']['enabled'] and user_text:
+            emotion, emotion_raw, axis_scores = detect_emotion(user_text)
             if emotion:
                 try:
                     from modules.module_chatui import update_emotion
@@ -347,6 +349,21 @@ def utterance_callback(message):
                 except Exception:
                     pass
         emo_dur = speed.stop('emotion')
+
+        # Log interaction for dashboard analytics
+        try:
+            from modules.module_dashboard_data import log_interaction
+            _speaker = None
+            try:
+                from modules.module_identity import get_identity_manager
+                im = get_identity_manager()
+                if im:
+                    _speaker = im.get_current_speaker()
+            except Exception:
+                pass
+            log_interaction(user_text, reply, emotion=emotion, emotion_raw=emotion_raw, axis_scores=axis_scores, speaker=_speaker)
+        except Exception:
+            pass
 
         # Finalize the streaming message with the complete reply
         if ui_manager:

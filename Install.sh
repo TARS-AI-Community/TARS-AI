@@ -69,7 +69,7 @@ tars_say() {
 }
 
 select_pi_version() {
-    local tars_data_dir="$HOME/.local/share/tars_ai"
+    local tars_data_dir="src/memory"
     local pi_version_file="$tars_data_dir/pi_version"
     local config_file="src/config.ini"
     local has_device_section=false
@@ -597,6 +597,9 @@ EMBEDDINGS
 
 # === SHERPA-ONNX STT (Pi4/Pi5) ===
 sherpa-onnx                     # Offline speech recognition (SenseVoiceTiny)
+
+# === ONNX RUNTIME FOR EMOTION DETECTION (Pi4/Pi5) ===
+optimum[onnxruntime]            # ONNX Runtime inference for emotion classifier
 
 SHERPA
     fi
@@ -1212,32 +1215,32 @@ main() {
     
     echo ""
     
-    WAKEWORD_DIR="$HOME/.local/share/tars_ai"
-    
-    if [ -d "$WAKEWORD_DIR" ]; then
+    WAKEWORD_PKL=$(find src/tts -maxdepth 1 -name '*_templates.pkl' 2>/dev/null | head -1)
+
+    if [ -n "$WAKEWORD_PKL" ]; then
         echo "+===============================================================+"
         echo "| WAKEWORD TEMPLATE DETECTED"
         echo "+===============================================================+"
-        echo "| Location: $WAKEWORD_DIR"
+        echo "| Location: $WAKEWORD_PKL"
         echo "+===============================================================+"
         echo ""
-        
+
         read -t 30 -p "Would you like to delete the wakeword template in order to create a new one? [y/n]: " -r WAKEWORD_REPLY
         echo ""
-        
+
         if [[ $WAKEWORD_REPLY =~ ^[Yy]$ ]]; then
-            tars_say "Removing wakeword template directory..." "info"
-            
-            if rm -rf "$WAKEWORD_DIR" 2>/dev/null; then
-                tars_say "Wakeword template directory successfully removed." "success"
+            tars_say "Removing wakeword template..." "info"
+
+            if rm -f src/tts/*_templates.pkl 2>/dev/null; then
+                tars_say "Wakeword template successfully removed." "success"
             else
-                tars_say "Failed to remove wakeword template directory. You may need to remove it manually." "warning"
-                echo "| Run manually: rm -rf $WAKEWORD_DIR"
+                tars_say "Failed to remove wakeword template. You may need to remove it manually." "warning"
+                echo "| Run manually: rm -f src/tts/*_templates.pkl"
             fi
         else
             echo ""
-            echo "Wakeword template directory preserved."
-            echo "You can delete it later with: rm -rf $WAKEWORD_DIR"
+            echo "Wakeword template preserved."
+            echo "You can delete it later with: rm -f src/tts/*_templates.pkl"
         fi
         echo ""
     fi

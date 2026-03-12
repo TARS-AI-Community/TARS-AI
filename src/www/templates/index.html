@@ -8,14 +8,14 @@
   <meta http-equiv="Expires" content="0">
   <title id="titleid">T.A.R.S.</title>
 
-  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v=6.0" rel="stylesheet">
-  <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}?v=6.0" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v=7.2" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}?v=7.2" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
-  <link href="{{ url_for('static', filename='css/main.css') }}?v=6.0" rel="stylesheet">
-  <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}?v=6.0">
+  <link href="{{ url_for('static', filename='css/main.css') }}?v=7.2" rel="stylesheet">
+  <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}?v=7.2">
 
-  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v=6.0"></script>
-  <script src="{{ url_for('static', filename='js/socket.io.js') }}?v=6.0"></script>
+  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v=7.2"></script>
+  <script src="{{ url_for('static', filename='js/socket.io.js') }}?v=7.2"></script>
 </head>
 
 <body>
@@ -37,6 +37,7 @@
       <button class="custom-tab"        id="emotions-tab" data-bs-toggle="tab" data-bs-target="#emotions" role="tab" aria-label="Emotions"><i class="bi bi-emoji-smile"></i></button>
       <button class="custom-tab"        id="wifi-tab"     data-bs-toggle="tab" data-bs-target="#wifi"     role="tab" aria-label="WiFi"><i class="bi bi-wifi"></i></button>
       <button class="custom-tab"        id="config-tab"   data-bs-toggle="tab" data-bs-target="#config"   role="tab" aria-label="Config"><i class="bi bi-gear-fill"></i></button>
+      <button class="custom-tab"        id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" role="tab" aria-label="Dashboard"><i class="bi bi-graph-up"></i></button>
       <button class="custom-tab"        id="nexus-tab"    data-bs-toggle="tab" data-bs-target="#nexus"    role="tab" aria-label="SYS"><i class="bi bi-cpu"></i></button>
     </div>
     <div class="tab-bar-right">
@@ -59,6 +60,7 @@
       {% include 'tabs/emotions.html' %}
       {% include 'tabs/wifi.html' %}
       {% include 'tabs/config.html' %}
+      {% include 'tabs/dashboard.html' %}
       {% include 'tabs/sys.html' %}
     </div>
   </div>
@@ -72,7 +74,8 @@
       <button class="mobile-nav-btn" data-tab-index="3" aria-label="Emotions"><i class="bi bi-emoji-smile"></i><span>FACE</span></button>
       <button class="mobile-nav-btn" data-tab-index="4" aria-label="WiFi"><i class="bi bi-wifi"></i><span>WiFi</span></button>
       <button class="mobile-nav-btn" data-tab-index="5" aria-label="Config"><i class="bi bi-gear-fill"></i><span>Config</span></button>
-      <button class="mobile-nav-btn" data-tab-index="6" aria-label="SYS"><i class="bi bi-cpu"></i><span>SYS</span></button>
+      <button class="mobile-nav-btn" data-tab-index="6" aria-label="Dashboard"><i class="bi bi-graph-up"></i><span>Dash</span></button>
+      <button class="mobile-nav-btn" data-tab-index="7" aria-label="SYS"><i class="bi bi-cpu"></i><span>SYS</span></button>
     </div>
   </nav>
 
@@ -90,7 +93,8 @@
     };
   </script>
 
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=6.0"></script>
-  <script src="{{ url_for('static', filename='js/particles.js') }}?v=6.0"></script>
+  <script src="{{ url_for('static', filename='js/d3.v7.min.js') }}?v=7.2"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=7.2"></script>
+  <script src="{{ url_for('static', filename='js/particles.js') }}?v=7.2"></script>
 </body>
 </html>

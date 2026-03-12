@@ -29,7 +29,7 @@ CONFIG = load_config()
 openai.api_key = CONFIG["TTS"]["openai_api_key"]
 VOICE = CONFIG["TTS"]["openai_voice"]
 
-CACHE_DIR = os.path.expanduser("~/.local/share/tars_ai_replies")
+CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tts", "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 def get_cache_filename(text):

@@ -2091,8 +2091,8 @@ window.showToast = function (message, type, duration) {
 
 // ── MOBILE SWIPE NAV ─────────────────────────────────────────────────────────
 (function () {
-  const TAB_IDS = ['chat', 'motion', 'body', 'emotions', 'wifi', 'config', 'nexus'];
-  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'body-tab', 'emotions-tab', 'wifi-tab', 'config-tab', 'nexus-tab'];
+  const TAB_IDS = ['chat', 'motion', 'body', 'emotions', 'wifi', 'config', 'dashboard', 'nexus'];
+  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'body-tab', 'emotions-tab', 'wifi-tab', 'config-tab', 'dashboard-tab', 'nexus-tab'];
   let currentIndex = 0;
   let isMobile = false;
 
@@ -2433,4 +2433,1201 @@ function $(id) { return document.getElementById(id); }
       if (sel) { sel.value = preselect; loadCharacter(preselect); }
     }
   };
+})();
+
+/* ═══════════════════════════════════════════════════════════════════
+   DASHBOARD — Memory Graph, Mood Analytics, Audit Log, Topics
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  var dashLoaded = false;
+  var graphSim = null;
+
+  // Axis group colors — each of the 8 radar axes gets a distinct color
+  var axisColors = {
+    joy:       '#66bb6a',   // green
+    anger:     '#ef5350',   // red
+    sadness:   '#5c6bc0',   // blue
+    fear:      '#7e57c2',   // purple
+    love:      '#ec407a',   // pink
+    curiosity: '#29b6f6',   // cyan
+    surprise:  '#ffca28',   // amber
+    neutral:   '#78909c'    // gray
+  };
+  // Map every GoEmotions label → its axis for color lookup
+  var emotionToAxis = {
+    joy:'joy', amusement:'joy', excitement:'joy', optimism:'joy', pride:'joy', relief:'joy',
+    anger:'anger', annoyance:'anger', disapproval:'anger', disgust:'anger',
+    sadness:'sadness', disappointment:'sadness', grief:'sadness', remorse:'sadness', embarrassment:'sadness',
+    fear:'fear', nervousness:'fear',
+    love:'love', admiration:'love', caring:'love', desire:'love', gratitude:'love', approval:'love',
+    curiosity:'curiosity', confusion:'curiosity', realization:'curiosity',
+    surprise:'surprise',
+    neutral:'neutral'
+  };
+  // Ordered list: emotions grouped by axis for timeline y-axis
+  var emotionOrder = [
+    'joy','amusement','excitement','optimism','pride','relief',
+    'love','admiration','caring','desire','gratitude','approval',
+    'curiosity','confusion','realization',
+    'surprise',
+    'neutral',
+    'fear','nervousness',
+    'sadness','disappointment','grief','remorse','embarrassment',
+    'anger','annoyance','disapproval','disgust'
+  ];
+  function getMoodColor(m) {
+    var key = (m||'').toLowerCase();
+    var axis = emotionToAxis[key] || key;
+    return axisColors[axis] || '#78909c';
+  }
+
+  // Track which sub-panels have been rendered
+  var _panelRendered = {};
+  var _moodData = null;
+  var _topicsData = null;
+
+  // Sub-tab switching
+  document.querySelectorAll('.dash-subtab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.dash-subtab').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.dash-panel').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      var panelId = btn.getAttribute('data-panel');
+      var panel = document.getElementById(panelId);
+      if (panel) panel.classList.add('active');
+      // Deferred render for panels that need visible containers
+      requestAnimationFrame(function () {
+        if (panelId === 'dshMood' && _moodData && !_panelRendered.mood) {
+          _panelRendered.mood = true;
+          renderEmotionalRadar(_moodData.emotional_state);
+          renderMoodTimeline(_moodData.timeline);
+          renderActivityHeatmap(_moodData.activity_heatmap || {});
+        }
+        if (panelId === 'dshTopicsPanel' && _topicsData && !_panelRendered.topics) {
+          _panelRendered.topics = true;
+          renderTopicsGraph(_topicsData);
+        }
+        if (panelId === 'dshPrompt' && _promptInteractions.length && !_panelRendered.prompt) {
+          _panelRendered.prompt = true;
+          populatePromptDropdown();
+        }
+      });
+    });
+  });
+
+  // Detail drawer
+  var drawer = document.getElementById('dshDetailDrawer');
+  var drawerClose = document.getElementById('dshDetailClose');
+  if (drawerClose) drawerClose.addEventListener('click', function () { drawer.classList.remove('open'); });
+
+  // Currently selected node for operations
+  var _selectedNode = null;
+
+  function showDetail(node) {
+    _selectedNode = node;
+    var title = document.getElementById('dshDetailTitle');
+    var body = document.getElementById('dshDetailBody');
+    var actions = document.getElementById('dshDetailActions');
+    title.textContent = node.name || node.id;
+
+    var html = '';
+    html += '<div class="detail-row"><span class="detail-label">Type</span><br>' + (node.group || '--') + '</div>';
+    if (node.details) {
+      Object.keys(node.details).forEach(function (k) {
+        var v = node.details[k];
+        if (v !== '' && v !== null && v !== undefined) {
+          html += '<div class="detail-row"><span class="detail-label">' + k.replace(/_/g, ' ') + '</span><br>' + escapeHtml(String(v)) + '</div>';
+        }
+      });
+    }
+    body.innerHTML = html;
+
+    // Show delete button for memory nodes
+    actions.innerHTML = '';
+    if (node.group === 'memory' && node.id && node.id.startsWith('mem_')) {
+      var memIndex = parseInt(node.id.replace('mem_', ''), 10);
+      if (!isNaN(memIndex)) {
+        var btn = document.createElement('button');
+        btn.className = 'dash-delete-btn';
+        btn.innerHTML = '<i class="bi bi-trash3"></i> Delete Memory';
+        btn.setAttribute('data-index', memIndex);
+        var clickCount = 0;
+        btn.addEventListener('click', function () {
+          clickCount++;
+          if (clickCount === 1) {
+            btn.classList.add('confirm');
+            btn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Click again to confirm';
+            setTimeout(function () { clickCount = 0; btn.classList.remove('confirm'); btn.innerHTML = '<i class="bi bi-trash3"></i> Delete Memory'; }, 3000);
+          } else {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
+            fetch('/api/dashboard/memory/delete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ index: memIndex })
+            }).then(function (r) { return r.json(); }).then(function (data) {
+              if (data.success) {
+                btn.innerHTML = '<i class="bi bi-check2"></i> Deleted';
+                btn.style.color = '#39ff14';
+                btn.style.borderColor = 'rgba(57,255,20,0.3)';
+                // Remove the node visually
+                d3.selectAll('circle').filter(function (d) { return d.id === node.id; }).transition().duration(300).attr('r', 0).remove();
+                d3.selectAll('line').filter(function (d) { return d.source.id === node.id || d.target.id === node.id; }).transition().duration(300).attr('opacity', 0).remove();
+                // Update stats
+                var memEl = document.getElementById('dshMemories');
+                if (memEl && data.remaining !== undefined) memEl.textContent = data.remaining;
+                setTimeout(function () { drawer.classList.remove('open'); }, 800);
+              } else {
+                btn.innerHTML = '<i class="bi bi-x-circle"></i> ' + (data.error || 'Failed');
+                btn.style.color = '#ef5350';
+                btn.disabled = false;
+                clickCount = 0;
+              }
+            }).catch(function () {
+              btn.innerHTML = '<i class="bi bi-x-circle"></i> Error';
+              btn.disabled = false;
+              clickCount = 0;
+            });
+          }
+        });
+        actions.appendChild(btn);
+      }
+    }
+
+    drawer.classList.add('open');
+  }
+
+  // ── Refresh stats strip (lightweight, safe to call repeatedly) ──
+  var _emotionEnabled = true; // assume true until stats tell us otherwise
+
+  function refreshStats() {
+    fetch('/api/dashboard/stats').then(function (r) { return r.json(); }).then(function (d) {
+      var el = function (id) { return document.getElementById(id); };
+      if (el('dshMemories'))     el('dshMemories').textContent = d.memories || 0;
+      if (el('dshTopics'))       el('dshTopics').textContent = d.topics || 0;
+      if (el('dshInteractions')) el('dshInteractions').textContent = d.interactions || 0;
+
+      _emotionEnabled = d.emotion_enabled !== false;
+
+      if (el('dshEmotion')) {
+        if (_emotionEnabled) {
+          var emo = d.current_emotion || 'neutral';
+          el('dshEmotion').textContent = emo;
+          el('dshEmotion').style.color = getMoodColor(emo);
+          el('dshEmotion').parentElement.style.display = '';
+        } else {
+          el('dshEmotion').parentElement.style.display = 'none';
+        }
+      }
+
+      // Disable/enable the Mood sub-tab
+      var moodBtn = document.querySelector('.dash-subtab[data-panel="dshMood"]');
+      if (moodBtn) {
+        if (_emotionEnabled) {
+          moodBtn.disabled = false;
+          moodBtn.style.opacity = '';
+          moodBtn.style.pointerEvents = '';
+          moodBtn.title = '';
+        } else {
+          moodBtn.disabled = true;
+          moodBtn.style.opacity = '0.3';
+          moodBtn.style.pointerEvents = 'none';
+          moodBtn.title = 'Enable emotions in config to use this panel';
+        }
+      }
+    }).catch(function () {});
+  }
+
+  // ── Load dashboard data (heavy, runs once) ──
+  function loadDashboard() {
+    dashLoaded = true;
+    refreshStats();
+    loadGraph();
+    loadMoodData();
+    loadLog();
+    loadTopicsData();
+    loadPrompt();
+  }
+
+  // ── Live dashboard updates via SocketIO ──
+  function refreshActiveDashboardPanel() {
+    if (!dashLoaded) return;
+    // Always refresh the stats strip
+    refreshStats();
+    // Invalidate render cache so inactive panels re-render on next visit
+    _panelRendered = {};
+    // Find which sub-panel is active and refresh it
+    var activePanel = document.querySelector('.dash-panel.active');
+    if (!activePanel) return;
+    var panelId = activePanel.id;
+    if (panelId === 'dshMood') {
+      fetch('/api/dashboard/mood').then(function (r) { return r.json(); }).then(function (data) {
+        _moodData = data;
+        renderEmotionalRadar(data.emotional_state);
+        renderMoodTimeline(data.timeline);
+        renderActivityHeatmap(data.activity_heatmap || {});
+      }).catch(function () {});
+    } else if (panelId === 'dshLog') {
+      loadLog();
+    } else if (panelId === 'dshGraph') {
+      loadGraph();
+    } else if (panelId === 'dshTopicsPanel') {
+      loadTopicsData();
+    } else if (panelId === 'dshPrompt') {
+      loadPrompt();
+    }
+  }
+
+  var _dashRefreshTimer = null;
+  function debouncedDashRefresh() {
+    if (_dashRefreshTimer) clearTimeout(_dashRefreshTimer);
+    _dashRefreshTimer = setTimeout(function () {
+      _dashRefreshTimer = null;
+      refreshActiveDashboardPanel();
+    }, 1000);
+  }
+
+  if (typeof socket !== 'undefined') {
+    socket.on('emotion_change', function () {
+      debouncedDashRefresh();
+    });
+    socket.on('bot_message', function () {
+      debouncedDashRefresh();
+    });
+  }
+
+  // ── GRAPH ──
+  function loadGraph() {
+    fetch('/api/dashboard/graph').then(function (r) { return r.json(); }).then(function (data) {
+      renderGraph(data.nodes, data.links);
+    }).catch(function () {});
+  }
+
+  function renderGraph(nodes, links) {
+    var container = document.getElementById('dshGraphSvg');
+    if (!container || typeof d3 === 'undefined') return;
+    container.innerHTML = '';
+
+    var w = container.clientWidth || 600;
+    var h = Math.max(container.clientHeight || 450, 450);
+
+    var svg = d3.select(container).append('svg')
+      .attr('viewBox', '0 0 ' + w + ' ' + h)
+      .attr('preserveAspectRatio', 'xMidYMid meet');
+
+    // Glow filter for hub/core nodes
+    var defs = svg.append('defs');
+    var filter = defs.append('filter').attr('id', 'glow');
+    filter.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'blur');
+    filter.append('feMerge').selectAll('feMergeNode')
+      .data(['blur', 'SourceGraphic']).enter().append('feMergeNode')
+      .attr('in', function (d) { return d; });
+
+    // Zoom + pan
+    var g = svg.append('g');
+    svg.call(d3.zoom().scaleExtent([0.2, 5]).on('zoom', function (e) {
+      g.attr('transform', e.transform);
+    }));
+
+    // ── Build parallel-link index so overlapping links curve apart ──
+    var linkCounts = {};  // "nodeA|nodeB" -> count
+    var linkIndex = {};   // same key -> next index
+    links.forEach(function (l) {
+      var sId = typeof l.source === 'object' ? l.source.id : l.source;
+      var tId = typeof l.target === 'object' ? l.target.id : l.target;
+      var key = sId < tId ? sId + '|' + tId : tId + '|' + sId;
+      linkCounts[key] = (linkCounts[key] || 0) + 1;
+    });
+    links.forEach(function (l) {
+      var sId = typeof l.source === 'object' ? l.source.id : l.source;
+      var tId = typeof l.target === 'object' ? l.target.id : l.target;
+      var key = sId < tId ? sId + '|' + tId : tId + '|' + sId;
+      linkIndex[key] = (linkIndex[key] || 0);
+      l._total = linkCounts[key];
+      l._index = linkIndex[key];
+      linkIndex[key]++;
+    });
+
+    // Distance based on node relationship
+    function linkDist(d) {
+      var sg = (d.source.group || d.source), tg = (d.target.group || d.target);
+      if (sg === 'core' || tg === 'core') return 160;
+      if (sg === 'hub' || tg === 'hub') return 110;
+      if (sg === 'cluster' || tg === 'cluster') return 70;
+      if (sg === 'category' || tg === 'category') return 70;
+      if (sg === 'person' && tg === 'cluster') return 100;
+      if (sg === 'overflow' || tg === 'overflow') return 35;
+      return 45;
+    }
+
+    var simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(function (d) { return d.id; }).distance(linkDist).strength(0.35))
+      .force('charge', d3.forceManyBody().strength(function (d) {
+        if (d.group === 'core') return -500;
+        if (d.group === 'hub') return -300;
+        if (d.group === 'cluster' || d.group === 'category' || d.group === 'person') return -180;
+        if (d.group === 'overflow') return -15;
+        return -50;
+      }))
+      .force('center', d3.forceCenter(w / 2, h / 2))
+      .force('collision', d3.forceCollide().radius(function (d) { return (d.size || 6) + 6; }).strength(0.8))
+      .force('x', d3.forceX(w / 2).strength(0.025))
+      .force('y', d3.forceY(h / 2).strength(0.025))
+      .alphaDecay(0.02);  // slower settling for better layout
+
+    // ── Links as curved paths ──
+    function linkColor(d) {
+      var sg = typeof d.source === 'object' ? d.source.group : '';
+      var tg = typeof d.target === 'object' ? d.target.group : '';
+      if (sg === 'person' && tg === 'cluster') return 'rgba(236,64,122,0.18)';
+      if (sg === 'person' && tg === 'topic') return 'rgba(236,64,122,0.12)';
+      return 'rgba(0,229,255,0.12)';
+    }
+
+    var link = g.append('g').selectAll('path')
+      .data(links).enter().append('path')
+      .attr('fill', 'none')
+      .attr('stroke', linkColor)
+      .attr('stroke-width', function (d) {
+        var sg = typeof d.source === 'object' ? d.source.group : '';
+        if (sg === 'core') return 2;
+        if (sg === 'hub') return 1.5;
+        return 0.8;
+      })
+      .attr('stroke-dasharray', function (d) {
+        var sg = typeof d.source === 'object' ? d.source.group : '';
+        var tg = typeof d.target === 'object' ? d.target.group : '';
+        if (sg === 'person' && (tg === 'cluster' || tg === 'topic')) return '4,3';
+        return null;
+      });
+
+    // Compute curved path for each link
+    function linkPath(d) {
+      var sx = d.source.x, sy = d.source.y, tx = d.target.x, ty = d.target.y;
+      // Straight line for single links between a pair
+      if (d._total <= 1) {
+        return 'M' + sx + ',' + sy + 'L' + tx + ',' + ty;
+      }
+      // Curve parallel links apart using quadratic bezier
+      var dx = tx - sx, dy = ty - sy;
+      var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      // Perpendicular offset: alternate sides, spread by index
+      var offset = (d._index - (d._total - 1) / 2) * Math.min(25, dist * 0.2);
+      var mx = (sx + tx) / 2 + (-dy / dist) * offset;
+      var my = (sy + ty) / 2 + (dx / dist) * offset;
+      return 'M' + sx + ',' + sy + 'Q' + mx + ',' + my + ' ' + tx + ',' + ty;
+    }
+
+    // Nodes
+    var node = g.append('g').selectAll('circle')
+      .data(nodes).enter().append('circle')
+      .attr('r', function (d) { return d.size || 6; })
+      .attr('fill', function (d) { return d.color || '#42a5f5'; })
+      .attr('stroke', function (d) {
+        if (d.group === 'core') return '#b44dff';
+        if (d.group === 'hub' || d.group === 'category') return 'rgba(255,255,255,0.15)';
+        return 'rgba(0,229,255,0.15)';
+      })
+      .attr('stroke-width', function (d) {
+        if (d.group === 'core') return 3;
+        if (d.group === 'hub') return 2;
+        return 0.5;
+      })
+      .attr('opacity', function (d) {
+        if (d.group === 'memory' || d.group === 'topic') return 0.7;
+        return 0.9;
+      })
+      .attr('filter', function (d) {
+        if (d.group === 'core' || d.group === 'hub') return 'url(#glow)';
+        return null;
+      })
+      .style('cursor', 'pointer')
+      .on('click', function (event, d) { showDetail(d); })
+      .on('mouseover', function (event, d) {
+        // Highlight connected links
+        link.attr('stroke-opacity', function (l) {
+          return (l.source === d || l.target === d) ? 1 : 0.15;
+        }).attr('stroke', function (l) {
+          return (l.source === d || l.target === d) ? 'rgba(0,229,255,0.6)' : 'rgba(0,229,255,0.08)';
+        });
+        // Show tooltip
+        tooltip.style('display', 'block')
+          .html(d.name + (d.group ? '<br><span style="color:rgba(0,229,255,0.5);font-size:9px">' + d.group + '</span>' : ''));
+      })
+      .on('mousemove', function (event) {
+        tooltip.style('left', (event.offsetX + 12) + 'px').style('top', (event.offsetY - 10) + 'px');
+      })
+      .on('mouseout', function () {
+        link.attr('stroke-opacity', 1).attr('stroke', linkColor);
+        tooltip.style('display', 'none');
+      })
+      .call(d3.drag()
+        .on('start', function (event, d) {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x; d.fy = d.y;
+        })
+        .on('drag', function (event, d) { d.fx = event.x; d.fy = event.y; })
+        .on('end', function (event, d) {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null; d.fy = null;
+        })
+      );
+
+    // Tooltip div
+    var tooltip = d3.select(container).append('div')
+      .style('position', 'absolute').style('display', 'none')
+      .style('background', 'rgba(10,18,32,0.9)').style('border', '1px solid rgba(0,229,255,0.3)')
+      .style('padding', '6px 10px').style('border-radius', '6px')
+      .style('font-family', 'var(--font-mono)').style('font-size', '11px')
+      .style('color', '#e2eaf2').style('pointer-events', 'none')
+      .style('z-index', '100').style('max-width', '200px');
+
+    // Labels for important nodes
+    var labelNodes = nodes.filter(function (d) {
+      return d.group === 'core' || d.group === 'hub' || d.group === 'person' || d.group === 'category' || d.group === 'cluster';
+    });
+    var labels = g.append('g').selectAll('text')
+      .data(labelNodes).enter().append('text')
+      .attr('class', 'dash-node-label')
+      .attr('dy', function (d) { return (d.size || 8) + 12; })
+      .attr('font-size', function (d) {
+        if (d.group === 'core') return '12px';
+        if (d.group === 'hub') return '10px';
+        return '8px';
+      })
+      .attr('fill', function (d) {
+        if (d.group === 'core' || d.group === 'hub') return d.color;
+        return 'rgba(226,234,242,0.6)';
+      })
+      .text(function (d) {
+        var n = d.name;
+        return n.length > 20 ? n.substring(0, 18) + '..' : n;
+      });
+
+    simulation.on('tick', function () {
+      link.attr('d', linkPath);
+      node.attr('cx', function (d) { return d.x; })
+          .attr('cy', function (d) { return d.y; });
+      labels.attr('x', function (d) { return d.x; })
+            .attr('y', function (d) { return d.y; });
+    });
+
+    graphSim = simulation;
+  }
+
+  // ── MOOD ──
+  function loadMoodData() {
+    fetch('/api/dashboard/mood').then(function (r) { return r.json(); }).then(function (data) {
+      _moodData = data;
+      // Only render if mood panel is currently visible
+      var moodPanel = document.getElementById('dshMood');
+      if (moodPanel && moodPanel.classList.contains('active')) {
+        _panelRendered.mood = true;
+        renderEmotionalRadar(data.emotional_state);
+        renderMoodTimeline(data.timeline);
+        renderActivityHeatmap(data.activity_heatmap || {});
+      }
+    }).catch(function () {});
+  }
+
+  function renderEmotionalRadar(state) {
+    var el = document.getElementById('dshMoodBar');
+    if (!el || typeof d3 === 'undefined') return;
+    el.innerHTML = '';
+    var entries = Object.entries(state || {});
+    if (!entries.length) { el.innerHTML = '<div class="dash-log-empty">No emotional data yet — talk to TARS to build up the emotional profile</div>'; return; }
+
+    // All emotions, keep backend order
+    var labels = entries.map(function (e) { return e[0]; });
+    var values = entries.map(function (e) { return e[1]; });
+    var n = labels.length;
+
+    // Size: fit within card, square aspect
+    var labelMargin = 60;
+    var containerW = el.clientWidth || 350;
+    var size = Math.min(containerW, 380);
+    var cx = size / 2, cy = size / 2;
+    var maxR = (size / 2) - labelMargin;
+
+    var svg = d3.select(el).append('svg')
+      .attr('viewBox', '0 0 ' + size + ' ' + size)
+      .attr('preserveAspectRatio', 'xMidYMid meet');
+
+    // Glow filter
+    var defs = svg.append('defs');
+    var filter = defs.append('filter').attr('id', 'radarGlow');
+    filter.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'blur');
+    var merge = filter.append('feMerge');
+    merge.append('feMergeNode').attr('in', 'blur');
+    merge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+    var g = svg.append('g');
+
+    // Helper: angle for axis i (start from top)
+    function angle(i) { return (Math.PI * 2 * i / n) - Math.PI / 2; }
+    function ptx(i, r) { return cx + r * Math.cos(angle(i)); }
+    function pty(i, r) { return cy + r * Math.sin(angle(i)); }
+
+    // Concentric grid rings (circles for clean look)
+    var rings = [25, 50, 75, 100];
+    rings.forEach(function (pct) {
+      var r = maxR * pct / 100;
+      g.append('circle')
+        .attr('cx', cx).attr('cy', cy).attr('r', r)
+        .attr('fill', 'none')
+        .attr('stroke', pct === 50 ? 'rgba(0,229,255,0.15)' : 'rgba(0,229,255,0.06)')
+        .attr('stroke-width', pct === 50 ? 1 : 0.5);
+      // Ring percentage label
+      if (pct < 100) {
+        g.append('text')
+          .attr('x', cx + 3).attr('y', cy - r + 1)
+          .attr('fill', 'rgba(0,229,255,0.2)')
+          .attr('font-family', 'var(--font-mono)')
+          .attr('font-size', '7px')
+          .attr('dominant-baseline', 'auto')
+          .text(pct + '%');
+      }
+    });
+
+    // Axis spokes
+    for (var i = 0; i < n; i++) {
+      g.append('line')
+        .attr('x1', cx).attr('y1', cy)
+        .attr('x2', ptx(i, maxR)).attr('y2', pty(i, maxR))
+        .attr('stroke', 'rgba(0,229,255,0.1)').attr('stroke-width', 0.5);
+    }
+
+    // Data polygon (filled area)
+    var pts = [];
+    for (var i = 0; i < n; i++) {
+      var r = maxR * Math.min(values[i], 100) / 100;
+      pts.push(ptx(i, r) + ',' + pty(i, r));
+    }
+    // Find dominant axis for polygon color
+    var maxVal = 0, domIdx = 0;
+    for (var i = 0; i < n; i++) { if (values[i] > maxVal) { maxVal = values[i]; domIdx = i; } }
+    var domColor = maxVal > 0 ? getMoodColor(labels[domIdx]) : '#00e5ff';
+    g.append('polygon').attr('points', pts.join(' '))
+      .attr('fill', domColor)
+      .attr('fill-opacity', 0.12)
+      .attr('stroke', domColor)
+      .attr('stroke-width', 2)
+      .attr('stroke-linejoin', 'round')
+      .attr('filter', 'url(#radarGlow)');
+
+    // Data points on non-zero vertices
+    for (var i = 0; i < n; i++) {
+      if (values[i] <= 0) continue;
+      var r = maxR * Math.min(values[i], 100) / 100;
+      var color = getMoodColor(labels[i]);
+      g.append('circle')
+        .attr('cx', ptx(i, r)).attr('cy', pty(i, r))
+        .attr('r', 4)
+        .attr('fill', color)
+        .attr('stroke', 'rgba(255,255,255,0.3)')
+        .attr('stroke-width', 1);
+    }
+
+    // Axis labels: name + percentage on separate lines
+    for (var i = 0; i < n; i++) {
+      var labelR = maxR + 14;
+      var a = angle(i);
+      var cosA = Math.cos(a), sinA = Math.sin(a);
+      var lx = cx + labelR * cosA;
+      var ly = cy + labelR * sinA;
+      var anchor = 'middle';
+      if (cosA > 0.2) anchor = 'start';
+      else if (cosA < -0.2) anchor = 'end';
+      var val = Math.round(values[i]);
+      var color = val > 0 ? getMoodColor(labels[i]) : 'rgba(226,234,242,0.35)';
+      g.append('text')
+        .attr('x', lx).attr('y', ly - 5)
+        .attr('text-anchor', anchor)
+        .attr('dominant-baseline', 'central')
+        .attr('fill', color)
+        .attr('font-family', 'var(--font-mono)')
+        .attr('font-size', '9px')
+        .attr('font-weight', 'bold')
+        .text(labels[i]);
+      g.append('text')
+        .attr('x', lx).attr('y', ly + 7)
+        .attr('text-anchor', anchor)
+        .attr('dominant-baseline', 'central')
+        .attr('fill', val > 0 ? 'rgba(226,234,242,0.6)' : 'rgba(226,234,242,0.2)')
+        .attr('font-family', 'var(--font-mono)')
+        .attr('font-size', '8px')
+        .text(val + '%');
+    }
+  }
+
+  function renderMoodTimeline(timeline) {
+    var el = document.getElementById('dshMoodTimeline');
+    if (!el || typeof d3 === 'undefined') return;
+    el.innerHTML = '';
+    if (!timeline.length) { el.innerHTML = '<div class="dash-log-empty">No timeline data yet</div>'; return; }
+
+    var parseTime = function (ts) {
+      try { return new Date(ts.replace(' ', 'T')); } catch (e) { return new Date(); }
+    };
+    var data = timeline.map(function (d) {
+      return { time: parseTime(d.timestamp), mood: d.mood, axis: d.axis || emotionToAxis[d.mood] || d.mood };
+    });
+
+    // Always show all 28 emotions in grouped order
+    var moods = emotionOrder.slice();
+
+    // Figure out which axis groups are present and where separators go
+    var axisGroups = [];
+    var lastAxis = null;
+    moods.forEach(function (m, i) {
+      var axis = emotionToAxis[m] || m;
+      if (axis !== lastAxis) {
+        axisGroups.push({ axis: axis, startIdx: i, count: 0 });
+        lastAxis = axis;
+      }
+      axisGroups[axisGroups.length - 1].count++;
+    });
+
+    var longestMood = moods.reduce(function (a, b) { return a.length > b.length ? a : b; }, '');
+    var leftMargin = Math.max(longestMood.length * 6.5 + 28, 70);
+    var rowH = 22;
+    var groupGap = 6;
+    var margin = { top: 12, right: 12, bottom: 30, left: leftMargin };
+    var w = Math.max(el.clientWidth || 400, 280);
+
+    // Total height: rows + gaps between axis groups
+    var totalRows = moods.length * rowH + (axisGroups.length - 1) * groupGap;
+    var h = totalRows + margin.top + margin.bottom;
+    var iw = w - margin.left - margin.right;
+
+    var svg = d3.select(el).append('svg')
+      .attr('viewBox', '0 0 ' + w + ' ' + h)
+      .attr('preserveAspectRatio', 'xMidYMid meet');
+
+    // Glow filter
+    var defs = svg.append('defs');
+    var filter = defs.append('filter').attr('id', 'dotGlow');
+    filter.append('feGaussianBlur').attr('stdDeviation', '2.5').attr('result', 'blur');
+    var fmerge = filter.append('feMerge');
+    fmerge.append('feMergeNode').attr('in', 'blur');
+    fmerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+    var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    // Build y positions with gaps between axis groups
+    var yPos = {};
+    var curY = 0;
+    axisGroups.forEach(function (grp, gi) {
+      if (gi > 0) curY += groupGap;
+      // Draw axis group label (small, left-aligned)
+      g.append('text')
+        .attr('x', -leftMargin + 4)
+        .attr('y', curY + (grp.count * rowH) / 2 + 3)
+        .text(grp.axis.toUpperCase())
+        .attr('fill', axisColors[grp.axis] || '#78909c')
+        .attr('font-size', '7px')
+        .attr('font-weight', '700')
+        .attr('font-family', 'var(--font-mono)')
+        .attr('text-anchor', 'start')
+        .attr('opacity', 0.6);
+      // Draw subtle group background
+      g.append('rect')
+        .attr('x', 0).attr('y', curY)
+        .attr('width', iw).attr('height', grp.count * rowH)
+        .attr('fill', axisColors[grp.axis] || '#78909c')
+        .attr('opacity', 0.03)
+        .attr('rx', 3);
+      for (var j = 0; j < grp.count; j++) {
+        yPos[moods[grp.startIdx + j]] = curY + j * rowH + rowH / 2;
+      }
+      curY += grp.count * rowH;
+    });
+
+    var x = d3.scaleTime()
+      .domain(d3.extent(data, function (d) { return d.time; }))
+      .range([0, iw]);
+
+    // Track which emotions have data points
+    var seenMoods = {};
+    data.forEach(function (d) { seenMoods[d.mood] = true; });
+
+    // Emotion labels on left — dim if no data points
+    moods.forEach(function (m) {
+      var hasPts = seenMoods[m];
+      g.append('text').attr('x', -8).attr('y', yPos[m] + 3)
+        .text(m).attr('fill', getMoodColor(m)).attr('font-size', '9px')
+        .attr('font-family', 'var(--font-mono)').attr('text-anchor', 'end')
+        .attr('opacity', hasPts ? 1 : 0.25);
+    });
+
+    // Subtle horizontal guide lines
+    moods.forEach(function (m) {
+      g.append('line')
+        .attr('x1', 0).attr('x2', iw)
+        .attr('y1', yPos[m]).attr('y2', yPos[m])
+        .attr('stroke', getMoodColor(m)).attr('stroke-opacity', 0.08);
+    });
+
+    // X axis
+    g.append('g').attr('transform', 'translate(0,' + curY + ')')
+      .call(d3.axisBottom(x).ticks(5).tickFormat(d3.timeFormat('%H:%M')))
+      .selectAll('text').attr('fill', 'rgba(226,234,242,0.5)').attr('font-size', '9px');
+    g.selectAll('.domain').attr('stroke', 'rgba(0,229,255,0.1)');
+    g.selectAll('.tick line').attr('stroke', 'rgba(0,229,255,0.08)');
+
+    // Dots with glow
+    g.selectAll('.tl-dot').data(data).enter().append('circle')
+      .attr('class', 'tl-dot')
+      .attr('cx', function (d) { return x(d.time); })
+      .attr('cy', function (d) { return yPos[d.mood] || 0; })
+      .attr('r', 4.5)
+      .attr('fill', function (d) { return getMoodColor(d.mood); })
+      .attr('opacity', 0.9)
+      .attr('filter', 'url(#dotGlow)');
+  }
+
+  function renderActivityHeatmap(heatmap) {
+    var el = document.getElementById('dshActivityBar');
+    if (!el || typeof d3 === 'undefined') return;
+    el.innerHTML = '';
+
+    var days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var hours = [];
+    for (var h = 0; h < 24; h++) hours.push(h);
+
+    // Build flat data array
+    var data = [];
+    var maxVal = 0;
+    days.forEach(function (day, di) {
+      hours.forEach(function (hr) {
+        var val = heatmap[di + '_' + hr] || 0;
+        if (val > maxVal) maxVal = val;
+        data.push({ day: di, hour: hr, val: val });
+      });
+    });
+
+    if (maxVal === 0) { el.innerHTML = '<div class="dash-log-empty">No activity data yet</div>'; return; }
+
+    var margin = { top: 6, right: 12, bottom: 24, left: 32 };
+    var w = Math.max(el.clientWidth || 400, 280);
+    var cellH = 14;
+    var ht = days.length * cellH + margin.top + margin.bottom;
+    var iw = w - margin.left - margin.right;
+    var cellW = iw / 24;
+
+    var svg = d3.select(el).append('svg')
+      .attr('viewBox', '0 0 ' + w + ' ' + ht)
+      .attr('preserveAspectRatio', 'xMidYMid meet');
+
+    var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    // Color scale: dark → cyan
+    var color = d3.scaleSequential(function (t) {
+      if (t === 0) return 'rgba(0,229,255,0.04)';
+      return 'rgba(0,229,255,' + (0.15 + t * 0.85) + ')';
+    }).domain([0, maxVal]);
+
+    // Cells
+    g.selectAll('.hm-cell').data(data).enter().append('rect')
+      .attr('class', 'hm-cell')
+      .attr('x', function (d) { return d.hour * cellW; })
+      .attr('y', function (d) { return d.day * cellH; })
+      .attr('width', cellW - 1)
+      .attr('height', cellH - 1)
+      .attr('rx', 2)
+      .attr('fill', function (d) { return color(d.val); })
+      .append('title').text(function (d) {
+        return days[d.day] + ' ' + (d.hour < 10 ? '0' : '') + d.hour + ':00 — ' + d.val + ' interactions';
+      });
+
+    // Day labels
+    days.forEach(function (day, i) {
+      g.append('text')
+        .attr('x', -4).attr('y', i * cellH + cellH / 2 + 3)
+        .text(day).attr('fill', 'rgba(226,234,242,0.5)')
+        .attr('font-size', '8px').attr('font-family', 'var(--font-mono)')
+        .attr('text-anchor', 'end');
+    });
+
+    // Hour labels (every 3 hours)
+    hours.forEach(function (hr) {
+      if (hr % 3 !== 0) return;
+      g.append('text')
+        .attr('x', hr * cellW + cellW / 2)
+        .attr('y', days.length * cellH + 12)
+        .text((hr < 10 ? '0' : '') + hr)
+        .attr('fill', 'rgba(226,234,242,0.5)')
+        .attr('font-size', '8px').attr('font-family', 'var(--font-mono)')
+        .attr('text-anchor', 'middle');
+    });
+  }
+
+  // ── AUDIT LOG ──
+  function loadLog() {
+    fetch('/api/dashboard/interactions?limit=100').then(function (r) { return r.json(); }).then(function (data) {
+      var list = document.getElementById('dshLogList');
+      if (!list) return;
+      if (!data.length) { list.innerHTML = '<div class="dash-log-empty">No interactions recorded yet.</div>'; return; }
+
+      var html = '';
+      // Show newest first
+      for (var i = data.length - 1; i >= 0; i--) {
+        var e = data[i];
+        html += '<div class="dash-log-entry">';
+        html += '<div class="dash-log-meta">';
+        html += '<span class="dash-log-ts">' + (e.ts || '') + '</span>';
+        if (e.emotion_raw || e.emotion) {
+          var rawLabel = e.emotion_raw || e.emotion;
+          var pillColor = getMoodColor(rawLabel);
+          html += '<span class="dash-log-emotion" style="border-color:' + pillColor + ';color:' + pillColor + '">' + rawLabel + '</span>';
+        }
+        if (e.speaker) html += '<span class="dash-log-speaker">' + e.speaker + '</span>';
+        html += '</div>';
+        if (e.user) html += '<div class="dash-log-user"><strong>User:</strong> ' + escapeHtml(e.user) + '</div>';
+        if (e.bot) html += '<div class="dash-log-bot"><strong>Bot:</strong> ' + escapeHtml(e.bot).substring(0, 300) + '</div>';
+        html += '</div>';
+      }
+      list.innerHTML = html;
+    }).catch(function () {});
+  }
+
+  function escapeHtml(s) {
+    if (!s) return '';
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ── TOPICS ──
+  function loadTopicsData() {
+    fetch('/api/dashboard/topics').then(function (r) { return r.json(); }).then(function (data) {
+      var topics = data.topics || [];
+      _topicsData = topics;
+      renderTopicsTable(topics);
+      // Only render graph if topics panel is currently visible
+      var topicsPanel = document.getElementById('dshTopicsPanel');
+      if (topicsPanel && topicsPanel.classList.contains('active')) {
+        _panelRendered.topics = true;
+        renderTopicsGraph(topics);
+      }
+    }).catch(function () {});
+  }
+
+  function renderTopicsTable(topics) {
+    var tbody = document.querySelector('#dshTopicsTable tbody');
+    if (!tbody) return;
+    if (!topics.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:rgba(226,234,242,0.3)">No topics yet</td></tr>'; return; }
+
+    var html = '';
+    // Sort by mention count desc
+    var sorted = topics.slice().sort(function (a, b) { return (b.mention_count || 1) - (a.mention_count || 1); });
+    sorted.forEach(function (t) {
+      var name = typeof t === 'string' ? t : (t.topic || '');
+      var mentions = t.mention_count || 1;
+      var first = (t.first_mentioned || '').substring(0, 10);
+      var last = (t.last_mentioned || '').substring(0, 10);
+      html += '<tr><td>' + escapeHtml(name) + '</td><td>' + mentions + '</td><td>' + first + '</td><td>' + last + '</td></tr>';
+    });
+    tbody.innerHTML = html;
+  }
+
+  function renderTopicsGraph(topics) {
+    var container = document.getElementById('dshTopicsGraph');
+    if (!container || typeof d3 === 'undefined' || !topics.length) return;
+    container.innerHTML = '';
+
+    var w = container.clientWidth || 400;
+    var h = Math.max(250, Math.min(topics.length * 12 + 100, 400));
+
+    var nodes = [{ id: 'center', name: 'TOPICS', color: '#39ff14', size: 18, group: 'hub' }];
+    var links = [];
+    topics.forEach(function (t, i) {
+      var name = typeof t === 'string' ? t : (t.topic || '');
+      var mentions = (typeof t === 'object' ? t.mention_count : 1) || 1;
+      var nid = 'topic_' + i;
+      nodes.push({ id: nid, name: name, color: '#66bb6a', size: 4 + Math.min(mentions * 1.5, 12), group: 'topic', mentions: mentions });
+      links.push({ source: 'center', target: nid });
+    });
+
+    var svg = d3.select(container).append('svg').attr('viewBox', '0 0 ' + w + ' ' + h)
+      .style('width', '100%').style('height', '100%');
+
+    // Glow
+    var defs = svg.append('defs');
+    var filter = defs.append('filter').attr('id', 'topicGlow');
+    filter.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'blur');
+    var merge = filter.append('feMerge');
+    merge.append('feMergeNode').attr('in', 'blur');
+    merge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+    var g = svg.append('g');
+    svg.call(d3.zoom().scaleExtent([0.3, 4]).on('zoom', function (e) { g.attr('transform', e.transform); }));
+
+    var sim = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(function (d) { return d.id; }).distance(60))
+      .force('charge', d3.forceManyBody().strength(-80))
+      .force('center', d3.forceCenter(w / 2, h / 2))
+      .force('collision', d3.forceCollide().radius(function (d) { return d.size + 4; }));
+
+    var link = g.append('g').selectAll('line').data(links).enter().append('line')
+      .attr('stroke', 'rgba(57,255,20,0.12)').attr('stroke-width', 1);
+
+    var node = g.append('g').selectAll('circle').data(nodes).enter().append('circle')
+      .attr('r', function (d) { return d.size; })
+      .attr('fill', function (d) { return d.color; })
+      .attr('opacity', function (d) { return d.group === 'hub' ? 0.95 : 0.7; })
+      .attr('filter', function (d) { return d.group === 'hub' ? 'url(#topicGlow)' : null; })
+      .call(d3.drag()
+        .on('start', function (e, d) { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on('drag', function (e, d) { d.fx = e.x; d.fy = e.y; })
+        .on('end', function (e, d) { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+      );
+
+    var labels = g.append('g').selectAll('text').data(nodes).enter().append('text')
+      .attr('class', 'dash-node-label')
+      .attr('dy', function (d) { return d.size + 10; })
+      .attr('font-size', function (d) { return d.group === 'hub' ? '10px' : '8px'; })
+      .attr('fill', function (d) { return d.group === 'hub' ? '#39ff14' : 'rgba(226,234,242,0.6)'; })
+      .text(function (d) { return d.name.length > 20 ? d.name.substring(0, 18) + '..' : d.name; });
+
+    sim.on('tick', function () {
+      link.attr('x1', function (d) { return d.source.x; }).attr('y1', function (d) { return d.source.y; })
+          .attr('x2', function (d) { return d.target.x; }).attr('y2', function (d) { return d.target.y; });
+      node.attr('cx', function (d) { return d.x; }).attr('cy', function (d) { return d.y; });
+      labels.attr('x', function (d) { return d.x; }).attr('y', function (d) { return d.y; });
+    });
+  }
+
+  // ── PROMPT DEBUGGER ──
+  var _promptInteractions = [];
+  var _currentPromptText = null;
+
+  function loadPrompt() {
+    fetch('/api/dashboard/prompt').then(function (r) { return r.json(); }).then(function (data) {
+      _promptInteractions = data.interactions || [];
+      var promptPanel = document.getElementById('dshPrompt');
+      if (promptPanel && promptPanel.classList.contains('active')) {
+        _panelRendered.prompt = true;
+        populatePromptDropdown();
+      }
+    }).catch(function () {});
+  }
+
+  function populatePromptDropdown() {
+    var select = document.getElementById('dshPromptSelect');
+    if (!select) return;
+    // Keep the first placeholder option
+    select.innerHTML = '<option value="">Select interaction to debug...</option>';
+    _promptInteractions.forEach(function (item) {
+      if (!item.has_prompt) return;
+      var opt = document.createElement('option');
+      opt.value = item.id;
+      var ts = (item.ts || '').split(' ')[1] || item.ts || '';
+      var label = ts + ' — ' + (item.user || '(no input)');
+      if (item.emotion) label += ' [' + item.emotion + ']';
+      opt.textContent = label;
+      select.appendChild(opt);
+    });
+  }
+
+  function setPromptToolbarState(enabled) {
+    ['dshPromptCopy', 'dshPromptExpandAll', 'dshPromptCollapseAll'].forEach(function (id) {
+      var btn = document.getElementById(id);
+      if (btn) btn.disabled = !enabled;
+    });
+  }
+
+  function loadSelectedPrompt(entryId) {
+    var sections = document.getElementById('dshPromptSections');
+    var info = document.getElementById('dshPromptInfo');
+    if (!entryId) {
+      sections.innerHTML = '<div class="dash-prompt-empty"><i class="bi bi-bug" style="font-size:2rem;opacity:0.3"></i><div>Select an interaction above to inspect its prompt</div></div>';
+      info.innerHTML = '';
+      _currentPromptText = null;
+      setPromptToolbarState(false);
+      return;
+    }
+
+    sections.innerHTML = '<div class="dash-prompt-empty"><i class="bi bi-hourglass-split" style="font-size:1.5rem;opacity:0.3"></i><div>Loading prompt...</div></div>';
+
+    // Find the interaction metadata
+    var meta = _promptInteractions.find(function (i) { return i.id === entryId; });
+
+    fetch('/api/dashboard/prompt?id=' + encodeURIComponent(entryId))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        _currentPromptText = data.prompt || '';
+        setPromptToolbarState(!!_currentPromptText);
+
+        // Build info chips
+        if (meta && info) {
+          var chips = '';
+          if (meta.ts) chips += '<span class="dash-prompt-info-chip"><strong>Time:</strong> ' + meta.ts + '</span>';
+          if (meta.speaker) chips += '<span class="dash-prompt-info-chip"><strong>Speaker:</strong> ' + escapeHtml(meta.speaker) + '</span>';
+          if (meta.emotion) chips += '<span class="dash-prompt-info-chip"><strong>Mood:</strong> ' + escapeHtml(meta.emotion) + '</span>';
+          var charCount = _currentPromptText.length;
+          var approxTokens = Math.round(_currentPromptText.split(/\s+/).length * 1.3);
+          chips += '<span class="dash-prompt-info-chip"><strong>' + charCount.toLocaleString() + '</strong> chars · <strong>~' + approxTokens.toLocaleString() + '</strong> tokens</span>';
+          info.innerHTML = chips;
+        }
+
+        // Parse prompt into sections
+        renderPromptSections(_currentPromptText, meta);
+      })
+      .catch(function () {
+        sections.innerHTML = '<div class="dash-prompt-empty"><i class="bi bi-x-circle" style="font-size:1.5rem;color:#ef5350"></i><div>Failed to load prompt</div></div>';
+      });
+  }
+
+  function renderPromptSections(promptText, meta) {
+    var sections = document.getElementById('dshPromptSections');
+    if (!sections) return;
+
+    var html = '';
+
+    // Parse the prompt into logical sections
+    var parsed = parsePromptSections(promptText);
+    parsed.forEach(function (sec, idx) {
+      var secId = 'prompt-sec-' + idx;
+      var lineCount = sec.content.split('\n').length;
+      // All sections start collapsed except the first
+      var collapsed = idx > 0;
+      html += '<div class="dash-prompt-section">';
+      html += '<div class="dash-prompt-section-title' + (collapsed ? ' collapsed' : '') + '" data-collapse="' + secId + '">';
+      html += '<i class="bi bi-chevron-down"></i> ' + escapeHtml(sec.name);
+      html += '<span class="prompt-sec-lines">' + lineCount + ' lines</span>';
+      html += '</div>';
+      html += '<pre class="dash-prompt-pre' + (collapsed ? ' collapsed' : '') + '" id="' + secId + '">' + highlightPrompt(sec.content) + '</pre>';
+      html += '</div>';
+    });
+
+    sections.innerHTML = html;
+
+    // Wire up collapse toggles
+    sections.querySelectorAll('.dash-prompt-section-title').forEach(function (title) {
+      title.addEventListener('click', function () {
+        var targetId = title.getAttribute('data-collapse');
+        var target = document.getElementById(targetId);
+        if (target) {
+          target.classList.toggle('collapsed');
+          title.classList.toggle('collapsed');
+        }
+      });
+    });
+  }
+
+  function parsePromptSections(text) {
+    if (!text) return [{ name: 'Full Prompt', content: '(empty)' }];
+
+    var sections = [];
+    var lines = text.split('\n');
+    var currentName = 'System Instructions';
+    var currentLines = [];
+    var MIN_SECTION_LINES = 3; // Don't split on headers that create tiny sections
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      // Match section headers: "## Title", "=== Title ===", "Part N: Title"
+      var headerMatch = line.match(/^#{1,3}\s+(.+)$/) ||
+                        line.match(/^===+\s*(.+?)\s*===+$/) ||
+                        line.match(/^(Part\s+\d+[:\s].+)$/i);
+      if (headerMatch && currentLines.length >= MIN_SECTION_LINES) {
+        var content = currentLines.join('\n').trim();
+        if (content) sections.push({ name: currentName, content: content });
+        currentName = headerMatch[1].trim();
+        currentLines = [];
+      } else {
+        currentLines.push(line);
+      }
+    }
+    if (currentLines.length > 0) {
+      var content = currentLines.join('\n').trim();
+      if (content) sections.push({ name: currentName, content: content });
+    }
+
+    // Merge any tiny trailing sections into the previous one
+    var merged = [];
+    for (var j = 0; j < sections.length; j++) {
+      var sec = sections[j];
+      if (j > 0 && sec.content.split('\n').length < 2) {
+        merged[merged.length - 1].content += '\n\n' + sec.name + '\n' + sec.content;
+      } else {
+        merged.push(sec);
+      }
+    }
+
+    if (merged.length <= 1) {
+      return [{ name: 'Full Prompt', content: text }];
+    }
+    return merged;
+  }
+
+  function highlightPrompt(text) {
+    var safe = escapeHtml(text);
+    // Highlight headers
+    safe = safe.replace(/^(#{1,3}\s+.*)$/gm, '<span style="color:#00e5ff;font-weight:bold">$1</span>');
+    // Highlight bracketed labels
+    safe = safe.replace(/^(\[.*?\])(.*)$/gm, '<span style="color:#b44dff">$1</span>$2');
+    // Highlight XML-like tags
+    safe = safe.replace(/(&lt;[^&]+&gt;)/g, '<span style="color:rgba(0,229,255,0.45)">$1</span>');
+    // Highlight JSON keys
+    safe = safe.replace(/"([^"]+)":/g, '<span style="color:#ffca28">"$1"</span>:');
+    return safe;
+  }
+
+  // Dropdown change handler
+  var promptSelect = document.getElementById('dshPromptSelect');
+  if (promptSelect) {
+    promptSelect.addEventListener('change', function () {
+      loadSelectedPrompt(this.value);
+    });
+  }
+
+  // Copy button
+  var copyBtn = document.getElementById('dshPromptCopy');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function () {
+      if (_currentPromptText) {
+        navigator.clipboard.writeText(_currentPromptText).then(function () {
+          copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied';
+          setTimeout(function () { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy'; }, 1500);
+        }).catch(function () {});
+      }
+    });
+  }
+
+  // Expand / Collapse all buttons
+  var expandBtn = document.getElementById('dshPromptExpandAll');
+  if (expandBtn) {
+    expandBtn.addEventListener('click', function () {
+      var container = document.getElementById('dshPromptSections');
+      if (!container) return;
+      container.querySelectorAll('.dash-prompt-section-title.collapsed').forEach(function (t) {
+        t.classList.remove('collapsed');
+      });
+      container.querySelectorAll('.dash-prompt-pre.collapsed').forEach(function (p) {
+        p.classList.remove('collapsed');
+      });
+    });
+  }
+  var collapseBtn = document.getElementById('dshPromptCollapseAll');
+  if (collapseBtn) {
+    collapseBtn.addEventListener('click', function () {
+      var container = document.getElementById('dshPromptSections');
+      if (!container) return;
+      container.querySelectorAll('.dash-prompt-section-title:not(.collapsed)').forEach(function (t) {
+        t.classList.add('collapsed');
+      });
+      container.querySelectorAll('.dash-prompt-pre:not(.collapsed)').forEach(function (p) {
+        p.classList.add('collapsed');
+      });
+    });
+  }
+
+  // ── Tab activation ──
+  var dashTab = document.getElementById('dashboard-tab');
+  if (dashTab) {
+    dashTab.addEventListener('shown.bs.tab', function () {
+      if (!dashLoaded) loadDashboard();
+      else refreshStats();  // always refresh stats strip on tab visit
+    });
+  }
 })();

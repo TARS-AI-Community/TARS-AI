@@ -502,6 +502,19 @@ Current Time: {now.strftime('%H:%M:%S')}
     if speaker_ctx:
         base_prompt += f"\n{speaker_ctx}"
 
+    # Emotional state context (if emotion detection is enabled)
+    try:
+        if config['EMOTION']['enabled']:
+            from modules.module_dashboard_data import get_emotional_state
+            emo_state = get_emotional_state()
+            active = {k: v for k, v in emo_state.items() if v > 0}
+            if active:
+                dominant = max(active, key=active.get)
+                parts = [f"{k}: {v}%" for k, v in sorted(active.items(), key=lambda x: -x[1])]
+                base_prompt += f"\n[EMOTIONAL STATE] Your current emotional state based on recent interactions: {', '.join(parts)}. Dominant mood: {dominant}. Let this subtly influence your tone — don't mention these numbers or that you have an emotional state system."
+    except Exception:
+        pass
+
     # Memory retrieval (long-term + short-term + examples)
     speed.start('memory')
     final_prompt = append_memory_and_examples(
@@ -513,7 +526,7 @@ Current Time: {now.strftime('%H:%M:%S')}
         queue_message(f"DEBUG PROMPT:\n{final_prompt}")
 
     try:
-        dump_dir = os.path.join(os.path.expanduser("~"), ".local", "share", "tars_ai")
+        dump_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
         os.makedirs(dump_dir, exist_ok=True)
         dump_path = os.path.join(dump_dir, "last_prompt.txt")
         with open(dump_path, "w", encoding="utf-8") as f:

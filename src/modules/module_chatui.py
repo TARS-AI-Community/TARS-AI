@@ -760,10 +760,20 @@ def _process_chat_message(msg, img_b64):
         latest_text_to_read = reply
         socketio.emit('bot_message', {'message': reply or '', 'audio_streamed': True})
 
-        if CONFIG['EMOTION']['enabled'] and reply:
-            detected = detect_emotion(reply)
+        detected = None
+        detected_raw = None
+        axis_scores = {}
+        if CONFIG['EMOTION']['enabled'] and msg:
+            detected, detected_raw, axis_scores = detect_emotion(msg)
             if detected:
                 update_emotion(detected)
+
+        # Log interaction for dashboard analytics
+        try:
+            from modules.module_dashboard_data import log_interaction
+            log_interaction(msg, reply, emotion=detected, emotion_raw=detected_raw, axis_scores=axis_scores)
+        except Exception:
+            pass
 
         # Wait for streamed TTS to finish
         if _audio_streamed:
@@ -1928,6 +1938,362 @@ def save_character(name):
             p.write(f)
 
     return jsonify({'success': True})
+
+
+# ── Dashboard API endpoints ──────────────────────────────────────────────────
+
+@flask_app.route('/api/dashboard/memory/delete', methods=['POST'])
+def dashboard_memory_delete():
+    """Delete a memory document by its index in HyperDB."""
+    import modules.module_llm as _llm
+    mm = _llm.memory_manager
+    if not mm or not hasattr(mm, 'hyper_db'):
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    if index is None:
+        return jsonify({"error": "Missing 'index' parameter"}), 400
+
+    try:
+        index = int(index)
+        doc_count = len(mm.hyper_db.documents)
+        if index < 0 or index >= doc_count:
+            return jsonify({"error": f"Index {index} out of range (0-{doc_count-1})"}), 400
+
+        # Get the document before deleting for confirmation
+        doc = mm.hyper_db.documents[index]
+        preview = ''
+        if isinstance(doc, dict):
+            preview = doc.get('user_input', doc.get('bot_response', ''))[:80]
+
+        mm.hyper_db.remove_document(index)
+        mm.hyper_db.save(mm.memory_db_path)
+        queue_message(f"DASHBOARD: Deleted memory #{index}: {preview}")
+        return jsonify({"success": True, "deleted_index": index, "remaining": len(mm.hyper_db.documents)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/api/dashboard/graph')
+def dashboard_graph():
+    """Return nodes+links for a brain-like D3 knowledge graph."""
+    import modules.module_llm as _llm
+    mm = _llm.memory_manager
+    nodes = []
+    links = []
+    node_ids = set()
+
+    def add_node(n):
+        if n["id"] not in node_ids:
+            nodes.append(n)
+            node_ids.add(n["id"])
+
+    # ── Central brain node ──
+    add_node({"id": "BRAIN", "name": character_name.upper(), "color": "#b44dff", "size": 32, "group": "core"})
+
+    # ── IDENTITY HUB: Voice speakers + Face IDs ──
+    voice_mem_path = os.path.join(BASE_DIR, 'memory', 'voice_memory.json')
+    voice_speakers = []
+    if os.path.exists(voice_mem_path):
+        try:
+            with open(voice_mem_path, 'r') as f:
+                vm = json.load(f)
+            voice_speakers = vm.get('speakers', [])
+        except Exception:
+            pass
+
+    face_names = []
+    try:
+        import numpy as np
+        face_db = os.path.join(BASE_DIR, 'vision', 'faces', 'known_faces.npz')
+        if os.path.exists(face_db):
+            data = np.load(face_db, allow_pickle=True)
+            face_names = data['names'].tolist()
+    except Exception:
+        pass
+
+    # Merge voice + face into known people
+    all_people = {}
+    for s in voice_speakers:
+        name = s.get('name', 'Unknown')
+        all_people[name] = {
+            "voice": True,
+            "voice_role": s.get('role', ''),
+            "voice_embeddings": len(s.get('embeddings', [])),
+            "face": name in face_names,
+        }
+    for fn in face_names:
+        if fn not in all_people:
+            all_people[fn] = {"voice": False, "face": True}
+        else:
+            all_people[fn]["face"] = True
+
+    if all_people:
+        add_node({"id": "hub_people", "name": "PEOPLE", "color": "#ff2d8a", "size": 22, "group": "hub"})
+        links.append({"source": "BRAIN", "target": "hub_people"})
+
+        for name, info in all_people.items():
+            pid = f"person_{name}"
+            modalities = []
+            if info.get("voice"): modalities.append("voice")
+            if info.get("face"): modalities.append("face")
+            add_node({
+                "id": pid, "name": name, "color": "#ec407a", "size": 14, "group": "person",
+                "details": {
+                    "role": info.get("voice_role", ""),
+                    "voice_enrolled": info.get("voice", False),
+                    "voice_samples": info.get("voice_embeddings", 0),
+                    "face_enrolled": info.get("face", False),
+                    "modalities": ", ".join(modalities),
+                }
+            })
+            links.append({"source": "hub_people", "target": pid})
+
+    # ── MEMORIES: grouped by speaker / source ──
+    if mm and hasattr(mm, 'hyper_db') and mm.hyper_db.documents:
+        add_node({"id": "hub_memory", "name": "MEMORIES", "color": "#ffca28", "size": 22, "group": "hub"})
+        links.append({"source": "BRAIN", "target": "hub_memory"})
+
+        docs = mm.hyper_db.documents
+        # Classify memories into buckets
+        speaker_groups = {}  # speaker name -> list of (i, doc)
+        ingested = []        # memories with no user_input (bulk loaded)
+        conversations = []   # memories with user_input but no/unknown speaker
+
+        for i, doc in enumerate(docs):
+            if not isinstance(doc, dict):
+                continue
+            user_in = doc.get('user_input', '').strip()
+            bot_resp = doc.get('bot_response', '').strip()
+            speaker = doc.get('speaker', '').strip()
+
+            # Detect ingested/seeded data: no user_input, or user_input looks like a fact statement
+            if not user_in and bot_resp:
+                ingested.append((i, doc))
+            elif speaker and speaker != 'Unknown' and not speaker.startswith('Unknown'):
+                speaker_groups.setdefault(speaker, []).append((i, doc))
+            else:
+                conversations.append((i, doc))
+
+        # Helper to add memory leaf nodes (capped to prevent visual overload)
+        MAX_LEAVES = 25  # max visible memories per cluster
+
+        def add_memory_leaves(parent_nid, mem_list, color):
+            shown = mem_list[-MAX_LEAVES:]  # show most recent
+            hidden = len(mem_list) - len(shown)
+            for i, doc in shown:
+                user_in = doc.get('user_input', '')
+                bot_resp = doc.get('bot_response', '')
+                label = user_in[:50] if user_in else bot_resp[:50] if bot_resp else f"mem_{i}"
+                nid = f"mem_{i}"
+                add_node({
+                    "id": nid, "name": label, "color": color, "size": 5, "group": "memory",
+                    "details": {
+                        "timestamp": doc.get('timestamp', ''),
+                        "speaker": doc.get('speaker', ''),
+                        "user_input": user_in[:300],
+                        "bot_response": bot_resp[:300],
+                    }
+                })
+                links.append({"source": parent_nid, "target": nid})
+            return hidden
+
+        # Ingested knowledge cluster
+        if ingested:
+            add_node({
+                "id": "cluster_ingested", "name": f"INGESTED ({len(ingested)})",
+                "color": "#ffa726", "size": 12 + min(len(ingested), 12), "group": "cluster",
+                "details": {"count": len(ingested), "description": "Bulk-loaded knowledge and seed data"}
+            })
+            links.append({"source": "hub_memory", "target": "cluster_ingested"})
+            overflow = add_memory_leaves("cluster_ingested", ingested, "#ffcc80")
+            if overflow > 0:
+                add_node({"id": "more_ingested", "name": f"+{overflow} more", "color": "#ffa726", "size": 4, "group": "overflow"})
+                links.append({"source": "cluster_ingested", "target": "more_ingested"})
+
+        # Per-speaker memory clusters
+        for spk_name, mem_list in speaker_groups.items():
+            cluster_nid = f"cluster_spk_{spk_name}"
+            add_node({
+                "id": cluster_nid, "name": f"{spk_name} ({len(mem_list)})",
+                "color": "#42a5f5", "size": 10 + min(len(mem_list) * 2, 12), "group": "cluster",
+                "details": {"count": len(mem_list), "speaker": spk_name}
+            })
+            links.append({"source": "hub_memory", "target": cluster_nid})
+            overflow = add_memory_leaves(cluster_nid, mem_list, "#64b5f6")
+            if overflow > 0:
+                add_node({"id": f"more_spk_{spk_name}", "name": f"+{overflow} more", "color": "#42a5f5", "size": 4, "group": "overflow"})
+                links.append({"source": cluster_nid, "target": f"more_spk_{spk_name}"})
+
+        # Knowledge / unattributed conversations cluster
+        if conversations:
+            add_node({
+                "id": "cluster_convos", "name": f"KNOWLEDGE ({len(conversations)})",
+                "color": "#29b6f6", "size": 12 + min(len(conversations), 12), "group": "cluster",
+                "details": {"count": len(conversations), "description": "Ingested knowledge and conversations"}
+            })
+            links.append({"source": "hub_memory", "target": "cluster_convos"})
+            overflow = add_memory_leaves("cluster_convos", conversations, "#81d4fa")
+            if overflow > 0:
+                add_node({"id": "more_convos", "name": f"+{overflow} more", "color": "#29b6f6", "size": 4, "group": "overflow"})
+                links.append({"source": "cluster_convos", "target": "more_convos"})
+
+    # ── KNOWLEDGE (TOPICS): categorized ──
+    if mm and hasattr(mm, 'topic_index') and mm.topic_index.get('topics'):
+        add_node({"id": "hub_knowledge", "name": "KNOWLEDGE", "color": "#39ff14", "size": 22, "group": "hub"})
+        links.append({"source": "BRAIN", "target": "hub_knowledge"})
+
+        categories = {
+            "Personal Facts": {"color": "#26c6da", "keywords": [
+                "has ", "is ", "lives", "owns", "favorite", "name", "born",
+                "age", "family", "wife", "husband", "dog", "cat", "pet",
+                "garage", "el paso", "blue", "likes", "dislikes", "works",
+            ]},
+            "Emotional": {"color": "#ab47bc", "keywords": [
+                "frustrat", "happy", "humor", "angry", "sad", "excit",
+                "nervou", "grateful", "love", "fear", "curious", "surprise",
+                "disappoint", "emotion", "mood", "feel", "gratitude", "sarcasm",
+            ]},
+            "Tools & Tech": {"color": "#00e5ff", "keywords": [
+                "tool", "search", "vision", "camera", "photo", "home assistant",
+                "discord", "voice", "servo", "movement", "volume", "program",
+                "code", "debug", "test", "api",
+            ]},
+        }
+
+        categorized = {cat: [] for cat in categories}
+        categorized["General"] = []
+
+        for j, t in enumerate(mm.topic_index['topics']):
+            topic_name = t.get('topic', str(t)) if isinstance(t, dict) else str(t)
+            mentions = t.get('mention_count', 1) if isinstance(t, dict) else 1
+            nl = topic_name.lower()
+            placed = False
+            for cat, info in categories.items():
+                if any(kw in nl for kw in info["keywords"]):
+                    categorized[cat].append((j, t, topic_name, mentions))
+                    placed = True
+                    break
+            if not placed:
+                categorized["General"].append((j, t, topic_name, mentions))
+
+        cat_colors = {
+            "Personal Facts": "#26c6da", "Emotional": "#ab47bc",
+            "Tools & Tech": "#00e5ff", "General": "#66bb6a",
+        }
+
+        for cat, items in categorized.items():
+            if not items:
+                continue
+            cat_nid = f"cat_{cat.lower().replace(' ', '_').replace('&', '')}"
+            add_node({
+                "id": cat_nid, "name": f"{cat.upper()} ({len(items)})",
+                "color": cat_colors.get(cat, "#66bb6a"),
+                "size": 12 + min(len(items), 10), "group": "category",
+                "details": {"count": len(items)}
+            })
+            links.append({"source": "hub_knowledge", "target": cat_nid})
+
+            for j, t, topic_name, mentions in items:
+                nid = f"topic_{j}"
+                add_node({
+                    "id": nid, "name": topic_name,
+                    "color": cat_colors.get(cat, "#66bb6a"),
+                    "size": 5 + min(mentions * 2, 10), "group": "topic",
+                    "details": {
+                        "category": cat, "mentions": mentions,
+                        "first_mentioned": t.get('first_mentioned', '')[:16] if isinstance(t, dict) else '',
+                        "last_mentioned": t.get('last_mentioned', '')[:16] if isinstance(t, dict) else '',
+                    }
+                })
+                links.append({"source": cat_nid, "target": nid})
+
+
+    return jsonify({"nodes": nodes, "links": links})
+
+
+@flask_app.route('/api/dashboard/mood')
+def dashboard_mood():
+    """Return mood analytics for the dashboard."""
+    from modules.module_dashboard_data import get_mood_analytics, get_emotional_state
+    data = get_mood_analytics()
+    data['emotional_state'] = get_emotional_state()
+    return jsonify(data)
+
+
+@flask_app.route('/api/dashboard/interactions')
+def dashboard_interactions():
+    """Return recent interactions for the audit log."""
+    from modules.module_dashboard_data import get_interactions
+    limit = request.args.get('limit', 100, type=int)
+    return jsonify(get_interactions(limit))
+
+
+@flask_app.route('/api/dashboard/topics')
+def dashboard_topics():
+    """Return the topic index for the facts/topic view."""
+    import modules.module_llm as _llm
+    mm = _llm.memory_manager
+    if mm and hasattr(mm, 'topic_index'):
+        return jsonify(mm.topic_index)
+    return jsonify({"topics": []})
+
+
+@flask_app.route('/api/dashboard/stats')
+def dashboard_stats():
+    """Return summary stats for the dashboard header."""
+    import modules.module_llm as _llm
+    mm = _llm.memory_manager
+    mem_count = len(mm.hyper_db.documents) if mm and hasattr(mm, 'hyper_db') and mm.hyper_db.documents else 0
+    topic_count = len(mm.topic_index.get('topics', [])) if mm and hasattr(mm, 'topic_index') else 0
+    from modules.module_dashboard_data import get_interactions, get_emotional_state
+    interaction_count = len(get_interactions(500))
+    # Derive dominant mood from the time-weighted emotional state
+    # Prefer non-neutral unless nothing else has a meaningful score
+    emo_state = get_emotional_state()
+    non_neutral = {k: v for k, v in emo_state.items() if k != 'neutral' and v > 0}
+    if non_neutral:
+        dominant = max(non_neutral, key=non_neutral.get)
+    elif emo_state.get('neutral', 0) > 0:
+        dominant = 'neutral'
+    else:
+        dominant = 'neutral'
+    return jsonify({
+        "memories": mem_count,
+        "topics": topic_count,
+        "interactions": interaction_count,
+        "current_emotion": dominant,
+        "emotion_enabled": bool(CONFIG['EMOTION']['enabled']),
+    })
+
+
+@flask_app.route('/api/dashboard/prompt')
+def dashboard_prompt():
+    """Return prompt history list, or a specific prompt if ?id= is given."""
+    from modules.module_dashboard_data import get_interactions, get_prompt_for_interaction
+
+    entry_id = request.args.get('id', '')
+    if entry_id:
+        # Return the full prompt for a specific interaction
+        prompt = get_prompt_for_interaction(entry_id)
+        return jsonify({"prompt": prompt or '(prompt not stored for this interaction)'})
+
+    # Return the interaction list with metadata for the dropdown
+    interactions = get_interactions(200)
+    items = []
+    for e in reversed(interactions):  # newest first
+        items.append({
+            "id": e.get("id", ""),
+            "ts": e.get("ts", ""),
+            "user": (e.get("user", "") or "")[:60],
+            "bot": (e.get("bot", "") or "")[:60],
+            "emotion": e.get("emotion", ""),
+            "speaker": e.get("speaker", ""),
+            "has_prompt": e.get("has_prompt", False),
+        })
+    return jsonify({"interactions": items
+    })
 
 
 def start_flask_app(port=None):

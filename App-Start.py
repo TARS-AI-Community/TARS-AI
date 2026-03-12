@@ -424,7 +424,7 @@ def check_required_file():
             wake_word_processor = config.get('STT', 'wake_word_processor').strip().lower()
             
             if wake_word_processor == 'atomik':
-                file_path = os.path.expanduser("~/.local/share/tars_ai/hey_tars_templates.pkl")
+                file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "tts", "hey_tars_templates.pkl")
                 return os.path.exists(file_path)
             else:
                 return True

@@ -12,7 +12,7 @@ CONFIG = load_config()
 
 elevenlabs_client = ElevenLabs(api_key=CONFIG['TTS']['elevenlabs_api_key'])
 
-CACHE_DIR = os.path.expanduser("~/.local/share/tars_ai_replies")
+CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tts", "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 def split_into_sentences(text, max_length=80):
