@@ -169,6 +169,8 @@ pi_version
 interaction_log.json
 emotional_state.json
 prompt_history/
+reminders.json
+scheduled_tasks.json
 
 # Character Data & Personas
 *persona.ini
