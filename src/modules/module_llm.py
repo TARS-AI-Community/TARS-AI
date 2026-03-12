@@ -27,8 +27,6 @@ import random
 import asyncio
 from modules.module_config import load_config, get_capabilities
 from modules.module_prompt import build_prompt
-from modules.module_engine  import execute_movement
-
 from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
