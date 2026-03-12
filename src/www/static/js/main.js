@@ -9,8 +9,8 @@
 // Batches messages to avoid "Too many packets in payload" SocketIO errors
 let _dbgQueue = [];
 let _dbgTimer = null;
-function _dbg() {
-  const msg = Array.prototype.slice.call(arguments).join(' ');
+function _dbg(...args) {
+  const msg = args.join(' ');
   console.log(msg);
   _dbgQueue.push(msg);
   if (!_dbgTimer) {
@@ -208,6 +208,10 @@ function stop_talking()  { avatarIsTalking = false; }
 function _unlockAudioElement() {
   if (_audioUnlocked) return;
   _audioUnlocked = true;
+  // Remove listeners now that we've had a user gesture — no need to keep firing
+  document.removeEventListener('click', _unlockAudioElement);
+  document.removeEventListener('touchend', _unlockAudioElement);
+  document.removeEventListener('keydown', _unlockAudioElement);
   const el = $('audioPlayer');
   if (!el) return;
   const wav = new Uint8Array([
@@ -508,9 +512,20 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  socket.on('user_message',   d => displayUserMessage(d.message));
+  socket.on('user_message',   d => displayUserMessage(d.message, null, d.speaker));
   socket.on('talking_state',  d => { _dbg('[DEBUG] talking_state:', d.talking); avatarIsTalking = d.talking; });
   socket.on('emotion_change', d => preloadAvatarSprites(d));
+
+  // Deferred speaker name correction — update the last user message bubble if
+  // speaker ID resolved after the initial display
+  socket.on('update_last_user_speaker', d => {
+    const rows = document.querySelectorAll('.msg-row-user');
+    if (rows.length > 0) {
+      const lastRow = rows[rows.length - 1];
+      const nameEl = lastRow.querySelector('.msg-name');
+      if (nameEl && d.speaker) nameEl.textContent = d.speaker;
+    }
+  });
 
   // Connection status
   const connDot = document.getElementById('connDot');
@@ -594,10 +609,15 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.is-typing').forEach(el => el.remove());
   }
 
-  function displayUserMessage(message, imageFile) {
+  function displayUserMessage(message, imageFile, speakerName) {
     const chatBody = document.querySelector('.chat-messages');
     const row = document.createElement('div');
     row.className = 'msg-row msg-row-user';
+    const name = speakerName || window.APP_CONFIG?.userName || 'User';
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta msg-meta-user';
+    meta.innerHTML = `<span class="msg-name">${name}</span>`;
+    row.appendChild(meta);
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble msg-bubble-user';
     if (message) bubble.innerHTML = `<div class="response-text">${formatText(message)}</div>`;
@@ -766,10 +786,13 @@ document.addEventListener('DOMContentLoaded', function () {
       merged.set(chunks[i], offset);
       offset += chunks[i].length;
     }
-    // Base64 encode
+    // Base64 encode — use chunked apply to avoid stack overflow on large buffers
     const bytes = new Uint8Array(merged.buffer);
+    const CHUNK = 8192;
     let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
     const b64 = btoa(binary);
     _dbg('[MIC] Sending audio to server |', merged.length, 'samples |', Math.round(merged.length / 16000 * 10) / 10, 's');
     _waitingForSTT = true;

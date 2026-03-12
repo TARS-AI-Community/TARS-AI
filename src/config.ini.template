@@ -98,7 +98,7 @@ speechdelay = 20
 # Speaker identification — passively identify who is speaking (Pi5/Pi4 only)
 speaker_id_enabled = True
 # Speaker ID cosine similarity threshold (0.0–1.0, higher = stricter matching)
-speaker_id_threshold = 0.5
+speaker_id_threshold = 0.75
 # Microphone amplification gain — multiplies raw mic input (higher = more sensitive, default 10.0)
 mic_amp_gain = 10.0
 # Silence margin — how many times above background noise counts as speech (lower = more sensitive, default 3.0)

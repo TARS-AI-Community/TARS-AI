@@ -123,17 +123,16 @@ def wake_word_callback(wake_response):
     # Deactivate screensaver when wake word is detected
     if ui_manager:
         ui_manager.deactivate_screensaver()
-
-    character_name = CONFIG['CHAR']['character_name']
-    ui_manager.update_data(character_name, wake_response, character_name)
-
-    ui_manager.set_tars_status("TALKING")
+        character_name = CONFIG['CHAR']['character_name']
+        ui_manager.update_data(character_name, wake_response, character_name)
+        ui_manager.set_tars_status("TALKING")
 
     # Don't run barge-in on wake responses — they're too short and the mic
     # picks up TARS's own voice, causing false positives
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption'], True))
 
-    ui_manager.set_tars_status("LISTENING")
+    if ui_manager:
+        ui_manager.set_tars_status("LISTENING")
 
 def utterance_callback(message):
     """
@@ -160,12 +159,28 @@ def utterance_callback(message):
 
         user_text = message_dict['text'].strip()
 
-        ui_manager.update_data("USER", user_text, "USER")
+        # Resolve speaker name for display (voice mode)
+        # Wait for background speaker ID — returns immediately if already done
+        _speaker_display = CONFIG['CHAR'].get('user_name', 'User')
+        try:
+            from modules.module_speaker_id import get_speaker_id_manager
+            sid = get_speaker_id_manager()
+            if sid and sid.enabled:
+                identified = sid.wait_for_identification(timeout=1.5)
+                if not identified:
+                    queue_message("DEBUG: Speaker ID timed out (1.5s) — using default name")
+            from modules.module_prompt import _get_active_user_name
+            _speaker_display = _get_active_user_name(_speaker_display)
+        except Exception:
+            pass
+
+        if ui_manager:
+            ui_manager.update_data(_speaker_display, user_text, _speaker_display)
 
         # Push voice-mode user message to web UI
         try:
             from modules.module_chatui import push_user_message
-            push_user_message(user_text)
+            push_user_message(user_text, speaker_name=_speaker_display)
         except Exception:
             pass
 
@@ -174,7 +189,8 @@ def utterance_callback(message):
             os.system('shutdown /s /t 0')
             return
 
-        ui_manager.set_tars_status("THINKING")
+        if ui_manager:
+            ui_manager.set_tars_status("THINKING")
 
         # ── Sentence-pipeline TTS ─────────────────────────────────────────────
         _acc_raw    = ['']   # cumulative raw text from LLM (may include <think>)
@@ -186,7 +202,8 @@ def utterance_callback(message):
             return text.strip()
 
         def _on_first_play():
-            ui_manager.set_tars_status("TALKING")
+            if ui_manager:
+                ui_manager.set_tars_status("TALKING")
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text="")
 
@@ -198,7 +215,8 @@ def utterance_callback(message):
 
         # Add placeholder message to OpenGL UI for streaming updates
         character_name = CONFIG['CHAR']['character_name']
-        ui_manager.update_data(character_name, "", "TARS")
+        if ui_manager:
+            ui_manager.update_data(character_name, "", "TARS")
 
         def on_reply_chunk(chunk, is_first):
             """Called from LLM streaming thread with each reply text piece."""
@@ -219,7 +237,8 @@ def utterance_callback(message):
                 return
 
             # Stream to OpenGL UI (update last message in-place)
-            ui_manager.update_streaming_data(clean_total)
+            if ui_manager:
+                ui_manager.update_streaming_data(clean_total)
 
             # Stream new text to web UI
             try:
@@ -227,6 +246,10 @@ def utterance_callback(message):
                 stream_reply_token(new_clean)
             except Exception:
                 pass
+
+            # Update barge-in monitor with latest TTS text (streaming mode)
+            if stt_manager:
+                stt_manager.update_bargein_tts_text(clean_total)
 
             # Feed to sentence-pipeline TTS
             pipeline.feed(new_clean)
@@ -273,7 +296,8 @@ def utterance_callback(message):
                     socketio.emit('bot_message', {'message': ''})
                 except Exception:
                     pass
-            ui_manager.set_tars_status("STANDBY")
+            if ui_manager:
+                ui_manager.set_tars_status("STANDBY")
             return
 
         if parsed is None:
@@ -284,7 +308,8 @@ def utterance_callback(message):
                     socketio.emit('bot_message', {'message': ''})
                 except Exception:
                     pass
-            ui_manager.set_tars_status("STANDBY")
+            if ui_manager:
+                ui_manager.set_tars_status("STANDBY")
             return
 
         # Extract the final reply text for post-processing (emotion, display)
@@ -306,7 +331,8 @@ def utterance_callback(message):
                     socketio.emit('bot_message', {'message': ''})
                 except Exception:
                     pass
-            ui_manager.set_tars_status("STANDBY")
+            if ui_manager:
+                ui_manager.set_tars_status("STANDBY")
             return
 
         # Detect emotion (parallel-safe — runs while TTS thread plays sentences)
@@ -323,7 +349,8 @@ def utterance_callback(message):
         emo_dur = speed.stop('emotion')
 
         # Finalize the streaming message with the complete reply
-        ui_manager.update_streaming_data(reply)
+        if ui_manager:
+            ui_manager.update_streaming_data(reply)
 
         # Handle side effects (vision/search/photo run inline, others in background)
         _followup_reply = None
@@ -362,7 +389,8 @@ def utterance_callback(message):
         # For preemptive results, TTS hasn't started yet — play full reply normally
         if preemptive is not None:
             reply_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
-            ui_manager.set_tars_status("TALKING")
+            if ui_manager:
+                ui_manager.set_tars_status("TALKING")
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=reply_clean)
             speed.start('tts')
@@ -383,8 +411,9 @@ def utterance_callback(message):
         if _followup_reply and not was_interrupted:
             followup_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', _followup_reply)
             # Update OpenGL UI with follow-up content
-            ui_manager.update_streaming_data(_followup_reply)
-            ui_manager.set_tars_status("TALKING")
+            if ui_manager:
+                ui_manager.update_streaming_data(_followup_reply)
+                ui_manager.set_tars_status("TALKING")
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=followup_clean)
             speed.start('followup_tts')
@@ -396,9 +425,11 @@ def utterance_callback(message):
 
         if was_interrupted:
             time.sleep(0.3)
-            ui_manager.set_tars_status("LISTENING")
+            if ui_manager:
+                ui_manager.set_tars_status("LISTENING")
         else:
-            ui_manager.set_tars_status("STANDBY")
+            if ui_manager:
+                ui_manager.set_tars_status("STANDBY")
 
         # Push final reply to web UI (finalizes streaming bubble or creates one for preemptive)
         # Mark audio_streamed=True since audio was played on Pi speakers — prevents
@@ -412,15 +443,28 @@ def utterance_callback(message):
         except Exception:
             pass
 
-        # Round summary log
+        # Round summary log — wait for background speaker ID to finish first
         speaker = '?'
         try:
             from modules.module_speaker_id import get_speaker_id_manager
             sid = get_speaker_id_manager()
-            if sid and sid.current_speaker:
-                speaker = sid.current_speaker
+            if sid:
+                sid.wait_for_identification(timeout=8.0)
+                spk = sid.get_current_speaker()
+                if spk:
+                    speaker = spk
         except Exception:
             pass
+
+        # If speaker ID resolved late (after initial display), update WebUI speaker name
+        _final_speaker = speaker if (speaker and speaker != '?' and not speaker.startswith("Unknown")) else _speaker_display
+        if _final_speaker != _speaker_display:
+            try:
+                from modules.module_chatui import socketio
+                socketio.emit('update_last_user_speaker', {'speaker': _final_speaker})
+            except Exception:
+                pass
+
         parts = [
             f"speaker={speaker}",
             f"emotion={emotion or '?'}",
@@ -470,7 +514,8 @@ def utterance_callback(message):
     except json.JSONDecodeError:
         queue_message("ERROR: Invalid JSON format. Could not process user message.")
     except Exception as e:
-        ui_manager.set_tars_status("STANDBY")
+        if ui_manager:
+            ui_manager.set_tars_status("STANDBY")
         queue_message(f"ERROR: {e}")
 
 def post_utterance_callback():

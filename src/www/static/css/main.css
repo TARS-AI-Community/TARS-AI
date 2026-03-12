@@ -158,6 +158,11 @@ html, body {
   100% { transform: translate(0, 0) scale(1); opacity: 0.5; }
 }
 
+/* Respect user's motion preferences (important on low-spec Pi hardware) */
+@media (prefers-reduced-motion: reduce) {
+  .nebula-blob { animation: none !important; }
+}
+
 /* particle / cosmic ray canvas background */
 #particleBg {
   position: fixed;
@@ -734,6 +739,10 @@ body::after {
   text-transform: uppercase;
   color: var(--cyan);
   text-shadow: 0 0 8px var(--cyan);
+}
+
+.msg-row-user .msg-meta {
+  text-align: right;
 }
 
 .msg-row-user .msg-name {

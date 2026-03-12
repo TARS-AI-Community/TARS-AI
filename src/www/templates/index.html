@@ -8,14 +8,14 @@
   <meta http-equiv="Expires" content="0">
   <title id="titleid">T.A.R.S.</title>
 
-  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v={{ range(1,99999)|random }}" rel="stylesheet">
-  <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}?v={{ range(1,99999)|random }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v=6.0" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/bootstrap-icons.css') }}?v=6.0" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
-  <link href="{{ url_for('static', filename='css/main.css') }}?v={{ range(1,99999)|random }}" rel="stylesheet">
-  <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}?v={{ range(1,99999)|random }}">
+  <link href="{{ url_for('static', filename='css/main.css') }}?v=6.0" rel="stylesheet">
+  <link rel="icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}?v=6.0">
 
-  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v={{ range(1,99999)|random }}"></script>
-  <script src="{{ url_for('static', filename='js/socket.io.js') }}?v={{ range(1,99999)|random }}"></script>
+  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v=6.0"></script>
+  <script src="{{ url_for('static', filename='js/socket.io.js') }}?v=6.0"></script>
 </head>
 
 <body>
@@ -43,7 +43,7 @@
       <div class="connection-indicator" id="connIndicator">
         <span class="conn-dot" id="connDot"></span>
       </div>
-      <div class="tars-watermark">{{ char_name }}</div>
+      <div class="tars-watermark">{{ char_name | e }}</div>
       <button class="custom-tab" id="fullscreen-toggle" onclick="toggleFullscreen()" aria-label="Fullscreen">
         <i class="bi bi-fullscreen" id="fullscreen-icon"></i>
       </button>
@@ -82,14 +82,15 @@
   <!-- Flask → JS bridge -->
   <script>
     window.APP_CONFIG = {
-      charName:      "{{ char_name }}",
-      charGreeting:  "{{ char_greeting }}",
-      port:          "{{ port }}",
-      charAvatarUrl: "{{ url_for('static', filename='imgs/char.png') }}"
+      charName:      {{ char_name | tojson }},
+      charGreeting:  {{ char_greeting | tojson }},
+      port:          {{ port | tojson }},
+      charAvatarUrl: {{ url_for('static', filename='imgs/char.png') | tojson }},
+      userName:      {{ user_name | tojson }}
     };
   </script>
 
-  <script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1,99999)|random }}"></script>
-  <script src="{{ url_for('static', filename='js/particles.js') }}?v={{ range(1,99999)|random }}"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=6.0"></script>
+  <script src="{{ url_for('static', filename='js/particles.js') }}?v=6.0"></script>
 </body>
 </html>

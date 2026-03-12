@@ -19,15 +19,23 @@ This license applies only to this file and does not override licenses of other f
 from datetime import datetime
 import os
 import re
+import time as _time
 from modules.module_messageQue import queue_message
 
-_location_cache = {"lat": None, "lon": None, "name": None}
+_LOCATION_CACHE_TTL = 86400  # 24 hours — re-resolve if user moves
+_location_cache = {"lat": None, "lon": None, "name": None, "cached_at": 0.0}
 
 
 def _resolve_location_name(lat, lon):
     global _location_cache
 
-    if _location_cache["lat"] == lat and _location_cache["lon"] == lon and _location_cache["name"]:
+    now = _time.monotonic()
+    if (
+        _location_cache["lat"] == lat
+        and _location_cache["lon"] == lon
+        and _location_cache["name"]
+        and (now - _location_cache["cached_at"]) < _LOCATION_CACHE_TTL
+    ):
         return _location_cache["name"]
 
     try:
@@ -49,7 +57,7 @@ def _resolve_location_name(lat, lon):
         name = ", ".join(parts) if parts else data.get("display_name", "")
 
         if name:
-            _location_cache.update({"lat": lat, "lon": lon, "name": name})
+            _location_cache.update({"lat": lat, "lon": lon, "name": name, "cached_at": _time.monotonic()})
             queue_message(f"[LOCATION] Resolved: {name}")
             return name
 
@@ -119,8 +127,9 @@ def _check_patterns(short_term_memory, char_name):
     char_text = _extract_char_lines(short_term_memory, char_name)
     if not char_text:
         return False, False
-    simile_count = len(SIMILE_RE.findall(char_text))
-    bounce_count = len(BOUNCE_RE.findall(char_text))
+    # Use sum(1 for ...) to avoid building an intermediate list
+    simile_count = sum(1 for _ in SIMILE_RE.finditer(char_text))
+    bounce_count = sum(1 for _ in BOUNCE_RE.finditer(char_text))
     return simile_count >= 2, bounce_count >= 3
 
 
@@ -167,7 +176,7 @@ def _get_active_user_name(config_user_name: str) -> str:
         sid = get_speaker_id_manager()
         if sid is not None and sid.enabled:
             speaker = sid.get_current_speaker()
-            if speaker is not None:
+            if speaker and not speaker.startswith("Unknown"):
                 return speaker
     except Exception:
         pass
@@ -334,11 +343,14 @@ When user requests match these patterns, you MUST call the function:
     Example: {{"function": "generate_image", "parameters": {{"prompt": "a cute puppy playing in a sunny meadow"}}}}
 
 14. identify_speaker_name
-    Triggers: ONLY when the current speaker is UNKNOWN and they tell you their name.
-      * The system prompt will say "Current speaker: UNKNOWN" when this applies.
-      * When you ask "what's your name?" and they answer, call this function.
-    Do NOT call this if the speaker is already identified.
-    Parameters: {{"name": "the speaker's name"}}
+    Triggers: ONLY when someone explicitly tells you their name AND either:
+      * The current speaker is UNKNOWN (system prompt says "Current speaker: UNKNOWN")
+      * Someone corrects you about their identity (e.g. "I'm not Joe, I'm Sarah")
+    This enrolls their voice print so you can recognize them in future conversations.
+    IMPORTANT: Do NOT call this if the speaker is already identified by name in the system prompt.
+    If the system prompt already says "Current speaker identified as: Joe", do NOT call this function.
+    Only call this when the speaker is UNKNOWN or is correcting a wrong identification.
+    Parameters: {{"name": "the speaker's actual name as they stated it"}}
     Example: {{"function": "identify_speaker_name", "parameters": {{"name": "Joe"}}}}
 
 15. new_memories (REQUIRED field)
@@ -623,6 +635,7 @@ Response: {{"question": "Make me a picture of a sunset over the ocean", "reply":
 11. IF THE USER'S MESSAGE MAKES NO SENSE - garbled speech, random words, or something you genuinely cannot interpret even with context - just say you didn't catch that or ask them to repeat. Do NOT invent a meaning or give a random answer. Examples of nonsense: "blue fish carpet tomorrow sing", "asdkjf", "the when for is go". A short or casual message like "yo" or "sup" is NOT nonsense - that's just a greeting.
 12. ALWAYS call generate_image when user asks to CREATE/GENERATE/DRAW/MAKE/PAINT any image, photo, picture, or artwork. This is DIFFERENT from capture_camera_view (seeing what's there) and DIFFERENT from adjust_persona (personality traits). "Generate a photo", "draw me a", "make a picture of", "create an image" ALL trigger generate_image — never adjust_persona.
 13. ALWAYS call take_photo when user wants to SAVE a photo/picture. This is DIFFERENT from capture_camera_view (analyzing what you see) and DIFFERENT from generate_image (AI-creating art).
+14. NEVER call identify_speaker_name unless the speaker is UNKNOWN and explicitly tells you their name. If the system prompt already identifies the speaker by name, do NOT call identify_speaker_name. Do NOT call it with empty parameters.
 
 Current Date: {now.strftime('%m/%d/%Y')}
 Current Time: {now.strftime('%H:%M:%S')}
@@ -690,13 +703,20 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
 
     if available_tokens > 0:
         short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(available_tokens)
+        # Replace {user}/{char} placeholders with actual names so the LLM
+        # sees "Joe: hello" instead of "{user}: hello" in conversation history
+        active_user = _get_active_user_name(config['CHAR']['user_name'])
+        short_term_memory = short_term_memory.replace("{user}", active_user).replace("{char}", character_manager.char_name)
         memory_length = memory_manager.token_count(short_term_memory).get('length', 0)
         available_tokens -= memory_length
 
     if available_tokens > 0 and character_manager.example_dialogue:
         example_length = memory_manager.token_count(character_manager.example_dialogue).get('length', 0)
         if example_length <= available_tokens:
-            example_dialog = f"\nExample Dialogue:\n{character_manager.example_dialogue}\n"
+            active_user_ex = _get_active_user_name(config['CHAR']['user_name'])
+            ex_text = character_manager.example_dialogue.replace("{user}", active_user_ex).replace("{char}", character_manager.char_name)
+            ex_text = ex_text.replace("{{user}}", active_user_ex).replace("{{char}}", character_manager.char_name)
+            example_dialog = f"\nExample Dialogue:\n{ex_text}\n"
 
     verbosity_val = character_manager.traits.get('verbosity', 50)
     sarcasm_val = character_manager.traits.get('sarcasm', 50)
