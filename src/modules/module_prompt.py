@@ -38,6 +38,31 @@ def _get_skills_prompt_text():
     return "(No skills loaded)"
 
 
+def _get_emotion_schema_field(config):
+    """Return the emotion JSON field for the prompt schema, or empty string if not using LLM emotions."""
+    try:
+        if config['EMOTION']['enabled'] and config['EMOTION'].get('emotion_method', 'classifier') == 'llm':
+            return ',\n  "emotion": "string (one of: joy, anger, sadness, fear, love, curiosity, surprise, neutral)"'
+    except (KeyError, TypeError):
+        pass
+    return ""
+
+
+def _get_emotion_prompt_instruction(config):
+    """Return the emotion instruction block when LLM emotion mode is active."""
+    try:
+        if config['EMOTION']['enabled'] and config['EMOTION'].get('emotion_method', 'classifier') == 'llm':
+            return """
+   emotion (REQUIRED field)
+   Set this to the single emotion that best describes your reply's tone.
+   Must be one of: joy, anger, sadness, fear, love, curiosity, surprise, neutral
+   Pick the most fitting one — do not overthink it.
+"""
+    except (KeyError, TypeError):
+        pass
+    return ""
+
+
 def _get_skills_examples_text():
     """Get skill-specific examples from the skills system for LLM prompt injection."""
     try:
@@ -258,7 +283,7 @@ Schema:
   "function_calls": [
     {{"function": "string", "parameters": {{}}}}
   ],
-  "new_memories": ["string"]
+  "new_memories": ["string"]{_get_emotion_schema_field(config)}
 }}
 
 === PART 1: FUNCTION CALLING (MANDATORY) ===
@@ -285,7 +310,7 @@ When user requests match these patterns, you MUST call the function:
    Bad examples: "designing unique maze", "working on first level", "still building"
    If no NEW high-level facts, use empty array: []
    Example: "new_memories": ["building Pac-Man game", "has 5 year old kid"]
-
+{_get_emotion_prompt_instruction(config)}
 FUNCTION CALLING RULES:
 - If pattern matches, function_calls MUST contain that function
 - Do NOT just respond with text - MUST include function call

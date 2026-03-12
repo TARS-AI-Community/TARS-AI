@@ -44,7 +44,7 @@ from modules.module_config import CONFIG_METADATA as CONFIG_UI_FIELDS
 from modules.module_llm import get_completion, process_completion, _sanitize_for_tts
 import modules.module_llm as _llm_mod
 from modules.module_tts import generate_tts_audio, SentenceTTSPipeline
-from modules.module_llm import detect_emotion, classifier as emotion_classifier
+from modules.module_llm import detect_emotion, detect_emotion_from_llm, classifier as emotion_classifier
 from modules.module_messageQue import queue_message, get_recent_logs
 from modules.module_servoctl import *
 from modules.module_movement_registry import get_names, get_names_by_type, LEGS_ONLY, HAS_ARMS, MOVEMENTS
@@ -764,14 +764,20 @@ def _process_chat_message(msg, img_b64):
         detected_raw = None
         axis_scores = {}
         if CONFIG['EMOTION']['enabled'] and msg:
-            detected, detected_raw, axis_scores = detect_emotion(msg)
+            _emo_method = CONFIG['EMOTION'].get('emotion_method', 'classifier')
+            if _emo_method == 'llm':
+                if isinstance(parsed, dict):
+                    detected, detected_raw, axis_scores = detect_emotion_from_llm(parsed.get('emotion'))
+                # else: LLM response wasn't valid JSON — skip emotion silently
+            else:
+                detected, detected_raw, axis_scores = detect_emotion(msg)
             if detected:
                 update_emotion(detected)
 
         # Log interaction for dashboard analytics
         try:
             from modules.module_dashboard_data import log_interaction
-            log_interaction(msg, reply, emotion=detected, emotion_raw=detected_raw, axis_scores=axis_scores)
+            log_interaction(msg, reply, emotion=detected, emotion_raw=detected_raw, axis_scores=axis_scores, llm_response=parsed)
         except Exception:
             pass
 
@@ -2275,9 +2281,12 @@ def dashboard_prompt():
 
     entry_id = request.args.get('id', '')
     if entry_id:
-        # Return the full prompt for a specific interaction
-        prompt = get_prompt_for_interaction(entry_id)
-        return jsonify({"prompt": prompt or '(prompt not stored for this interaction)'})
+        # Return the full prompt and LLM response for a specific interaction
+        prompt, llm_raw = get_prompt_for_interaction(entry_id)
+        return jsonify({
+            "prompt": prompt or '(prompt not stored for this interaction)',
+            "llm_raw": llm_raw or '',
+        })
 
     # Return the interaction list with metadata for the dropdown
     interactions = get_interactions(200)

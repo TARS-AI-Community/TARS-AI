@@ -15,7 +15,7 @@ import asyncio
 
 # === Custom Modules ===
 from modules.module_config import load_config, get_capabilities
-from modules.module_llm import process_completion, detect_emotion, llm_execute_side_effects, _sanitize_for_tts
+from modules.module_llm import process_completion, detect_emotion, detect_emotion_from_llm, llm_execute_side_effects, _sanitize_for_tts
 from modules.module_tts import play_audio_chunks, SentenceTTSPipeline
 from modules.module_messageQue import queue_message
 from modules.module_servoctl import initialize_servos
@@ -341,7 +341,13 @@ def utterance_callback(message):
         emotion_raw = None
         axis_scores = {}
         if CONFIG['EMOTION']['enabled'] and user_text:
-            emotion, emotion_raw, axis_scores = detect_emotion(user_text)
+            _emo_method = CONFIG['EMOTION'].get('emotion_method', 'classifier')
+            if _emo_method == 'llm':
+                if isinstance(parsed, dict):
+                    emotion, emotion_raw, axis_scores = detect_emotion_from_llm(parsed.get('emotion'))
+                # else: LLM response wasn't valid JSON — skip emotion silently
+            else:
+                emotion, emotion_raw, axis_scores = detect_emotion(user_text)
             if emotion:
                 try:
                     from modules.module_chatui import update_emotion
@@ -361,7 +367,7 @@ def utterance_callback(message):
                     _speaker = im.get_current_speaker()
             except Exception:
                 pass
-            log_interaction(user_text, reply, emotion=emotion, emotion_raw=emotion_raw, axis_scores=axis_scores, speaker=_speaker)
+            log_interaction(user_text, reply, emotion=emotion, emotion_raw=emotion_raw, axis_scores=axis_scores, speaker=_speaker, llm_response=parsed)
         except Exception:
             pass
 

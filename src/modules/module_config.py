@@ -434,6 +434,7 @@ def load_config():
         },
         "EMOTION": {
             "enabled": config.getboolean('EMOTION', 'enabled'),
+            "emotion_method": config.get('EMOTION', 'emotion_method', fallback='classifier'),
             "emotion_model": config['EMOTION']['emotion_model'],
         },
         "TTS": TTSConfig.from_config_dict({
@@ -819,10 +820,20 @@ CONFIG_METADATA = {
     'EMOTION': {
         '__description__': 'Controls whether TARS shows emotions on its face/display based on what it says',
         'enabled': {
-            'description': 'When ON, TARS analyzes its own responses to figure out the emotion behind them (happy, sad, angry, surprised, etc.) and then shows matching facial expressions on its screen. This makes TARS feel more alive and expressive. Turn this OFF if you are not using the TARS display screen, or if you want to save processing power on weaker Pi models. The emotion detection runs a small AI model that uses some RAM and CPU.'
+            'description': 'When ON, TARS analyzes its own responses to figure out the emotion behind them (happy, sad, angry, surprised, etc.) and then shows matching facial expressions on its screen. This makes TARS feel more alive and expressive. Turn this OFF if you are not using the TARS display screen, or if you want to save processing power on weaker Pi models.'
+        },
+        'emotion_method': {
+            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'options': ['classifier', 'llm'],
+            'option_labels': {'classifier': 'Classifier (local model)', 'llm': 'LLM (from response)'},
+            'label': 'Detection Method',
+            'description': 'How TARS detects emotions. "Classifier" downloads and runs a dedicated AI model locally (~500MB RAM, 28 fine-grained emotions). "LLM" asks your existing LLM to include the emotion in its response — zero extra RAM, but less granular (8 categories). Use LLM on Pi3/PiZero2 to save resources.'
         },
         'emotion_model': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
+            'depends_on': [
+                {'field': 'enabled', 'values': ['True', 'true']},
+                {'field': 'emotion_method', 'values': ['classifier']}
+            ],
             'description': 'The name of the AI model used to detect emotions in text. The default model can recognize 28 different emotions like joy, sadness, anger, surprise, fear, and more. It gets downloaded automatically the first time you enable emotion detection (about 500MB download). You should not need to change this unless you want to experiment with a different emotion model from HuggingFace.'
         },
     },

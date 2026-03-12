@@ -95,12 +95,15 @@ def _write_log_to_disk(entries):
     """Persist entries to disk (trimmed, prompts stripped from old entries)."""
     trimmed = entries[-_MAX_ENTRIES:]
 
-    # Only keep prompt text for the most recent N entries
+    # Only keep prompt/llm_raw text for the most recent N entries
     cutoff = len(trimmed) - _MAX_PROMPT_ENTRIES
     for i, e in enumerate(trimmed):
-        if i < cutoff and "prompt" in e:
-            del e["prompt"]
-            e["has_prompt"] = False
+        if i < cutoff:
+            if "prompt" in e:
+                del e["prompt"]
+                e["has_prompt"] = False
+            if "llm_raw" in e:
+                del e["llm_raw"]
 
     try:
         os.makedirs(_MEMORY_DIR, exist_ok=True)
@@ -182,7 +185,7 @@ def _get_last_prompt():
         return ''
 
 
-def log_interaction(user_input, bot_response, emotion=None, emotion_raw=None, axis_scores=None, speaker=None):
+def log_interaction(user_input, bot_response, emotion=None, emotion_raw=None, axis_scores=None, speaker=None, llm_response=None):
     """Record a single conversation turn (in-memory, flushed periodically)."""
     global _log_dirty
     _ensure_log()
@@ -210,6 +213,18 @@ def log_interaction(user_input, bot_response, emotion=None, emotion_raw=None, ax
         entry["has_prompt"] = True
         entry["prompt"] = prompt_text
 
+    # Capture the raw LLM response (dict or string)
+    if llm_response is not None:
+        try:
+            if isinstance(llm_response, dict):
+                # Store without internal keys like _timings
+                clean = {k: v for k, v in llm_response.items() if not k.startswith('_')}
+                entry["llm_raw"] = json.dumps(clean, indent=2, ensure_ascii=False)
+            else:
+                entry["llm_raw"] = str(llm_response)
+        except Exception:
+            pass
+
     with _lock:
         _log_entries.append(entry)
         # Trim in-memory to cap
@@ -231,17 +246,17 @@ def get_interactions(limit=100):
     _ensure_log()
     with _lock:
         entries = _log_entries[-limit:]
-    return [{k: v for k, v in e.items() if k != "prompt"} for e in entries]
+    return [{k: v for k, v in e.items() if k not in ("prompt", "llm_raw")} for e in entries]
 
 
 def get_prompt_for_interaction(entry_id):
-    """Load the full prompt for a specific interaction (inline in log)."""
+    """Load the full prompt and LLM response for a specific interaction."""
     _ensure_log()
     with _lock:
         for e in _log_entries:
             if e.get("id") == entry_id:
-                return e.get("prompt")
-    return None
+                return e.get("prompt"), e.get("llm_raw")
+    return None, None
 
 
 def get_mood_analytics():

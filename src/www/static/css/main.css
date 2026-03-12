@@ -3879,6 +3879,27 @@ body::after {
 .dash-prompt-pre.collapsed {
   display: none;
 }
+.dash-prompt-response-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 8px;
+  padding: 0 14px;
+}
+.dash-prompt-response-divider::before,
+.dash-prompt-response-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(0,229,255,0.15);
+}
+.dash-prompt-response-divider span {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 1.5px;
+  color: rgba(0,229,255,0.5);
+  white-space: nowrap;
+}
 
 /* D3 graph node labels */
 .dash-node-label {
