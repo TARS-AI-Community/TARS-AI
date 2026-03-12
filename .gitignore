@@ -163,14 +163,13 @@ initial_memory.loaded
 initial_memory.json
 voice_memory.json
 last_prompt.txt
-ui_settings.json
-terminal_log.json
 pi_version
 interaction_log.json
-emotional_state.json
-prompt_history/
 reminders.json
 scheduled_tasks.json
+
+# State files (UI preferences, terminal log — now in src/state/)
+src/state/
 
 # Character Data & Personas
 *persona.ini
@@ -208,3 +207,7 @@ character/
 !character/PLEX/images/neutral/**
 
 tarsdiscordbot/
+src/memory/prompt_history/
+terminal_log.json
+emotional_state.json
+ui_settings.json

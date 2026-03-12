@@ -33,6 +33,9 @@ CONFIG = load_config()
 # Anchor memory directory relative to this file (src/modules/ -> src/memory/)
 _MEMORY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
 
+_MEMORY_FLUSH_INTERVAL = 30  # seconds between periodic disk flushes
+
+
 class MemoryManager:
     def __init__(self, config, char_name, char_greeting, ui_manager):
         self.config = config
@@ -40,7 +43,8 @@ class MemoryManager:
         self.char_greeting = char_greeting
         self.memory_db_path = os.path.join(_MEMORY_DIR, f"{self.char_name}.pickle.gz")
 
-        self.topic_index_path = os.path.join(_MEMORY_DIR, f"{self.char_name}_topics.json")
+        # Legacy path — topics are now stored inside the pickle via extra_data
+        self._legacy_topic_path = os.path.join(_MEMORY_DIR, f"{self.char_name}_topics.json")
 
         rag_config = self.config.get('RAG', {})
         self.rag_strategy = rag_config.get('strategy', 'naive')
@@ -56,10 +60,12 @@ class MemoryManager:
         self.initial_memory_path = os.path.join(_MEMORY_DIR, "initial_memory.json")
 
         self.ui_manager = ui_manager
+        self._dirty = False  # True when in-memory state has unflushed changes
 
         self.init_dynamic_memory()
         self.load_initial_memory(self.initial_memory_path)
         self.load_topic_index()
+        self._start_periodic_flush()
 
     def init_dynamic_memory(self):
         if os.path.exists(self.memory_db_path):
@@ -73,33 +79,74 @@ class MemoryManager:
         else:
             queue_message(f"LOAD: No memory DB found. Creating new one: {self.memory_db_path}")
             self.hyper_db.add_document({"text": f'{self.char_name}: {self.char_greeting}'})
-            self.hyper_db.save(self.memory_db_path)
+            self._mark_dirty()
 
     def load_topic_index(self):
-        if os.path.exists(self.topic_index_path):
+        # Try loading from pickle extra_data first (new location)
+        if "topics" in self.hyper_db.extra_data:
+            self.topic_index = self.hyper_db.extra_data["topics"]
+            queue_message(f"LOAD: Topic index loaded with {len(self.topic_index.get('topics', []))} topics")
+            # Migrate: remove legacy JSON file if it exists
+            if os.path.exists(self._legacy_topic_path):
+                try:
+                    os.remove(self._legacy_topic_path)
+                    queue_message("LOAD: Migrated topics into pickle, removed legacy JSON")
+                except OSError:
+                    pass
+            return
+
+        # Backwards compat: migrate from legacy JSON file
+        if os.path.exists(self._legacy_topic_path):
             try:
-                with open(self.topic_index_path, 'r') as f:
+                with open(self._legacy_topic_path, 'r') as f:
                     self.topic_index = json.load(f)
-                queue_message(f"LOAD: Topic index loaded with {len(self.topic_index.get('topics', []))} topics")
+                queue_message(f"LOAD: Topic index migrated from JSON ({len(self.topic_index.get('topics', []))} topics)")
+                self.save_topic_index()  # persist into pickle
+                # Remove the old file
+                try:
+                    os.remove(self._legacy_topic_path)
+                except OSError:
+                    pass
+                return
             except Exception as e:
-                queue_message(f"WARN: Failed to load topic index: {e}")
-                self.topic_index = {"topics": [], "last_updated": datetime.now().isoformat()}
-        else:
-            queue_message(f"LOAD: No topic index found. Creating new one.")
-            self.topic_index = {
-                "topics": [],
-                "last_updated": datetime.now().isoformat(),
-                "total_conversations": 0
-            }
-            self.save_topic_index()
+                queue_message(f"WARN: Failed to load legacy topic index: {e}")
+
+        # No topics found — create new
+        queue_message(f"LOAD: No topic index found. Creating new one.")
+        self.topic_index = {
+            "topics": [],
+            "last_updated": datetime.now().isoformat(),
+            "total_conversations": 0
+        }
+        self.save_topic_index()
 
     def save_topic_index(self):
+        self.hyper_db.extra_data["topics"] = self.topic_index
+        self._mark_dirty()
+
+    def _mark_dirty(self):
+        """Mark in-memory state as needing a flush to disk."""
+        self._dirty = True
+
+    def flush(self):
+        """Write in-memory state to disk if dirty. Called by heartbeat + shutdown."""
+        if not self._dirty:
+            return
         try:
-            os.makedirs(os.path.dirname(self.topic_index_path), exist_ok=True)
-            with open(self.topic_index_path, 'w') as f:
-                json.dump(self.topic_index, f, indent=2)
+            self.hyper_db.save(self.memory_db_path)
+            self._dirty = False
         except Exception as e:
-            queue_message(f"ERROR: Failed to save topic index: {e}")
+            queue_message(f"ERROR: Failed to flush memory to disk: {e}")
+
+    def _start_periodic_flush(self):
+        """Register a recurring heartbeat task to flush memory periodically."""
+        try:
+            from modules.module_heartbeat import schedule_recurring
+            schedule_recurring(
+                "memory_flush", _MEMORY_FLUSH_INTERVAL, lambda: self.flush()
+            )
+        except Exception:
+            pass  # heartbeat not available — memory will flush on shutdown only
 
     def get_topic_index_summary(self) -> str:
         if not self.topic_index.get('topics'):
@@ -256,7 +303,7 @@ class MemoryManager:
         except Exception:
             pass
         self.hyper_db.add_document(document)
-        self.hyper_db.save(self.memory_db_path)
+        self._mark_dirty()
 
     def _parse_timestamp(self, memory: Dict[str, Any]) -> Optional[datetime]:
         try:
@@ -500,7 +547,7 @@ class MemoryManager:
             "bot_response": toolused
         }
         self.hyper_db.add_document(document)
-        self.hyper_db.save(self.memory_db_path)
+        self._mark_dirty()
 
     def load_initial_memory(self, json_file_path: str):
         if os.path.exists(json_file_path):

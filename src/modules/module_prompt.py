@@ -210,6 +210,13 @@ def _get_active_user_name(config_user_name: str) -> str:
 # Speed profiling data from the last build_prompt call (read by module_llm)
 _last_prompt_timings = {}
 
+# In-memory cache of the last built prompt (replaces last_prompt.txt file IPC)
+_last_built_prompt = None
+
+def get_last_prompt():
+    """Return the most recently built prompt text (in-memory, no file I/O)."""
+    return _last_built_prompt
+
 def build_prompt(user_prompt, character_manager, memory_manager, config, debug=False):
     global _last_prompt_timings
     import modules.module_speed as speed
@@ -525,14 +532,9 @@ Current Time: {now.strftime('%H:%M:%S')}
     if debug:
         queue_message(f"DEBUG PROMPT:\n{final_prompt}")
 
-    try:
-        dump_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
-        os.makedirs(dump_dir, exist_ok=True)
-        dump_path = os.path.join(dump_dir, "last_prompt.txt")
-        with open(dump_path, "w", encoding="utf-8") as f:
-            f.write(clean_text(final_prompt))
-    except Exception as e:
-        queue_message(f"[PROMPT DUMP] Failed to write prompt: {e}")
+    # Cache the last prompt in-memory (replaces old last_prompt.txt file IPC)
+    global _last_built_prompt
+    _last_built_prompt = clean_text(final_prompt)
 
     total_dur = speed.stop('prompt_build')
     _last_prompt_timings = {
@@ -541,7 +543,7 @@ Current Time: {now.strftime('%H:%M:%S')}
         'total': total_dur,
     }
 
-    return clean_text(final_prompt)
+    return _last_built_prompt
 
 def clean_text(text):
     return (

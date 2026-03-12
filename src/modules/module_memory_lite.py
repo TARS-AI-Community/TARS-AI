@@ -57,7 +57,8 @@ class MemoryManagerLite:
         self.char_name = char_name
         self.char_greeting = char_greeting
         self.memory_db_path = os.path.abspath(os.path.join(os.path.join("..", "memory"), f"{self.char_name}_lite.json"))
-        self.topic_index_path = os.path.abspath(os.path.join(os.path.join("..", "memory"), f"{self.char_name}_topics.json"))
+        # Legacy path — topics are now stored inside the lite JSON
+        self._legacy_topic_path = os.path.abspath(os.path.join(os.path.join("..", "memory"), f"{self.char_name}_topics.json"))
 
         rag_config = self.config.get('RAG', {})
         self.top_k = int(rag_config.get('top_k', 5))
@@ -70,10 +71,12 @@ class MemoryManagerLite:
         self.initial_memory_path = os.path.abspath(os.path.join(os.path.join("..", "memory", "initial_memory.json")))
 
         self.ui_manager = ui_manager
+        self._dirty = False  # True when in-memory state has unflushed changes
 
         self.init_dynamic_memory()
         self.load_initial_memory(self.initial_memory_path)
         self.load_topic_index()
+        self._start_periodic_flush()
 
     def _extract_keywords(self, text: str) -> set:
         if not text:
@@ -100,11 +103,20 @@ class MemoryManagerLite:
             queue_message(f"LOAD: Found existing lite memory: {self.char_name}_lite.json")
             try:
                 with open(self.memory_db_path, 'r') as f:
-                    self.documents = json.load(f)
+                    raw = json.load(f)
+                # New format: {"documents": [...], "topics": {...}}
+                # Legacy format: plain array [...]
+                if isinstance(raw, dict):
+                    self.documents = raw.get("documents", [])
+                    self._embedded_topics = raw.get("topics")
+                else:
+                    self.documents = raw  # legacy plain array
+                    self._embedded_topics = None
                 queue_message(f"LOAD: Lite memory loaded with {len(self.documents)} entries")
             except Exception as e:
                 queue_message(f"LOAD: Memory load failed: {e}. Initializing new memory.")
                 self.documents = []
+                self._embedded_topics = None
         else:
             queue_message(f"LOAD: No lite memory found. Creating new one: {self.memory_db_path}")
             self.documents = [{
@@ -112,41 +124,82 @@ class MemoryManagerLite:
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "keywords": list(self._extract_keywords(self.char_greeting))
             }]
+            self._embedded_topics = None
             self._save_memory()
 
     def _save_memory(self):
         try:
             os.makedirs(os.path.dirname(self.memory_db_path), exist_ok=True)
+            data = {
+                "documents": self.documents,
+                "topics": getattr(self, 'topic_index', None) or {},
+            }
             with open(self.memory_db_path, 'w') as f:
-                json.dump(self.documents, f, indent=2)
+                json.dump(data, f, indent=2)
         except Exception as e:
             queue_message(f"ERROR: Failed to save lite memory: {e}")
 
+    def _mark_dirty(self):
+        """Mark in-memory state as needing a flush to disk."""
+        self._dirty = True
+
+    def flush(self):
+        """Write in-memory state to disk if dirty. Called by heartbeat + shutdown."""
+        if not self._dirty:
+            return
+        self._save_memory()
+        self._dirty = False
+
+    def _start_periodic_flush(self):
+        """Register a recurring heartbeat task to flush memory periodically."""
+        try:
+            from modules.module_heartbeat import schedule_recurring
+            schedule_recurring(
+                "memory_flush", 30, lambda: self.flush()
+            )
+        except Exception:
+            pass  # heartbeat not available — memory will flush on shutdown only
+
     def load_topic_index(self):
-        if os.path.exists(self.topic_index_path):
+        # Try loading from embedded topics (new format — inside lite JSON)
+        if self._embedded_topics:
+            self.topic_index = self._embedded_topics
+            queue_message(f"LOAD: Topic index loaded with {len(self.topic_index.get('topics', []))} topics")
+            # Migrate: remove legacy JSON file if it exists
+            if os.path.exists(self._legacy_topic_path):
+                try:
+                    os.remove(self._legacy_topic_path)
+                    queue_message("LOAD: Migrated topics into lite JSON, removed legacy file")
+                except OSError:
+                    pass
+            return
+
+        # Backwards compat: migrate from legacy JSON file
+        if os.path.exists(self._legacy_topic_path):
             try:
-                with open(self.topic_index_path, 'r') as f:
+                with open(self._legacy_topic_path, 'r') as f:
                     self.topic_index = json.load(f)
-                queue_message(f"LOAD: Topic index loaded with {len(self.topic_index.get('topics', []))} topics")
+                queue_message(f"LOAD: Topic index migrated from JSON ({len(self.topic_index.get('topics', []))} topics)")
+                self.save_topic_index()  # persist into lite JSON
+                try:
+                    os.remove(self._legacy_topic_path)
+                except OSError:
+                    pass
+                return
             except Exception as e:
-                queue_message(f"WARN: Failed to load topic index: {e}")
-                self.topic_index = {"topics": [], "last_updated": datetime.now().isoformat()}
-        else:
-            queue_message(f"LOAD: No topic index found. Creating new one.")
-            self.topic_index = {
-                "topics": [],
-                "last_updated": datetime.now().isoformat(),
-                "total_conversations": 0
-            }
-            self.save_topic_index()
+                queue_message(f"WARN: Failed to load legacy topic index: {e}")
+
+        # No topics found — create new
+        queue_message(f"LOAD: No topic index found. Creating new one.")
+        self.topic_index = {
+            "topics": [],
+            "last_updated": datetime.now().isoformat(),
+            "total_conversations": 0
+        }
+        self.save_topic_index()
 
     def save_topic_index(self):
-        try:
-            os.makedirs(os.path.dirname(self.topic_index_path), exist_ok=True)
-            with open(self.topic_index_path, 'w') as f:
-                json.dump(self.topic_index, f, indent=2)
-        except Exception as e:
-            queue_message(f"ERROR: Failed to save topic index: {e}")
+        self._mark_dirty()  # topics are saved alongside documents on next flush
 
     def get_topic_index_summary(self) -> str:
         if not self.topic_index.get('topics'):
@@ -290,7 +343,7 @@ class MemoryManagerLite:
         except Exception:
             pass
         self.documents.append(document)
-        self._save_memory()
+        self._mark_dirty()
 
         if self.ui_manager:
             self.ui_manager.save_memory()
@@ -530,7 +583,7 @@ class MemoryManagerLite:
             "keywords": list(self._extract_keywords(toolused))
         }
         self.documents.append(document)
-        self._save_memory()
+        self._mark_dirty()
 
     def load_initial_memory(self, json_file_path: str):
         if os.path.exists(json_file_path):
