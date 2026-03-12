@@ -31,12 +31,6 @@ try:
 except ImportError:
     pass
 
-send_prompt_to_homeassistant = None
-try:
-    from modules.module_homeassistant import send_prompt_to_homeassistant
-except ImportError:
-    pass
-
 generate_tts_audio = None
 try:
     from modules.module_tts import generate_tts_audio
@@ -131,6 +125,5 @@ FUNCTION_REGISTRY = {
     "Vision": process_camera_image,
     "Search": search_google,
     "SDmodule-Generate": generate_image,
-    "Home_Assistant": send_prompt_to_homeassistant,
     "RetroPie": launch_retropie
 }
