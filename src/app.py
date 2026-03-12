@@ -48,6 +48,7 @@ queue_message(f"LOAD: TARS-AI starting on {RASPBERRY_VERSION.upper()}")
 from modules.module_character import CharacterManager
 from modules.module_tts import update_tts_settings
 from modules.module_llm import initialize_manager_llm
+from modules.module_skills import initialize_skills
 from modules.module_stt import STTManager
 from modules.module_main import (
     initialize_managers,
@@ -267,6 +268,9 @@ def start_discord_in_thread():
 # === Main Application Logic ===
 if __name__ == "__main__":
     init_app()
+
+    # === Skills System (auto-discover tool plugins) ===
+    initialize_skills()
 
     # Shutdown event
     shutdown_event = threading.Event()
