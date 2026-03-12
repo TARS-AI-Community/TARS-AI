@@ -12,6 +12,11 @@ SKILL = {
     Only call this when the speaker is UNKNOWN or is correcting a wrong identification.
     Parameters: {{"name": "the speaker's actual name as they stated it"}}
     Example: {{"function": "identify_speaker_name", "parameters": {{"name": "Joe"}}}}""",
+    "examples": [
+        """Example - Speaker introduction:
+User: "My name is Joe"
+Response: {{"question": "My name is Joe", "reply": "Nice to meet you, Joe! I'll remember your voice.", "function_calls": [{{"function": "identify_speaker_name", "parameters": {{"name": "Joe"}}}}], "new_memories": []}}""",
+    ],
 }
 
 

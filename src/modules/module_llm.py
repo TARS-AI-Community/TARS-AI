@@ -27,8 +27,6 @@ import random
 import asyncio
 from modules.module_config import load_config, get_capabilities
 from modules.module_prompt import build_prompt
-from modules.module_engine  import execute_movement
-
 from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
@@ -630,7 +628,12 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
             result = skills.execute(function_name, parameters, context)
             # If skill returns a string, update the reply
             if result is not None:
-                bot_response["reply"] = result
+                if bot_response.get("_skill_replied"):
+                    # Multiple skills returning replies — append instead of overwrite
+                    bot_response["reply"] = f"{bot_response['reply']} {result}"
+                else:
+                    bot_response["reply"] = result
+                    bot_response["_skill_replied"] = True
         else:
             queue_message(f"Unknown function: {function_name}")
 
