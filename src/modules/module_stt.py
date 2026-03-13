@@ -210,6 +210,9 @@ class STTManager:
         self._bargein_mode = CONFIG['STT'].get('bargein_mode', 'fuzzy')
         sensitivity = max(1, min(10, int(CONFIG['STT'].get('bargein_sensitivity', 5))))
         t = (sensitivity - 1) / 9.0  # 0.0 (sens=1, hard to interrupt) to 1.0 (sens=10, easy)
+        # RMS gate: higher sensitivity = lower multiplier on silence_threshold
+        # sens=1: 1.0x (same as normal), sens=10: 0.4x (very sensitive)
+        self._bargein_rms_scale = 1.0 - t * 0.6
         # Fuzzy mode: higher sensitivity = lower threshold = fewer words matched as echo
         self._bargein_broad_threshold = 0.80 - t * 0.10   # 0.80 (sens=1) to 0.70 (sens=10)
         self._bargein_min_novel = 3 if sensitivity <= 3 else 2
@@ -1679,7 +1682,7 @@ class STTManager:
         tts_data = self._bargein_tts_data  # local ref for monitor thread
 
         def _monitor():
-            bargein_threshold = self.silence_threshold
+            bargein_threshold = self.silence_threshold * self._bargein_rms_scale
             audio_buf = []
             TRANSCRIBE_EVERY = 8  # Transcribe every ~1s (8 x 125ms frames)
             frame_count = 0
@@ -1765,7 +1768,7 @@ class STTManager:
         from modules.module_speaker_id import get_speaker_id_manager
 
         def _monitor():
-            bargein_threshold = self.silence_threshold
+            bargein_threshold = self.silence_threshold * self._bargein_rms_scale
             speech_buf = []       # Rolling buffer of speech frames (kept across checks)
             MAX_BUF = 16          # Keep last ~2s of speech frames (16 x 125ms)
             CHECK_EVERY = 4       # Check every ~0.5s (4 x 125ms)
