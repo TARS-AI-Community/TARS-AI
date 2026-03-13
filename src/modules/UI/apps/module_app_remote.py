@@ -52,6 +52,7 @@ class RemoteApp:
         self._poll_thread = None
         self._stop_event = threading.Event()
         self._spinner_frame = 0
+        self._stop_btn_rect = None  # Set during render when active
 
     def reset(self):
         """Called on launch — kick off the tunnel."""
@@ -63,6 +64,31 @@ class RemoteApp:
 
         # Start tunnel via the existing API
         threading.Thread(target=self._start_and_poll, daemon=True).start()
+
+    def handle_event(self, event):
+        """Handle touch/click on the stop button."""
+        if event.type == pygame.MOUSEBUTTONDOWN and self._state == _STATE_ACTIVE:
+            if self._stop_btn_rect and self._stop_btn_rect.collidepoint(event.pos):
+                self._do_stop_tunnel()
+                return True
+        return False
+
+    def _do_stop_tunnel(self):
+        """Stop the tunnel and update state."""
+        try:
+            from modules.module_chatui import _stop_tunnel
+            _stop_tunnel()
+        except Exception:
+            pass
+        self._state = _STATE_IDLE
+        self._url = None
+        self._qr_surface = None
+        self._stop_btn_rect = None
+        try:
+            from modules.module_messageQue import queue_message
+            queue_message("REMOTE APP: Tunnel stopped by user")
+        except Exception:
+            pass
 
     def update(self):
         self._spinner_frame += 1
@@ -101,39 +127,56 @@ class RemoteApp:
         self.screen.blit(hint, hint_rect)
 
     def _render_active(self, top_y):
-        """Show QR code centered and as large as possible, with URL below."""
+        """Show QR code with stop button directly underneath, then URL at bottom."""
         cx = self.width // 2
 
-        # Reserve space: URL line (~20px) + hint line (~16px) + padding
-        bottom_text_h = 44
-        available_h = self.height - top_y - bottom_text_h
-        available_w = self.width - 16  # 8px padding each side
-        qr_size = min(available_h, available_w)
+        # Layout: QR + button stacked vertically, centered as a group
+        btn_h = 44  # big enough to tap
+        btn_gap = 8  # space between QR and button
+        url_h = 20   # URL text at very bottom
+        url_pad = 6
 
+        # QR gets remaining space after title, button, URL
+        available_h = self.height - top_y - btn_h - btn_gap - url_h - url_pad
+        available_w = self.width - 16
+        qr_size = min(available_h, available_w)
+        if qr_size < 50:
+            qr_size = 50
+
+        # Center the QR+button group vertically
+        group_h = qr_size + btn_gap + btn_h
+        group_top = top_y + (self.height - top_y - url_h - url_pad - group_h) // 2
+        if group_top < top_y:
+            group_top = top_y
+
+        # Draw QR
         if self._qr_surface and qr_size > 0:
             scaled_qr = pygame.transform.smoothscale(self._qr_surface, (qr_size, qr_size))
-            # Center vertically in the available space (between top_y and bottom text)
-            qr_y = top_y + (available_h - qr_size) // 2
-            qr_rect = scaled_qr.get_rect(centerx=cx, top=qr_y)
+            qr_rect = scaled_qr.get_rect(centerx=cx, top=group_top)
             self.screen.blit(scaled_qr, qr_rect)
+            btn_top = qr_rect.bottom + btn_gap
+        else:
+            btn_top = group_top + btn_gap
 
-        # URL text at bottom
+        # Stop button — wide and tall for easy tapping
+        btn_w = max(self.width // 2, 160)
+        btn_rect = pygame.Rect(cx - btn_w // 2, btn_top, btn_w, btn_h)
+        self._stop_btn_rect = btn_rect
+        pygame.draw.rect(self.screen, self.red, btn_rect, border_radius=6)
+        btn_label = self.font_status.render("STOP TUNNEL", True, self.bg_color)
+        self.screen.blit(btn_label, btn_label.get_rect(center=btn_rect.center))
+
+        # URL at very bottom
         if self._url:
             display_url = self._url.replace("https://", "")
-            url_surf = self.font_url.render(display_url, True, self.white)
-            url_rect = url_surf.get_rect(centerx=cx, bottom=self.height - 20)
-            # Truncate if too wide
-            if url_rect.width > self.width - 20:
-                while url_rect.width > self.width - 30 and len(display_url) > 10:
+            url_surf = self.font_hint.render(display_url, True, self.dim_cyan)
+            url_rect = url_surf.get_rect(centerx=cx, bottom=self.height - 4)
+            if url_rect.width > self.width - 16:
+                while url_rect.width > self.width - 24 and len(display_url) > 10:
                     display_url = display_url[:-1]
-                url_surf = self.font_url.render(display_url + "...", True, self.white)
-                url_rect = url_surf.get_rect(centerx=cx, bottom=self.height - 20)
+                url_surf = self.font_hint.render(display_url + "...", True, self.dim_cyan)
+                url_rect = url_surf.get_rect(centerx=cx, bottom=self.height - 4)
             self.screen.blit(url_surf, url_rect)
-
-        # Hint at very bottom
-        hint = self.font_hint.render("Scan to open TARS", True, self.dim_cyan)
-        hint_rect = hint.get_rect(centerx=cx, bottom=self.height - 4)
-        self.screen.blit(hint, hint_rect)
 
     def _render_error(self, top_y):
         """Show error state."""
