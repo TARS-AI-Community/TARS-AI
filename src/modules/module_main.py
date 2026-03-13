@@ -18,7 +18,7 @@ from modules.module_config import load_config, get_capabilities
 from modules.module_llm import process_completion, detect_emotion, detect_emotion_from_llm, llm_execute_side_effects, _sanitize_for_tts
 from modules.module_tts import play_audio_chunks, SentenceTTSPipeline
 from modules.module_messageQue import queue_message
-from modules.module_servoctl import initialize_servos, set_side_effect_mode
+from modules.module_servoctl import initialize_servos
 
 CONFIG = load_config()
 CAPABILITIES = get_capabilities()
@@ -287,23 +287,6 @@ def utterance_callback(message):
                     remaining = full_clean[len(_clean_seen[0]):].strip()
                 pipeline.finish(remaining=_apply_sanitize(remaining) if remaining else None)
 
-        # If a movement happened during the LLM call, discard the result
-        if stt_manager and stt_manager.is_cancelled():
-            queue_message("INFO: LLM response discarded (movement interrupted)")
-            if preemptive is None:
-                pipeline.finish()
-                pipeline.join(timeout=5)
-                if stt_manager:
-                    stt_manager.stop_bargein_monitor()
-                try:
-                    from modules.module_chatui import socketio
-                    socketio.emit('bot_message', {'message': ''})
-                except Exception:
-                    pass
-            if ui_manager:
-                ui_manager.set_tars_status("LISTENING")
-            return
-
         if parsed is None:
             queue_message("DEBUG VOICE: parsed is None — LLM returned no response")
             if preemptive is None:
@@ -330,22 +313,6 @@ def utterance_callback(message):
             reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
         except Exception:
             pass
-
-        if stt_manager and stt_manager.is_cancelled():
-            queue_message("INFO: LLM response discarded (movement interrupted)")
-            if preemptive is None:
-                pipeline.finish()
-                pipeline.join(timeout=5)
-                if stt_manager:
-                    stt_manager.stop_bargein_monitor()
-                try:
-                    from modules.module_chatui import socketio
-                    socketio.emit('bot_message', {'message': ''})
-                except Exception:
-                    pass
-            if ui_manager:
-                ui_manager.set_tars_status("LISTENING")
-            return
 
         # Detect emotion (parallel-safe — runs while TTS thread plays sentences)
         speed.start('emotion')
@@ -401,11 +368,7 @@ def utterance_callback(message):
             if has_blocking_tool:
                 queue_message(f"DEBUG VOICE: Running blocking side effects inline")
                 speed.start('tools')
-                set_side_effect_mode(True)
-                try:
-                    llm_execute_side_effects(parsed, user_text)
-                finally:
-                    set_side_effect_mode(False)
+                llm_execute_side_effects(parsed, user_text)
                 tools_dur = speed.stop('tools')
                 # Check if side effects updated the reply (e.g. vision result, search summary)
                 updated_reply = parsed.get("reply", "") or ""
@@ -416,14 +379,9 @@ def utterance_callback(message):
                     queue_message(f"DEBUG VOICE: No reply change after side effects")
             elif func_calls or new_mems:
                 queue_message(f"DEBUG VOICE: Running side effects in background thread")
-                def _run_side_effects(p=parsed, u=user_text):
-                    set_side_effect_mode(True)
-                    try:
-                        llm_execute_side_effects(p, u)
-                    finally:
-                        set_side_effect_mode(False)
                 threading.Thread(
-                    target=_run_side_effects, daemon=True
+                    target=llm_execute_side_effects,
+                    args=(parsed, user_text), daemon=True
                 ).start()
             else:
                 queue_message(f"DEBUG VOICE: No side effects to run")

@@ -18,7 +18,6 @@ This license applies only to this file and does not override licenses of other f
 """
 
 from __future__ import division
-import threading
 import time
 import os
 import board
@@ -269,20 +268,6 @@ def set_movement_callbacks(on_start=None, on_end=None):
     _on_movement_start = on_start
     _on_movement_end = on_end
 
-# --- Side-effect mode (thread-local) ---
-# When a movement is triggered by the LLM as a side effect of its response,
-# we must NOT call stt_manager.cancel() or the in-progress response will be
-# discarded.  Thread-local storage lets us distinguish side-effect threads
-# (background llm_execute_side_effects) from external threads (BT controller).
-_thread_local = threading.local()
-
-def set_side_effect_mode(enabled):
-    """Mark the current thread as running LLM side-effect movements."""
-    _thread_local.is_side_effect = enabled
-
-def _is_side_effect():
-    return getattr(_thread_local, 'is_side_effect', False)
-
 def _notify_movement_start():
     global _is_ventilate_operation
 
@@ -298,9 +283,6 @@ def _notify_movement_start():
             pass
 
     if _on_movement_start:
-        if _is_side_effect():
-            queue_message("DEBUG: Skipping STT cancel for LLM-triggered movement")
-            return
         try:
             _on_movement_start()
         except Exception as e:
@@ -311,8 +293,6 @@ def _notify_movement_end():
     signal_servo_activity()
 
     if _on_movement_end:
-        if _is_side_effect():
-            return
         try:
             _on_movement_end()
         except Exception as e:

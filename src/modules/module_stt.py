@@ -588,13 +588,12 @@ class STTManager:
 
         with sd.InputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
             # Flush stale mic audio that may contain the robot's own TTS voice.
-            # Read and discard ~0.5s to let room echo die down.
             try:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(8):
-                        stream.read(2000)  # 8 × 2000 @ 16kHz = 1.0s
+                    for _ in range(4):
+                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
                     clear_mic_flush()
             except Exception:
                 pass
@@ -1022,8 +1021,8 @@ class STTManager:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(8):
-                        stream.read(2000)  # 8 × 2000 @ 16kHz = 1.0s
+                    for _ in range(4):
+                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
                     clear_mic_flush()
             except Exception:
                 pass
@@ -1207,8 +1206,8 @@ class STTManager:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(8):
-                        stream.read(2000)  # 8 × 2000 @ 16kHz = 1.0s
+                    for _ in range(4):
+                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
                     clear_mic_flush()
             except Exception:
                 pass
@@ -1278,8 +1277,8 @@ class STTManager:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(8):
-                        stream.read(2000)  # 8 × 2000 @ 16kHz = 1.0s
+                    for _ in range(4):
+                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
                     clear_mic_flush()
             except Exception:
                 pass
