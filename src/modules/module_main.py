@@ -216,7 +216,7 @@ def utterance_callback(message):
         # Add placeholder message to OpenGL UI for streaming updates
         character_name = CONFIG['CHAR']['character_name']
         if ui_manager:
-            ui_manager.update_data(character_name, "", "TARS")
+            ui_manager.update_data(character_name, "", character_name)
 
         def on_reply_chunk(chunk, is_first):
             """Called from LLM streaming thread with each reply text piece."""
