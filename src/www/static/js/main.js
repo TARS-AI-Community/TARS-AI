@@ -2558,6 +2558,151 @@ function $(id) { return document.getElementById(id); }
   // Currently selected node for operations
   var _selectedNode = null;
 
+  // ── Editable field helpers ──
+  var _editableFields = { 'user_input': true, 'bot_response': true, 'speaker': true };
+  var _editableTopicFields = { 'topic': true, 'mention_count': true };
+
+  function _makeEditableField(key, value, nodeType, nodeIndex) {
+    var isEditable = (nodeType === 'memory' && _editableFields[key]) ||
+                     (nodeType === 'topic' && _editableTopicFields[key]);
+    var displayKey = key.replace(/_/g, ' ');
+    if (!isEditable) {
+      return '<div class="detail-row"><span class="detail-label">' + displayKey + '</span><br>' + escapeHtml(String(value)) + '</div>';
+    }
+    var escapedVal = escapeHtml(String(value));
+    return '<div class="detail-row detail-row-editable">' +
+      '<span class="detail-label">' + displayKey + ' <i class="bi bi-pencil detail-edit-icon"></i></span>' +
+      '<div class="detail-editable" contenteditable="true" spellcheck="false"' +
+      ' data-field="' + key + '" data-type="' + nodeType + '" data-index="' + nodeIndex + '"' +
+      ' data-original="' + escapedVal + '">' + escapedVal + '</div></div>';
+  }
+
+  function _saveEditableField(el) {
+    var field = el.getAttribute('data-field');
+    var nodeType = el.getAttribute('data-type');
+    var index = parseInt(el.getAttribute('data-index'), 10);
+    var original = el.getAttribute('data-original');
+    var newVal = el.textContent.trim();
+    if (newVal === original || !newVal) {
+      el.textContent = original;
+      return;
+    }
+    el.classList.add('detail-saving');
+    var url;
+    if (nodeType === 'memory') {
+      url = '/api/dashboard/memory/edit';
+    } else if (nodeType === 'topic') {
+      url = '/api/dashboard/topic/edit';
+    } else { return; }
+    var fields = {};
+    fields[field] = newVal;
+    var body = JSON.stringify({ index: index, fields: fields });
+
+    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        el.classList.remove('detail-saving');
+        if (data.success) {
+          el.classList.add('detail-saved');
+          el.setAttribute('data-original', newVal);
+          // Update the node label in the graph if topic name changed
+          if (nodeType === 'topic' && field === 'topic' && _selectedNode) {
+            _selectedNode.name = newVal;
+            d3.selectAll('text').filter(function (d) { return d && d.id === _selectedNode.id; })
+              .text(newVal.length > 20 ? newVal.substring(0, 18) + '..' : newVal);
+            var titleEl = document.getElementById('dshDetailTitle');
+            if (titleEl) titleEl.textContent = newVal;
+          }
+          // Update node details in memory for graph label
+          if (nodeType === 'memory' && _selectedNode && _selectedNode.details) {
+            _selectedNode.details[field] = newVal;
+            if (field === 'user_input') {
+              _selectedNode.name = newVal.substring(0, 50);
+              d3.selectAll('text').filter(function (d) { return d && d.id === _selectedNode.id; })
+                .text(newVal.length > 20 ? newVal.substring(0, 18) + '..' : newVal);
+              var titleEl = document.getElementById('dshDetailTitle');
+              if (titleEl) titleEl.textContent = newVal.substring(0, 50);
+            }
+          }
+          setTimeout(function () { el.classList.remove('detail-saved'); }, 1500);
+        } else {
+          el.classList.add('detail-error');
+          setTimeout(function () { el.classList.remove('detail-error'); el.textContent = original; }, 2000);
+        }
+      }).catch(function () {
+        el.classList.remove('detail-saving');
+        el.classList.add('detail-error');
+        setTimeout(function () { el.classList.remove('detail-error'); el.textContent = original; }, 2000);
+      });
+  }
+
+  // Global blur handler for editable fields (auto-save on click off)
+  document.addEventListener('focusout', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('detail-editable')) {
+      _saveEditableField(e.target);
+    }
+  });
+  // Also save on Enter key (but allow Shift+Enter for newlines)
+  document.addEventListener('keydown', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('detail-editable') && e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      e.target.blur();
+    }
+  });
+
+  function _addDeleteButton(actions, nodeType, nodeIndex, node) {
+    var isMemory = nodeType === 'memory';
+    var label = isMemory ? 'Delete Memory' : 'Delete Topic';
+    var url = isMemory ? '/api/dashboard/memory/delete' : '/api/dashboard/topic/delete';
+
+    var btn = document.createElement('button');
+    btn.className = 'dash-delete-btn';
+    btn.innerHTML = '<i class="bi bi-trash3"></i> ' + label;
+    var clickCount = 0;
+    btn.addEventListener('click', function () {
+      clickCount++;
+      if (clickCount === 1) {
+        btn.classList.add('confirm');
+        btn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Click again to confirm';
+        setTimeout(function () { clickCount = 0; btn.classList.remove('confirm'); btn.innerHTML = '<i class="bi bi-trash3"></i> ' + label; }, 3000);
+      } else {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ index: nodeIndex })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (data.success) {
+            btn.innerHTML = '<i class="bi bi-check2"></i> Deleted';
+            btn.style.color = '#39ff14';
+            btn.style.borderColor = 'rgba(57,255,20,0.3)';
+            d3.selectAll('circle').filter(function (d) { return d.id === node.id; }).transition().duration(300).attr('r', 0).remove();
+            d3.selectAll('line').filter(function (d) { return d.source.id === node.id || d.target.id === node.id; }).transition().duration(300).attr('opacity', 0).remove();
+            if (isMemory) {
+              var memEl = document.getElementById('dshMemories');
+              if (memEl && data.remaining !== undefined) memEl.textContent = data.remaining;
+            } else {
+              var topEl = document.getElementById('dshTopics');
+              if (topEl && data.remaining !== undefined) topEl.textContent = data.remaining;
+            }
+            setTimeout(function () { drawer.classList.remove('open'); }, 800);
+          } else {
+            btn.innerHTML = '<i class="bi bi-x-circle"></i> ' + (data.error || 'Failed');
+            btn.style.color = '#ef5350';
+            btn.disabled = false;
+            clickCount = 0;
+          }
+        }).catch(function () {
+          btn.innerHTML = '<i class="bi bi-x-circle"></i> Error';
+          btn.disabled = false;
+          clickCount = 0;
+        });
+      }
+    });
+    actions.appendChild(btn);
+  }
+
   function showDetail(node) {
     _selectedNode = node;
     var title = document.getElementById('dshDetailTitle');
@@ -2565,68 +2710,35 @@ function $(id) { return document.getElementById(id); }
     var actions = document.getElementById('dshDetailActions');
     title.textContent = node.name || node.id;
 
+    var isMemory = node.group === 'memory' && node.id && node.id.startsWith('mem_');
+    var isTopic = node.group === 'topic' && node.id && node.id.startsWith('topic_');
+    var nodeIndex = -1;
+    if (isMemory) nodeIndex = parseInt(node.id.replace('mem_', ''), 10);
+    if (isTopic) nodeIndex = parseInt(node.id.replace('topic_', ''), 10);
+
     var html = '';
     html += '<div class="detail-row"><span class="detail-label">Type</span><br>' + (node.group || '--') + '</div>';
     if (node.details) {
+      var nodeType = isMemory ? 'memory' : (isTopic ? 'topic' : '');
       Object.keys(node.details).forEach(function (k) {
         var v = node.details[k];
         if (v !== '' && v !== null && v !== undefined) {
-          html += '<div class="detail-row"><span class="detail-label">' + k.replace(/_/g, ' ') + '</span><br>' + escapeHtml(String(v)) + '</div>';
+          if (nodeType && nodeIndex >= 0) {
+            html += _makeEditableField(k, v, nodeType, nodeIndex);
+          } else {
+            html += '<div class="detail-row"><span class="detail-label">' + k.replace(/_/g, ' ') + '</span><br>' + escapeHtml(String(v)) + '</div>';
+          }
         }
       });
     }
     body.innerHTML = html;
 
-    // Show delete button for memory nodes
+    // Action buttons (delete for memories and topics)
     actions.innerHTML = '';
-    if (node.group === 'memory' && node.id && node.id.startsWith('mem_')) {
-      var memIndex = parseInt(node.id.replace('mem_', ''), 10);
-      if (!isNaN(memIndex)) {
-        var btn = document.createElement('button');
-        btn.className = 'dash-delete-btn';
-        btn.innerHTML = '<i class="bi bi-trash3"></i> Delete Memory';
-        btn.setAttribute('data-index', memIndex);
-        var clickCount = 0;
-        btn.addEventListener('click', function () {
-          clickCount++;
-          if (clickCount === 1) {
-            btn.classList.add('confirm');
-            btn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Click again to confirm';
-            setTimeout(function () { clickCount = 0; btn.classList.remove('confirm'); btn.innerHTML = '<i class="bi bi-trash3"></i> Delete Memory'; }, 3000);
-          } else {
-            btn.disabled = true;
-            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
-            fetch('/api/dashboard/memory/delete', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ index: memIndex })
-            }).then(function (r) { return r.json(); }).then(function (data) {
-              if (data.success) {
-                btn.innerHTML = '<i class="bi bi-check2"></i> Deleted';
-                btn.style.color = '#39ff14';
-                btn.style.borderColor = 'rgba(57,255,20,0.3)';
-                // Remove the node visually
-                d3.selectAll('circle').filter(function (d) { return d.id === node.id; }).transition().duration(300).attr('r', 0).remove();
-                d3.selectAll('line').filter(function (d) { return d.source.id === node.id || d.target.id === node.id; }).transition().duration(300).attr('opacity', 0).remove();
-                // Update stats
-                var memEl = document.getElementById('dshMemories');
-                if (memEl && data.remaining !== undefined) memEl.textContent = data.remaining;
-                setTimeout(function () { drawer.classList.remove('open'); }, 800);
-              } else {
-                btn.innerHTML = '<i class="bi bi-x-circle"></i> ' + (data.error || 'Failed');
-                btn.style.color = '#ef5350';
-                btn.disabled = false;
-                clickCount = 0;
-              }
-            }).catch(function () {
-              btn.innerHTML = '<i class="bi bi-x-circle"></i> Error';
-              btn.disabled = false;
-              clickCount = 0;
-            });
-          }
-        });
-        actions.appendChild(btn);
-      }
+    if (isMemory && !isNaN(nodeIndex)) {
+      _addDeleteButton(actions, 'memory', nodeIndex, node);
+    } else if (isTopic && !isNaN(nodeIndex)) {
+      _addDeleteButton(actions, 'topic', nodeIndex, node);
     }
 
     drawer.classList.add('open');
@@ -3359,19 +3471,90 @@ function $(id) { return document.getElementById(id); }
   function renderTopicsTable(topics) {
     var tbody = document.querySelector('#dshTopicsTable tbody');
     if (!tbody) return;
-    if (!topics.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:rgba(226,234,242,0.3)">No topics yet</td></tr>'; return; }
+    if (!topics.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:rgba(226,234,242,0.3)">No topics yet</td></tr>'; return; }
+
+    // Update header if needed (add Actions column)
+    var thead = document.querySelector('#dshTopicsTable thead tr');
+    if (thead && thead.children.length === 4) {
+      var th = document.createElement('th');
+      th.textContent = '';
+      th.style.width = '32px';
+      thead.appendChild(th);
+    }
 
     var html = '';
-    // Sort by mention count desc
-    var sorted = topics.slice().sort(function (a, b) { return (b.mention_count || 1) - (a.mention_count || 1); });
-    sorted.forEach(function (t) {
+    // Sort by mention count desc, preserve original indices for API calls
+    var indexed = topics.map(function (t, i) { return { t: t, origIdx: i }; });
+    indexed.sort(function (a, b) { return (b.t.mention_count || 1) - (a.t.mention_count || 1); });
+    indexed.forEach(function (item) {
+      var t = item.t;
+      var origIdx = item.origIdx;
       var name = typeof t === 'string' ? t : (t.topic || '');
       var mentions = t.mention_count || 1;
       var first = (t.first_mentioned || '').substring(0, 10);
       var last = (t.last_mentioned || '').substring(0, 10);
-      html += '<tr><td>' + escapeHtml(name) + '</td><td>' + mentions + '</td><td>' + first + '</td><td>' + last + '</td></tr>';
+      html += '<tr data-topic-idx="' + origIdx + '">'
+        + '<td><span class="topic-editable" contenteditable="true" spellcheck="false" data-field="topic" data-index="' + origIdx + '">' + escapeHtml(name) + '</span></td>'
+        + '<td>' + mentions + '</td><td>' + first + '</td><td>' + last + '</td>'
+        + '<td><button class="topic-delete-btn" data-index="' + origIdx + '" title="Delete topic"><i class="bi bi-x-lg"></i></button></td>'
+        + '</tr>';
     });
     tbody.innerHTML = html;
+
+    // Inline edit: save on blur
+    tbody.querySelectorAll('.topic-editable').forEach(function (el) {
+      var origVal = el.textContent;
+      el.addEventListener('focus', function () { origVal = el.textContent; });
+      el.addEventListener('blur', function () {
+        var newVal = el.textContent.trim();
+        if (!newVal || newVal === origVal) { el.textContent = origVal; return; }
+        el.style.opacity = '0.5';
+        fetch('/api/dashboard/topic/edit', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ index: parseInt(el.getAttribute('data-index'), 10), fields: { topic: newVal } })
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          el.style.opacity = '1';
+          if (d.success) {
+            origVal = newVal;
+            el.style.color = '#39ff14';
+            setTimeout(function () { el.style.color = ''; }, 1200);
+          } else { el.textContent = origVal; }
+        }).catch(function () { el.style.opacity = '1'; el.textContent = origVal; });
+      });
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+        if (e.key === 'Escape') { el.textContent = origVal; el.blur(); }
+      });
+    });
+
+    // Delete buttons
+    tbody.querySelectorAll('.topic-delete-btn').forEach(function (btn) {
+      var clicks = 0;
+      btn.addEventListener('click', function () {
+        clicks++;
+        if (clicks === 1) {
+          btn.style.color = '#ef5350';
+          btn.title = 'Click again to confirm';
+          setTimeout(function () { clicks = 0; btn.style.color = ''; btn.title = 'Delete topic'; }, 3000);
+        } else {
+          btn.disabled = true;
+          var idx = parseInt(btn.getAttribute('data-index'), 10);
+          fetch('/api/dashboard/topic/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ index: idx })
+          }).then(function (r) { return r.json(); }).then(function (d) {
+            if (d.success) {
+              var row = btn.closest('tr');
+              if (row) { row.style.opacity = '0'; setTimeout(function () { row.remove(); }, 300); }
+              var topEl = document.getElementById('dshTopics');
+              if (topEl && d.remaining !== undefined) topEl.textContent = d.remaining;
+              // Reload topics to refresh indices after delete
+              setTimeout(function () { loadTopicsData(); }, 400);
+            } else { btn.disabled = false; clicks = 0; }
+          }).catch(function () { btn.disabled = false; clicks = 0; });
+        }
+      });
+    });
   }
 
   function renderTopicsGraph(topics) {

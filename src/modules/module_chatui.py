@@ -1891,25 +1891,21 @@ def memory_stats():
     """Memory/knowledge graph statistics for the NEXUS dashboard."""
     stats = {'topics': 0, 'memories': 0, 'topic_list': []}
 
-    # Try to load topic index
     try:
-        topic_path = os.path.join(BASE_DIR, '..', 'memory', f'{character_name}_topics.json')
-        if os.path.exists(topic_path):
-            with open(topic_path, 'r') as f:
-                topics = json.load(f)
+        import modules.module_llm as _llm
+        mm = _llm.memory_manager
+        if mm and hasattr(mm, 'topic_index'):
+            topics = mm.topic_index.get('topics', [])
             stats['topics'] = len(topics)
-            stats['topic_list'] = topics[:20]  # last 20 topics
-    except Exception:
-        pass
-
-    # Try to get memory count
-    try:
-        memory_dir = os.path.join(BASE_DIR, '..', 'memory')
-        lite_path = os.path.join(memory_dir, f'{character_name}_lite.json')
-        if os.path.exists(lite_path):
-            with open(lite_path, 'r') as f:
-                memories = json.load(f)
-            stats['memories'] = len(memories)
+            stats['topic_list'] = [
+                t.get('topic', str(t)) if isinstance(t, dict) else str(t)
+                for t in topics[:20]
+            ]
+        if mm:
+            if hasattr(mm, 'hyper_db'):
+                stats['memories'] = len(mm.hyper_db.documents)
+            elif hasattr(mm, 'documents'):
+                stats['memories'] = len(mm.documents)
     except Exception:
         pass
 
@@ -2001,10 +1997,15 @@ def save_character(name):
 
 @flask_app.route('/api/dashboard/memory/delete', methods=['POST'])
 def dashboard_memory_delete():
-    """Delete a memory document by its index in HyperDB."""
+    """Delete a memory document by its index (supports both full and lite memory)."""
     import modules.module_llm as _llm
     mm = _llm.memory_manager
-    if not mm or not hasattr(mm, 'hyper_db'):
+    if not mm:
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    is_full = hasattr(mm, 'hyper_db')
+    is_lite = hasattr(mm, 'documents') and not is_full
+    if not is_full and not is_lite:
         return jsonify({"error": "Memory manager not available"}), 500
 
     data = request.get_json(silent=True) or {}
@@ -2014,20 +2015,177 @@ def dashboard_memory_delete():
 
     try:
         index = int(index)
-        doc_count = len(mm.hyper_db.documents)
+        docs = mm.hyper_db.documents if is_full else mm.documents
+        doc_count = len(docs)
         if index < 0 or index >= doc_count:
             return jsonify({"error": f"Index {index} out of range (0-{doc_count-1})"}), 400
 
         # Get the document before deleting for confirmation
-        doc = mm.hyper_db.documents[index]
+        doc = docs[index]
         preview = ''
         if isinstance(doc, dict):
             preview = doc.get('user_input', doc.get('bot_response', ''))[:80]
 
-        mm.hyper_db.remove_document(index)
-        mm.hyper_db.save(mm.memory_db_path)
+        if is_full:
+            mm.hyper_db.remove_document(index)
+            mm._mark_dirty()
+            mm.flush()
+            remaining = len(mm.hyper_db.documents)
+        else:
+            docs.pop(index)
+            mm._mark_dirty()
+            mm.flush()
+            remaining = len(docs)
+
         queue_message(f"DASHBOARD: Deleted memory #{index}: {preview}")
-        return jsonify({"success": True, "deleted_index": index, "remaining": len(mm.hyper_db.documents)})
+        return jsonify({"success": True, "deleted_index": index, "remaining": remaining})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/api/dashboard/memory/edit', methods=['POST'])
+def dashboard_memory_edit():
+    """Edit a memory document's fields by index (supports both full and lite memory)."""
+    import modules.module_llm as _llm
+    mm = _llm.memory_manager
+    if not mm:
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    # Determine storage backend
+    is_full = hasattr(mm, 'hyper_db')
+    is_lite = hasattr(mm, 'documents') and not is_full
+    if not is_full and not is_lite:
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    fields = data.get('fields')  # dict of field_name -> new_value
+
+    if index is None:
+        return jsonify({"error": "Missing 'index' parameter"}), 400
+    if not fields or not isinstance(fields, dict):
+        return jsonify({"error": "Missing or invalid 'fields' parameter"}), 400
+
+    try:
+        index = int(index)
+        docs = mm.hyper_db.documents if is_full else mm.documents
+        doc_count = len(docs)
+        if index < 0 or index >= doc_count:
+            return jsonify({"error": f"Index {index} out of range (0-{doc_count-1})"}), 400
+
+        doc = docs[index]
+        if not isinstance(doc, dict):
+            return jsonify({"error": "Document is not editable"}), 400
+
+        # Build an updated copy — never mutate the live doc in-place before
+        # update_document(), which saves old_doc for rollback from docs[index].
+        new_doc = dict(doc)
+        allowed = {'user_input', 'bot_response', 'speaker', 'timestamp'}
+        updated = []
+        for key, value in fields.items():
+            if key in allowed:
+                new_doc[key] = str(value)
+                updated.append(key)
+
+        if not updated:
+            return jsonify({"error": "No valid fields to update"}), 400
+
+        if is_full:
+            # Re-embed the document with updated content; update_document handles
+            # the rollback using the original doc still in documents[index].
+            mm.hyper_db.update_document(index, new_doc)
+            mm._mark_dirty()
+            mm.flush()
+        else:
+            # Lite mode: update keywords and flush
+            if hasattr(mm, '_extract_keywords'):
+                new_doc['keywords'] = list(mm._extract_keywords(
+                    (new_doc.get('user_input', '') + ' ' + new_doc.get('bot_response', ''))
+                ))
+            docs[index] = new_doc
+            mm._mark_dirty()
+            mm.flush()
+
+        queue_message(f"DASHBOARD: Edited memory #{index}: {', '.join(updated)}")
+        return jsonify({"success": True, "updated_fields": updated})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/api/dashboard/topic/edit', methods=['POST'])
+def dashboard_topic_edit():
+    """Edit a topic's fields by its index in the topic list."""
+    import modules.module_llm as _llm
+    mm = _llm.memory_manager
+    if not mm or not hasattr(mm, 'topic_index'):
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    fields = data.get('fields')
+
+    if index is None:
+        return jsonify({"error": "Missing 'index' parameter"}), 400
+    if not fields or not isinstance(fields, dict):
+        return jsonify({"error": "Missing or invalid 'fields' parameter"}), 400
+
+    try:
+        index = int(index)
+        topics = mm.topic_index.get('topics', [])
+        if index < 0 or index >= len(topics):
+            return jsonify({"error": f"Topic index {index} out of range"}), 400
+
+        topic = topics[index]
+        if not isinstance(topic, dict):
+            return jsonify({"error": "Topic is not editable"}), 400
+
+        updated = []
+        if 'topic' in fields:
+            topic['topic'] = str(fields['topic'])
+            updated.append('topic')
+        if 'mention_count' in fields:
+            try:
+                topic['mention_count'] = max(1, int(fields['mention_count']))
+                updated.append('mention_count')
+            except (ValueError, TypeError):
+                pass
+
+        if not updated:
+            return jsonify({"error": "No valid fields to update"}), 400
+
+        mm.save_topic_index()
+        mm.flush()
+        queue_message(f"DASHBOARD: Edited topic #{index}: {', '.join(updated)}")
+        return jsonify({"success": True, "updated_fields": updated})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/api/dashboard/topic/delete', methods=['POST'])
+def dashboard_topic_delete():
+    """Delete a topic by its index."""
+    import modules.module_llm as _llm
+    mm = _llm.memory_manager
+    if not mm or not hasattr(mm, 'topic_index'):
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    if index is None:
+        return jsonify({"error": "Missing 'index' parameter"}), 400
+
+    try:
+        index = int(index)
+        topics = mm.topic_index.get('topics', [])
+        if index < 0 or index >= len(topics):
+            return jsonify({"error": f"Topic index {index} out of range"}), 400
+
+        removed = topics.pop(index)
+        name = removed.get('topic', '') if isinstance(removed, dict) else str(removed)
+        mm.save_topic_index()
+        mm.flush()
+        queue_message(f"DASHBOARD: Deleted topic #{index}: {name}")
+        return jsonify({"success": True, "deleted_topic": name, "remaining": len(topics)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2108,11 +2266,13 @@ def dashboard_graph():
             links.append({"source": "hub_people", "target": pid})
 
     # ── MEMORIES: grouped by speaker / source ──
-    if mm and hasattr(mm, 'hyper_db') and mm.hyper_db.documents:
+    _has_full = mm and hasattr(mm, 'hyper_db') and mm.hyper_db.documents
+    _has_lite = mm and hasattr(mm, 'documents') and mm.documents and not _has_full
+    if _has_full or _has_lite:
         add_node({"id": "hub_memory", "name": "MEMORIES", "color": "#ffca28", "size": 22, "group": "hub"})
         links.append({"source": "BRAIN", "target": "hub_memory"})
 
-        docs = mm.hyper_db.documents
+        docs = mm.hyper_db.documents if _has_full else mm.documents
         # Classify memories into buckets
         speaker_groups = {}  # speaker name -> list of (i, doc)
         ingested = []        # memories with no user_input (bulk loaded)
@@ -2259,7 +2419,8 @@ def dashboard_graph():
                     "color": cat_colors.get(cat, "#66bb6a"),
                     "size": 5 + min(mentions * 2, 10), "group": "topic",
                     "details": {
-                        "category": cat, "mentions": mentions,
+                        "topic": topic_name,
+                        "category": cat, "mention_count": mentions,
                         "first_mentioned": t.get('first_mentioned', '')[:16] if isinstance(t, dict) else '',
                         "last_mentioned": t.get('last_mentioned', '')[:16] if isinstance(t, dict) else '',
                     }
@@ -2302,7 +2463,12 @@ def dashboard_stats():
     """Return summary stats for the dashboard header."""
     import modules.module_llm as _llm
     mm = _llm.memory_manager
-    mem_count = len(mm.hyper_db.documents) if mm and hasattr(mm, 'hyper_db') and mm.hyper_db.documents else 0
+    if mm and hasattr(mm, 'hyper_db') and mm.hyper_db.documents:
+        mem_count = len(mm.hyper_db.documents)
+    elif mm and hasattr(mm, 'documents') and mm.documents:
+        mem_count = len(mm.documents)
+    else:
+        mem_count = 0
     topic_count = len(mm.topic_index.get('topics', [])) if mm and hasattr(mm, 'topic_index') else 0
     from modules.module_dashboard_data import get_interactions, get_emotional_state
     interaction_count = len(get_interactions(500))

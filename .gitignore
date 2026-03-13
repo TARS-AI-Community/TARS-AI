@@ -211,3 +211,4 @@ src/memory/prompt_history/
 terminal_log.json
 emotional_state.json
 ui_settings.json
+*interaction_log.json

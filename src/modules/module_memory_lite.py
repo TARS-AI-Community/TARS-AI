@@ -56,9 +56,11 @@ class MemoryManagerLite:
         self.config = config
         self.char_name = char_name
         self.char_greeting = char_greeting
-        self.memory_db_path = os.path.abspath(os.path.join(os.path.join("..", "memory"), f"{self.char_name}_lite.json"))
+        # Anchor memory directory relative to this file (src/modules/ -> src/memory/)
+        _memory_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
+        self.memory_db_path = os.path.join(_memory_dir, f"{self.char_name}_lite.json")
         # Legacy path — topics are now stored inside the lite JSON
-        self._legacy_topic_path = os.path.abspath(os.path.join(os.path.join("..", "memory"), f"{self.char_name}_topics.json"))
+        self._legacy_topic_path = os.path.join(_memory_dir, f"{self.char_name}_topics.json")
 
         rag_config = self.config.get('RAG', {})
         self.top_k = int(rag_config.get('top_k', 5))
@@ -68,7 +70,7 @@ class MemoryManagerLite:
 
         self.documents = []
         self.long_mem_use = True
-        self.initial_memory_path = os.path.abspath(os.path.join(os.path.join("..", "memory", "initial_memory.json")))
+        self.initial_memory_path = os.path.join(_memory_dir, "initial_memory.json")
 
         self.ui_manager = ui_manager
         self._dirty = False  # True when in-memory state has unflushed changes
@@ -99,6 +101,15 @@ class MemoryManagerLite:
         return intersection / union
 
     def init_dynamic_memory(self):
+        # Migrate from old CWD-relative path if the correct path doesn't exist yet
+        if not os.path.exists(self.memory_db_path):
+            old_path = os.path.abspath(os.path.join("..", "memory", f"{self.char_name}_lite.json"))
+            if os.path.exists(old_path):
+                import shutil
+                os.makedirs(os.path.dirname(self.memory_db_path), exist_ok=True)
+                shutil.move(old_path, self.memory_db_path)
+                queue_message(f"LOAD: Migrated lite memory from {old_path} to {self.memory_db_path}")
+
         if os.path.exists(self.memory_db_path):
             queue_message(f"LOAD: Found existing lite memory: {self.char_name}_lite.json")
             try:
@@ -138,6 +149,7 @@ class MemoryManagerLite:
                 json.dump(data, f, indent=2)
         except Exception as e:
             queue_message(f"ERROR: Failed to save lite memory: {e}")
+            raise  # re-raise so flush() knows the save failed and keeps _dirty=True
 
     def _mark_dirty(self):
         """Mark in-memory state as needing a flush to disk."""
@@ -147,8 +159,11 @@ class MemoryManagerLite:
         """Write in-memory state to disk if dirty. Called by heartbeat + shutdown."""
         if not self._dirty:
             return
-        self._save_memory()
-        self._dirty = False
+        try:
+            self._save_memory()
+            self._dirty = False
+        except Exception:
+            pass  # _dirty stays True — next periodic flush will retry
 
     def _start_periodic_flush(self):
         """Register a recurring heartbeat task to flush memory periodically."""
@@ -162,7 +177,7 @@ class MemoryManagerLite:
 
     def load_topic_index(self):
         # Try loading from embedded topics (new format — inside lite JSON)
-        if self._embedded_topics:
+        if self._embedded_topics is not None:
             self.topic_index = self._embedded_topics
             queue_message(f"LOAD: Topic index loaded with {len(self.topic_index.get('topics', []))} topics")
             # Migrate: remove legacy JSON file if it exists
