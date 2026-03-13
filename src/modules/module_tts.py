@@ -355,6 +355,7 @@ class SentenceTTSPipeline:
                         self._on_first_play()
                     except Exception:
                         pass
+                queue_message(f"DEBUG: TTS speaking: {sentence}")
                 try:
                     if self._play_func:
                         was_int = loop.run_until_complete(
@@ -380,6 +381,8 @@ class SentenceTTSPipeline:
 
 
 async def play_audio_chunks(text, config, is_wakeword=False):
+    if not is_wakeword:
+        queue_message(f"DEBUG: TTS speaking (direct): {text}")
     _tts_cancel_event.clear()
     audio_queue = asyncio.Queue(maxsize=3)
     synthesis_done = asyncio.Event()
