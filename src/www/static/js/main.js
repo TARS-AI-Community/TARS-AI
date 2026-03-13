@@ -516,6 +516,30 @@ document.addEventListener('DOMContentLoaded', function () {
   socket.on('talking_state',  d => { _dbg('[DEBUG] talking_state:', d.talking); avatarIsTalking = d.talking; });
   socket.on('emotion_change', d => preloadAvatarSprites(d));
 
+  // Skill execution status (sandbox, etc.) — shows a status indicator in chat
+  socket.on('skill_status', d => {
+    _dbg('[DEBUG] skill_status:', d.skill, d.status, d.description);
+    const statusId = 'skill-status-' + d.skill;
+    let el = document.getElementById(statusId);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = statusId;
+      el.className = 'skill-status';
+      const chatBox = document.getElementById('chatBox');
+      if (chatBox) chatBox.appendChild(el);
+    }
+    const icons = { running: '\u2699\uFE0F', completed: '\u2705', failed: '\u274C', timeout: '\u23F1\uFE0F' };
+    const icon = icons[d.status] || '';
+    el.innerHTML = '<span class="skill-status-icon">' + icon + '</span> '
+      + '<strong>' + (d.description || d.skill) + '</strong>'
+      + ' <span class="skill-status-badge skill-status-' + d.status + '">' + d.status + '</span>'
+      + (d.output ? '<pre class="skill-output">' + d.output.substring(0, 300) + '</pre>' : '');
+    // Auto-remove completed/failed status after a few seconds
+    if (d.status !== 'running') {
+      setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 8000);
+    }
+  });
+
   // Deferred speaker name correction — update the last user message bubble if
   // speaker ID resolved after the initial display
   socket.on('update_last_user_speaker', d => {

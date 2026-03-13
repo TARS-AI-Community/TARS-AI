@@ -13,6 +13,7 @@ SKILL = {
      For canceling: {{"action": "cancel", "id": <number or "all">}}
    CRITICAL: Convert the user's time to seconds. Examples: "5 minutes" = 300, "1 hour" = 3600, "30 seconds" = 30, "2 and a half hours" = 9000.
    CRITICAL: Your "reply" should confirm what you set. Example: "Got it, I'll remind you in 5 minutes about the laundry."
+   CRITICAL: The "message" parameter should capture the FULL intent of what the user wants. If they say "tell me a joke in 5 minutes", the message should be "tell me a joke" — not just "joke". When the reminder fires, you will be asked to fulfill this request, so include enough context.
    Example: {{"function": "reminder", "parameters": {{"action": "set", "seconds": 300, "message": "check the laundry"}}}}""",
     "examples": [
         """Example - set a reminder:
@@ -50,7 +51,13 @@ def _get_next_id():
 
 
 def _fire_reminder(task_id, meta):
-    """Called by the scheduler when a reminder fires."""
+    """Called by the scheduler when a reminder fires.
+
+    Routes the reminder through the LLM so TARS responds contextually
+    (e.g. "tell me a joke" actually tells a joke, not just "Reminder: tell me a joke").
+    Falls back to direct TTS if the LLM pipeline isn't available.
+    """
+    import asyncio
     message = meta.get("message", "Timer expired")
 
     try:
@@ -59,17 +66,52 @@ def _fire_reminder(task_id, meta):
     except Exception:
         pass
 
+    # Try to route through LLM for a contextual response
+    llm_reply = None
+    try:
+        from modules.module_llm import process_completion, llm_execute_side_effects
+        prompt = f"[SYSTEM: A reminder just fired. The user previously asked you to remind them: \"{message}\". Respond naturally — acknowledge the reminder and fulfill the request if it was an action (e.g. tell a joke, suggest something, etc.). Keep it concise.]"
+        parsed = process_completion(prompt)
+        if isinstance(parsed, dict):
+            llm_reply = parsed.get("reply", "")
+            # Run any side effects (function calls, memories) in background
+            import threading
+            threading.Thread(
+                target=llm_execute_side_effects,
+                args=(parsed, prompt),
+                daemon=True,
+            ).start()
+        elif isinstance(parsed, str) and parsed.strip():
+            llm_reply = parsed.strip()
+    except Exception as e:
+        try:
+            from modules.module_messageQue import queue_message
+            queue_message(f"REMINDER: LLM processing failed, falling back to direct TTS: {e}")
+        except Exception:
+            pass
+
+    # Determine what to speak
+    speak_text = llm_reply if llm_reply else f"Reminder: {message}"
+
     # TTS announcement
     try:
-        from modules.module_tts import tts_queue_and_play
-        tts_queue_and_play(f"Reminder: {message}")
-    except Exception:
-        pass
+        from modules.module_tts import play_audio_chunks
+        from modules.module_config import load_config
+        config = load_config()
+        asyncio.run(play_audio_chunks(speak_text, config['TTS']['ttsoption']))
+    except Exception as e:
+        try:
+            from modules.module_messageQue import queue_message
+            queue_message(f"REMINDER: TTS failed: {e}")
+        except Exception:
+            pass
 
     # Push to web UI
+    display_text = llm_reply if llm_reply else f"**Reminder:** {message}"
     try:
         from modules.module_chatui import socketio
-        socketio.emit('bot_message', {'message': f"\u23f0 **Reminder:** {message}"})
+        socketio.emit('bot_message', {'message': display_text})
+        socketio.emit('bot_audio_done', {})
     except Exception:
         pass
 

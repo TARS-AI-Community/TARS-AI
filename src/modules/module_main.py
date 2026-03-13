@@ -362,7 +362,7 @@ def utterance_callback(message):
             new_mems = parsed.get("new_memories", [])
             queue_message(f"DEBUG VOICE: parsed type={type(parsed).__name__}, func_calls={func_calls}, new_memories={new_mems}")
             has_blocking_tool = any(
-                fc.get("function") in ("capture_camera_view", "web_search", "take_photo")
+                fc.get("function") in ("capture_camera_view", "web_search", "take_photo", "sandbox_exec")
                 for fc in func_calls
             )
             if has_blocking_tool:
