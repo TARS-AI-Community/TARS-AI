@@ -583,6 +583,19 @@ class STTManager:
         vad_func = vad_dispatch.get(vad_method, self._is_silence_detected_rms)
 
         with sd.InputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
+            # Flush stale mic audio that may contain TTS bleed from the
+            # robot's own voice.  After TTS stops, the OS audio buffer can
+            # still hold hundreds of ms of echo.  Discard ~500ms of frames
+            # if TTS stopped within the last second.
+            try:
+                from modules.module_tts import get_tts_last_stopped
+                _since_tts = time.time() - get_tts_last_stopped()
+                if _since_tts < 1.0:
+                    for _ in range(4):          # 4 × 4000 samples @ 16 kHz ≈ 1s flush
+                        stream.read(4000)
+            except Exception:
+                pass
+
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
                 is_silence, detected_speech, silent_frames = vad_func(data, detected_speech, silent_frames)
@@ -989,6 +1002,17 @@ class STTManager:
             vad_func = self._is_silence_detected_rms
 
         with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
+            # Flush stale mic audio that may contain the robot's own TTS voice
+            try:
+                from modules.module_tts import get_tts_last_stopped
+                _since_tts = time.time() - get_tts_last_stopped()
+                if _since_tts < 1.0:
+                    queue_message(f"DEBUG: Flushing mic audio (TTS ended {_since_tts*1000:.0f}ms ago)")
+                    for _ in range(4):
+                        stream.read(4000)
+            except Exception:
+                pass
+
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
                 is_silence, detected_speech, silent_frames = vad_func(data, detected_speech, silent_frames)
@@ -1143,6 +1167,17 @@ class STTManager:
         self._smart_turn_future = None
 
         with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
+            # Flush stale mic audio after TTS playback
+            try:
+                from modules.module_tts import get_tts_last_stopped
+                _since_tts = time.time() - get_tts_last_stopped()
+                if _since_tts < 1.0:
+                    queue_message(f"DEBUG: Flushing mic audio (TTS ended {_since_tts*1000:.0f}ms ago)")
+                    for _ in range(4):
+                        stream.read(frames_per_chunk)
+            except Exception:
+                pass
+
             for _ in range(100):
                 if not self.running or self.shutdown_event.is_set():
                     break
@@ -1202,6 +1237,16 @@ class STTManager:
 
         try:
           with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
+            # Flush stale mic audio after TTS playback to avoid detecting
+            # the robot's own voice as a wake word.
+            try:
+                from modules.module_tts import get_tts_last_stopped
+                if time.time() - get_tts_last_stopped() < 1.0:
+                    for _ in range(4):
+                        stream.read(frames_per_chunk)
+            except Exception:
+                pass
+
             # Prime buffer with first full chunk
             data, _ = stream.read(frames_per_chunk)
             audio_buffer[:] = data.flatten()
@@ -1580,7 +1625,7 @@ class STTManager:
 
     def _start_bargein_fuzzy(self, tts_text):
         """Fuzzy word-matching barge-in monitor."""
-        from modules.module_tts import stop_tts_playback
+        from modules.module_tts import stop_tts_playback, is_tts_playing
 
         # Build initial word list from whatever text we have; during streaming
         # this may be empty and will be updated via update_bargein_tts_text().
@@ -1605,6 +1650,8 @@ class STTManager:
             WINDOW_PAD = 4       # Extra words before/after estimated position
             accumulated_novel = []  # Novel words across consecutive frames
             no_novel_streak = 0     # Reset accumulator after 2 empty frames
+            ECHO_GRACE_FRAMES = 2   # Skip ~250ms after TTS stops to let echo die
+            grace_remaining = 0     # Countdown frames after TTS stops playing
 
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
@@ -1616,7 +1663,17 @@ class STTManager:
                         data, _ = stream.read(2000)  # ~125ms frame
                         frame_count += 1
 
-                        # Always collect audio with speech energy
+                        # Skip audio collection while TTS is playing to avoid
+                        # picking up the robot's own voice through the mic.
+                        if is_tts_playing():
+                            grace_remaining = ECHO_GRACE_FRAMES
+                            continue
+                        # After TTS stops, skip a few frames for residual echo
+                        if grace_remaining > 0:
+                            grace_remaining -= 1
+                            continue
+
+                        # Collect audio with speech energy (only when TTS is silent)
                         rms = self._compute_rms_fast(data)
                         if rms and rms > bargein_threshold:
                             audio_buf.append(data)
@@ -1666,7 +1723,7 @@ class STTManager:
 
     def _start_bargein_voiceprint(self):
         """Voiceprint-based barge-in monitor. Checks if detected speech matches a known speaker."""
-        from modules.module_tts import stop_tts_playback
+        from modules.module_tts import stop_tts_playback, is_tts_playing
         from modules.module_speaker_id import get_speaker_id_manager
 
         def _monitor():
@@ -1676,6 +1733,8 @@ class STTManager:
             CHECK_EVERY = 4       # Check every ~0.5s (4 x 125ms)
             MIN_SPEECH = 8        # Need >=8 speech frames (~1s) for usable embedding
             frame_count = 0
+            ECHO_GRACE_FRAMES = 2   # Skip ~250ms after TTS stops to let echo die
+            grace_remaining = 0     # Countdown frames after TTS stops playing
 
             try:
                 with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
@@ -1686,6 +1745,14 @@ class STTManager:
                     while self._bargein_active:
                         data, _ = stream.read(2000)  # ~125ms frame
                         frame_count += 1
+
+                        # Skip audio while TTS is playing to avoid self-hearing
+                        if is_tts_playing():
+                            grace_remaining = ECHO_GRACE_FRAMES
+                            continue
+                        if grace_remaining > 0:
+                            grace_remaining -= 1
+                            continue
 
                         # Collect frames with speech energy into rolling buffer
                         rms = self._compute_rms_fast(data)

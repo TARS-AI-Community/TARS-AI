@@ -29,6 +29,7 @@ CONFIG = load_config()
 # Barge-in: TTS cancellation event (thread-safe)
 _tts_cancel_event = threading.Event()
 _tts_playing = threading.Event()  # Set while sd.play() is actively outputting audio
+_tts_last_stopped = 0.0  # time.time() when TTS playback last stopped
 
 
 def stop_tts_playback():
@@ -42,6 +43,10 @@ def stop_tts_playback():
 def is_tts_playing():
     """Check if TTS audio is currently being output. Used by barge-in monitor."""
     return _tts_playing.is_set()
+
+def get_tts_last_stopped():
+    """Return time.time() when TTS playback last stopped. Used to flush stale mic audio."""
+    return _tts_last_stopped
 
 # Conditional TTS module imports - not all are available on all devices
 text_to_speech_with_pipelining_piper = None
@@ -454,6 +459,8 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                     await asyncio.sleep(0.05)
 
                 _tts_playing.clear()
+                global _tts_last_stopped
+                _tts_last_stopped = time.time()
 
                 if was_interrupted:
                     break
