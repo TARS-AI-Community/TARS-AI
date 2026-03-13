@@ -297,7 +297,7 @@ def utterance_callback(message):
                 except Exception:
                     pass
             if ui_manager:
-                ui_manager.set_tars_status("STANDBY")
+                ui_manager.set_tars_status("LISTENING")
             return
 
         if parsed is None:
@@ -309,7 +309,7 @@ def utterance_callback(message):
                 except Exception:
                     pass
             if ui_manager:
-                ui_manager.set_tars_status("STANDBY")
+                ui_manager.set_tars_status("LISTENING")
             return
 
         # Extract the final reply text for post-processing (emotion, display)
@@ -332,7 +332,7 @@ def utterance_callback(message):
                 except Exception:
                     pass
             if ui_manager:
-                ui_manager.set_tars_status("STANDBY")
+                ui_manager.set_tars_status("LISTENING")
             return
 
         # Detect emotion (parallel-safe — runs while TTS thread plays sentences)
@@ -446,13 +446,12 @@ def utterance_callback(message):
                 stt_manager.stop_bargein_monitor()
             reply = _followup_reply  # Update for web UI display
 
+        # After response finishes, return to LISTENING (waiting for next utterance in session)
+        # Bot only goes to STANDBY after timeout in STT manager
         if was_interrupted:
             time.sleep(0.3)
-            if ui_manager:
-                ui_manager.set_tars_status("LISTENING")
-        else:
-            if ui_manager:
-                ui_manager.set_tars_status("STANDBY")
+        if ui_manager:
+            ui_manager.set_tars_status("LISTENING")
 
         # Push final reply to web UI (finalizes streaming bubble or creates one for preemptive)
         # Mark audio_streamed=True since audio was played on Pi speakers — prevents
@@ -538,7 +537,7 @@ def utterance_callback(message):
         queue_message("ERROR: Invalid JSON format. Could not process user message.")
     except Exception as e:
         if ui_manager:
-            ui_manager.set_tars_status("STANDBY")
+            ui_manager.set_tars_status("LISTENING")
         queue_message(f"ERROR: {e}")
 
 def post_utterance_callback():
