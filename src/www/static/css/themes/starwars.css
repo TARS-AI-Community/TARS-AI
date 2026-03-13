@@ -1,0 +1,427 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: Star Wars
+   "May the Force be with you."
+   Hyperspace starfield, holographic blue scan line,
+   lightsaber tab bar, Death Star grid, Jedi/Sith
+   message accents, golden crawl-text watermark,
+   twinkling box-shadow stars
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — holographic blue primary */
+  --accent-rgb:  80, 160, 255;
+  --panel-rgb:   4, 8, 18;
+  --magenta-rgb: 255, 40, 40;
+  --purple-rgb:  100, 130, 200;
+
+  /* Backgrounds — deep space black */
+  --bg:          #010308;
+  --bg2:         #040a18;
+  --panel:       rgba(var(--panel-rgb), 0.50);
+  --panel-solid: rgba(var(--panel-rgb), 0.72);
+  --glass-blur:  16px;
+  --glass-border: rgba(var(--accent-rgb), 0.15);
+  --glass-shine: linear-gradient(135deg, rgba(80,160,255,0.05) 0%, rgba(80,160,255,0.02) 40%, transparent 60%, rgba(var(--accent-rgb),0.02) 100%);
+
+  /* Borders — thin holographic */
+  --border:      rgba(var(--accent-rgb), 0.14);
+  --border-hi:   rgba(var(--accent-rgb), 0.38);
+
+  /* Accent colors — holo blue + saber red */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.45);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.10);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.45);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.45);
+  --gold:        #ffd740;
+  --gold-dim:    rgba(255, 215, 64, 0.45);
+
+  /* Status colors */
+  --green:       #66ff66;
+  --orange:      #ffaa22;
+  --red:         #ff2828;
+
+  /* Text — holographic blue-white */
+  --text:        #d0e0ff;
+  --text-dim:    #3a5070;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout */
+  --tab-h:       52px;
+  --radius:      14px;
+  --radius-sm:   8px;
+  --radius-lg:   18px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Nebula: distant galaxy blobs ── */
+  --nebula-1:       radial-gradient(ellipse at 30% 40%, rgba(80,140,255,0.12) 0%, rgba(40,80,180,0.04) 40%, transparent 65%);
+  --nebula-1-size:  600px;
+  --nebula-1-anim:  galaxyDrift1 70s ease-in-out infinite;
+  --nebula-2:       radial-gradient(ellipse at 60% 30%, rgba(200,160,255,0.08) 0%, rgba(120,80,200,0.03) 40%, transparent 60%);
+  --nebula-2-size:  500px;
+  --nebula-2-anim:  galaxyDrift2 80s ease-in-out infinite;
+  --nebula-3:       radial-gradient(ellipse at 70% 70%, rgba(255,200,100,0.06) 0%, rgba(200,150,50,0.02) 40%, transparent 55%);
+  --nebula-3-size:  450px;
+  --nebula-3-anim:  galaxyDrift3 90s ease-in-out infinite;
+  --nebula-blur:    110px;
+
+  /* Particle system — holographic blue */
+  --particle-orb-hues: 220, 230, 210;
+  --particle-prism:    60,120,255; 80,160,255; 100,180,255; 120,200,255; 80,140,240; 60,100,200; 100,160,240;
+
+  /* Pronounced scanlines — holographic display */
+  --scanlines: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(80,160,255,0.012) 2px, rgba(80,160,255,0.012) 4px);
+  --scanline-opacity: 1;
+
+  /* Dramatic viewport vignette */
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 35%, rgba(0,2,10,0.5) 75%, rgba(0,0,4,0.85) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   HYPERSPACE STARFIELD + DEATH STAR GRID + TWINKLING STARS
+   Multi-layer body background with animated hyperspace dots
+═══════════════════════════════════════════════════════ */
+body {
+  background:
+    /* Death Star technical grid overlay */
+    repeating-linear-gradient(
+      0deg,
+      rgba(80, 160, 255, 0.015) 0px,
+      rgba(80, 160, 255, 0.015) 1px,
+      transparent 1px,
+      transparent 80px),
+    repeating-linear-gradient(
+      90deg,
+      rgba(80, 160, 255, 0.015) 0px,
+      rgba(80, 160, 255, 0.015) 1px,
+      transparent 1px,
+      transparent 80px),
+    /* Static star dots */
+    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 22% 72%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 35% 8%, rgba(200,220,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 48% 88%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 62% 28%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 78% 52%, rgba(200,220,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 92% 18%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 5% 48%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 15% 92%, rgba(200,220,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 42% 38%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 55% 62%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 68% 78%, rgba(200,220,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 82% 5%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 28% 45%, rgba(255,255,255,0.25) 0%, transparent 100%),
+    radial-gradient(1px 1px at 72% 95%, rgba(200,220,255,0.35) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 18% 32%, rgba(200,220,255,0.5) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 85% 68%, rgba(255,255,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 50% 10%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 95% 42%, rgba(200,220,255,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 38% 82%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    var(--bg) !important;
+  background-size:
+    80px 80px, 80px 80px,
+    100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%,
+    100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%,
+    100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%,
+    100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100% !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TWINKLING STARS — box-shadow pseudo-element with animation
+═══════════════════════════════════════════════════════ */
+.nebula-layer::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 2px;
+  background: transparent;
+  border-radius: 50%;
+  box-shadow:
+    /* Layer 1 — bright twinkling stars */
+    120px 80px 0 0 rgba(255,255,255,0.8),
+    340px 150px 0 0 rgba(200,220,255,0.7),
+    550px 60px 0 0 rgba(255,255,255,0.6),
+    780px 200px 0 0 rgba(200,220,255,0.75),
+    90px 320px 0 0 rgba(255,255,255,0.65),
+    420px 380px 0 0 rgba(200,220,255,0.7),
+    650px 290px 0 0 rgba(255,255,255,0.6),
+    200px 500px 0 0 rgba(200,220,255,0.8),
+    500px 450px 0 0 rgba(255,255,255,0.55),
+    810px 400px 0 0 rgba(200,220,255,0.7),
+    160px 180px 0 0 rgba(255,240,200,0.75),
+    720px 120px 0 0 rgba(255,255,255,0.6),
+    380px 550px 0 0 rgba(200,220,255,0.65),
+    600px 500px 0 0 rgba(255,255,255,0.7),
+    50px 600px 0 0 rgba(200,220,255,0.6),
+    /* Layer 2 — dimmer background stars */
+    250px 30px 0 0 rgba(255,255,255,0.35),
+    470px 180px 0 0 rgba(200,220,255,0.3),
+    700px 350px 0 0 rgba(255,255,255,0.25),
+    130px 450px 0 0 rgba(200,220,255,0.3),
+    850px 80px 0 0 rgba(255,255,255,0.35),
+    310px 280px 0 0 rgba(200,220,255,0.25),
+    580px 420px 0 0 rgba(255,255,255,0.3),
+    40px 250px 0 0 rgba(200,220,255,0.35),
+    760px 550px 0 0 rgba(255,255,255,0.3),
+    440px 100px 0 0 rgba(200,220,255,0.25);
+  animation: twinkle 4s ease-in-out infinite alternate;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Second twinkling layer offset in timing */
+.nebula-layer::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  background: transparent;
+  border-radius: 50%;
+  box-shadow:
+    180px 40px 0 0.5px rgba(255,255,255,0.7),
+    400px 120px 0 0.5px rgba(200,220,255,0.6),
+    620px 340px 0 0.5px rgba(255,255,255,0.65),
+    80px 480px 0 0.5px rgba(200,220,255,0.7),
+    300px 200px 0 0.5px rgba(255,255,255,0.55),
+    520px 520px 0 0.5px rgba(200,220,255,0.6),
+    740px 160px 0 0.5px rgba(255,255,255,0.7),
+    150px 350px 0 0.5px rgba(200,220,255,0.5),
+    480px 60px 0 0.5px rgba(255,240,200,0.65),
+    680px 480px 0 0.5px rgba(200,220,255,0.55),
+    260px 420px 0 0.5px rgba(255,255,255,0.6),
+    820px 280px 0 0.5px rgba(200,220,255,0.7),
+    60px 140px 0 0.5px rgba(255,255,255,0.5),
+    360px 480px 0 0.5px rgba(200,220,255,0.55),
+    560px 220px 0 0.5px rgba(255,240,200,0.6);
+  animation: twinkle 5s ease-in-out infinite alternate-reverse;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@keyframes twinkle {
+  0%   { opacity: 0.6; }
+  25%  { opacity: 0.9; }
+  50%  { opacity: 0.5; }
+  75%  { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+/* Galaxy drift animations for nebula blobs */
+@keyframes galaxyDrift1 {
+  0%   { transform: translate(0, 0) scale(1) rotate(0deg);   opacity: 0.4; }
+  25%  { transform: translate(8vw, 6vh) scale(1.2) rotate(5deg);  opacity: 0.6; }
+  50%  { transform: translate(14vw, 2vh) scale(0.9) rotate(-3deg); opacity: 0.35; }
+  75%  { transform: translate(4vw, -6vh) scale(1.1) rotate(2deg);  opacity: 0.55; }
+  100% { transform: translate(0, 0) scale(1) rotate(0deg);   opacity: 0.4; }
+}
+@keyframes galaxyDrift2 {
+  0%   { transform: translate(0, 0) scale(1) rotate(0deg);   opacity: 0.3; }
+  33%  { transform: translate(-6vw, 8vh) scale(1.15) rotate(-4deg); opacity: 0.5; }
+  66%  { transform: translate(5vw, -4vh) scale(0.95) rotate(3deg);  opacity: 0.35; }
+  100% { transform: translate(0, 0) scale(1) rotate(0deg);   opacity: 0.3; }
+}
+@keyframes galaxyDrift3 {
+  0%   { transform: translate(0, 0) scale(1);   opacity: 0.25; }
+  50%  { transform: translate(-8vw, -5vh) scale(1.2); opacity: 0.45; }
+  100% { transform: translate(0, 0) scale(1);   opacity: 0.25; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   HYPERSPACE RADIAL BURST — animated outward from center
+   Uses #particleBg::after for the effect
+═══════════════════════════════════════════════════════ */
+#particleBg::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(ellipse at 50% 50%,
+      rgba(120, 180, 255, 0.08) 0%,
+      rgba(80, 140, 255, 0.04) 20%,
+      transparent 50%);
+  animation: hyperspaceGlow 10s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@keyframes hyperspaceGlow {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50%      { transform: scale(1.5); opacity: 0.6; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   HOLOGRAPHIC BLUE SCAN LINE — sweeps top to bottom
+═══════════════════════════════════════════════════════ */
+#particleBg::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(80, 160, 255, 0.1) 10%,
+    rgba(100, 180, 255, 0.4) 30%,
+    rgba(120, 200, 255, 0.7) 50%,
+    rgba(100, 180, 255, 0.4) 70%,
+    rgba(80, 160, 255, 0.1) 90%,
+    transparent 100%);
+  box-shadow:
+    0 0 15px rgba(80, 160, 255, 0.3),
+    0 0 40px rgba(80, 160, 255, 0.15),
+    0 -2px 6px rgba(80, 160, 255, 0.2),
+    0 2px 6px rgba(80, 160, 255, 0.2);
+  z-index: 10;
+  pointer-events: none;
+  animation: holoScanLine 6s linear infinite;
+}
+
+@keyframes holoScanLine {
+  0%   { top: -4px; opacity: 0; }
+  5%   { opacity: 0.8; }
+  90%  { opacity: 0.8; }
+  100% { top: 100vh; opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   GLASS PANELS — holographic flicker
+═══════════════════════════════════════════════════════ */
+@keyframes holoFlicker {
+  0%, 93%, 95%, 97%, 100% { opacity: 1; }
+  94%  { opacity: 0.9; }
+  96%  { opacity: 0.97; }
+}
+.glass {
+  animation: holoFlicker 10s linear infinite;
+}
+
+.glass::before {
+  background: linear-gradient(
+    180deg,
+    rgba(80,160,255,0.03) 0%,
+    transparent 30%,
+    transparent 70%,
+    rgba(80,160,255,0.02) 100%
+  ) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TAB BAR — lightsaber line that hums (pulses)
+═══════════════════════════════════════════════════════ */
+.tab-bar {
+  background: rgba(4, 8, 18, 0.88) !important;
+  border-bottom: 1px solid rgba(80, 160, 255, 0.12) !important;
+}
+
+.tab-bar::after {
+  background: linear-gradient(90deg,
+    transparent 5%,
+    rgba(80, 160, 255, 0.3) 15%,
+    rgba(120, 200, 255, 0.8) 30%,
+    rgba(200, 230, 255, 1) 50%,
+    rgba(120, 200, 255, 0.8) 70%,
+    rgba(80, 160, 255, 0.3) 85%,
+    transparent 95%) !important;
+  box-shadow:
+    0 0 8px rgba(120, 200, 255, 0.5),
+    0 0 20px rgba(80, 160, 255, 0.4),
+    0 0 40px rgba(80, 160, 255, 0.2),
+    0 0 60px rgba(80, 160, 255, 0.1) !important;
+  animation: saberHum 2s ease-in-out infinite !important;
+}
+
+@keyframes saberHum {
+  0%, 100% { box-shadow: 0 0 8px rgba(120,200,255,0.5), 0 0 20px rgba(80,160,255,0.4), 0 0 40px rgba(80,160,255,0.2), 0 0 60px rgba(80,160,255,0.1); opacity: 0.9; }
+  25%      { box-shadow: 0 0 10px rgba(120,200,255,0.6), 0 0 25px rgba(80,160,255,0.5), 0 0 50px rgba(80,160,255,0.25), 0 0 70px rgba(80,160,255,0.12); opacity: 1; }
+  50%      { box-shadow: 0 0 6px rgba(120,200,255,0.45), 0 0 18px rgba(80,160,255,0.35), 0 0 35px rgba(80,160,255,0.18), 0 0 55px rgba(80,160,255,0.08); opacity: 0.85; }
+  75%      { box-shadow: 0 0 12px rgba(120,200,255,0.55), 0 0 28px rgba(80,160,255,0.45), 0 0 45px rgba(80,160,255,0.22), 0 0 65px rgba(80,160,255,0.1); opacity: 0.95; }
+}
+
+/* Active tab icon — Force glow */
+@keyframes forceTabGlow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(80,160,255,0.4)); }
+  50%      { filter: drop-shadow(0 0 10px rgba(80,160,255,0.7)) drop-shadow(0 0 20px rgba(120,200,255,0.3)); }
+}
+.custom-tab.active i {
+  animation: forceTabGlow 3s ease-in-out infinite !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CHAT BUBBLES — Jedi (blue) vs Sith (red)
+═══════════════════════════════════════════════════════ */
+/* Bot messages: Jedi blue saber accent */
+.msg-bubble-bot {
+  border-left: 2px solid rgba(80, 160, 255, 0.45) !important;
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.25),
+    inset 0 0 20px rgba(80, 160, 255, 0.03) !important;
+}
+
+/* User messages: Sith red saber accent */
+.msg-bubble-user {
+  border-right: 2px solid rgba(255, 40, 40, 0.5) !important;
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.25),
+    inset 0 0 20px rgba(255, 40, 40, 0.04) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   WATERMARK — golden Star Wars crawl text
+═══════════════════════════════════════════════════════ */
+.tars-watermark {
+  background: linear-gradient(180deg,
+    rgba(255, 232, 100, 0.95) 0%,
+    rgba(255, 200, 50, 0.8) 40%,
+    rgba(220, 170, 30, 0.65) 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+  filter: drop-shadow(0 0 6px rgba(255, 200, 50, 0.2));
+}
+
+/* ═══════════════════════════════════════════════════════
+   INPUT — holographic blue styling
+═══════════════════════════════════════════════════════ */
+.input-pill:focus-within {
+  border-color: rgba(80, 160, 255, 0.4) !important;
+  box-shadow: 0 0 0 2px rgba(80, 160, 255, 0.1), 0 0 25px rgba(80, 160, 255, 0.08) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   EMOTION BUTTONS — Force-powered hover
+═══════════════════════════════════════════════════════ */
+.em-btn:hover {
+  box-shadow: 0 0 20px rgba(80, 160, 255, 0.2),
+              inset 0 0 15px rgba(80, 160, 255, 0.06) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CONFIG HINTS — Imperial briefing style
+═══════════════════════════════════════════════════════ */
+.config-hint {
+  border-left: 3px solid rgba(80, 160, 255, 0.4) !important;
+}

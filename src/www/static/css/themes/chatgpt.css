@@ -1,0 +1,317 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: ChatGPT
+   OpenAI — Clean, professional, minimal.
+   Teal-green on dark gray. Hexagonal grid, sonar pulse,
+   breathing glow. Every detail precise.
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — OpenAI teal */
+  --accent-rgb:  16, 163, 127;
+  --panel-rgb:   16, 18, 20;
+  --magenta-rgb: 80, 160, 140;
+  --purple-rgb:  60, 130, 110;
+
+  /* Backgrounds — OpenAI dark gray */
+  --bg:          #0d0f10;
+  --bg2:         #131516;
+  --panel:       rgba(var(--panel-rgb), 0.50);
+  --panel-solid: rgba(var(--panel-rgb), 0.75);
+  --glass-blur:  22px;
+  --glass-border: rgba(var(--accent-rgb), 0.08);
+  --glass-shine: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 40%, transparent 100%);
+
+  /* Borders — almost invisible */
+  --border:      rgba(255, 255, 255, 0.06);
+  --border-hi:   rgba(16, 163, 127, 0.25);
+
+  /* Accent colors — teal family */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.40);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.08);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.40);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.40);
+  --gold:        #10a37f;
+  --gold-dim:    rgba(16, 163, 127, 0.40);
+
+  /* Status colors */
+  --green:       #10a37f;
+  --orange:      #f5a623;
+  --red:         #ef4444;
+
+  /* Text — neutral warm gray */
+  --text:        #d1d5db;
+  --text-dim:    #6b7280;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout — clean, professional radius */
+  --tab-h:       52px;
+  --radius:      12px;
+  --radius-sm:   8px;
+  --radius-lg:   16px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Theme-specific ── */
+  /* Very subtle green nebula — barely visible */
+  --nebula-1:       radial-gradient(circle, rgba(16, 163, 127, 0.10) 0%, rgba(10, 100, 80, 0.02) 50%, transparent 70%);
+  --nebula-1-size:  600px;
+  --nebula-1-anim:  gptDrift1 60s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(16, 163, 127, 0.06) 0%, transparent 50%);
+  --nebula-2-size:  400px;
+  --nebula-2-anim:  gptDrift2 70s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(80, 160, 140, 0.04) 0%, transparent 50%);
+  --nebula-3-size:  350px;
+  --nebula-blur:    140px;
+  --particle-orb-hues: 160, 165, 155;
+  --particle-rays:     none;
+
+  /* No scanlines, no vignette — clean */
+  --scanlines: none;
+  --scanline-content: none;
+  --scanline-opacity: 0;
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 60%, rgba(0,0,0,0.25) 100%);
+}
+
+/* ── Subtle drift ── */
+@keyframes gptDrift1 {
+  0%   { transform: translate(0, 0) scale(1);     opacity: 0.4; }
+  25%  { transform: translate(6vw, 8vh) scale(1.1); opacity: 0.5; }
+  50%  { transform: translate(12vw, 3vh) scale(0.95); opacity: 0.35; }
+  75%  { transform: translate(4vw, -5vh) scale(1.05); opacity: 0.45; }
+  100% { transform: translate(0, 0) scale(1);     opacity: 0.4; }
+}
+@keyframes gptDrift2 {
+  0%   { transform: translate(0, 0) scale(1);     opacity: 0.35; }
+  50%  { transform: translate(-8vw, 6vh) scale(1.1); opacity: 0.45; }
+  100% { transform: translate(0, 0) scale(1);     opacity: 0.35; }
+}
+
+/* ── Hexagonal grid background ──
+   Three overlapping repeating gradients at 0°, 60°, -60° create hex pattern */
+body {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 28px,
+      rgba(16,163,127,0.015) 28px,
+      rgba(16,163,127,0.015) 29px
+    ),
+    repeating-linear-gradient(
+      60deg,
+      transparent,
+      transparent 28px,
+      rgba(16,163,127,0.015) 28px,
+      rgba(16,163,127,0.015) 29px
+    ),
+    repeating-linear-gradient(
+      -60deg,
+      transparent,
+      transparent 28px,
+      rgba(16,163,127,0.015) 28px,
+      rgba(16,163,127,0.015) 29px
+    ),
+    #0d0f10 !important;
+}
+
+/* ── Sonar / thinking pulse from center ── */
+.nebula-layer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 1px solid rgba(16, 163, 127, 0.12);
+  transform: translate(-50%, -50%) scale(0.5);
+  animation: gptSonar 6s ease-out infinite;
+  z-index: 0;
+}
+
+@keyframes gptSonar {
+  0% {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0.4;
+    border-color: rgba(16, 163, 127, 0.18);
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(3.5);
+    opacity: 0.05;
+    border-color: rgba(16, 163, 127, 0.04);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(5);
+    opacity: 0;
+    border-color: rgba(16, 163, 127, 0);
+  }
+}
+
+/* Second sonar ring offset */
+.nebula-layer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 1px solid rgba(16, 163, 127, 0.10);
+  transform: translate(-50%, -50%) scale(0.5);
+  animation: gptSonar 6s ease-out infinite 3s;
+  z-index: 0;
+}
+
+/* ── No scanlines, subtle vignette ── */
+body::after {
+  content: none !important;
+}
+
+/* ── Clean glass panels — very subtle borders ── */
+.glass {
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 1px 3px rgba(0,0,0,0.12),
+    0 4px 16px rgba(0,0,0,0.1) !important;
+  backdrop-filter: blur(22px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.2) !important;
+}
+
+.glass::before {
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 100%) !important;
+  border-radius: 12px !important;
+}
+
+/* ── Clean teal tab bar ── */
+.tab-bar {
+  background: rgba(13, 15, 16, 0.90) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  box-shadow: 0 1px 8px rgba(0,0,0,0.15) !important;
+}
+
+/* Single-color teal line */
+.tab-bar::after {
+  background: rgba(16, 163, 127, 0.65) !important;
+  box-shadow: 0 0 8px rgba(16, 163, 127, 0.15) !important;
+  height: 2px !important;
+}
+
+/* ── Active tab — clean teal ── */
+.custom-tab.active {
+  box-shadow: inset 0 -2px 0 rgba(16,163,127,0.7) !important;
+}
+.custom-tab.active i {
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  -webkit-text-fill-color: #10a37f !important;
+  background-clip: unset !important;
+  filter: drop-shadow(0 0 6px rgba(16,163,127,0.3)) !important;
+  animation: gptTabGlow 4s ease-in-out infinite !important;
+}
+
+@keyframes gptTabGlow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(16,163,127,0.2)); }
+  50%      { filter: drop-shadow(0 0 8px rgba(16,163,127,0.4)); }
+}
+
+.custom-tab:hover i {
+  color: #10a37f !important;
+  filter: drop-shadow(0 0 4px rgba(16,163,127,0.2)) !important;
+}
+
+/* ── Watermark — subtle teal ── */
+.tars-watermark {
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  -webkit-text-fill-color: rgba(16,163,127,0.15) !important;
+  background-clip: unset !important;
+}
+
+/* ── Bot messages — subtle green tint ── */
+.msg-bubble-bot {
+  background: rgba(16, 163, 127, 0.04) !important;
+  border-left: 2px solid rgba(16, 163, 127, 0.15) !important;
+  border-radius: 12px 12px 12px 4px !important;
+}
+
+.msg-bubble-user {
+  border-radius: 12px 12px 4px 12px !important;
+}
+
+/* ── Input pill — breathing green glow ── */
+.input-pill {
+  border-radius: 24px !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: rgba(var(--panel-rgb), 0.45) !important;
+  animation: gptBreathe 4s ease-in-out infinite;
+}
+
+@keyframes gptBreathe {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(16,163,127,0), 0 1px 4px rgba(0,0,0,0.1);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(16,163,127,0.06), 0 0 24px rgba(16,163,127,0.03), 0 1px 4px rgba(0,0,0,0.1);
+  }
+}
+
+.input-pill:focus-within {
+  border-color: rgba(16, 163, 127, 0.30) !important;
+  box-shadow: 0 0 0 2px rgba(16,163,127,0.08), 0 0 16px rgba(16,163,127,0.06) !important;
+  animation: none !important;
+}
+
+/* ── Cursor blink on input placeholder ── */
+.input-pill input::placeholder,
+.input-pill textarea::placeholder {
+  animation: gptCursorBlink 1.2s step-end infinite;
+}
+
+@keyframes gptCursorBlink {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.15; }
+}
+
+/* ── Emotion buttons — clean, minimal ── */
+.em-btn {
+  border-radius: 8px !important;
+}
+.em-btn:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* ── HUD buttons — professional ── */
+.hud-btn {
+  border-radius: 8px !important;
+}
+
+/* ── HUD inputs ── */
+.hud-input, .hud-select {
+  border-radius: 8px !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+}
+.hud-input:focus, .hud-select:focus {
+  border-color: rgba(16,163,127,0.3) !important;
+  box-shadow: 0 0 0 2px rgba(16,163,127,0.08) !important;
+}
+
+/* ── Particle canvas — very subtle ── */
+#particleBg {
+  opacity: 0.25;
+}

@@ -1,0 +1,379 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: Microsoft
+   Windows 11 / Copilot — Fluent Design with Bloom wallpaper,
+   acrylic material, Mica panels, 4-color brand identity.
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — Windows/Copilot blue */
+  --accent-rgb:  0, 120, 212;
+  --panel-rgb:   16, 16, 20;
+  --magenta-rgb: 0, 153, 188;
+  --purple-rgb:  104, 33, 122;
+
+  /* Microsoft brand colors */
+  --ms-blue:     0, 120, 212;
+  --ms-red:      243, 83, 37;
+  --ms-green:    127, 186, 0;
+  --ms-yellow:   255, 185, 0;
+
+  /* Backgrounds — Windows dark mode */
+  --bg:          #0a0a0e;
+  --bg2:         #101014;
+  --panel:       rgba(var(--panel-rgb), 0.50);
+  --panel-solid: rgba(var(--panel-rgb), 0.78);
+  --glass-blur:  28px;
+  --glass-border: rgba(255,255,255,0.08);
+  --glass-shine: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 40%, transparent 60%, rgba(var(--accent-rgb),0.03) 100%);
+
+  /* Borders — subtle Mica edges */
+  --border:      rgba(255,255,255,0.08);
+  --border-hi:   rgba(var(--accent-rgb), 0.35);
+
+  /* Accent colors */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.45);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.10);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.45);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.45);
+  --gold:        #ffb900;
+  --gold-dim:    rgba(255, 185, 0, 0.45);
+
+  /* Status colors — Fluent */
+  --green:       #7fba00;
+  --orange:      #ffb900;
+  --red:         #f35325;
+
+  /* Text — clean white */
+  --text:        #e4e4e8;
+  --text-dim:    #6a6a78;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout — Windows 11 rounded corners */
+  --tab-h:       52px;
+  --radius:      12px;
+  --radius-sm:   8px;
+  --radius-lg:   16px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Theme-specific ── */
+  /* Nebula: Microsoft brand color blobs (part of Bloom) */
+  --nebula-1:       radial-gradient(circle, rgba(0,120,212,0.20) 0%, rgba(0,70,140,0.05) 50%, transparent 70%);
+  --nebula-1-size:  550px;
+  --nebula-1-anim:  bloomMorph1 30s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(104,33,122,0.15) 0%, rgba(60,20,80,0.04) 50%, transparent 70%);
+  --nebula-2-size:  500px;
+  --nebula-2-anim:  bloomMorph2 35s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(0,153,188,0.12) 0%, transparent 50%);
+  --nebula-3-size:  450px;
+  --nebula-3-anim:  bloomMorph3 40s ease-in-out infinite;
+  --nebula-blur:    100px;
+  --particle-orb-hues: 210, 300, 195;
+  --particle-rays:     none;
+
+  /* Minimal scanlines — clean modern feel */
+  --scanlines: repeating-linear-gradient(
+    0deg, transparent, transparent 4px,
+    rgba(0,120,212,0.003) 4px, rgba(0,120,212,0.003) 8px);
+  --scanline-opacity: 1;
+
+  /* Soft vignette */
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,0.35) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Keyframe Animations
+═══════════════════════════════════════════════════════ */
+
+/* Bloom wallpaper morphing — organic blob movement */
+@keyframes bloomMorph1 {
+  0%   { transform: translate(-5vw, 10vh) scale(1) rotate(0deg);     opacity: 0.6; }
+  25%  { transform: translate(10vw, 5vh) scale(1.3) rotate(15deg);   opacity: 0.8; }
+  50%  { transform: translate(5vw, -8vh) scale(0.9) rotate(-10deg);  opacity: 0.5; }
+  75%  { transform: translate(-8vw, 2vh) scale(1.15) rotate(8deg);   opacity: 0.7; }
+  100% { transform: translate(-5vw, 10vh) scale(1) rotate(0deg);     opacity: 0.6; }
+}
+@keyframes bloomMorph2 {
+  0%   { transform: translate(8vw, -5vh) scale(1) rotate(0deg);      opacity: 0.5; }
+  25%  { transform: translate(-10vw, 8vh) scale(1.2) rotate(-20deg); opacity: 0.7; }
+  50%  { transform: translate(12vw, 12vh) scale(1.1) rotate(12deg);  opacity: 0.6; }
+  75%  { transform: translate(0vw, -10vh) scale(0.85) rotate(-5deg); opacity: 0.8; }
+  100% { transform: translate(8vw, -5vh) scale(1) rotate(0deg);      opacity: 0.5; }
+}
+@keyframes bloomMorph3 {
+  0%   { transform: translate(0, 5vh) scale(1) rotate(0deg);        opacity: 0.45; }
+  33%  { transform: translate(15vw, -5vh) scale(1.25) rotate(25deg); opacity: 0.65; }
+  66%  { transform: translate(-12vw, 10vh) scale(0.95) rotate(-15deg); opacity: 0.5; }
+  100% { transform: translate(0, 5vh) scale(1) rotate(0deg);        opacity: 0.45; }
+}
+
+/* Windows logo pulse */
+@keyframes winLogoPulse {
+  0%, 100% { opacity: 0.12; transform: scale(1); }
+  50%      { opacity: 0.20; transform: scale(1.03); }
+}
+
+/* Reveal highlight sweep */
+@keyframes revealSweep {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Background — Windows 11 Bloom wallpaper recreation
+   Multiple large overlapping radial gradients that morph
+═══════════════════════════════════════════════════════ */
+body {
+  background:
+    /* Bloom layer 1: Blue (dominant, center-left) */
+    radial-gradient(ellipse 60% 55% at 35% 50%, rgba(0,120,212,0.18) 0%, transparent 70%),
+    /* Bloom layer 2: Red/orange (upper-right) */
+    radial-gradient(ellipse 45% 50% at 70% 25%, rgba(243,83,37,0.12) 0%, transparent 65%),
+    /* Bloom layer 3: Green (lower-right) */
+    radial-gradient(ellipse 50% 45% at 65% 75%, rgba(127,186,0,0.10) 0%, transparent 65%),
+    /* Bloom layer 4: Yellow (center) */
+    radial-gradient(ellipse 35% 40% at 50% 45%, rgba(255,185,0,0.08) 0%, transparent 60%),
+    /* Bloom layer 5: Purple (left) */
+    radial-gradient(ellipse 40% 50% at 25% 65%, rgba(104,33,122,0.10) 0%, transparent 65%),
+    /* Acrylic noise texture — tiny repeating micro-gradients */
+    repeating-linear-gradient(
+      0deg,
+      rgba(255,255,255,0.003) 0px, transparent 1px, transparent 3px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255,255,255,0.003) 0px, transparent 1px, transparent 3px
+    ),
+    var(--bg) !important;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 4px 4px, 4px 4px, 100% 100% !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Windows Logo — 4 colored squares in 2x2 grid
+   Built with ::before and ::after on .nebula-layer
+═══════════════════════════════════════════════════════ */
+.nebula-layer::before {
+  content: '' !important;
+  position: fixed !important;
+  /* Top-left blue square + top-right green square */
+  width: 18px !important;
+  height: 18px !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-20px, -20px) !important;
+  background: rgba(0,120,212,0.25) !important;
+  border-radius: 2px !important;
+  z-index: 0 !important;
+  animation: winLogoPulse 6s ease-in-out infinite !important;
+  box-shadow:
+    /* Top-right: green */
+    21px 0 0 0 rgba(127,186,0,0.25),
+    /* Bottom-left: red */
+    0 21px 0 0 rgba(243,83,37,0.25),
+    /* Bottom-right: yellow */
+    21px 21px 0 0 rgba(255,185,0,0.25),
+    /* Soft glow behind the logo */
+    10px 10px 60px 30px rgba(0,120,212,0.04),
+    10px 10px 120px 60px rgba(104,33,122,0.03) !important;
+}
+
+.nebula-layer::after {
+  content: '' !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 0 !important;
+  /* Additional Bloom color washes that slowly animate */
+  background:
+    radial-gradient(ellipse 80% 70% at 30% 40%, rgba(0,120,212,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 60% at 75% 30%, rgba(243,83,37,0.04) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 60% 80%, rgba(127,186,0,0.04) 0%, transparent 55%) !important;
+  animation: bloomMorph1 45s ease-in-out infinite !important;
+  pointer-events: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Glass Panels — Mica/Acrylic material effect
+   Heavy blur, subtle translucency, frosted glass
+═══════════════════════════════════════════════════════ */
+.glass {
+  backdrop-filter: blur(28px) saturate(1.6) brightness(1.05) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.6) brightness(1.05) !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.35),
+    0 2px 8px rgba(0,0,0,0.2),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -1px 0 rgba(0,0,0,0.15) !important;
+  transition: box-shadow 0.3s var(--ease), border-color 0.3s var(--ease) !important;
+}
+
+/* Reveal highlight on hover — diagonal sweep of light */
+.glass:hover {
+  border-color: rgba(255,255,255,0.12) !important;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.35),
+    0 2px 8px rgba(0,0,0,0.2),
+    0 0 0 1px rgba(var(--accent-rgb),0.08),
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    inset 0 -1px 0 rgba(0,0,0,0.15) !important;
+}
+
+.glass::before {
+  /* Mica tint — slight warm/cool shift from underlying content */
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255,255,255,0.07) 0%,
+      rgba(255,255,255,0.02) 30%,
+      transparent 50%,
+      rgba(var(--accent-rgb),0.02) 100%
+    ),
+    /* Acrylic noise grain */
+    repeating-linear-gradient(
+      45deg,
+      rgba(255,255,255,0.008) 0px, transparent 1px, transparent 2px
+    ) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Tab Bar — Microsoft 4-color stripe
+═══════════════════════════════════════════════════════ */
+.tab-bar {
+  background: rgba(16, 16, 20, 0.85) !important;
+  backdrop-filter: blur(24px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.4) !important;
+  border-top: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+.tab-bar::after {
+  /* 4-color Microsoft brand stripe */
+  background: linear-gradient(90deg,
+    transparent 5%,
+    rgba(243,83,37,0.6) 20%,
+    rgba(127,186,0,0.5) 35%,
+    rgba(0,120,212,0.65) 55%,
+    rgba(255,185,0,0.55) 75%,
+    transparent 95%
+  ) !important;
+  box-shadow:
+    0 0 12px rgba(0,120,212,0.15),
+    0 0 6px rgba(127,186,0,0.08),
+    0 0 6px rgba(243,83,37,0.08),
+    0 0 6px rgba(255,185,0,0.08) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Active Tab — Fluent blue glow
+═══════════════════════════════════════════════════════ */
+@keyframes fluentTabGlow {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(0,120,212,0.4)); }
+  50%      { filter: drop-shadow(0 0 8px rgba(0,120,212,0.7)) drop-shadow(0 0 3px rgba(104,33,122,0.2)); }
+}
+.custom-tab.active i {
+  animation: fluentTabGlow 3s ease-in-out infinite !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Chat Bubbles — clean, minimal Fluent style
+═══════════════════════════════════════════════════════ */
+.msg-bubble-bot {
+  border-left: 2px solid rgba(0,120,212,0.4) !important;
+  border-radius: 12px 12px 12px 4px !important;
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.2),
+    inset 0 0 20px rgba(0,120,212,0.02) !important;
+}
+
+.msg-bubble-user {
+  border-right: 2px solid rgba(104,33,122,0.4) !important;
+  border-radius: 12px 12px 4px 12px !important;
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.2),
+    inset 0 0 20px rgba(104,33,122,0.02) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Input — Fluent focus with accent underline
+═══════════════════════════════════════════════════════ */
+.input-pill {
+  border-radius: 12px !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease) !important;
+}
+
+.input-pill:focus-within {
+  border-color: rgba(0,120,212,0.5) !important;
+  box-shadow:
+    0 0 0 2px rgba(0,120,212,0.12),
+    0 0 20px rgba(0,120,212,0.06),
+    inset 0 -2px 0 rgba(0,120,212,0.4) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Watermark — Gradient with all 4 brand colors
+═══════════════════════════════════════════════════════ */
+.tars-watermark {
+  background: linear-gradient(90deg,
+    rgba(243,83,37,0.8),
+    rgba(127,186,0,0.7),
+    rgba(0,120,212,0.9),
+    rgba(255,185,0,0.8)
+  ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Emotion Buttons — Fluent elevation on hover
+═══════════════════════════════════════════════════════ */
+.em-btn {
+  border-radius: 10px !important;
+  transition: all 0.2s var(--ease) !important;
+}
+
+.em-btn:hover {
+  box-shadow:
+    0 4px 16px rgba(0,0,0,0.3),
+    0 0 0 1px rgba(var(--accent-rgb),0.15),
+    inset 0 0 16px rgba(var(--accent-rgb),0.04) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Nebula Blobs — Bloom-colored organic shapes
+═══════════════════════════════════════════════════════ */
+.nb-1 {
+  background: radial-gradient(ellipse 120% 100%, rgba(0,120,212,0.22) 0%, rgba(0,70,140,0.06) 50%, transparent 70%) !important;
+  animation: bloomMorph1 30s ease-in-out infinite !important;
+  border-radius: 40% 60% 55% 45% !important;
+}
+.nb-2 {
+  background: radial-gradient(ellipse 100% 120%, rgba(243,83,37,0.14) 0%, rgba(180,40,20,0.04) 50%, transparent 70%) !important;
+  animation: bloomMorph2 35s ease-in-out infinite !important;
+  border-radius: 55% 45% 40% 60% !important;
+}
+.nb-3 {
+  background: radial-gradient(ellipse 110% 90%, rgba(127,186,0,0.12) 0%, rgba(60,120,0,0.03) 50%, transparent 70%) !important;
+  animation: bloomMorph3 40s ease-in-out infinite !important;
+  border-radius: 45% 55% 60% 40% !important;
+}

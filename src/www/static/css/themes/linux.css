@@ -1,0 +1,464 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: Linux Terminal / Hacker
+   Pure #00ff00 on #000000. CRT monitor, matrix rain,
+   phosphor glow, blinking cursors. You've been hacked.
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — terminal green */
+  --accent-rgb:  0, 255, 0;
+  --panel-rgb:   2, 8, 2;
+  --magenta-rgb: 255, 200, 40;
+  --purple-rgb:  80, 220, 80;
+
+  /* Backgrounds — pure void black */
+  --bg:          #000000;
+  --bg2:         #020802;
+  --panel:       rgba(var(--panel-rgb), 0.40);
+  --panel-solid: rgba(var(--panel-rgb), 0.65);
+  --glass-blur:  10px;
+  --glass-border: rgba(var(--accent-rgb), 0.18);
+  --glass-shine: linear-gradient(180deg, rgba(0,255,0,0.04) 0%, transparent 40%, transparent 80%, rgba(0,255,0,0.02) 100%);
+
+  /* Borders — hard terminal lines */
+  --border:      rgba(var(--accent-rgb), 0.15);
+  --border-hi:   rgba(var(--accent-rgb), 0.40);
+
+  /* Accent colors — monochrome green */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.4);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.10);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.4);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.4);
+  --gold:        #00ff00;
+  --gold-dim:    rgba(0, 255, 0, 0.4);
+
+  /* Status colors — hacker palette */
+  --green:       #00ff00;
+  --orange:      #ffcc00;
+  --red:         #ff3333;
+
+  /* Text — phosphor green */
+  --text:        #00ff00;
+  --text-dim:    #206820;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout — sharp terminal corners */
+  --tab-h:       52px;
+  --radius:      3px;
+  --radius-sm:   2px;
+  --radius-lg:   4px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Theme-specific ── */
+  --nebula-1:       radial-gradient(circle, rgba(0,255,0,0.06) 0%, transparent 50%);
+  --nebula-1-size:  400px;
+  --nebula-2:       radial-gradient(circle, rgba(0,200,0,0.04) 0%, transparent 50%);
+  --nebula-2-size:  350px;
+  --nebula-3:       radial-gradient(circle, rgba(0,180,0,0.03) 0%, transparent 50%);
+  --nebula-3-size:  300px;
+  --nebula-blur:    120px;
+  --particle-orb-hues: 120, 130, 115;
+  --particle-rays:     none;
+
+  /* Heavy CRT phosphor scanlines — 2px thick */
+  --scanlines: repeating-linear-gradient(
+    0deg,
+    transparent 0px, transparent 2px,
+    rgba(0,0,0,0.35) 2px, rgba(0,0,0,0.35) 4px);
+  --scanline-opacity: 1;
+
+  /* CRT curve vignette — dark edges simulating curved glass */
+  --vignette: radial-gradient(
+    ellipse 85% 80% at 50% 50%,
+    transparent 50%,
+    rgba(0,20,0,0.3) 70%,
+    rgba(0,0,0,0.75) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Keyframe Animations
+═══════════════════════════════════════════════════════ */
+
+/* Matrix digital rain — columns scrolling downward */
+@keyframes matrixRain {
+  0%   { background-position: 0 -100vh; }
+  100% { background-position: 0 100vh; }
+}
+
+/* CRT flicker — occasional brightness fluctuation */
+@keyframes crtFlicker {
+  0%      { opacity: 1; }
+  3%      { opacity: 0.97; }
+  6%      { opacity: 1; }
+  7.5%    { opacity: 0.93; }
+  8%      { opacity: 1; }
+  45%     { opacity: 1; }
+  46%     { opacity: 0.96; }
+  46.5%   { opacity: 1; }
+  70%     { opacity: 1; }
+  70.5%   { opacity: 0.92; }
+  71%     { opacity: 0.97; }
+  71.5%   { opacity: 1; }
+  92%     { opacity: 1; }
+  92.5%   { opacity: 0.94; }
+  93%     { opacity: 1; }
+  100%    { opacity: 1; }
+}
+
+/* Blinking terminal cursor */
+@keyframes cursorBlink {
+  0%, 49%  { border-right-color: rgba(0,255,0,0.8); }
+  50%, 100% { border-right-color: transparent; }
+}
+
+/* Typewriter effect for watermark */
+@keyframes typewriter {
+  0%   { width: 0; }
+  50%  { width: 100%; }
+  55%  { width: 100%; }
+  100% { width: 100%; }
+}
+@keyframes blinkCaret {
+  0%, 49%  { border-right-color: #00ff00; }
+  50%, 100% { border-right-color: transparent; }
+}
+
+/* Green phosphor pulse for active tab */
+@keyframes terminalTabPulse {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(0,255,0,0.5)); }
+  50%      { filter: drop-shadow(0 0 8px rgba(0,255,0,0.9)) drop-shadow(0 0 16px rgba(0,255,0,0.3)); }
+}
+
+/* Slow horizontal scan line that sweeps down the screen */
+@keyframes crtScanSweep {
+  0%   { top: -5%; }
+  100% { top: 105%; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   CRT Flicker — Whole screen brightness fluctuation
+═══════════════════════════════════════════════════════ */
+body {
+  animation: crtFlicker 8s linear infinite !important;
+  /* Green-tinted background */
+  background:
+    /* Subtle green ambient glow from center */
+    radial-gradient(ellipse at 50% 50%, rgba(0,255,0,0.02) 0%, transparent 60%),
+    #000000 !important;
+}
+
+/* CRT horizontal scan line sweeping down */
+body::before {
+  z-index: 9998 !important;
+  background: var(--vignette) !important;
+}
+
+/* Extra CRT scan sweep line */
+body::after {
+  z-index: 9999 !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Matrix Digital Rain — via .nebula-layer::before
+   Columns of green using repeating gradients
+═══════════════════════════════════════════════════════ */
+.nebula-layer::before {
+  content: '' !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  /* Matrix rain columns — vertical stripes with varying green intensity */
+  background:
+    /* Column layer 1 — thin bright columns */
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 18px,
+      rgba(0,255,0,0.03) 18px,
+      rgba(0,255,0,0.03) 19px,
+      transparent 19px,
+      transparent 40px
+    ),
+    /* Column layer 2 — offset wider columns */
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 29px,
+      rgba(0,255,0,0.02) 29px,
+      rgba(0,255,0,0.02) 30px,
+      transparent 30px,
+      transparent 55px
+    ),
+    /* Vertical rain streaks — these animate downward */
+    repeating-linear-gradient(
+      180deg,
+      rgba(0,255,0,0.0) 0%,
+      rgba(0,255,0,0.04) 3%,
+      rgba(0,255,0,0.08) 5%,
+      rgba(0,255,0,0.04) 8%,
+      rgba(0,255,0,0.0) 12%,
+      transparent 15%,
+      transparent 20%,
+      rgba(0,255,0,0.0) 22%,
+      rgba(0,255,0,0.06) 24%,
+      rgba(0,255,0,0.0) 28%,
+      transparent 35%,
+      transparent 45%,
+      rgba(0,255,0,0.03) 48%,
+      rgba(0,255,0,0.07) 50%,
+      rgba(0,255,0,0.03) 53%,
+      transparent 58%,
+      transparent 70%,
+      rgba(0,255,0,0.02) 72%,
+      rgba(0,255,0,0.05) 75%,
+      rgba(0,255,0,0.02) 78%,
+      transparent 85%,
+      transparent 100%
+    ) !important;
+  background-size: 40px 100%, 55px 100%, 100% 200% !important;
+  animation: matrixRain 15s linear infinite !important;
+  opacity: 0.7 !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Tux Penguin — CSS pixel art via box-shadow
+   on .nebula-layer::after
+═══════════════════════════════════════════════════════ */
+.nebula-layer::after {
+  content: '' !important;
+  position: fixed !important;
+  bottom: 80px !important;
+  right: 20px !important;
+  width: 4px !important;
+  height: 4px !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+  opacity: 0.15 !important;
+  background: transparent !important;
+  /* Tux penguin ~12x16 pixel art */
+  box-shadow:
+    /* Row 1: top of head — black */
+    16px 0 0 0 #00ff00, 20px 0 0 0 #00ff00, 24px 0 0 0 #00ff00,
+    /* Row 2 */
+    12px 4px 0 0 #00ff00, 16px 4px 0 0 #003300, 20px 4px 0 0 #003300, 24px 4px 0 0 #003300, 28px 4px 0 0 #00ff00,
+    /* Row 3: eyes */
+    8px 8px 0 0 #00ff00, 12px 8px 0 0 #003300, 16px 8px 0 0 #ffffff, 20px 8px 0 0 #003300,
+    24px 8px 0 0 #ffffff, 28px 8px 0 0 #003300, 32px 8px 0 0 #00ff00,
+    /* Row 4: beak */
+    8px 12px 0 0 #00ff00, 12px 12px 0 0 #003300, 16px 12px 0 0 #ffcc00, 20px 12px 0 0 #ffcc00,
+    24px 12px 0 0 #ffcc00, 28px 12px 0 0 #003300, 32px 12px 0 0 #00ff00,
+    /* Row 5 */
+    8px 16px 0 0 #00ff00, 12px 16px 0 0 #003300, 16px 16px 0 0 #003300, 20px 16px 0 0 #ffcc00,
+    24px 16px 0 0 #003300, 28px 16px 0 0 #003300, 32px 16px 0 0 #00ff00,
+    /* Row 6: body start — black sides, white belly */
+    4px 20px 0 0 #00ff00, 8px 20px 0 0 #003300, 12px 20px 0 0 #003300, 16px 20px 0 0 #ccffcc,
+    20px 20px 0 0 #ccffcc, 24px 20px 0 0 #ccffcc, 28px 20px 0 0 #003300, 32px 20px 0 0 #003300, 36px 20px 0 0 #00ff00,
+    /* Row 7: body */
+    4px 24px 0 0 #003300, 8px 24px 0 0 #003300, 12px 24px 0 0 #ccffcc,
+    16px 24px 0 0 #ccffcc, 20px 24px 0 0 #ccffcc, 24px 24px 0 0 #ccffcc,
+    28px 24px 0 0 #ccffcc, 32px 24px 0 0 #003300, 36px 24px 0 0 #003300,
+    /* Row 8: body */
+    4px 28px 0 0 #003300, 8px 28px 0 0 #003300, 12px 28px 0 0 #ccffcc,
+    16px 28px 0 0 #ccffcc, 20px 28px 0 0 #ccffcc, 24px 28px 0 0 #ccffcc,
+    28px 28px 0 0 #ccffcc, 32px 28px 0 0 #003300, 36px 28px 0 0 #003300,
+    /* Row 9: body */
+    4px 32px 0 0 #00ff00, 8px 32px 0 0 #003300, 12px 32px 0 0 #003300, 16px 32px 0 0 #ccffcc,
+    20px 32px 0 0 #ccffcc, 24px 32px 0 0 #ccffcc, 28px 32px 0 0 #003300, 32px 32px 0 0 #003300, 36px 32px 0 0 #00ff00,
+    /* Row 10: lower body */
+    8px 36px 0 0 #00ff00, 12px 36px 0 0 #003300, 16px 36px 0 0 #003300, 20px 36px 0 0 #003300,
+    24px 36px 0 0 #003300, 28px 36px 0 0 #003300, 32px 36px 0 0 #00ff00,
+    /* Row 11: feet — yellow/orange */
+    8px 40px 0 0 #ffcc00, 12px 40px 0 0 #ffcc00, 16px 40px 0 0 #ffcc00,
+    24px 40px 0 0 #ffcc00, 28px 40px 0 0 #ffcc00, 32px 40px 0 0 #ffcc00 !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Glass Panels — Terminal window style
+   Hard green borders, fake title bar, square corners
+═══════════════════════════════════════════════════════ */
+.glass {
+  border: 1px solid rgba(0,255,0,0.25) !important;
+  border-top: 2px solid rgba(0,255,0,0.45) !important;
+  border-radius: 3px !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  box-shadow:
+    0 0 15px rgba(0,255,0,0.04),
+    0 0 1px rgba(0,255,0,0.2),
+    inset 0 0 30px rgba(0,255,0,0.02),
+    inset 0 1px 0 rgba(0,255,0,0.08) !important;
+}
+
+.glass::before {
+  /* Fake terminal title bar — brighter green top gradient */
+  background: linear-gradient(
+    180deg,
+    rgba(0,255,0,0.06) 0%,
+    rgba(0,255,0,0.02) 4%,
+    transparent 8%,
+    transparent 100%
+  ) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Tab Bar — Terminal bottom with green accent
+═══════════════════════════════════════════════════════ */
+.tab-bar {
+  background: rgba(0,4,0,0.9) !important;
+  border-top: 1px solid rgba(0,255,0,0.2) !important;
+}
+
+.tab-bar::after {
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(0,255,0,0.3),
+    rgba(0,255,0,0.6),
+    rgba(0,255,0,0.3),
+    transparent
+  ) !important;
+  box-shadow: 0 0 12px rgba(0,255,0,0.2) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Active Tab — Phosphor glow pulse
+═══════════════════════════════════════════════════════ */
+.custom-tab.active i {
+  animation: terminalTabPulse 2s ease-in-out infinite !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Chat Bubbles — Green phosphor glow text
+═══════════════════════════════════════════════════════ */
+.msg-bubble-bot {
+  border-left: 2px solid rgba(0,255,0,0.4) !important;
+  border-radius: 3px !important;
+  text-shadow:
+    0 0 4px rgba(0,255,0,0.3),
+    0 0 8px rgba(0,255,0,0.15),
+    0 0 16px rgba(0,255,0,0.08) !important;
+  box-shadow:
+    0 0 10px rgba(0,255,0,0.03),
+    inset 0 0 20px rgba(0,255,0,0.02) !important;
+}
+
+/* User messages — amber accent like a different terminal user */
+.msg-bubble-user {
+  border-right: 2px solid rgba(255,200,40,0.4) !important;
+  border-radius: 3px !important;
+  text-shadow:
+    0 0 4px rgba(0,255,0,0.2),
+    0 0 8px rgba(0,255,0,0.1) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Input Pill — Blinking cursor + terminal border
+═══════════════════════════════════════════════════════ */
+.input-pill {
+  border: 1px solid rgba(0,255,0,0.2) !important;
+  border-radius: 3px !important;
+  background: rgba(0,4,0,0.6) !important;
+}
+
+.input-pill:focus-within {
+  border-color: rgba(0,255,0,0.5) !important;
+  box-shadow:
+    0 0 0 1px rgba(0,255,0,0.1),
+    0 0 15px rgba(0,255,0,0.06),
+    inset 0 0 10px rgba(0,255,0,0.03) !important;
+  /* Blinking cursor effect via right border */
+  animation: cursorBlink 1s step-end infinite !important;
+  border-right: 2px solid rgba(0,255,0,0.8) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Watermark — Typewriter boot sequence effect
+═══════════════════════════════════════════════════════ */
+.tars-watermark {
+  color: #00ff00 !important;
+  -webkit-text-fill-color: #00ff00 !important;
+  background: none !important;
+  text-shadow:
+    0 0 6px rgba(0,255,0,0.4),
+    0 0 12px rgba(0,255,0,0.2) !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  border-right: 2px solid #00ff00 !important;
+  animation:
+    typewriter 8s steps(20) 1s both,
+    blinkCaret 0.8s step-end infinite !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Emotion Buttons — Terminal button style
+═══════════════════════════════════════════════════════ */
+.em-btn {
+  border-radius: 3px !important;
+  border: 1px solid rgba(0,255,0,0.15) !important;
+}
+
+.em-btn:hover {
+  border-color: rgba(0,255,0,0.4) !important;
+  box-shadow:
+    0 0 15px rgba(0,255,0,0.15),
+    0 0 30px rgba(0,255,0,0.05),
+    inset 0 0 15px rgba(0,255,0,0.05) !important;
+  text-shadow: 0 0 8px rgba(0,255,0,0.5) !important;
+  transform: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Nebula Blobs — Dim green ambient glow
+═══════════════════════════════════════════════════════ */
+.nb-1 {
+  background: radial-gradient(circle, rgba(0,255,0,0.07) 0%, transparent 50%) !important;
+  filter: blur(120px) !important;
+}
+.nb-2 {
+  background: radial-gradient(circle, rgba(0,200,0,0.05) 0%, transparent 50%) !important;
+  filter: blur(140px) !important;
+}
+.nb-3 {
+  background: radial-gradient(circle, rgba(0,180,0,0.04) 0%, transparent 50%) !important;
+  filter: blur(160px) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Global green tint — everything gets a phosphor cast
+═══════════════════════════════════════════════════════ */
+
+/* All text gets subtle green glow */
+* {
+  caret-color: #00ff00 !important;
+}
+
+/* Scrollbar — terminal green */
+::-webkit-scrollbar {
+  width: 6px;
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0,255,0,0.2);
+  border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,255,0,0.4);
+}

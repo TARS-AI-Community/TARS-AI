@@ -528,6 +528,7 @@ def load_config():
             "webui_enabled": config.getboolean('ACCESS', 'webui_enabled', fallback=True),
             "webui_port": config.getint('ACCESS', 'webui_port', fallback=80),
             "webui_password": config.get('ACCESS', 'webui_password', fallback='tarspass1234'),
+            "webui_theme": config.get('ACCESS', 'webui_theme', fallback='default'),
             "remote_access_enabled": config.getboolean('ACCESS', 'remote_access_enabled', fallback=False),
         },
         "UI": {
@@ -933,6 +934,11 @@ CONFIG_METADATA = {
         'webui_password': {
             'depends_on': [{'field': 'webui_enabled', 'values': ['True', 'true']}],
             'description': 'The password needed to log into this web interface. Anyone on your local network could potentially access it, so change this from the default to something only you know. This is NOT stored securely - it is a simple access barrier, not bank-level security.'
+        },
+        'webui_theme': {
+            'depends_on': [{'field': 'webui_enabled', 'values': ['True', 'true']}],
+            'label': 'Theme',
+            'description': 'Color theme for the web interface. Each theme includes unique colors, animations, backgrounds, and effects. Changes take effect immediately without restart. Themes are auto-discovered from CSS files in www/static/css/themes/.'
         },
         'remote_access_enabled': {
             'depends_on': [{'field': 'webui_enabled', 'values': ['True', 'true']}],

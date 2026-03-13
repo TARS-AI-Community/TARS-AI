@@ -1,0 +1,578 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: GI Joe — A Real American Hero
+   Patriotic military action — red/blue/white tri-color,
+   star emblem CSS art, star field background, bold
+   dossier-style panels, tactical corner brackets,
+   comm transmission flash, knowing is half the battle
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — patriotic red + blue */
+  --accent-rgb:  0, 51, 153;
+  --panel-rgb:   6, 8, 16;
+  --magenta-rgb: 204, 0, 0;
+  --purple-rgb:  100, 60, 160;
+
+  /* Backgrounds — dark navy */
+  --bg:          #060810;
+  --bg2:         #080c18;
+  --panel:       rgba(var(--panel-rgb), 0.90);
+  --panel-solid: rgba(var(--panel-rgb), 0.95);
+  --glass-blur:  14px;
+  --glass-border: rgba(var(--accent-rgb), 0.28);
+  --glass-shine: linear-gradient(135deg,
+    rgba(0,51,153,0.10) 0%,
+    rgba(0,51,153,0.03) 25%,
+    transparent 45%,
+    transparent 55%,
+    rgba(204,0,0,0.04) 80%,
+    rgba(204,0,0,0.08) 100%);
+
+  /* Borders — blue tactical */
+  --border:      rgba(var(--accent-rgb), 0.25);
+  --border-hi:   rgba(var(--accent-rgb), 0.60);
+
+  /* Accent colors — red white blue */
+  --cyan:        #3366cc;
+  --cyan-dim:    rgba(0, 51, 153, 0.5);
+  --cyan-glow:   rgba(0, 51, 153, 0.22);
+  --magenta:     #cc0000;
+  --magenta-dim: rgba(204, 0, 0, 0.5);
+  --purple:      #6644aa;
+  --purple-dim:  rgba(100, 60, 160, 0.5);
+  --gold:        #ffcc00;
+  --gold-dim:    rgba(255, 204, 0, 0.5);
+
+  /* Status colors */
+  --green:       #33cc33;
+  --orange:      #ff9900;
+  --red:         #cc0000;
+
+  /* Text — clean white with blue tint */
+  --text:        #e0e8f4;
+  --text-dim:    #4a5a7a;
+
+  /* Typography — bold military */
+  --font-mono:   'Share Tech Mono', 'Courier New', monospace;
+  --font-hud:    'Orbitron', 'Share Tech Mono', sans-serif;
+  --font-body:   'Rajdhani', 'Segoe UI', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout */
+  --tab-h:       52px;
+  --radius:      6px;
+  --radius-sm:   3px;
+  --radius-lg:   8px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* Nebula blobs — red and blue opposing faction glows */
+  --nebula-1:       radial-gradient(circle, rgba(0,51,153,0.25) 0%, rgba(0,30,100,0.08) 40%, transparent 65%);
+  --nebula-1-size:  550px;
+  --nebula-1-anim:  joeDrift1 32s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(204,0,0,0.20) 0%, rgba(150,0,0,0.06) 40%, transparent 65%);
+  --nebula-2-size:  500px;
+  --nebula-2-anim:  joeDrift2 38s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(200,200,220,0.03) 40%, transparent 65%);
+  --nebula-3-size:  400px;
+  --nebula-3-anim:  joeDrift3 44s ease-in-out infinite;
+  --nebula-blur:    70px;
+  --nebula-radius:  50%;
+
+  /* Particle system — red, white, blue */
+  --particle-orb-hues: 0, 220, 0;
+  --particle-rays: 204,0,0;
+  --particle-prism: 204,0,0; 0,51,153; 255,255,255; 220,40,40; 50,80,180; 200,200,220; 255,204,0;
+
+  /* Scanlines — subtle blue military monitor */
+  --scanlines: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0) 0px,
+    rgba(0,0,0,0) 3px,
+    rgba(0,0,20,0.18) 3px,
+    rgba(0,0,20,0.18) 4px);
+  --scanline-opacity: 0.8;
+  --scanline-content: '';
+
+  /* Dark navy vignette — intelligence display */
+  --vignette: radial-gradient(ellipse at 50% 50%,
+    transparent 20%,
+    rgba(0,4,16,0.30) 45%,
+    rgba(0,2,10,0.60) 70%,
+    rgba(0,0,0,0.85) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   ANIMATIONS
+═══════════════════════════════════════════════════════ */
+
+/* Nebula / faction glow drifts */
+@keyframes joeDrift1 {
+  0%   { transform: translate(-12vw, -8vh) scale(1);    opacity: 0.4; }
+  25%  { transform: translate(10vw, 14vh) scale(1.25);  opacity: 0.7; }
+  50%  { transform: translate(20vw, 2vh) scale(0.9);    opacity: 0.35; }
+  75%  { transform: translate(6vw, -10vh) scale(1.15);  opacity: 0.6; }
+  100% { transform: translate(-12vw, -8vh) scale(1);    opacity: 0.4; }
+}
+@keyframes joeDrift2 {
+  0%   { transform: translate(14vw, 10vh) scale(1);     opacity: 0.35; }
+  25%  { transform: translate(-10vw, -14vh) scale(1.2); opacity: 0.6; }
+  50%  { transform: translate(-16vw, 8vh) scale(1.05);  opacity: 0.4; }
+  75%  { transform: translate(4vw, 16vh) scale(0.85);   opacity: 0.7; }
+  100% { transform: translate(14vw, 10vh) scale(1);     opacity: 0.35; }
+}
+@keyframes joeDrift3 {
+  0%   { transform: translate(0, 10vh) scale(1);        opacity: 0.3; }
+  33%  { transform: translate(-10vw, -6vh) scale(1.1);  opacity: 0.5; }
+  66%  { transform: translate(8vw, -14vh) scale(0.95);  opacity: 0.4; }
+  100% { transform: translate(0, 10vh) scale(1);        opacity: 0.3; }
+}
+
+/* Star emblem glow pulse */
+@keyframes starGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 15px rgba(255,255,255,0.2)) drop-shadow(0 0 30px rgba(0,51,153,0.15));
+    opacity: 0.5;
+  }
+  50% {
+    filter: drop-shadow(0 0 25px rgba(255,255,255,0.4)) drop-shadow(0 0 50px rgba(204,0,0,0.2)) drop-shadow(0 0 80px rgba(0,51,153,0.15));
+    opacity: 0.7;
+  }
+}
+
+/* Comm transmission flash on tab bar */
+@keyframes commFlash {
+  0%, 88%, 92%, 100% {
+    box-shadow:
+      0 2px 20px rgba(0,51,153,0.10),
+      inset 0 -1px 0 rgba(0,51,153,0.25);
+  }
+  89% {
+    box-shadow:
+      0 2px 30px rgba(255,255,255,0.15),
+      0 0 60px rgba(255,255,255,0.08),
+      inset 0 -1px 0 rgba(255,255,255,0.40);
+  }
+  90% {
+    box-shadow:
+      0 2px 20px rgba(255,255,255,0.08),
+      inset 0 -1px 0 rgba(0,51,153,0.30);
+  }
+  91% {
+    box-shadow:
+      0 2px 25px rgba(255,255,255,0.12),
+      0 0 40px rgba(255,255,255,0.05),
+      inset 0 -1px 0 rgba(255,255,255,0.30);
+  }
+}
+
+/* Tab icon — patriotic pulse */
+@keyframes joeTabPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(0,51,153,0.5));
+    color: rgba(51,102,204,1);
+  }
+  33% {
+    filter: drop-shadow(0 0 8px rgba(204,0,0,0.6));
+    color: #ff4444;
+  }
+  66% {
+    filter: drop-shadow(0 0 10px rgba(255,255,255,0.5));
+    color: #ffffff;
+  }
+}
+
+/* Tab bar accent line — tri-color sweep */
+@keyframes triColorSweep {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Watermark patriotic shimmer */
+@keyframes patriotShimmer {
+  0%   { background-position: -100% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Dossier panel corner bracket flash */
+@keyframes bracketFlash {
+  0%, 85%, 90%, 100% {
+    box-shadow:
+      0 6px 24px rgba(0,0,0,0.5),
+      0 0 30px rgba(0,51,153,0.06),
+      inset 0 1px 0 rgba(0,51,153,0.12),
+      inset 0 -1px 0 rgba(0,0,0,0.3);
+  }
+  87% {
+    box-shadow:
+      0 6px 24px rgba(0,0,0,0.5),
+      0 0 40px rgba(0,51,153,0.10),
+      inset 0 1px 0 rgba(255,255,255,0.15),
+      inset 0 -1px 0 rgba(0,0,0,0.3);
+  }
+}
+
+/* Input focus glow — blue patriotic */
+@keyframes inputJoePulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px rgba(0,51,153,0.15),
+      0 0 20px rgba(0,51,153,0.12);
+    border-color: rgba(0,51,153,0.6);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(0,51,153,0.25),
+      0 0 30px rgba(0,51,153,0.18),
+      0 0 50px rgba(204,0,0,0.05);
+    border-color: rgba(51,102,204,0.9);
+  }
+}
+
+/* Star twinkle for background */
+@keyframes starTwinkle {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 0.8; }
+}
+
+/* Stripe shimmer */
+@keyframes stripeShift {
+  0%   { background-position: 0 0; }
+  100% { background-position: 200px 200px; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   BODY — Dark navy with star field + center glow
+═══════════════════════════════════════════════════════ */
+body {
+  background:
+    /* Tiny star field — scattered white dots via radial gradients */
+    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.5) 50%, transparent 50%),
+    radial-gradient(1px 1px at 25% 35%, rgba(255,255,255,0.4) 50%, transparent 50%),
+    radial-gradient(1px 1px at 40% 8%, rgba(255,255,255,0.6) 50%, transparent 50%),
+    radial-gradient(1px 1px at 55% 45%, rgba(255,255,255,0.3) 50%, transparent 50%),
+    radial-gradient(1px 1px at 70% 22%, rgba(255,255,255,0.5) 50%, transparent 50%),
+    radial-gradient(1px 1px at 85% 55%, rgba(255,255,255,0.4) 50%, transparent 50%),
+    radial-gradient(1px 1px at 15% 65%, rgba(255,255,255,0.3) 50%, transparent 50%),
+    radial-gradient(1px 1px at 35% 78%, rgba(255,255,255,0.5) 50%, transparent 50%),
+    radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,0.4) 50%, transparent 50%),
+    radial-gradient(1px 1px at 80% 85%, rgba(255,255,255,0.3) 50%, transparent 50%),
+    radial-gradient(1px 1px at 92% 12%, rgba(255,255,255,0.5) 50%, transparent 50%),
+    radial-gradient(1px 1px at 5% 90%, rgba(255,255,255,0.4) 50%, transparent 50%),
+    radial-gradient(1px 1px at 48% 28%, rgba(255,255,255,0.6) 50%, transparent 50%),
+    radial-gradient(1px 1px at 73% 52%, rgba(255,255,255,0.3) 50%, transparent 50%),
+    radial-gradient(1px 1px at 30% 92%, rgba(255,255,255,0.5) 50%, transparent 50%),
+    radial-gradient(1px 1px at 88% 38%, rgba(255,255,255,0.4) 50%, transparent 50%),
+    /* Red/blue/white center gradient glow */
+    radial-gradient(ellipse at 50% 50%,
+      rgba(0,51,153,0.08) 0%,
+      rgba(204,0,0,0.04) 25%,
+      rgba(255,255,255,0.02) 40%,
+      transparent 65%),
+    /* Base navy */
+    var(--bg) !important;
+  background-attachment: fixed !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   STAR EMBLEM — via .nebula-layer::before
+   5-pointed star using clip-path with red/white/blue
+═══════════════════════════════════════════════════════ */
+.nebula-layer::before {
+  content: '';
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 180px;
+  height: 180px;
+  margin-left: -90px;
+  margin-top: -90px;
+  pointer-events: none;
+  z-index: 1;
+  /* 5-pointed star via clip-path */
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 91%,
+    50% 70%,
+    21% 91%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.20) 0%,
+      rgba(0,51,153,0.25) 40%,
+      rgba(204,0,0,0.20) 100%);
+  animation: starGlow 6s ease-in-out infinite;
+  /* Outer ring around the star */
+  box-shadow:
+    0 0 60px rgba(255,255,255,0.08),
+    0 0 120px rgba(0,51,153,0.06),
+    0 0 180px rgba(204,0,0,0.04);
+}
+
+/* ═══════════════════════════════════════════════════════
+   PATRIOTIC STRIPES — via .nebula-layer::after
+   Diagonal red and blue stripes, very subtle
+═══════════════════════════════════════════════════════ */
+.nebula-layer::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    /* Diagonal stripes — red and blue alternating */
+    repeating-linear-gradient(
+      45deg,
+      rgba(204,0,0,0.03) 0px,
+      rgba(204,0,0,0.03) 20px,
+      transparent 20px,
+      transparent 40px,
+      rgba(0,51,153,0.03) 40px,
+      rgba(0,51,153,0.03) 60px,
+      transparent 60px,
+      transparent 80px),
+    /* Cross-hatch for subtle texture */
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255,255,255,0.01) 0px,
+      rgba(255,255,255,0.01) 20px,
+      transparent 20px,
+      transparent 40px,
+      rgba(0,51,153,0.015) 40px,
+      rgba(0,51,153,0.015) 60px,
+      transparent 60px,
+      transparent 80px);
+  animation: stripeShift 40s linear infinite;
+  opacity: 0.8;
+}
+
+/* ═══════════════════════════════════════════════════════
+   GLASS PANELS — Dossier style with corner brackets
+═══════════════════════════════════════════════════════ */
+.glass {
+  border-radius: 6px !important;
+  border: 1px solid rgba(0,51,153,0.28) !important;
+  border-top: 2px solid rgba(204,0,0,0.40) !important;
+  animation: bracketFlash 15s linear infinite !important;
+  /* Corner tactical brackets via box-shadow */
+  box-shadow:
+    0 6px 24px rgba(0,0,0,0.5),
+    0 0 30px rgba(0,51,153,0.06),
+    inset 0 1px 0 rgba(0,51,153,0.12),
+    inset 0 -1px 0 rgba(0,0,0,0.3),
+    /* Top-left bracket */
+    inset 12px 12px 0 -10px rgba(0,51,153,0.20),
+    inset 12px 0 0 -10px rgba(0,51,153,0.15),
+    inset 0 12px 0 -10px rgba(0,51,153,0.15),
+    /* Top-right bracket */
+    inset -12px 12px 0 -10px rgba(0,51,153,0.20),
+    inset -12px 0 0 -10px rgba(0,51,153,0.15),
+    inset 0 12px 0 -10px rgba(0,51,153,0.15),
+    /* Bottom-left bracket */
+    inset 12px -12px 0 -10px rgba(0,51,153,0.15),
+    inset 12px 0 0 -10px rgba(0,51,153,0.10),
+    /* Bottom-right bracket */
+    inset -12px -12px 0 -10px rgba(0,51,153,0.15),
+    inset -12px 0 0 -10px rgba(0,51,153,0.10) !important;
+}
+
+.glass::before {
+  background: linear-gradient(135deg,
+    rgba(0,51,153,0.08) 0%,
+    rgba(0,51,153,0.02) 20%,
+    transparent 40%,
+    transparent 60%,
+    rgba(204,0,0,0.03) 80%,
+    rgba(204,0,0,0.07) 100%) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TAB BAR — Bold tri-color stripe + comm flash
+═══════════════════════════════════════════════════════ */
+.tab-bar {
+  background: rgba(6,8,16,0.96) !important;
+  border-bottom: 1px solid rgba(0,51,153,0.35) !important;
+  animation: commFlash 12s linear infinite !important;
+}
+
+.tab-bar::after {
+  /* Tri-color stripe: red - white - blue */
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(204,0,0,0.85) 10%,
+    rgba(204,0,0,0.9) 25%,
+    rgba(255,255,255,0.70) 40%,
+    rgba(255,255,255,0.80) 50%,
+    rgba(255,255,255,0.70) 60%,
+    rgba(0,51,153,0.9) 75%,
+    rgba(0,51,153,0.85) 90%,
+    transparent 100%) !important;
+  background-size: 200% 100% !important;
+  animation: triColorSweep 5s linear infinite !important;
+  box-shadow:
+    0 0 12px rgba(204,0,0,0.3),
+    0 0 24px rgba(0,51,153,0.2),
+    0 0 36px rgba(255,255,255,0.08) !important;
+  height: 3px !important;
+}
+
+/* Tab icons — standard blue */
+.custom-tab i {
+  transition: all 0.3s var(--ease);
+}
+
+/* Active tab — red-white-blue cycle */
+.custom-tab.active i {
+  animation: joeTabPulse 3s ease-in-out infinite !important;
+  color: rgba(51,102,204,1) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CHAT BUBBLES — Military comms dossier style
+═══════════════════════════════════════════════════════ */
+
+/* Bot: bold blue left border */
+.msg-bubble-bot {
+  border-left: 3px solid rgba(0,51,153,0.75) !important;
+  border-radius: 3px 8px 8px 3px !important;
+  box-shadow:
+    0 4px 18px rgba(0,0,0,0.4),
+    -3px 0 15px rgba(0,51,153,0.06),
+    inset 0 0 25px rgba(0,51,153,0.04) !important;
+  background: rgba(0,51,153,0.07) !important;
+  border-top: 1px solid rgba(0,51,153,0.15) !important;
+  border-right: 1px solid rgba(0,51,153,0.10) !important;
+  border-bottom: 1px solid rgba(0,51,153,0.10) !important;
+}
+
+/* User: bold red right border */
+.msg-bubble-user {
+  border-right: 3px solid rgba(204,0,0,0.75) !important;
+  border-radius: 8px 3px 3px 8px !important;
+  box-shadow:
+    0 4px 18px rgba(0,0,0,0.4),
+    3px 0 15px rgba(204,0,0,0.06),
+    inset 0 0 25px rgba(204,0,0,0.04) !important;
+  background: rgba(204,0,0,0.06) !important;
+  border-top: 1px solid rgba(204,0,0,0.15) !important;
+  border-left: 1px solid rgba(204,0,0,0.10) !important;
+  border-bottom: 1px solid rgba(204,0,0,0.10) !important;
+}
+
+/* All bubbles */
+.msg-bubble {
+  border-radius: 3px 8px 8px 8px !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   WATERMARK — Patriotic gradient text
+═══════════════════════════════════════════════════════ */
+.tars-watermark {
+  background: linear-gradient(90deg,
+    rgba(204,0,0,0.9) 0%,
+    rgba(255,255,255,0.8) 30%,
+    rgba(255,255,255,0.9) 50%,
+    rgba(0,51,153,0.9) 70%,
+    rgba(0,51,153,0.8) 100%) !important;
+  background-size: 300% 100% !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+  animation: patriotShimmer 6s linear infinite !important;
+  filter: drop-shadow(0 0 5px rgba(0,51,153,0.3));
+  font-weight: 700 !important;
+  letter-spacing: 3px !important;
+  text-transform: uppercase !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   INPUT — Patriotic focus glow
+═══════════════════════════════════════════════════════ */
+.input-pill {
+  border-radius: 6px !important;
+  border: 1px solid rgba(0,51,153,0.18) !important;
+  background: rgba(6,8,16,0.65) !important;
+}
+
+.input-pill:focus-within {
+  border-color: rgba(0,51,153,0.65) !important;
+  animation: inputJoePulse 2.5s ease-in-out infinite !important;
+  background: rgba(6,8,16,0.85) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   EMOTION BUTTONS — Bold patriotic hover
+═══════════════════════════════════════════════════════ */
+.em-btn {
+  border-radius: 6px !important;
+  transition: all 0.2s var(--ease) !important;
+}
+
+.em-btn:hover {
+  box-shadow:
+    0 0 20px rgba(0,51,153,0.22),
+    0 0 40px rgba(204,0,0,0.08),
+    inset 0 0 20px rgba(0,51,153,0.06) !important;
+  transform: translateY(-2px) !important;
+  border-color: rgba(0,51,153,0.5) !important;
+}
+
+.em-btn.active {
+  box-shadow:
+    0 0 25px rgba(0,51,153,0.30),
+    0 0 50px rgba(204,0,0,0.08),
+    inset 0 0 25px rgba(0,51,153,0.05) !important;
+  border-color: rgba(204,0,0,0.40) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SCROLLBAR — Red-white-blue gradient
+═══════════════════════════════════════════════════════ */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(6,8,16,0.8);
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg,
+    rgba(204,0,0,0.5) 0%,
+    rgba(255,255,255,0.3) 50%,
+    rgba(0,51,153,0.5) 100%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg,
+    rgba(204,0,0,0.8) 0%,
+    rgba(255,255,255,0.5) 50%,
+    rgba(0,51,153,0.8) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   EXTRAS — Selection, deep panels, particle canvas
+═══════════════════════════════════════════════════════ */
+::selection {
+  background: rgba(0,51,153,0.35);
+  color: #fff;
+}
+
+.glass-deep {
+  border-radius: 6px !important;
+}
+
+#particleBg {
+  opacity: 0.6 !important;
+}

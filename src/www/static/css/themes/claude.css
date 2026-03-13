@@ -1,0 +1,382 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: Claude (by Anthropic)
+   Warm, thoughtful, literary — terracotta on charcoal.
+   Constellation sky, aged parchment texture, fireside glow.
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — warm terracotta/amber */
+  --accent-rgb:  217, 119, 62;
+  --panel-rgb:   18, 14, 12;
+  --magenta-rgb: 180, 100, 200;
+  --purple-rgb:  170, 120, 100;
+
+  /* Backgrounds — warm charcoal */
+  --bg:          #0c0a08;
+  --bg2:         #121010;
+  --panel:       rgba(var(--panel-rgb), 0.52);
+  --panel-solid: rgba(var(--panel-rgb), 0.75);
+  --glass-blur:  20px;
+  --glass-border: rgba(var(--accent-rgb), 0.15);
+  --glass-shine: linear-gradient(135deg, rgba(255,220,180,0.06) 0%, rgba(255,255,255,0.02) 40%, transparent 60%, rgba(var(--accent-rgb),0.03) 100%);
+
+  /* Borders */
+  --border:      rgba(var(--accent-rgb), 0.15);
+  --border-hi:   rgba(var(--accent-rgb), 0.38);
+
+  /* Accent colors */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.45);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.10);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.45);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.45);
+  --gold:        #d9773e;
+  --gold-dim:    rgba(217, 119, 62, 0.45);
+
+  /* Status colors — muted, warm */
+  --green:       #68b07a;
+  --orange:      #d9773e;
+  --red:         #cc4444;
+
+  /* Text — warm cream */
+  --text:        #e8e0d8;
+  --text-dim:    #7a6e62;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout */
+  --tab-h:       52px;
+  --radius:      14px;
+  --radius-sm:   8px;
+  --radius-lg:   18px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Theme-specific ── */
+  /* Warm amber nebulas — very subtle, like embers */
+  --nebula-1:       radial-gradient(circle, rgba(217, 119, 62, 0.18) 0%, rgba(180, 80, 40, 0.05) 50%, transparent 70%);
+  --nebula-1-anim:  claudeEmberDrift1 50s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(180, 100, 200, 0.10) 0%, rgba(120, 60, 140, 0.03) 50%, transparent 70%);
+  --nebula-2-anim:  claudeEmberDrift2 65s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(200, 140, 80, 0.08) 0%, transparent 50%);
+  --nebula-blur:    110px;
+  --particle-orb-hues: 25, 290, 30;
+  --particle-rays:     none;
+
+  /* Very subtle warm scanlines — like faint page lines */
+  --scanlines: repeating-linear-gradient(
+    0deg, transparent, transparent 4px,
+    rgba(217,119,62,0.004) 4px, rgba(217,119,62,0.004) 8px);
+  --scanline-opacity: 1;
+
+  /* Warm brown vignette — firelight edges */
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(12,6,2,0.55) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Keyframe Animations
+═══════════════════════════════════════════════════════ */
+
+/* Ember drift — slow, warm, breathing */
+@keyframes claudeEmberDrift1 {
+  0%   { transform: translate(0, 0) scale(1);       opacity: 0.5; }
+  25%  { transform: translate(8vw, 10vh) scale(1.15); opacity: 0.65; }
+  50%  { transform: translate(15vw, 5vh) scale(0.95); opacity: 0.45; }
+  75%  { transform: translate(5vw, -6vh) scale(1.1);  opacity: 0.6; }
+  100% { transform: translate(0, 0) scale(1);       opacity: 0.5; }
+}
+@keyframes claudeEmberDrift2 {
+  0%   { transform: translate(10vw, -5vh) scale(1);    opacity: 0.4; }
+  33%  { transform: translate(-5vw, 12vh) scale(1.1);   opacity: 0.55; }
+  66%  { transform: translate(12vw, 8vh) scale(0.9);    opacity: 0.35; }
+  100% { transform: translate(10vw, -5vh) scale(1);    opacity: 0.4; }
+}
+
+/* Constellation twinkle — stars gently fade in and out */
+@keyframes constellationTwinkle {
+  0%, 100% { opacity: 0.6; }
+  20%      { opacity: 0.9; }
+  40%      { opacity: 0.4; }
+  60%      { opacity: 1.0; }
+  80%      { opacity: 0.5; }
+}
+
+/* Candle flicker — for accent elements, warm wavering glow */
+@keyframes candleFlicker {
+  0%   { opacity: 1;    filter: brightness(1); }
+  5%   { opacity: 0.92; filter: brightness(0.95); }
+  10%  { opacity: 1;    filter: brightness(1.05); }
+  15%  { opacity: 0.96; filter: brightness(0.98); }
+  25%  { opacity: 1;    filter: brightness(1.02); }
+  35%  { opacity: 0.94; filter: brightness(0.97); }
+  45%  { opacity: 1;    filter: brightness(1); }
+  55%  { opacity: 0.97; filter: brightness(1.03); }
+  65%  { opacity: 0.93; filter: brightness(0.96); }
+  75%  { opacity: 1;    filter: brightness(1.04); }
+  85%  { opacity: 0.95; filter: brightness(0.99); }
+  100% { opacity: 1;    filter: brightness(1); }
+}
+
+/* Page turn shimmer — slow diagonal sweep */
+@keyframes pageTurnShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Warm pulse for active tab */
+@keyframes claudeTabWarmth {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(217,119,62,0.4)); }
+  50%      { filter: drop-shadow(0 0 10px rgba(217,119,62,0.7)) drop-shadow(0 0 4px rgba(240,180,100,0.3)); }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Background — Aged parchment texture via micro-gradients
+═══════════════════════════════════════════════════════ */
+body {
+  background:
+    /* Subtle noise-like texture — tiny repeating gradients mimicking paper grain */
+    repeating-linear-gradient(
+      45deg,
+      rgba(217,165,120,0.008) 0px, transparent 1px, transparent 3px, rgba(180,140,100,0.006) 4px
+    ),
+    repeating-linear-gradient(
+      -30deg,
+      rgba(200,160,110,0.006) 0px, transparent 2px, transparent 5px, rgba(160,120,80,0.005) 6px
+    ),
+    repeating-linear-gradient(
+      80deg,
+      transparent 0px, rgba(220,180,130,0.004) 1px, transparent 2px, transparent 7px
+    ),
+    radial-gradient(ellipse at 30% 70%, rgba(217,119,62,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 30%, rgba(180,100,60,0.03) 0%, transparent 50%),
+    var(--bg) !important;
+  background-size: 8px 8px, 12px 12px, 10px 10px, 100% 100%, 100% 100%, 100% 100% !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Constellation Pattern — dozens of warm dots with
+   connecting lines, built from box-shadow on ::before
+═══════════════════════════════════════════════════════ */
+.nebula-layer::before {
+  content: '' !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 2px !important;
+  height: 2px !important;
+  border-radius: 50% !important;
+  background: rgba(240, 200, 150, 0.9) !important;
+  z-index: 0 !important;
+  animation: constellationTwinkle 12s ease-in-out infinite !important;
+  /* Stars — warm dots scattered across the viewport */
+  box-shadow:
+    /* Constellation 1: Ursa Major shape — amber/orange dots */
+    12vw 8vh 0 1px rgba(240,180,100,0.8),
+    18vw 12vh 0 1.5px rgba(217,119,62,0.9),
+    25vw 10vh 0 1px rgba(255,200,130,0.7),
+    30vw 14vh 0 1.5px rgba(240,160,80,0.85),
+    35vw 11vh 0 1px rgba(200,140,70,0.75),
+    40vw 16vh 0 2px rgba(217,119,62,0.9),
+    44vw 13vh 0 1px rgba(255,210,150,0.7),
+    /* Connecting lines between nearby stars (very thin stretched shadows) */
+    15vw 10vh 0 0.3px rgba(240,180,100,0.25),
+    16vw 10.5vh 0 0.3px rgba(240,180,100,0.2),
+    17vw 11vh 0 0.3px rgba(240,180,100,0.2),
+    21vw 11vh 0 0.3px rgba(240,180,100,0.2),
+    22vw 10.8vh 0 0.3px rgba(240,180,100,0.18),
+    23vw 10.5vh 0 0.3px rgba(240,180,100,0.18),
+    27vw 12vh 0 0.3px rgba(240,180,100,0.2),
+    28vw 12.5vh 0 0.3px rgba(240,180,100,0.18),
+    32vw 12.5vh 0 0.3px rgba(240,180,100,0.18),
+    33vw 12vh 0 0.3px rgba(240,180,100,0.15),
+    37vw 13.5vh 0 0.3px rgba(240,180,100,0.18),
+    38vw 14vh 0 0.3px rgba(240,180,100,0.15),
+
+    /* Constellation 2: scattered in upper-right — cream/gold dots */
+    60vw 6vh 0 1.5px rgba(255,230,180,0.85),
+    67vw 9vh 0 1px rgba(240,200,140,0.75),
+    72vw 5vh 0 2px rgba(255,210,150,0.9),
+    78vw 11vh 0 1px rgba(230,180,120,0.7),
+    82vw 7vh 0 1.5px rgba(255,220,160,0.8),
+    88vw 4vh 0 1px rgba(240,190,130,0.7),
+    /* Connecting lines */
+    63vw 7.5vh 0 0.3px rgba(255,220,160,0.2),
+    64vw 7.8vh 0 0.3px rgba(255,220,160,0.18),
+    65vw 8vh 0 0.3px rgba(255,220,160,0.18),
+    69vw 7vh 0 0.3px rgba(255,220,160,0.2),
+    70vw 6.5vh 0 0.3px rgba(255,220,160,0.18),
+    75vw 8vh 0 0.3px rgba(255,220,160,0.18),
+    76vw 8.5vh 0 0.3px rgba(255,220,160,0.15),
+    80vw 9vh 0 0.3px rgba(255,220,160,0.18),
+    84vw 6vh 0 0.3px rgba(255,220,160,0.15),
+    85vw 5.5vh 0 0.3px rgba(255,220,160,0.15),
+
+    /* Constellation 3: lower area — terracotta dots */
+    15vw 75vh 0 1px rgba(217,119,62,0.7),
+    22vw 80vh 0 1.5px rgba(240,160,90,0.8),
+    28vw 77vh 0 1px rgba(200,130,70,0.65),
+    35vw 82vh 0 2px rgba(217,119,62,0.85),
+    42vw 78vh 0 1px rgba(230,170,100,0.7),
+    /* Connecting lines */
+    18vw 77vh 0 0.3px rgba(217,119,62,0.2),
+    19vw 77.5vh 0 0.3px rgba(217,119,62,0.18),
+    20vw 78vh 0 0.3px rgba(217,119,62,0.18),
+    25vw 78.5vh 0 0.3px rgba(217,119,62,0.18),
+    31vw 79.5vh 0 0.3px rgba(217,119,62,0.18),
+    32vw 80vh 0 0.3px rgba(217,119,62,0.15),
+    38vw 80vh 0 0.3px rgba(217,119,62,0.18),
+
+    /* Scattered solo stars — ambient warmth */
+    5vw 25vh 0 0.8px rgba(255,200,130,0.5),
+    8vw 45vh 0 1px rgba(240,180,100,0.4),
+    50vw 30vh 0 0.8px rgba(255,230,180,0.45),
+    55vw 55vh 0 1px rgba(217,119,62,0.5),
+    65vw 40vh 0 0.8px rgba(255,200,130,0.4),
+    75vw 60vh 0 1px rgba(240,160,80,0.45),
+    85vw 35vh 0 0.8px rgba(255,220,160,0.5),
+    90vw 70vh 0 1px rgba(230,170,100,0.4),
+    92vw 50vh 0 0.8px rgba(240,190,120,0.45),
+    48vw 65vh 0 1px rgba(255,210,140,0.5),
+    3vw 85vh 0 0.8px rgba(217,119,62,0.4),
+    95vw 20vh 0 1px rgba(255,200,130,0.5),
+    38vw 45vh 0 0.8px rgba(240,170,90,0.35),
+    52vw 88vh 0 1px rgba(255,220,150,0.4),
+    70vw 85vh 0 0.8px rgba(217,119,62,0.35),
+    20vw 55vh 0 1px rgba(240,200,130,0.45) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Glass Panels — warm inner glow + book page fold effect
+═══════════════════════════════════════════════════════ */
+.glass {
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.4),
+    0 0 30px rgba(217,119,62,0.04),
+    inset 0 0 40px rgba(217,119,62,0.03),
+    inset 0 1px 0 rgba(255,220,180,0.06),
+    inset 0 -1px 0 rgba(0,0,0,0.2) !important;
+}
+
+.glass::before {
+  /* Page fold effect — subtle gradient on left edge like a book spine */
+  background: linear-gradient(
+    90deg,
+    rgba(255,200,140,0.06) 0%,
+    rgba(255,200,140,0.02) 3%,
+    transparent 8%,
+    transparent 90%,
+    rgba(217,119,62,0.01) 100%
+  ) !important;
+}
+
+/* Secondary page-edge effect via outline and extra shadow */
+.glass::after {
+  border-left: 1px solid rgba(217,119,62,0.08) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Tab Bar — warm terracotta gradient with candle flicker
+═══════════════════════════════════════════════════════ */
+.tab-bar::after {
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(180,100,50,0.4),
+    rgba(217,119,62,0.65),
+    rgba(240,170,100,0.7),
+    rgba(217,119,62,0.65),
+    rgba(180,100,50,0.4),
+    transparent
+  ) !important;
+  box-shadow: 0 0 16px rgba(217,119,62,0.25) !important;
+  animation: candleFlicker 4s ease-in-out infinite !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Active Tab — warm pulsing glow
+═══════════════════════════════════════════════════════ */
+.custom-tab.active i {
+  animation: claudeTabWarmth 4s ease-in-out infinite !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Chat Bubbles
+═══════════════════════════════════════════════════════ */
+
+/* Bot messages — warm amber side glow like firelight */
+.msg-bubble-bot {
+  border-left: 2px solid rgba(217,119,62,0.5) !important;
+  box-shadow:
+    0 2px 12px rgba(0,0,0,0.3),
+    inset 0 0 25px rgba(217,119,62,0.04),
+    -4px 0 20px rgba(217,119,62,0.06) !important;
+  text-shadow: 0 0 30px rgba(217,119,62,0.05);
+}
+
+/* User messages — subtle cream accent */
+.msg-bubble-user {
+  border-right: 2px solid rgba(180,100,200,0.4) !important;
+  box-shadow:
+    0 2px 12px rgba(0,0,0,0.3),
+    inset 0 0 20px rgba(180,100,200,0.03) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Input — warm focus glow with candle flicker
+═══════════════════════════════════════════════════════ */
+.input-pill:focus-within {
+  border-color: rgba(217,119,62,0.45) !important;
+  box-shadow:
+    0 0 0 3px rgba(217,119,62,0.1),
+    0 0 25px rgba(217,119,62,0.08) !important;
+  animation: candleFlicker 5s ease-in-out infinite !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Watermark — literary warm gradient
+═══════════════════════════════════════════════════════ */
+.tars-watermark {
+  background: linear-gradient(135deg, rgba(217,119,62,0.85), rgba(240,200,150,0.7), rgba(180,100,200,0.5)) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Emotion Buttons — warm hover with inner fireside glow
+═══════════════════════════════════════════════════════ */
+.em-btn:hover {
+  box-shadow:
+    0 0 20px rgba(217,119,62,0.2),
+    0 0 40px rgba(240,180,100,0.08),
+    inset 0 0 20px rgba(217,119,62,0.06) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Nebula Blobs — warm ember colors
+═══════════════════════════════════════════════════════ */
+.nb-1 {
+  background: radial-gradient(circle, rgba(217,119,62,0.22) 0%, rgba(180,80,40,0.06) 50%, transparent 70%) !important;
+  animation: claudeEmberDrift1 50s ease-in-out infinite !important;
+}
+.nb-2 {
+  background: radial-gradient(circle, rgba(180,100,200,0.12) 0%, rgba(120,60,140,0.04) 50%, transparent 70%) !important;
+  animation: claudeEmberDrift2 65s ease-in-out infinite !important;
+}
+.nb-3 {
+  background: radial-gradient(circle, rgba(240,180,100,0.10) 0%, transparent 50%) !important;
+  animation: claudeEmberDrift1 80s ease-in-out infinite reverse !important;
+}

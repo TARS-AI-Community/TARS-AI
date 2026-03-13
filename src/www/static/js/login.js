@@ -1,6 +1,16 @@
 (function(){
 'use strict';
 
+// ─── read theme colors ──────────────────────────────────────────────────────
+function parseRGB(raw, fallback) {
+  if (!raw) return fallback;
+  var parts = raw.trim().split(',').map(function(s){ return parseInt(s.trim(),10); });
+  return parts.length === 3 && !isNaN(parts[0]) ? parts : fallback;
+}
+var style = getComputedStyle(document.documentElement);
+var ACCENT = parseRGB(style.getPropertyValue('--accent-rgb'), [0,229,255]);
+var PURPLE = parseRGB(style.getPropertyValue('--purple-rgb'), [180,77,255]);
+
 // ─── canvas setup ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
@@ -70,11 +80,12 @@ function buildPanelOutline(count){
       acc += s.len;
     }
 
-    // colour: cyan → purple gradient along the perimeter
+    // colour: accent → purple gradient along the perimeter
     const t = i / count;
-    const cr = Math.round(0 + t * 180);
-    const cg = Math.round(229 - t * 152);
-    pts.push({ x, y, r:cr, g:cg, b:255, a:0.85 });
+    const cr = Math.round(ACCENT[0] + t * (PURPLE[0] - ACCENT[0]));
+    const cg = Math.round(ACCENT[1] + t * (PURPLE[1] - ACCENT[1]));
+    const cb = Math.round(ACCENT[2] + t * (PURPLE[2] - ACCENT[2]));
+    pts.push({ x, y, r:cr, g:cg, b:cb, a:0.85 });
   }
 
   // shuffle so particles arrive from mixed positions
@@ -190,11 +201,12 @@ class Particle {
     if(p==='morphing'||p==='outline'||p==='resolve'){
       col=`rgba(${this.r},${this.g},${this.b},${this.alpha})`;
     } else {
-      // cyan→purple blend during forming/holding
+      // accent→purple blend during forming/holding
       const mix = clamp(this.cx / (W||1), 0, 1);
-      const r = Math.round(0 + mix * 180);
-      const g = Math.round(229 - mix * 152);
-      col=`rgba(${r},${g},255,${this.alpha*.9})`;
+      const r = Math.round(ACCENT[0] + mix * (PURPLE[0] - ACCENT[0]));
+      const g = Math.round(ACCENT[1] + mix * (PURPLE[1] - ACCENT[1]));
+      const b = Math.round(ACCENT[2] + mix * (PURPLE[2] - ACCENT[2]));
+      col=`rgba(${r},${g},${b},${this.alpha*.9})`;
     }
     ctx.beginPath();
     ctx.arc(this.cx,this.cy,this.size,0,Math.PI*2);
@@ -204,10 +216,11 @@ class Particle {
     // soft glow during holding & outline phases
     if(p==='holding'||p==='outline'){
       const mix = clamp(this.cx / (W||1), 0, 1);
-      const gr = Math.round(0 + mix * 180);
-      const gg = Math.round(229 - mix * 152);
+      const gr = Math.round(ACCENT[0] + mix * (PURPLE[0] - ACCENT[0]));
+      const gg = Math.round(ACCENT[1] + mix * (PURPLE[1] - ACCENT[1]));
+      const gb = Math.round(ACCENT[2] + mix * (PURPLE[2] - ACCENT[2]));
       const g=ctx.createRadialGradient(this.cx,this.cy,0,this.cx,this.cy,this.size*4);
-      g.addColorStop(0,`rgba(${gr},${gg},255,${this.alpha*.15})`);
+      g.addColorStop(0,`rgba(${gr},${gg},${gb},${this.alpha*.15})`);
       g.addColorStop(1,'transparent');
       ctx.beginPath();
       ctx.arc(this.cx,this.cy,this.size*4,0,Math.PI*2);
@@ -230,9 +243,10 @@ class Ambient{
     ctx.beginPath();
     ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
     const amix = clamp(this.x / (W||1), 0, 1);
-    const ar = Math.round(0 + amix * 140);
-    const ag = Math.round(180 - amix * 100);
-    ctx.fillStyle=`rgba(${ar},${ag},230,${this.a*this.life})`;
+    const ar = Math.round(ACCENT[0] * 0.7 + amix * (PURPLE[0] * 0.8 - ACCENT[0] * 0.7));
+    const ag = Math.round(ACCENT[1] * 0.8 + amix * (PURPLE[1] * 0.8 - ACCENT[1] * 0.8));
+    const ab = Math.round(Math.min(255, ACCENT[2] * 0.9));
+    ctx.fillStyle=`rgba(${ar},${ag},${ab},${this.a*this.life})`;
     ctx.fill();
   }
 }

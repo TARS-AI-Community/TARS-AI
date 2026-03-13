@@ -1,0 +1,311 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: Grok
+   xAI — Brutalist, stark, rebellious.
+   Pure black with electric white/blue. Raw terminal meets
+   modern brutalism. Industrial hash lines. The X pulses.
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — electric white with blue edge */
+  --accent-rgb:  220, 230, 255;
+  --panel-rgb:   6, 6, 8;
+  --magenta-rgb: 80, 130, 255;
+  --purple-rgb:  140, 160, 220;
+
+  /* Backgrounds — pure black */
+  --bg:          #000000;
+  --bg2:         #050508;
+  --panel:       rgba(var(--panel-rgb), 0.65);
+  --panel-solid: rgba(var(--panel-rgb), 0.88);
+  --glass-blur:  14px;
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-shine: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 50%);
+
+  /* Borders — sharp white lines */
+  --border:      rgba(255, 255, 255, 0.12);
+  --border-hi:   rgba(255, 255, 255, 0.35);
+
+  /* Accent colors — white/electric blue */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.35);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.06);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.35);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.35);
+  --gold:        #ffffff;
+  --gold-dim:    rgba(255, 255, 255, 0.35);
+
+  /* Status colors */
+  --green:       #44ff88;
+  --orange:      #ffaa33;
+  --red:         #ff3344;
+
+  /* Text — high contrast */
+  --text:        #e8eaf0;
+  --text-dim:    #484c5a;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout — sharp corners */
+  --tab-h:       52px;
+  --radius:      3px;
+  --radius-sm:   2px;
+  --radius-lg:   4px;
+  --ease:        cubic-bezier(0.25, 0, 0.5, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Theme-specific ── */
+  /* Data stream columns instead of nebula blobs */
+  --nebula-1:       linear-gradient(180deg,
+    rgba(220,230,255,0.06) 0%, transparent 8%,
+    transparent 12%, rgba(220,230,255,0.04) 14%,
+    transparent 18%, transparent 25%, rgba(220,230,255,0.05) 27%,
+    transparent 30%, transparent 40%, rgba(80,130,255,0.04) 42%,
+    transparent 45%, transparent 55%, rgba(220,230,255,0.03) 57%,
+    transparent 60%, transparent 72%, rgba(220,230,255,0.05) 74%,
+    transparent 78%, transparent 88%, rgba(80,130,255,0.04) 90%,
+    transparent 93%, rgba(220,230,255,0.06) 100%);
+  --nebula-1-size:  60px;
+  --nebula-1-anim:  grokDataStream1 8s linear infinite;
+  --nebula-2:       linear-gradient(180deg,
+    transparent 0%, rgba(80,130,255,0.05) 5%,
+    transparent 9%, transparent 20%, rgba(220,230,255,0.04) 22%,
+    transparent 26%, transparent 35%, rgba(80,130,255,0.06) 38%,
+    transparent 42%, transparent 50%, rgba(220,230,255,0.03) 52%,
+    transparent 56%, transparent 65%, rgba(80,130,255,0.04) 68%,
+    transparent 72%, transparent 82%, rgba(220,230,255,0.05) 85%,
+    transparent 88%, transparent 95%, rgba(80,130,255,0.03) 100%);
+  --nebula-2-size:  40px;
+  --nebula-2-anim:  grokDataStream2 6s linear infinite;
+  --nebula-3:       none;
+  --nebula-3-size:  0px;
+  --nebula-blur:    0px;
+  --nebula-radius:  0;
+  --particle-orb-hues: 230, 240, 0;
+  --particle-rays:     none;
+
+  /* No scanlines - brutalist prefers clean lines */
+  --scanlines: none;
+  --scanline-content: none;
+  --scanline-opacity: 0;
+  --vignette: none;
+}
+
+/* ── Data stream animations ── */
+@keyframes grokDataStream1 {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+@keyframes grokDataStream2 {
+  0%   { transform: translateY(100vh); }
+  100% { transform: translateY(-100%); }
+}
+
+/* ── X logo via nebula-layer pseudo-elements ── */
+.nebula-layer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 180px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  transform: translate(-50%, -50%) rotate(45deg);
+  animation: grokXPulse 4s ease-in-out infinite;
+  border-radius: 0;
+  z-index: 0;
+}
+.nebula-layer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 180px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  transform: translate(-50%, -50%) rotate(-45deg);
+  animation: grokXPulse 4s ease-in-out infinite 0.5s;
+  border-radius: 0;
+  z-index: 0;
+}
+
+@keyframes grokXPulse {
+  0%, 100% {
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 0 15px rgba(80, 130, 255, 0.05);
+  }
+  50% {
+    background: rgba(220, 230, 255, 0.10);
+    box-shadow: 0 0 30px rgba(80, 130, 255, 0.12), 0 0 60px rgba(80, 130, 255, 0.04);
+  }
+}
+
+/* ── Industrial diagonal hash background ── */
+body {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 30px,
+      rgba(255,255,255,0.012) 30px,
+      rgba(255,255,255,0.012) 31px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 30px,
+      rgba(255,255,255,0.008) 30px,
+      rgba(255,255,255,0.008) 31px
+    ),
+    #000000 !important;
+}
+
+/* ── No vignette, no scanlines ── */
+body::before {
+  background: none !important;
+}
+body::after {
+  content: none !important;
+}
+
+/* ── Brutalist glass panels — terminal window style ── */
+.glass {
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 3px !important;
+  box-shadow:
+    0 4px 16px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(255,255,255,0.05) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+}
+
+.glass::before {
+  background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 3px, transparent 3px) !important;
+  border-radius: 3px !important;
+}
+
+/* ── Tab bar — sharp, minimal ── */
+.tab-bar {
+  background: rgba(0, 0, 0, 0.92) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+/* Solid white line — no gradient */
+.tab-bar::after {
+  background: rgba(255, 255, 255, 0.6) !important;
+  box-shadow: none !important;
+  height: 2px !important;
+}
+
+/* ── Active tab — sharp underline ── */
+.custom-tab.active {
+  box-shadow: inset 0 -2px 0 #fff !important;
+}
+.custom-tab.active i {
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  -webkit-text-fill-color: #fff !important;
+  background-clip: unset !important;
+  filter: none !important;
+  animation: none !important;
+}
+.custom-tab:hover i {
+  color: #fff !important;
+  filter: none !important;
+}
+
+/* ── Watermark — raw white ── */
+.tars-watermark {
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  -webkit-text-fill-color: rgba(255,255,255,0.12) !important;
+  background-clip: unset !important;
+  letter-spacing: 0.5em !important;
+}
+
+/* ── Chat bubbles — terminal blocks ── */
+.msg-bubble-bot {
+  border-left: 3px solid rgba(255, 255, 255, 0.25) !important;
+  border-radius: 2px !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.msg-bubble-user {
+  border-right: 3px solid rgba(80, 130, 255, 0.4) !important;
+  border-radius: 2px !important;
+  background: rgba(80, 130, 255, 0.05) !important;
+}
+
+/* ── Input — terminal prompt style ── */
+.input-pill {
+  border-radius: 2px !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background: rgba(0, 0, 0, 0.6) !important;
+}
+.input-pill:focus-within {
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── Emotion buttons — brutalist blocks ── */
+.em-btn {
+  border-radius: 2px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+.em-btn:hover {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  box-shadow: none !important;
+  transform: translateY(-1px) !important;
+}
+
+/* ── HUD buttons — sharp ── */
+.hud-btn {
+  border-radius: 2px !important;
+}
+
+/* ── HUD inputs — sharp ── */
+.hud-input, .hud-select {
+  border-radius: 2px !important;
+}
+
+/* ── Particle canvas — dim it ── */
+#particleBg {
+  opacity: 0.3;
+}
+
+/* ── Data stream nebula blobs override — tall narrow columns ── */
+.nb-1 {
+  width: 60px !important;
+  height: 200vh !important;
+  top: -100vh !important;
+  left: 15% !important;
+  border-radius: 0 !important;
+  filter: none !important;
+}
+.nb-2 {
+  width: 40px !important;
+  height: 200vh !important;
+  top: -100vh !important;
+  right: 25% !important;
+  left: auto !important;
+  border-radius: 0 !important;
+  filter: none !important;
+}
+.nb-3 {
+  display: none !important;
+}

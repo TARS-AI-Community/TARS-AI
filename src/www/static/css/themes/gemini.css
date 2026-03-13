@@ -1,0 +1,346 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: Gemini
+   Google DeepMind — Fluid, colorful, AI-magical.
+   Morphing multi-color blob, sparkle diamonds, dot grid,
+   Material Design 3 roundness. Premium AI aesthetic.
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — Gemini blue */
+  --accent-rgb:  66, 133, 244;
+  --panel-rgb:   12, 14, 22;
+  --magenta-rgb: 234, 67, 53;
+  --purple-rgb:  138, 100, 255;
+
+  /* Backgrounds — deep indigo-black */
+  --bg:          #08090f;
+  --bg2:         #0d0f18;
+  --panel:       rgba(var(--panel-rgb), 0.48);
+  --panel-solid: rgba(var(--panel-rgb), 0.72);
+  --glass-blur:  24px;
+  --glass-border: rgba(var(--accent-rgb), 0.12);
+  --glass-shine: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 40%, transparent 60%, rgba(138,100,255,0.04) 100%);
+
+  /* Borders — subtle, Material-style */
+  --border:      rgba(var(--accent-rgb), 0.12);
+  --border-hi:   rgba(var(--accent-rgb), 0.35);
+
+  /* Accent colors — Google palette */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.45);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.12);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.45);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.45);
+  --gold:        #fbbc04;
+  --gold-dim:    rgba(251, 188, 4, 0.45);
+
+  /* Status colors — Google brand */
+  --green:       #34a853;
+  --orange:      #fbbc04;
+  --red:         #ea4335;
+
+  /* Text */
+  --text:        #e8ecf4;
+  --text-dim:    #5a6480;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout — Material Design 3 roundness */
+  --tab-h:       52px;
+  --radius:      16px;
+  --radius-sm:   12px;
+  --radius-lg:   20px;
+  --ease:        cubic-bezier(0.2, 0, 0, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Theme-specific ── */
+  /* Google 4-color nebula blobs */
+  --nebula-1:       radial-gradient(circle, rgba(66, 133, 244, 0.28) 0%, rgba(30, 80, 200, 0.06) 50%, transparent 70%);
+  --nebula-1-size:  500px;
+  --nebula-1-anim:  geminiSwim1 30s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(234, 67, 53, 0.18) 0%, rgba(200, 40, 30, 0.04) 50%, transparent 70%);
+  --nebula-2-size:  420px;
+  --nebula-2-anim:  geminiSwim2 35s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(52, 168, 83, 0.16) 0%, rgba(30, 120, 50, 0.04) 50%, transparent 70%);
+  --nebula-3-size:  380px;
+  --nebula-3-anim:  geminiSwim3 40s ease-in-out infinite;
+  --nebula-blur:    100px;
+  --particle-orb-hues: 220, 10, 140;
+  --particle-prism:    66,133,244; 234,67,53; 251,188,4; 52,168,83; 138,100,255; 100,180,255; 220,80,200;
+
+  /* No scanlines — clean and premium */
+  --scanlines: none;
+  --scanline-content: none;
+  --scanline-opacity: 0;
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(4,4,12,0.40) 100%);
+}
+
+/* ── Nebula swim animations — slow organic movement ── */
+@keyframes geminiSwim1 {
+  0%   { transform: translate(-8vw, -5vh) scale(1);    opacity: 0.5; }
+  25%  { transform: translate(12vw, 10vh) scale(1.2);  opacity: 0.7; }
+  50%  { transform: translate(20vw, -3vh) scale(0.9);  opacity: 0.5; }
+  75%  { transform: translate(5vw, -12vh) scale(1.15); opacity: 0.65; }
+  100% { transform: translate(-8vw, -5vh) scale(1);    opacity: 0.5; }
+}
+@keyframes geminiSwim2 {
+  0%   { transform: translate(5vw, 8vh) scale(1);     opacity: 0.45; }
+  25%  { transform: translate(-10vw, -5vh) scale(1.15); opacity: 0.6; }
+  50%  { transform: translate(-18vw, 12vh) scale(1.1); opacity: 0.5; }
+  75%  { transform: translate(2vw, 15vh) scale(0.95);  opacity: 0.65; }
+  100% { transform: translate(5vw, 8vh) scale(1);     opacity: 0.45; }
+}
+@keyframes geminiSwim3 {
+  0%   { transform: translate(0, 0) scale(1);          opacity: 0.4; }
+  25%  { transform: translate(15vw, 6vh) scale(1.2);    opacity: 0.55; }
+  50%  { transform: translate(-8vw, -12vh) scale(0.95); opacity: 0.4; }
+  75%  { transform: translate(-15vw, 8vh) scale(1.1);   opacity: 0.6; }
+  100% { transform: translate(0, 0) scale(1);          opacity: 0.4; }
+}
+
+/* ── Morphing multi-color Gemini blob ── */
+.nebula-layer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 350px;
+  height: 350px;
+  transform: translate(-50%, -50%);
+  animation: geminiMorph 12s ease-in-out infinite;
+  filter: blur(80px);
+  opacity: 0.35;
+  z-index: 0;
+}
+
+@keyframes geminiMorph {
+  0% {
+    background: radial-gradient(circle, rgba(66,133,244,0.8), rgba(66,133,244,0.2), transparent);
+    border-radius: 60% 40% 55% 45% / 55% 60% 40% 45%;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  25% {
+    background: radial-gradient(circle, rgba(234,67,53,0.8), rgba(234,67,53,0.2), transparent);
+    border-radius: 45% 55% 40% 60% / 65% 35% 65% 35%;
+    transform: translate(-50%, -50%) scale(1.15) rotate(90deg);
+  }
+  50% {
+    background: radial-gradient(circle, rgba(251,188,4,0.8), rgba(251,188,4,0.2), transparent);
+    border-radius: 55% 45% 65% 35% / 40% 60% 45% 55%;
+    transform: translate(-50%, -50%) scale(0.95) rotate(180deg);
+  }
+  75% {
+    background: radial-gradient(circle, rgba(52,168,83,0.8), rgba(52,168,83,0.2), transparent);
+    border-radius: 40% 60% 50% 50% / 55% 45% 55% 45%;
+    transform: translate(-50%, -50%) scale(1.1) rotate(270deg);
+  }
+  100% {
+    background: radial-gradient(circle, rgba(66,133,244,0.8), rgba(66,133,244,0.2), transparent);
+    border-radius: 60% 40% 55% 45% / 55% 60% 40% 45%;
+    transform: translate(-50%, -50%) scale(1) rotate(360deg);
+  }
+}
+
+/* ── Floating sparkle diamonds via box-shadow ── */
+.nebula-layer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: transparent;
+  animation: geminiSparkle 6s ease-in-out infinite;
+  z-index: 0;
+}
+
+@keyframes geminiSparkle {
+  0%, 100% {
+    box-shadow:
+      15vw 12vh 0 1px rgba(66,133,244,0.5),
+      72vw 28vh 0 1.5px rgba(251,188,4,0.6),
+      35vw 65vh 0 1px rgba(234,67,53,0.4),
+      85vw 75vh 0 2px rgba(52,168,83,0.5),
+      50vw 20vh 0 1px rgba(138,100,255,0.4),
+      22vw 80vh 0 1.5px rgba(66,133,244,0.3),
+      90vw 45vh 0 1px rgba(251,188,4,0.4),
+      8vw 40vh 0 2px rgba(52,168,83,0.3),
+      60vw 88vh 0 1px rgba(234,67,53,0.5),
+      42vw 8vh 0 1.5px rgba(138,100,255,0.3);
+  }
+  33% {
+    box-shadow:
+      15vw 12vh 0 0.5px rgba(66,133,244,0.2),
+      72vw 28vh 0 2px rgba(251,188,4,0.8),
+      35vw 65vh 0 0.5px rgba(234,67,53,0.15),
+      85vw 75vh 0 1px rgba(52,168,83,0.3),
+      50vw 20vh 0 2px rgba(138,100,255,0.7),
+      22vw 80vh 0 0.5px rgba(66,133,244,0.1),
+      90vw 45vh 0 2px rgba(251,188,4,0.7),
+      8vw 40vh 0 1px rgba(52,168,83,0.15),
+      60vw 88vh 0 2px rgba(234,67,53,0.7),
+      42vw 8vh 0 0.5px rgba(138,100,255,0.1);
+  }
+  66% {
+    box-shadow:
+      15vw 12vh 0 2px rgba(66,133,244,0.7),
+      72vw 28vh 0 0.5px rgba(251,188,4,0.2),
+      35vw 65vh 0 2px rgba(234,67,53,0.7),
+      85vw 75vh 0 0.5px rgba(52,168,83,0.15),
+      50vw 20vh 0 0.5px rgba(138,100,255,0.2),
+      22vw 80vh 0 2px rgba(66,133,244,0.6),
+      90vw 45vh 0 0.5px rgba(251,188,4,0.15),
+      8vw 40vh 0 2px rgba(52,168,83,0.6),
+      60vw 88vh 0 0.5px rgba(234,67,53,0.2),
+      42vw 8vh 0 2px rgba(138,100,255,0.6);
+  }
+}
+
+/* ── Subtle dot grid background ── */
+body {
+  background:
+    radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px),
+    var(--bg) !important;
+  background-size: 24px 24px, 100% 100% !important;
+}
+
+/* ── No scanlines ── */
+body::after {
+  content: none !important;
+}
+
+/* ── Material Design 3 glass panels ── */
+.glass {
+  border-radius: 16px !important;
+  border: 1px solid rgba(var(--accent-rgb), 0.10) !important;
+  box-shadow:
+    0 2px 6px rgba(0,0,0,0.12),
+    0 8px 24px rgba(0,0,0,0.18),
+    0 1px 3px rgba(0,0,0,0.08) !important;
+  backdrop-filter: blur(24px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.4) !important;
+}
+
+.glass::before {
+  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 40%, transparent 100%) !important;
+  border-radius: 16px !important;
+}
+
+/* ── Google 4-color stripe tab bar ── */
+.tab-bar {
+  background: rgba(8, 9, 15, 0.85) !important;
+  border-bottom: none !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2) !important;
+}
+
+.tab-bar::after {
+  height: 3px !important;
+  background: linear-gradient(90deg,
+    rgba(66,133,244,0.8),
+    rgba(234,67,53,0.8),
+    rgba(251,188,4,0.8),
+    rgba(52,168,83,0.8)
+  ) !important;
+  box-shadow: 0 0 12px rgba(66,133,244,0.2) !important;
+}
+
+/* ── Active tab — multi-color shimmer ── */
+.custom-tab.active i {
+  background: linear-gradient(135deg,
+    rgba(66,133,244,1),
+    rgba(138,100,255,1),
+    rgba(234,67,53,0.9)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+  filter: drop-shadow(0 0 6px rgba(66,133,244,0.4)) !important;
+  animation: geminiTabGlow 4s ease-in-out infinite !important;
+}
+
+@keyframes geminiTabGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(66,133,244,0.3));
+  }
+  25% {
+    filter: drop-shadow(0 0 8px rgba(234,67,53,0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(251,188,4,0.3));
+  }
+  75% {
+    filter: drop-shadow(0 0 8px rgba(52,168,83,0.3));
+  }
+}
+
+/* ── Sparkle watermark ── */
+.tars-watermark {
+  background: linear-gradient(90deg,
+    rgba(66,133,244,0.7),
+    rgba(138,100,255,0.6),
+    rgba(234,67,53,0.5),
+    rgba(251,188,4,0.5)) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* ── Chat bubbles — Material elevated cards ── */
+.msg-bubble-bot {
+  border-radius: 16px 16px 16px 4px !important;
+  border-left: 3px solid rgba(66,133,244,0.3) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1) !important;
+}
+
+.msg-bubble-user {
+  border-radius: 16px 16px 4px 16px !important;
+  border-right: 3px solid rgba(138,100,255,0.3) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1) !important;
+}
+
+/* ── Input — rounded Material pill ── */
+.input-pill {
+  border-radius: 28px !important;
+  border: 1px solid rgba(var(--accent-rgb), 0.12) !important;
+  background: rgba(var(--panel-rgb), 0.5) !important;
+}
+.input-pill:focus-within {
+  border-color: rgba(66,133,244,0.4) !important;
+  box-shadow: 0 0 0 3px rgba(66,133,244,0.1), 0 4px 16px rgba(0,0,0,0.15) !important;
+}
+
+/* ── Emotion buttons — Material chips ── */
+.em-btn {
+  border-radius: 12px !important;
+}
+.em-btn:hover {
+  box-shadow: 0 2px 8px rgba(66,133,244,0.2), 0 4px 16px rgba(0,0,0,0.15) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* ── HUD buttons — rounded Material ── */
+.hud-btn {
+  border-radius: 12px !important;
+}
+
+/* ── HUD inputs — Material shape ── */
+.hud-input, .hud-select {
+  border-radius: 12px !important;
+}
+
+/* ── Particle canvas ── */
+#particleBg {
+  opacity: 0.4;
+}

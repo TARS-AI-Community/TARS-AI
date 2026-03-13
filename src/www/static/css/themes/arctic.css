@@ -1,0 +1,420 @@
+/* =====================================================
+   T.A.R.S. - Theme: Arctic
+   Frozen tundra, ice crystals, aurora borealis.
+   Cool blues and whites on deep navy.
+===================================================== */
+:root {
+  /* RGB components - ice blue */
+  --accent-rgb:  140, 210, 255;
+  --panel-rgb:   8, 18, 38;
+  --magenta-rgb: 140, 180, 255;
+  --purple-rgb:  100, 160, 220;
+
+  /* Backgrounds - deep arctic navy */
+  --bg:          #060d1a;
+  --bg2:         #0a1528;
+  --panel:       rgba(var(--panel-rgb), 0.50);
+  --panel-solid: rgba(var(--panel-rgb), 0.78);
+  --glass-blur:  30px;
+  --glass-border: rgba(var(--accent-rgb), 0.22);
+  --glass-shine: linear-gradient(135deg, rgba(200,230,255,0.12) 0%, rgba(255,255,255,0.06) 30%, transparent 55%, rgba(var(--accent-rgb),0.05) 100%);
+
+  /* Borders */
+  --border:      rgba(var(--accent-rgb), 0.16);
+  --border-hi:   rgba(var(--accent-rgb), 0.45);
+
+  /* Accent colors */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.45);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.12);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.45);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.45);
+  --gold:        #8cd2ff;
+  --gold-dim:    rgba(140, 210, 255, 0.45);
+
+  /* Status colors */
+  --green:       #60e8a0;
+  --orange:      #80c8ff;
+  --red:         #ff6688;
+
+  /* Text - crisp white / ice blue */
+  --text:        #e8f0fa;
+  --text-dim:    #5a80a0;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout */
+  --tab-h:       52px;
+  --radius:      16px;
+  --radius-sm:   10px;
+  --radius-lg:   20px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* Theme-specific: icy nebulas */
+  --nebula-1:       radial-gradient(circle, rgba(100,180,255,0.20) 0%, rgba(60,120,200,0.06) 50%, transparent 70%);
+  --nebula-1-anim:  arcticDrift1 55s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(100,255,200,0.12) 0%, rgba(60,200,160,0.04) 50%, transparent 70%);
+  --nebula-2-anim:  arcticDrift2 70s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(160,140,255,0.10) 0%, transparent 50%);
+  --nebula-blur:    120px;
+  --particle-orb-hues: 200, 160, 270;
+  --particle-rays:     none;
+
+  /* No scanlines - clean ice */
+  --scanlines: none;
+  --scanline-opacity: 0;
+
+  /* White frost vignette */
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(180,210,240,0.08) 70%, rgba(140,180,220,0.15) 90%, rgba(100,150,200,0.22) 100%);
+}
+
+/* =====================================================
+   Keyframe Animations
+===================================================== */
+
+/* Aurora borealis wave */
+@keyframes arcticAurora {
+  0%   { transform: translateX(-10%) scaleY(1);   opacity: 0.5; }
+  15%  { transform: translateX(0%) scaleY(1.3);   opacity: 0.7; }
+  30%  { transform: translateX(5%) scaleY(0.9);   opacity: 0.55; }
+  45%  { transform: translateX(10%) scaleY(1.2);  opacity: 0.65; }
+  60%  { transform: translateX(5%) scaleY(1.0);   opacity: 0.5; }
+  75%  { transform: translateX(-5%) scaleY(1.15); opacity: 0.6; }
+  100% { transform: translateX(-10%) scaleY(1);   opacity: 0.5; }
+}
+
+/* Snowfall */
+@keyframes arcticSnowfall {
+  0%   { transform: translateY(-10vh) translateX(0); }
+  25%  { transform: translateY(20vh) translateX(8px); }
+  50%  { transform: translateY(50vh) translateX(-5px); }
+  75%  { transform: translateY(75vh) translateX(10px); }
+  100% { transform: translateY(105vh) translateX(2px); }
+}
+
+@keyframes arcticSnowfall2 {
+  0%   { transform: translateY(-15vh) translateX(0); }
+  33%  { transform: translateY(25vh) translateX(-10px); }
+  66%  { transform: translateY(60vh) translateX(6px); }
+  100% { transform: translateY(108vh) translateX(-4px); }
+}
+
+/* Nebula drift */
+@keyframes arcticDrift1 {
+  0%   { transform: translate(0, 0) scale(1);       opacity: 0.45; }
+  25%  { transform: translate(10vw, 8vh) scale(1.15); opacity: 0.6; }
+  50%  { transform: translate(18vw, 3vh) scale(0.95); opacity: 0.4; }
+  75%  { transform: translate(6vw, -5vh) scale(1.1);  opacity: 0.55; }
+  100% { transform: translate(0, 0) scale(1);       opacity: 0.45; }
+}
+@keyframes arcticDrift2 {
+  0%   { transform: translate(8vw, -4vh) scale(1);    opacity: 0.35; }
+  33%  { transform: translate(-6vw, 10vh) scale(1.1);  opacity: 0.5; }
+  66%  { transform: translate(14vw, 6vh) scale(0.9);   opacity: 0.3; }
+  100% { transform: translate(8vw, -4vh) scale(1);    opacity: 0.35; }
+}
+
+/* Frost spread on panels */
+@keyframes frostSpread {
+  0%, 100% { border-color: rgba(140,210,255,0.18); box-shadow: 0 0 15px rgba(140,210,255,0.04); }
+  50%      { border-color: rgba(140,210,255,0.30); box-shadow: 0 0 25px rgba(140,210,255,0.08); }
+}
+
+/* Ice shimmer on tab bar */
+@keyframes arcticShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Aurora tab glow */
+@keyframes arcticTabGlow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(140,210,255,0.3)); }
+  33%      { filter: drop-shadow(0 0 8px rgba(100,255,200,0.5)); }
+  66%      { filter: drop-shadow(0 0 8px rgba(160,140,255,0.5)); }
+}
+
+/* =====================================================
+   Background - Frost crystal pattern
+===================================================== */
+body {
+  background:
+    /* Frost crystal geometry via conic gradients */
+    repeating-conic-gradient(
+      from 0deg at 50% 50%,
+      rgba(140,210,255,0.012) 0deg, transparent 30deg,
+      rgba(180,220,255,0.008) 60deg, transparent 90deg
+    ),
+    repeating-conic-gradient(
+      from 15deg at 30% 70%,
+      rgba(200,230,255,0.010) 0deg, transparent 45deg,
+      rgba(160,200,240,0.006) 90deg, transparent 120deg
+    ),
+    repeating-conic-gradient(
+      from 30deg at 70% 30%,
+      rgba(140,210,255,0.008) 0deg, transparent 60deg
+    ),
+    /* Subtle ice-blue radial underlays */
+    radial-gradient(ellipse at 20% 80%, rgba(80,160,240,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(100,200,255,0.03) 0%, transparent 50%),
+    var(--bg) !important;
+  background-size: 60px 60px, 80px 80px, 50px 50px, 100% 100%, 100% 100%, 100% 100% !important;
+}
+
+/* =====================================================
+   Aurora Borealis - layered gradient waves on ::before
+===================================================== */
+.nebula-layer::before {
+  content: '' !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: -10% !important;
+  width: 120% !important;
+  height: 35vh !important;
+  border-radius: 0 !important;
+  background:
+    /* Aurora band 1 - green/cyan */
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(60,255,180,0.08) 15%,
+      rgba(80,240,200,0.15) 30%,
+      rgba(100,255,220,0.12) 45%,
+      rgba(60,200,255,0.10) 60%,
+      rgba(80,180,240,0.08) 75%,
+      transparent 100%
+    ),
+    /* Aurora band 2 - blue/purple */
+    linear-gradient(
+      90deg,
+      transparent 10%,
+      rgba(100,140,255,0.06) 25%,
+      rgba(140,120,255,0.12) 40%,
+      rgba(160,100,240,0.10) 55%,
+      rgba(120,160,255,0.08) 70%,
+      transparent 90%
+    ),
+    /* Aurora band 3 - deep green */
+    linear-gradient(
+      90deg,
+      transparent 5%,
+      rgba(40,200,120,0.05) 20%,
+      rgba(60,220,160,0.10) 50%,
+      rgba(40,180,140,0.06) 80%,
+      transparent 95%
+    ) !important;
+  z-index: 0 !important;
+  filter: blur(30px) !important;
+  opacity: 0.7 !important;
+  animation: arcticAurora 20s ease-in-out infinite !important;
+  mix-blend-mode: screen !important;
+  box-shadow: none !important;
+}
+
+/* =====================================================
+   Snowflakes - falling dots on ::after using box-shadow
+===================================================== */
+.nebula-layer::after {
+  content: '' !important;
+  position: fixed !important;
+  top: -5vh !important;
+  left: 0 !important;
+  width: 3px !important;
+  height: 3px !important;
+  border-radius: 50% !important;
+  background: rgba(255,255,255,0.9) !important;
+  z-index: 0 !important;
+  animation: arcticSnowfall 18s linear infinite !important;
+  box-shadow:
+    /* Large snowflakes */
+    5vw 2vh 0 1.5px rgba(255,255,255,0.7),
+    15vw 8vh 0 2px rgba(220,240,255,0.6),
+    28vw 15vh 0 1px rgba(255,255,255,0.5),
+    42vw 5vh 0 2px rgba(200,230,255,0.7),
+    55vw 20vh 0 1.5px rgba(255,255,255,0.55),
+    68vw 10vh 0 1px rgba(220,240,255,0.6),
+    80vw 3vh 0 2px rgba(255,255,255,0.65),
+    92vw 18vh 0 1.5px rgba(200,230,255,0.5),
+    /* Medium snowflakes */
+    10vw 30vh 0 1px rgba(255,255,255,0.4),
+    22vw 40vh 0 1px rgba(220,240,255,0.45),
+    35vw 25vh 0 0.8px rgba(255,255,255,0.35),
+    48vw 45vh 0 1px rgba(200,230,255,0.4),
+    60vw 35vh 0 0.8px rgba(255,255,255,0.5),
+    73vw 50vh 0 1px rgba(220,240,255,0.35),
+    85vw 28vh 0 0.8px rgba(255,255,255,0.4),
+    95vw 42vh 0 1px rgba(200,230,255,0.45),
+    /* Small snowflakes */
+    3vw 55vh 0 0.5px rgba(255,255,255,0.3),
+    18vw 65vh 0 0.5px rgba(220,240,255,0.25),
+    30vw 58vh 0 0.5px rgba(255,255,255,0.35),
+    45vw 70vh 0 0.5px rgba(200,230,255,0.3),
+    57vw 62vh 0 0.5px rgba(255,255,255,0.25),
+    70vw 75vh 0 0.5px rgba(220,240,255,0.3),
+    82vw 60vh 0 0.5px rgba(255,255,255,0.35),
+    93vw 68vh 0 0.5px rgba(200,230,255,0.25),
+    /* Distant tiny flakes */
+    8vw 80vh 0 0.3px rgba(255,255,255,0.2),
+    25vw 85vh 0 0.3px rgba(220,240,255,0.2),
+    40vw 78vh 0 0.3px rgba(255,255,255,0.15),
+    52vw 90vh 0 0.3px rgba(200,230,255,0.2),
+    65vw 82vh 0 0.3px rgba(255,255,255,0.2),
+    78vw 88vh 0 0.3px rgba(220,240,255,0.15),
+    88vw 76vh 0 0.3px rgba(255,255,255,0.2),
+    97vw 84vh 0 0.3px rgba(200,230,255,0.15) !important;
+}
+
+/* =====================================================
+   Glass Panels - heavy frosted glass, crystalline
+===================================================== */
+.glass {
+  backdrop-filter: blur(30px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(1.3) !important;
+  animation: frostSpread 8s ease-in-out infinite !important;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.4),
+    0 0 40px rgba(140,210,255,0.04),
+    inset 0 0 50px rgba(140,210,255,0.03),
+    inset 0 1px 0 rgba(200,230,255,0.10),
+    inset 0 -1px 0 rgba(0,0,0,0.15) !important;
+}
+
+.glass::before {
+  background: linear-gradient(
+    135deg,
+    rgba(200,230,255,0.08) 0%,
+    rgba(180,220,255,0.03) 20%,
+    transparent 50%,
+    rgba(140,210,255,0.02) 80%,
+    rgba(200,230,255,0.05) 100%
+  ) !important;
+}
+
+.glass::after {
+  border-left: 1px solid rgba(140,210,255,0.10) !important;
+}
+
+/* =====================================================
+   Tab Bar - ice blue with aurora shimmer
+===================================================== */
+.tab-bar::after {
+  background:
+    linear-gradient(90deg,
+      transparent,
+      rgba(60,180,255,0.3),
+      rgba(80,255,200,0.45),
+      rgba(140,210,255,0.5),
+      rgba(140,140,255,0.45),
+      rgba(60,180,255,0.3),
+      transparent
+    ) !important;
+  background-size: 200% 100% !important;
+  box-shadow: 0 0 20px rgba(140,210,255,0.2) !important;
+  animation: arcticShimmer 8s linear infinite !important;
+}
+
+/* =====================================================
+   Active Tab - aurora cycling glow
+===================================================== */
+.custom-tab.active i {
+  animation: arcticTabGlow 6s ease-in-out infinite !important;
+}
+
+/* =====================================================
+   Chat Bubbles
+===================================================== */
+.msg-bubble-bot {
+  border-left: 2px solid rgba(140,210,255,0.45) !important;
+  box-shadow:
+    0 2px 12px rgba(0,0,0,0.3),
+    inset 0 0 30px rgba(140,210,255,0.04),
+    -4px 0 20px rgba(100,200,255,0.05) !important;
+  text-shadow: 0 0 25px rgba(140,210,255,0.04);
+}
+
+.msg-bubble-user {
+  border-right: 2px solid rgba(140,180,255,0.35) !important;
+  box-shadow:
+    0 2px 12px rgba(0,0,0,0.3),
+    inset 0 0 25px rgba(140,180,255,0.03) !important;
+}
+
+/* =====================================================
+   Input Pill - ice crystal border with frost glow
+===================================================== */
+.input-pill {
+  border: 1px solid rgba(140,210,255,0.18) !important;
+}
+
+.input-pill:focus-within {
+  border-color: rgba(140,210,255,0.50) !important;
+  box-shadow:
+    0 0 0 3px rgba(140,210,255,0.08),
+    0 0 30px rgba(140,210,255,0.10),
+    0 0 60px rgba(100,200,255,0.04) !important;
+}
+
+/* =====================================================
+   Watermark - icy gradient
+===================================================== */
+.tars-watermark {
+  background: linear-gradient(135deg, rgba(140,210,255,0.8), rgba(200,240,255,0.7), rgba(140,180,255,0.5)) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+}
+
+/* =====================================================
+   Emotion Buttons - frost hover
+===================================================== */
+.em-btn:hover {
+  box-shadow:
+    0 0 20px rgba(140,210,255,0.15),
+    0 0 40px rgba(100,200,255,0.06),
+    inset 0 0 20px rgba(140,210,255,0.05) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* =====================================================
+   HUD Buttons
+===================================================== */
+.hud-btn:hover {
+  box-shadow: 0 0 15px rgba(140,210,255,0.2) !important;
+}
+
+/* =====================================================
+   Particle Background - icy tint
+===================================================== */
+#particleBg {
+  opacity: 0.4 !important;
+}
+
+/* =====================================================
+   Nebula Blobs - icy aurora colors
+===================================================== */
+.nb-1 {
+  background: radial-gradient(circle, rgba(100,200,255,0.18) 0%, rgba(60,160,220,0.05) 50%, transparent 70%) !important;
+  animation: arcticDrift1 55s ease-in-out infinite !important;
+}
+.nb-2 {
+  background: radial-gradient(circle, rgba(80,255,180,0.10) 0%, rgba(50,200,140,0.03) 50%, transparent 70%) !important;
+  animation: arcticDrift2 70s ease-in-out infinite !important;
+}
+.nb-3 {
+  background: radial-gradient(circle, rgba(140,130,255,0.08) 0%, transparent 50%) !important;
+  animation: arcticDrift1 85s ease-in-out infinite reverse !important;
+}
