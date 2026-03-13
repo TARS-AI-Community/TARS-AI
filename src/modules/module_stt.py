@@ -583,16 +583,14 @@ class STTManager:
         vad_func = vad_dispatch.get(vad_method, self._is_silence_detected_rms)
 
         with sd.InputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
-            # Flush stale mic audio that may contain TTS bleed from the
-            # robot's own voice.  After TTS stops, the OS audio buffer can
-            # still hold hundreds of ms of echo.  Discard ~500ms of frames
-            # if TTS stopped within the last second.
+            # Flush stale mic audio that may contain the robot's own TTS voice
             try:
-                from modules.module_tts import get_tts_last_stopped
-                _since_tts = time.time() - get_tts_last_stopped()
-                if _since_tts < 1.0:
-                    for _ in range(4):          # 4 × 4000 samples @ 16 kHz ≈ 1s flush
+                from modules.module_tts import needs_mic_flush, clear_mic_flush
+                if needs_mic_flush():
+                    queue_message("DEBUG: Flushing mic audio after TTS playback")
+                    for _ in range(8):
                         stream.read(4000)
+                    clear_mic_flush()
             except Exception:
                 pass
 
@@ -1002,14 +1000,16 @@ class STTManager:
             vad_func = self._is_silence_detected_rms
 
         with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
-            # Flush stale mic audio that may contain the robot's own TTS voice
+            # Flush stale mic audio that may contain the robot's own TTS voice.
+            # Uses a persistent flag (not a time window) so it works even if
+            # the LLM+TTS pipeline took many seconds before we get here.
             try:
-                from modules.module_tts import get_tts_last_stopped
-                _since_tts = time.time() - get_tts_last_stopped()
-                if _since_tts < 1.0:
-                    queue_message(f"DEBUG: Flushing mic audio (TTS ended {_since_tts*1000:.0f}ms ago)")
-                    for _ in range(4):
+                from modules.module_tts import needs_mic_flush, clear_mic_flush
+                if needs_mic_flush():
+                    queue_message("DEBUG: Flushing mic audio after TTS playback")
+                    for _ in range(8):
                         stream.read(4000)
+                    clear_mic_flush()
             except Exception:
                 pass
 
@@ -1169,12 +1169,12 @@ class STTManager:
         with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
             # Flush stale mic audio after TTS playback
             try:
-                from modules.module_tts import get_tts_last_stopped
-                _since_tts = time.time() - get_tts_last_stopped()
-                if _since_tts < 1.0:
-                    queue_message(f"DEBUG: Flushing mic audio (TTS ended {_since_tts*1000:.0f}ms ago)")
+                from modules.module_tts import needs_mic_flush, clear_mic_flush
+                if needs_mic_flush():
+                    queue_message("DEBUG: Flushing mic audio after TTS playback")
                     for _ in range(4):
                         stream.read(frames_per_chunk)
+                    clear_mic_flush()
             except Exception:
                 pass
 
@@ -1240,10 +1240,12 @@ class STTManager:
             # Flush stale mic audio after TTS playback to avoid detecting
             # the robot's own voice as a wake word.
             try:
-                from modules.module_tts import get_tts_last_stopped
-                if time.time() - get_tts_last_stopped() < 1.0:
+                from modules.module_tts import needs_mic_flush, clear_mic_flush
+                if needs_mic_flush():
+                    queue_message("DEBUG: Flushing mic audio after TTS playback")
                     for _ in range(4):
                         stream.read(frames_per_chunk)
+                    clear_mic_flush()
             except Exception:
                 pass
 

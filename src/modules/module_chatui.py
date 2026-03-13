@@ -7,6 +7,7 @@ The server serves sprite image files and pushes talking/emotion state via Socket
 """
 
 import os
+import sys
 import shutil
 import threading
 import time
@@ -1518,6 +1519,31 @@ def save_config():
             "error": str(e),
             "tars_cms_enabled": False
         }), 500
+
+
+@flask_app.route('/reboot_program', methods=['POST'])
+def reboot_program():
+    """
+    Restarts the TARS-AI program to reload configuration.
+    Re-executes the current Python process with the same arguments.
+    """
+    try:
+        queue_message("INFO: Reboot requested from web UI - restarting program...")
+
+        def do_restart():
+            import time as _time
+            _time.sleep(1)  # Give response time to send
+            app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'app.py'))
+            args = [sys.executable, app_path] + sys.argv[1:]
+            os.execv(sys.executable, args)
+
+        import threading
+        threading.Thread(target=do_restart, daemon=True).start()
+
+        return jsonify({"success": True, "message": "Rebooting..."})
+    except Exception as e:
+        queue_message(f"ERROR: Reboot failed - {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @flask_app.route('/config_sync_status', methods=['GET'])

@@ -30,6 +30,7 @@ CONFIG = load_config()
 _tts_cancel_event = threading.Event()
 _tts_playing = threading.Event()  # Set while sd.play() is actively outputting audio
 _tts_last_stopped = 0.0  # time.time() when TTS playback last stopped
+_tts_needs_flush = threading.Event()  # Set after TTS finishes; cleared by STT after flushing
 
 
 def stop_tts_playback():
@@ -47,6 +48,14 @@ def is_tts_playing():
 def get_tts_last_stopped():
     """Return time.time() when TTS playback last stopped. Used to flush stale mic audio."""
     return _tts_last_stopped
+
+def needs_mic_flush():
+    """Check and clear the flush flag. Returns True once after each TTS playback."""
+    return _tts_needs_flush.is_set()
+
+def clear_mic_flush():
+    """Clear the flush flag after STT has flushed the mic buffer."""
+    _tts_needs_flush.clear()
 
 # Conditional TTS module imports - not all are available on all devices
 text_to_speech_with_pipelining_piper = None
@@ -461,6 +470,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 _tts_playing.clear()
                 global _tts_last_stopped
                 _tts_last_stopped = time.time()
+                _tts_needs_flush.set()
 
                 if was_interrupted:
                     break
