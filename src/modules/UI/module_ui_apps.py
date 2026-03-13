@@ -34,12 +34,20 @@ try:
     HAS_EYES = True
 except Exception:
     HAS_EYES = False
+
+try:
+    from modules.UI.apps.module_app_avatar import AvatarApp
+    HAS_AVATAR = True
+except Exception:
+    HAS_AVATAR = False
+
 from UI.screensavers.module_screensaver_dashboard import DashboardAnimation
 
 AVAILABLE_APPS = {
     "clock": {"class": ClockApp, "type": "pygame", "label": "Clock"},
     "dashboard": {"class": DashboardAnimation, "type": "opengl", "label": "Dashboard"},
     **({"eyes": {"class": EyesApp, "type": "pygame", "label": "Eyes"}} if HAS_EYES else {}),
+    **({"avatar": {"class": AvatarApp, "type": "pygame", "label": "Avatar"}} if HAS_AVATAR else {}),
 }
 
 
