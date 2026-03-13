@@ -1969,10 +1969,7 @@ function executeAction() {
           if (window.showToast) showToast('Configuration saved', 'success');
           setTimeout(()=>{
             saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false;
-            if (confirm('Settings saved. Would you like to reboot now to apply changes?')) {
-              if (window.showToast) showToast('Rebooting...', 'success');
-              fetch('/reboot_program',{method:'POST'}).catch(()=>{});
-            }
+            showRebootConfirm();
           },1000);
         } else { saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; if (window.showToast) showToast('Error: '+(d.error||'Unknown'), 'error'); }
       }).catch(err=>{ saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; alert('Error: '+err.message); });
@@ -1985,6 +1982,82 @@ function executeAction() {
 
   const saveBtn = $('saveConfigBtn');
   if (saveBtn) saveBtn.addEventListener('click', e => { e.preventDefault(); saveConfiguration(); });
+
+  /* ── Reboot Confirm Modal ─────────────────────── */
+  window.showRebootConfirm = function() {
+    // Build DOM
+    const overlay = document.createElement('div');
+    overlay.className = 'reboot-overlay';
+    const canvas = document.createElement('canvas');
+    overlay.appendChild(canvas);
+
+    overlay.innerHTML += `
+      <div class="reboot-card">
+        <div class="reboot-icon"><i class="bi bi-arrow-repeat"></i></div>
+        <div class="reboot-title">REBOOT REQUIRED</div>
+        <p class="reboot-subtitle">Settings saved successfully.<br>Reboot now to apply changes?</p>
+        <div class="reboot-actions">
+          <button class="hud-btn hud-btn-ghost" id="rebootNo">Later</button>
+          <button class="hud-btn hud-btn-primary" id="rebootYes"><i class="bi bi-power"></i> Reboot Now</button>
+        </div>
+      </div>`;
+    overlay.insertBefore(canvas, overlay.firstChild);
+    document.body.appendChild(overlay);
+
+    // Animate in
+    requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('active')));
+
+    // Particles
+    const ctx = canvas.getContext('2d');
+    let particles = [], animId = 0;
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    resize(); window.addEventListener('resize', resize);
+
+    const accentRGB = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim().split(',').map(Number);
+    for (let i = 0; i < 40; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 2 + 0.5,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4 - 0.15,
+        a: Math.random() * 0.5 + 0.15
+      });
+    }
+    function drawParticles() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of particles) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.y < -10) p.y = canvas.height + 10;
+        if (p.x < -10) p.x = canvas.width + 10;
+        if (p.x > canvas.width + 10) p.x = -10;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${accentRGB[0]},${accentRGB[1]},${accentRGB[2]},${p.a})`;
+        ctx.fill();
+      }
+      animId = requestAnimationFrame(drawParticles);
+    }
+    drawParticles();
+
+    function close() {
+      overlay.classList.remove('active');
+      cancelAnimationFrame(animId);
+      window.removeEventListener('resize', resize);
+      setTimeout(() => overlay.remove(), 400);
+    }
+
+    overlay.querySelector('#rebootNo').onclick = close;
+    overlay.querySelector('#rebootYes').onclick = function() {
+      this.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Rebooting…';
+      this.disabled = true;
+      overlay.querySelector('#rebootNo').disabled = true;
+      if (window.showToast) showToast('Rebooting...', 'success');
+      fetch('/reboot_program', { method: 'POST' }).catch(() => {});
+      setTimeout(close, 2000);
+    };
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  };
 })();
 
 
