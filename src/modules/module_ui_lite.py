@@ -42,10 +42,11 @@ show_mouse = CONFIG['UI']['show_mouse']
 fullscreen = CONFIG['UI']['fullscreen']
 screensaver_timer = CONFIG['UI']['screensaver_timer']
 screensaver_list = CONFIG['UI']['screensaver_list']
+_char_name = CONFIG['CHAR'].get('character_name', 'TARS')
 
 MSG_COLORS = {
     "USER": (255, 200, 0),
-    "TARS": (0, 200, 255),
+    _char_name: (0, 200, 255),
     "SYSTEM": (0, 200, 100),
     "DEBUG": (80, 80, 80),
     "INFO": (255, 255, 255),
@@ -78,7 +79,7 @@ class UIManagerLite(threading.Thread):
     def update_data(self, source, message, category="INFO"):
         with self._lock:
             self._pending.append((source, str(message), category))
-        if source == "TARS":
+        if source == _char_name:
             self._state = ""
         self._activity.set()
         self._dirty.set()

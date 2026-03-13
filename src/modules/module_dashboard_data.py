@@ -15,7 +15,27 @@ import threading
 from datetime import datetime
 
 _MEMORY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory")
-_LOG_FILE = os.path.join(_MEMORY_DIR, "interaction_log.json")
+_LOG_FILE = None  # resolved lazily on first use, namespaced by character name
+
+
+def _get_log_file():
+    """Return the character-specific interaction log path, resolving it once."""
+    global _LOG_FILE
+    if _LOG_FILE is None:
+        char_name = 'TARS'
+        try:
+            from modules.module_config import load_config
+            char_name = load_config()['CHAR'].get('character_name', 'TARS')
+        except Exception:
+            try:
+                from module_config import load_config
+                char_name = load_config()['CHAR'].get('character_name', 'TARS')
+            except Exception:
+                pass
+        _LOG_FILE = os.path.join(_MEMORY_DIR, f"{char_name}_interaction_log.json")
+    return _LOG_FILE
+
+
 _MAX_ENTRIES = 500
 _MAX_PROMPT_ENTRIES = 50   # only keep prompt text for the N most recent entries
 _USER_TEXT_MAX = 150       # truncate user text in log
@@ -70,9 +90,10 @@ def _ensure_log():
 
 def _load_log_from_disk():
     """Read the interaction log from disk."""
-    if os.path.exists(_LOG_FILE):
+    log_file = _get_log_file()
+    if os.path.exists(log_file):
         try:
-            with open(_LOG_FILE, 'r') as f:
+            with open(log_file, 'r') as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError):
             return []
@@ -107,7 +128,7 @@ def _write_log_to_disk(entries):
 
     try:
         os.makedirs(_MEMORY_DIR, exist_ok=True)
-        with open(_LOG_FILE, 'w') as f:
+        with open(_get_log_file(), 'w') as f:
             json.dump(trimmed, f, indent=None, separators=(',', ':'))
     except IOError:
         pass

@@ -85,9 +85,19 @@ class BounceAnimation:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         assets_dir = os.path.join(os.path.dirname(script_dir), 'assets')
         brandy_path = os.path.join(assets_dir, 'brandy.ttf')
-        
+
         pygame.font.init()
-        
+
+        try:
+            from modules.module_config import load_config
+            _char_label = load_config()['CHAR'].get('character_name', 'TARS')
+        except Exception:
+            try:
+                from module_config import load_config
+                _char_label = load_config()['CHAR'].get('character_name', 'TARS')
+            except Exception:
+                _char_label = 'TARS'
+
         try:
             if os.path.exists(brandy_path):
                 font_logo = pygame.font.Font(brandy_path, 80)
@@ -97,8 +107,8 @@ class BounceAnimation:
         except:
             font_logo = pygame.font.Font(None, 80)
             font_system = pygame.font.Font(None, 21)
-        
-        text = font_logo.render("TARS", True, (255, 255, 255))
+
+        text = font_logo.render(_char_label, True, (255, 255, 255))
         text_w = text.get_width()
         text_h = text.get_height()
         
