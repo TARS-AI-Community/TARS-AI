@@ -1891,25 +1891,21 @@ def memory_stats():
     """Memory/knowledge graph statistics for the NEXUS dashboard."""
     stats = {'topics': 0, 'memories': 0, 'topic_list': []}
 
-    # Try to load topic index
     try:
-        topic_path = os.path.join(BASE_DIR, '..', 'memory', f'{character_name}_topics.json')
-        if os.path.exists(topic_path):
-            with open(topic_path, 'r') as f:
-                topics = json.load(f)
+        import modules.module_llm as _llm
+        mm = _llm.memory_manager
+        if mm and hasattr(mm, 'topic_index'):
+            topics = mm.topic_index.get('topics', [])
             stats['topics'] = len(topics)
-            stats['topic_list'] = topics[:20]  # last 20 topics
-    except Exception:
-        pass
-
-    # Try to get memory count
-    try:
-        memory_dir = os.path.join(BASE_DIR, '..', 'memory')
-        lite_path = os.path.join(memory_dir, f'{character_name}_lite.json')
-        if os.path.exists(lite_path):
-            with open(lite_path, 'r') as f:
-                memories = json.load(f)
-            stats['memories'] = len(memories)
+            stats['topic_list'] = [
+                t.get('topic', str(t)) if isinstance(t, dict) else str(t)
+                for t in topics[:20]
+            ]
+        if mm:
+            if hasattr(mm, 'hyper_db'):
+                stats['memories'] = len(mm.hyper_db.documents)
+            elif hasattr(mm, 'documents'):
+                stats['memories'] = len(mm.documents)
     except Exception:
         pass
 
@@ -2032,7 +2028,8 @@ def dashboard_memory_delete():
 
         if is_full:
             mm.hyper_db.remove_document(index)
-            mm.hyper_db.save(mm.memory_db_path)
+            mm._mark_dirty()
+            mm.flush()
             remaining = len(mm.hyper_db.documents)
         else:
             docs.pop(index)
@@ -2080,28 +2077,32 @@ def dashboard_memory_edit():
         if not isinstance(doc, dict):
             return jsonify({"error": "Document is not editable"}), 400
 
-        # Update allowed fields
+        # Build an updated copy — never mutate the live doc in-place before
+        # update_document(), which saves old_doc for rollback from docs[index].
+        new_doc = dict(doc)
         allowed = {'user_input', 'bot_response', 'speaker', 'timestamp'}
         updated = []
         for key, value in fields.items():
             if key in allowed:
-                doc[key] = str(value)
+                new_doc[key] = str(value)
                 updated.append(key)
 
         if not updated:
             return jsonify({"error": "No valid fields to update"}), 400
 
         if is_full:
-            # Re-embed the document with updated content
-            mm.hyper_db.update_document(index, doc)
-            mm.hyper_db.save(mm.memory_db_path)
+            # Re-embed the document with updated content; update_document handles
+            # the rollback using the original doc still in documents[index].
+            mm.hyper_db.update_document(index, new_doc)
+            mm._mark_dirty()
+            mm.flush()
         else:
             # Lite mode: update keywords and flush
-            docs[index] = doc
             if hasattr(mm, '_extract_keywords'):
-                doc['keywords'] = list(mm._extract_keywords(
-                    (doc.get('user_input', '') + ' ' + doc.get('bot_response', ''))
+                new_doc['keywords'] = list(mm._extract_keywords(
+                    (new_doc.get('user_input', '') + ' ' + new_doc.get('bot_response', ''))
                 ))
+            docs[index] = new_doc
             mm._mark_dirty()
             mm.flush()
 
