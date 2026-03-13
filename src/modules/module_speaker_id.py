@@ -585,25 +585,9 @@ class SpeakerIDManager:
                     self._add_speaker_to_memory(name, embedding)
 
             else:
-                # No positive match — check for a "near miss" against named
-                # speakers (score between NEAR_MISS_THRESHOLD and the ID
-                # threshold).  If found, silently strengthen that speaker's
-                # profile so borderline enrollments improve over time.
-                near_miss = self._find_near_miss(embedding)
-                if near_miss:
-                    nm_name, nm_score = near_miss
-                    with self._lock:
-                        self.current_speaker = nm_name
-                        self.current_confidence = nm_score
-                        self.last_identified_time = time.time()
-                        self._unknown_embeddings.clear()
-                        self._unknown_count = 0
-                        self._unknown_session_id = None
-                    self._add_speaker_to_memory(nm_name, embedding)
-                    queue_message(f"INFO: Speaker ID near-miss '{nm_name}' score={nm_score:.3f} — profile strengthened")
-                else:
-                    # Truly unknown speaker
-                    self._handle_unknown(embedding)
+                # No positive match — treat as unknown speaker
+                # (near-miss strengthening disabled to prevent profile poisoning from marginal matches)
+                self._handle_unknown(embedding)
 
         except Exception as e:
             queue_message(f"ERROR: Speaker ID _process_utterance failed: {e}")
