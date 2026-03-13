@@ -1985,12 +1985,19 @@ function executeAction() {
 
   /* ── Reboot Confirm Modal ─────────────────────── */
   window.showRebootConfirm = function() {
+    // Source position: save button center
+    const srcBtn = $('saveConfigBtn');
+    const srcRect = srcBtn ? srcBtn.getBoundingClientRect() : null;
+    const sx = srcRect ? srcRect.left + srcRect.width / 2 : window.innerWidth / 2;
+    const sy = srcRect ? srcRect.top + srcRect.height / 2 : window.innerHeight;
+    // Target: screen center (where the card will be)
+    const tx = window.innerWidth / 2, ty = window.innerHeight / 2;
+
     // Build DOM
     const overlay = document.createElement('div');
     overlay.className = 'reboot-overlay';
     const canvas = document.createElement('canvas');
     overlay.appendChild(canvas);
-
     overlay.innerHTML += `
       <div class="reboot-card">
         <div class="reboot-icon"><i class="bi bi-arrow-repeat"></i></div>
@@ -2004,33 +2011,71 @@ function executeAction() {
     overlay.insertBefore(canvas, overlay.firstChild);
     document.body.appendChild(overlay);
 
-    // Animate in
     requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('active')));
 
-    // Particles
+    // Particle system
     const ctx = canvas.getContext('2d');
     let particles = [], animId = 0;
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     resize(); window.addEventListener('resize', resize);
 
-    const accentRGB = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim().split(',').map(Number);
-    for (let i = 0; i < 40; i++) {
+    const accentRGB = getComputedStyle(document.documentElement)
+      .getPropertyValue('--accent-rgb').trim().split(',').map(Number);
+    const N = 50;
+
+    // Spawn all particles at the save button — each gets a random
+    // delay so they stream out in a staggered burst, not all at once.
+    for (let i = 0; i < N; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.5 + Math.random() * 3;
       particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        r: Math.random() * 2 + 0.5,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: (Math.random() - 0.5) * 0.4 - 0.15,
-        a: Math.random() * 0.5 + 0.15
+        x: sx, y: sy,
+        // Initial burst velocity toward card center + random spread
+        vx: (tx - sx) * 0.008 + Math.cos(angle) * speed,
+        vy: (ty - sy) * 0.008 + Math.sin(angle) * speed,
+        r: Math.random() * 2.2 + 0.6,
+        a: 0,                            // fades in
+        maxA: Math.random() * 0.6 + 0.2,
+        life: 0,
+        delay: i * 0.6,                  // stagger frames
+        phase: Math.random() * Math.PI * 2  // orbit offset
       });
     }
-    function drawParticles() {
+
+    const startTime = performance.now();
+    function drawParticles(now) {
+      const elapsed = (now - startTime) / 16.67; // frame count approx
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (const p of particles) {
-        p.x += p.vx; p.y += p.vy;
-        if (p.y < -10) p.y = canvas.height + 10;
-        if (p.x < -10) p.x = canvas.width + 10;
-        if (p.x > canvas.width + 10) p.x = -10;
+        if (elapsed < p.delay) continue; // still waiting
+        p.life++;
+
+        // Phase 1 (life < 60): fly toward card center with damping
+        // Phase 2 (life >= 60): gentle orbit around card center
+        if (p.life < 60) {
+          // Attract toward card center
+          const dx = tx - p.x, dy = ty - p.y;
+          p.vx += dx * 0.003;
+          p.vy += dy * 0.003;
+          // Damping
+          p.vx *= 0.97;
+          p.vy *= 0.97;
+          p.x += p.vx;
+          p.y += p.vy;
+          // Fade in
+          p.a = Math.min(p.maxA, p.a + 0.03);
+        } else {
+          // Orbit: gentle circular drift around card
+          const orbitR = 80 + (p.r * 40);
+          const t = (p.life - 60) * 0.008 + p.phase;
+          const goalX = tx + Math.cos(t) * orbitR;
+          const goalY = ty + Math.sin(t) * orbitR * 0.6;
+          p.x += (goalX - p.x) * 0.03;
+          p.y += (goalY - p.y) * 0.03;
+          // Subtle pulse
+          p.a = p.maxA * (0.7 + 0.3 * Math.sin(t * 2));
+        }
+
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${accentRGB[0]},${accentRGB[1]},${accentRGB[2]},${p.a})`;
@@ -2038,7 +2083,7 @@ function executeAction() {
       }
       animId = requestAnimationFrame(drawParticles);
     }
-    drawParticles();
+    animId = requestAnimationFrame(drawParticles);
 
     function close() {
       overlay.classList.remove('active');
