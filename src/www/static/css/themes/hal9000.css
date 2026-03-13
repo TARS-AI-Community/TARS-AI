@@ -1,0 +1,344 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: HAL 9000
+   "I'm sorry Dave, I'm afraid I can't do that."
+   Absolute void black with HAL's iconic red eye —
+   CSS-built concentric rings, breathing pulse, horizontal
+   scan line, tight camera-lens vignette
+   2001: A Space Odyssey
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — monochromatic red only */
+  --accent-rgb:  255, 30, 30;
+  --panel-rgb:   8, 2, 2;
+  --magenta-rgb: 200, 40, 40;
+  --purple-rgb:  140, 20, 20;
+
+  /* Backgrounds — absolute void */
+  --bg:          #020000;
+  --bg2:         #060101;
+  --panel:       rgba(var(--panel-rgb), 0.40);
+  --panel-solid: rgba(var(--panel-rgb), 0.68);
+  --glass-blur:  14px;
+  --glass-border: rgba(var(--accent-rgb), 0.08);
+  --glass-shine: linear-gradient(135deg, rgba(255,255,255,0.015) 0%, transparent 100%);
+
+  /* Borders — barely visible, clinical */
+  --border:      rgba(var(--accent-rgb), 0.10);
+  --border-hi:   rgba(var(--accent-rgb), 0.28);
+
+  /* Accent colors — all red shades */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.35);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.08);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.35);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.35);
+  --gold:        #cc2020;
+  --gold-dim:    rgba(204, 32, 32, 0.35);
+
+  /* Status colors — muted, clinical */
+  --green:       #448844;
+  --orange:      #cc4422;
+  --red:         #ff1e1e;
+
+  /* Text — cold, clinical gray */
+  --text:        #b0a8a8;
+  --text-dim:    #4a3838;
+
+  /* Typography — clean, sterile */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout — flat, minimal radius */
+  --tab-h:       52px;
+  --radius:      6px;
+  --radius-sm:   3px;
+  --radius-lg:   8px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Nebula: dim red hazes, eye handled by ::before ── */
+  --nebula-1:       radial-gradient(circle, rgba(255, 10, 10, 0.06) 0%, transparent 50%);
+  --nebula-1-size:  300px;
+  --nebula-1-anim:  halAmbient1 80s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(180, 10, 10, 0.04) 0%, transparent 50%);
+  --nebula-2-size:  250px;
+  --nebula-2-anim:  halAmbient2 90s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(120, 5, 5, 0.03) 0%, transparent 40%);
+  --nebula-3-size:  200px;
+  --nebula-3-anim:  nebulaDrift3 100s ease-in-out infinite;
+  --nebula-blur:    80px;
+
+  /* Particle system — minimal, only deep reds */
+  --particle-orb-hues: 0, 5, 355;
+  --particle-rays:     none;
+  --particle-prism:    default;
+
+  /* Heavy scanlines — CRT monitor feel */
+  --scanlines: repeating-linear-gradient(
+    0deg, transparent, transparent 1px,
+    rgba(255,20,20,0.025) 1px, rgba(255,20,20,0.025) 2px);
+  --scanline-opacity: 1;
+
+  /* Very tight vignette — camera lens */
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 15%, rgba(0,0,0,0.4) 45%, rgba(0,0,0,0.85) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   HAL's EYE — CSS concentric rings with breathing pulse
+   Built on .nebula-layer::before
+═══════════════════════════════════════════════════════ */
+.nebula-layer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 180px;
+  height: 180px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background:
+    /* Inner bright core */
+    radial-gradient(circle,
+      rgba(255, 60, 30, 0.95) 0%,
+      rgba(255, 40, 20, 0.8) 12%,
+      rgba(255, 20, 10, 0.5) 22%,
+      transparent 35%),
+    /* Ring 1 — tight bright ring */
+    radial-gradient(circle,
+      transparent 28%,
+      rgba(255, 30, 20, 0.6) 30%,
+      rgba(255, 30, 20, 0.6) 33%,
+      transparent 35%),
+    /* Ring 2 — mid ring */
+    radial-gradient(circle,
+      transparent 42%,
+      rgba(255, 20, 10, 0.35) 44%,
+      rgba(255, 20, 10, 0.35) 47%,
+      transparent 49%),
+    /* Ring 3 — outer ring */
+    radial-gradient(circle,
+      transparent 60%,
+      rgba(255, 10, 5, 0.2) 62%,
+      rgba(255, 10, 5, 0.2) 65%,
+      transparent 67%),
+    /* Ring 4 — faint outermost */
+    radial-gradient(circle,
+      transparent 78%,
+      rgba(255, 5, 0, 0.1) 80%,
+      rgba(255, 5, 0, 0.1) 83%,
+      transparent 85%);
+  box-shadow:
+    0 0 60px 20px rgba(255, 20, 10, 0.3),
+    0 0 120px 40px rgba(255, 10, 5, 0.15),
+    0 0 200px 80px rgba(200, 5, 0, 0.08),
+    inset 0 0 30px 10px rgba(255, 40, 20, 0.4);
+  animation: halEyeBreathe 6s ease-in-out infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Radial scan ring expanding outward from the eye */
+.nebula-layer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 300px;
+  height: 300px;
+  transform: translate(-50%, -50%) scale(0.3);
+  border-radius: 50%;
+  border: 2px solid rgba(255, 30, 20, 0.4);
+  box-shadow:
+    0 0 15px rgba(255, 20, 10, 0.2),
+    inset 0 0 15px rgba(255, 20, 10, 0.1);
+  animation: halRadialScan 4s ease-out infinite;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* ── HAL Eye breathing animation ── */
+@keyframes halEyeBreathe {
+  0%   { transform: translate(-50%, -50%) scale(1);    opacity: 0.8; box-shadow: 0 0 60px 20px rgba(255,20,10,0.3), 0 0 120px 40px rgba(255,10,5,0.15), 0 0 200px 80px rgba(200,5,0,0.08); }
+  50%  { transform: translate(-50%, -50%) scale(1.08); opacity: 1;   box-shadow: 0 0 80px 30px rgba(255,30,15,0.45), 0 0 160px 60px rgba(255,15,5,0.25), 0 0 260px 100px rgba(200,5,0,0.12); }
+  100% { transform: translate(-50%, -50%) scale(1);    opacity: 0.8; box-shadow: 0 0 60px 20px rgba(255,20,10,0.3), 0 0 120px 40px rgba(255,10,5,0.15), 0 0 200px 80px rgba(200,5,0,0.08); }
+}
+
+/* Radial scan ring expanding from the eye */
+@keyframes halRadialScan {
+  0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0.6; border-color: rgba(255,30,20,0.5); }
+  70%  { transform: translate(-50%, -50%) scale(2.5); opacity: 0.15; border-color: rgba(255,20,10,0.2); }
+  100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0; border-color: rgba(255,10,5,0); }
+}
+
+/* ── Ambient nebula drift (very subtle) ── */
+@keyframes halAmbient1 {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0.3; }
+  50%  { transform: translate(5vw, 3vh) scale(1.1); opacity: 0.5; }
+  100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+}
+@keyframes halAmbient2 {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0.2; }
+  50%  { transform: translate(-4vw, 5vh) scale(1.15); opacity: 0.4; }
+  100% { transform: translate(0, 0) scale(1); opacity: 0.2; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   HORIZONTAL SCAN LINE — sweeps down the screen
+═══════════════════════════════════════════════════════ */
+body {
+  position: relative;
+  background: #020000 !important;
+}
+
+/* halScan — red horizontal line sweeping downward */
+#particleBg::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 30, 20, 0.15) 15%,
+    rgba(255, 30, 20, 0.5) 40%,
+    rgba(255, 40, 30, 0.7) 50%,
+    rgba(255, 30, 20, 0.5) 60%,
+    rgba(255, 30, 20, 0.15) 85%,
+    transparent 100%);
+  box-shadow:
+    0 0 20px rgba(255, 20, 10, 0.4),
+    0 0 60px rgba(255, 20, 10, 0.15),
+    0 -4px 8px rgba(255, 20, 10, 0.1),
+    0 4px 8px rgba(255, 20, 10, 0.1);
+  z-index: 10;
+  pointer-events: none;
+  animation: halScan 8s linear infinite;
+}
+
+@keyframes halScan {
+  0%   { top: -2px; opacity: 0; }
+  5%   { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 100vh; opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   CLINICAL GLASS PANELS — flat, sterile, minimal
+═══════════════════════════════════════════════════════ */
+.glass {
+  border-radius: 4px !important;
+  box-shadow:
+    0 4px 16px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.02),
+    inset 0 -1px 0 rgba(0,0,0,0.2) !important;
+  border: 1px solid rgba(255, 30, 30, 0.06) !important;
+}
+
+.glass::before {
+  background: linear-gradient(180deg, rgba(255,255,255,0.01) 0%, transparent 100%) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TAB BAR — ominous red glow
+═══════════════════════════════════════════════════════ */
+.tab-bar {
+  background: rgba(6, 1, 1, 0.92) !important;
+  border-bottom: 1px solid rgba(255, 30, 30, 0.15) !important;
+  box-shadow:
+    0 4px 30px rgba(255, 10, 5, 0.08),
+    inset 0 -1px 0 rgba(255, 30, 30, 0.06) !important;
+}
+
+.tab-bar::after {
+  background: linear-gradient(90deg,
+    transparent 10%,
+    rgba(255, 20, 10, 0.3) 30%,
+    rgba(255, 40, 20, 0.8) 50%,
+    rgba(255, 20, 10, 0.3) 70%,
+    transparent 90%) !important;
+  box-shadow:
+    0 0 30px rgba(255, 20, 10, 0.4),
+    0 0 60px rgba(255, 10, 5, 0.15) !important;
+}
+
+/* Active tab icon — ominous slow pulse */
+@keyframes halTabGlow {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(255,30,30,0.3)); color: rgba(255,60,50,0.7); }
+  50%      { filter: drop-shadow(0 0 10px rgba(255,30,30,0.7)) drop-shadow(0 0 20px rgba(255,10,5,0.3)); color: rgba(255,80,60,1); }
+}
+.custom-tab.active i {
+  animation: halTabGlow 4s ease-in-out infinite !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CHAT BUBBLES — bot has red inner glow like HAL speaking
+═══════════════════════════════════════════════════════ */
+.msg-bubble-bot {
+  border-left: 2px solid rgba(255, 30, 20, 0.35) !important;
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.3),
+    inset 0 0 30px rgba(255, 20, 10, 0.04),
+    inset -2px 0 15px rgba(255, 20, 10, 0.03) !important;
+  animation: halBotSpeak 5s ease-in-out infinite;
+}
+
+@keyframes halBotSpeak {
+  0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.3), inset 0 0 30px rgba(255,20,10,0.04), inset -2px 0 15px rgba(255,20,10,0.03); }
+  50%      { box-shadow: 0 2px 8px rgba(0,0,0,0.3), inset 0 0 40px rgba(255,20,10,0.08), inset -2px 0 20px rgba(255,20,10,0.06); }
+}
+
+.msg-bubble-user {
+  border-right: 2px solid rgba(255, 30, 20, 0.2) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   INPUT — sterile, flat, minimal red accent
+═══════════════════════════════════════════════════════ */
+.input-pill {
+  border-radius: 4px !important;
+}
+
+.input-pill:focus-within {
+  border-color: rgba(255, 30, 30, 0.3) !important;
+  box-shadow: 0 0 0 2px rgba(255, 30, 30, 0.08), 0 0 20px rgba(255, 20, 10, 0.06) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   EMOTION BUTTONS — flat, clinical
+═══════════════════════════════════════════════════════ */
+.em-btn {
+  border-radius: 3px !important;
+}
+
+.em-btn:hover {
+  box-shadow: 0 0 15px rgba(255, 30, 30, 0.15),
+              inset 0 0 10px rgba(255, 30, 30, 0.05) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CONFIG HINTS — clinical red accent
+═══════════════════════════════════════════════════════ */
+.config-hint {
+  border-left: 2px solid rgba(255, 30, 30, 0.3) !important;
+  border-radius: 2px !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   WATERMARK — dim red, almost hidden
+═══════════════════════════════════════════════════════ */
+.tars-watermark {
+  color: rgba(255, 30, 30, 0.15) !important;
+  text-shadow: 0 0 10px rgba(255, 20, 10, 0.1) !important;
+}

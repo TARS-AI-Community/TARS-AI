@@ -1,23 +1,14 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root {
-      --cyan: #00e5ff;
-      --cyan-rgb: 0, 229, 255;
-      --purple: #b44dff;
-      --bg: #0a1220;
-      --surface: rgba(14, 26, 48, 0.78);
-      --border: rgba(0, 229, 255, 0.22);
-      --text: #e2eaf2;
-      --text-dim: #5a7a94;
-      --red: #ff4444;
-    }
+    /* Login page reads colors from the theme CSS loaded before it.
+       Fallbacks match midnight defaults so it works without a theme. */
 
     html, body {
       width: 100%; height: 100%;
-      background: var(--bg);
+      background: var(--bg, #0a1220);
       overflow: hidden;
-      font-family: 'Share Tech Mono', monospace;
-      color: var(--text);
+      font-family: var(--font-mono, 'Share Tech Mono', monospace);
+      color: var(--text, #e2eaf2);
       -webkit-font-smoothing: antialiased;
     }
 
@@ -26,8 +17,8 @@
       content: '';
       position: fixed; inset: 0;
       background-image:
-        linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px);
+        linear-gradient(rgba(var(--accent-rgb, 0,229,255),0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(var(--accent-rgb, 0,229,255),0.04) 1px, transparent 1px);
       background-size: 48px 48px;
       pointer-events: none;
       z-index: 0;
@@ -82,12 +73,12 @@
       width: 100%;
       max-width: 420px;
       padding: 32px 28px 26px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      box-shadow: 0 8px 48px rgba(0,0,0,0.35), 0 0 60px rgba(0,229,255,0.07), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 40px rgba(0,0,0,0.3);
-      backdrop-filter: blur(22px) saturate(1.3);
-      -webkit-backdrop-filter: blur(22px) saturate(1.3);
+      background: var(--panel-solid, rgba(14, 26, 48, 0.78));
+      border: 1px solid rgba(var(--accent-rgb, 0,229,255), 0.22);
+      border-radius: var(--radius, 14px);
+      box-shadow: 0 8px 48px rgba(0,0,0,0.35), 0 0 60px rgba(var(--accent-rgb, 0,229,255),0.07), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 40px rgba(0,0,0,0.3);
+      backdrop-filter: blur(var(--glass-blur, 22px)) saturate(1.3);
+      -webkit-backdrop-filter: blur(var(--glass-blur, 22px)) saturate(1.3);
     }
 
     /* corner accents */
@@ -96,19 +87,19 @@
       position: absolute;
       top: -1px; left: -1px; right: -1px; bottom: -1px;
       border-radius: inherit;
-      background: linear-gradient(135deg, rgba(0,229,255,0.15) 0%, transparent 40%, transparent 60%, rgba(180,77,255,0.1) 100%);
+      background: linear-gradient(135deg, rgba(var(--accent-rgb, 0,229,255),0.15) 0%, transparent 40%, transparent 60%, rgba(var(--purple-rgb, 180,77,255),0.1) 100%);
       pointer-events: none;
       z-index: 0;
     }
     .panel .c2 { display: none; }
 
     .logo {
-      font-family: 'Orbitron', sans-serif;
+      font-family: var(--font-hud, 'Orbitron', sans-serif);
       font-weight: 900;
       font-size: clamp(1.6rem, 7vw, 2.6rem);
       letter-spacing: 0.32em;
-      color: var(--cyan);
-      text-shadow: 0 0 18px rgba(0,229,255,0.55), 0 0 50px rgba(0,229,255,0.18);
+      color: rgb(var(--accent-rgb, 0,229,255));
+      text-shadow: 0 0 18px rgba(var(--accent-rgb, 0,229,255),0.55), 0 0 50px rgba(var(--accent-rgb, 0,229,255),0.18);
       text-align: center;
       line-height: 1;
       margin-bottom: 4px;
@@ -122,7 +113,7 @@
       text-align: center;
       font-size: 0.58rem;
       letter-spacing: 0.22em;
-      color: var(--text-dim);
+      color: var(--text-dim, #5a7a94);
       text-transform: uppercase;
       margin-bottom: 12px;
     }
@@ -137,8 +128,8 @@
     .dot {
       width: 6px; height: 6px;
       border-radius: 50%;
-      background: var(--cyan);
-      box-shadow: 0 0 7px var(--cyan);
+      background: rgb(var(--accent-rgb, 0,229,255));
+      box-shadow: 0 0 7px rgb(var(--accent-rgb, 0,229,255));
       animation: pulse 2s ease infinite;
       flex-shrink: 0;
     }
@@ -148,7 +139,7 @@
     .status-txt {
       font-size: 0.6rem;
       letter-spacing: 0.2em;
-      color: rgba(0,229,255,0.55);
+      color: rgba(var(--accent-rgb, 0,229,255),0.55);
     }
 
     .divider {
@@ -157,24 +148,24 @@
       gap: 10px;
       margin-bottom: 20px;
     }
-    .divider span { flex:1; height:1px; background: linear-gradient(90deg,transparent,var(--border),transparent); }
-    .divider i { color:var(--cyan); font-style:normal; font-size:.8rem; opacity:.5; }
+    .divider span { flex:1; height:1px; background: linear-gradient(90deg,transparent,rgba(var(--accent-rgb, 0,229,255),0.22),transparent); }
+    .divider i { color:rgb(var(--accent-rgb, 0,229,255)); font-style:normal; font-size:.8rem; opacity:.5; }
 
     .lbl {
       display: block;
       font-size: 0.6rem;
       letter-spacing: 0.2em;
-      color: rgba(0,229,255,.5);
+      color: rgba(var(--accent-rgb, 0,229,255),.5);
       text-transform: uppercase;
       margin-bottom: 7px;
     }
-    .lbl em { color: var(--text-dim); font-style: normal; }
+    .lbl em { color: var(--text-dim, #5a7a94); font-style: normal; }
 
     .inp-wrap { position: relative; margin-bottom: 16px; }
     .inp-icon {
       position: absolute; left: 12px; top: 50%;
       transform: translateY(-50%);
-      color: rgba(0,229,255,.4);
+      color: rgba(var(--accent-rgb, 0,229,255),.4);
       font-size: .85rem;
       pointer-events: none;
       transition: color .25s;
@@ -182,11 +173,11 @@
     input[type=password] {
       width: 100%;
       padding: 12px 14px 12px 34px;
-      background: rgba(14, 26, 48, 0.35);
-      border: 1px solid rgba(0,229,255,0.15);
-      border-radius: 8px;
-      color: var(--text);
-      font-family: 'Share Tech Mono', monospace;
+      background: rgba(var(--panel-rgb, 14,26,48), 0.35);
+      border: 1px solid rgba(var(--accent-rgb, 0,229,255),0.15);
+      border-radius: var(--radius-sm, 8px);
+      color: var(--text, #e2eaf2);
+      font-family: var(--font-mono, 'Share Tech Mono', monospace);
       font-size: .95rem;
       letter-spacing: .12em;
       outline: none;
@@ -195,28 +186,28 @@
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
     }
-    input[type=password]::placeholder { color: var(--text-dim); letter-spacing:.08em; }
+    input[type=password]::placeholder { color: var(--text-dim, #5a7a94); letter-spacing:.08em; }
     input[type=password]:focus {
-      border-color: rgba(0,229,255,0.5);
-      background: rgba(14, 26, 48, 0.45);
-      box-shadow: 0 0 0 3px rgba(0,229,255,0.1), 0 0 20px rgba(0,229,255,0.08);
+      border-color: rgba(var(--accent-rgb, 0,229,255),0.5);
+      background: rgba(var(--panel-rgb, 14,26,48), 0.45);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb, 0,229,255),0.1), 0 0 20px rgba(var(--accent-rgb, 0,229,255),0.08);
     }
-    .inp-wrap:focus-within .inp-icon { color: var(--cyan); }
+    .inp-wrap:focus-within .inp-icon { color: rgb(var(--accent-rgb, 0,229,255)); }
 
     .btn {
       position: relative;
       width: 100%;
       padding: 13px 20px;
-      background: rgba(0,229,255,.08);
-      border: 1px solid rgba(0,229,255,0.35);
-      border-radius: 8px;
-      color: var(--cyan);
-      font-family: 'Orbitron', sans-serif;
+      background: rgba(var(--accent-rgb, 0,229,255),.08);
+      border: 1px solid rgba(var(--accent-rgb, 0,229,255),0.35);
+      border-radius: var(--radius-sm, 8px);
+      color: rgb(var(--accent-rgb, 0,229,255));
+      font-family: var(--font-hud, 'Orbitron', sans-serif);
       font-size: .88rem;
       font-weight: 700;
       letter-spacing: .22em;
       text-transform: uppercase;
-      text-shadow: 0 0 8px rgba(0,229,255,0.3);
+      text-shadow: 0 0 8px rgba(var(--accent-rgb, 0,229,255),0.3);
       cursor: pointer;
       overflow: hidden;
       display: flex;
@@ -229,13 +220,13 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
     }
-    .btn:hover  { background: rgba(0,229,255,.15); box-shadow: 0 0 35px rgba(0,229,255,.25), 0 4px 20px rgba(0,0,0,0.2); border-color: rgba(0,229,255,0.6); transform: translateY(-1px); }
+    .btn:hover  { background: rgba(var(--accent-rgb, 0,229,255),.15); box-shadow: 0 0 35px rgba(var(--accent-rgb, 0,229,255),.25), 0 4px 20px rgba(0,0,0,0.2); border-color: rgba(var(--accent-rgb, 0,229,255),0.6); transform: translateY(-1px); }
     .btn:active { transform: translateY(1px) scale(0.97); box-shadow: inset 0 2px 8px rgba(0,0,0,0.3); }
     .btn-arr { transition: transform .25s; }
     .btn:hover .btn-arr { transform: translateX(5px); }
     .btn-shine {
       position: absolute; top:0; left:-100%; width:55%; height:100%;
-      background: linear-gradient(90deg,transparent,rgba(0,229,255,.11),transparent);
+      background: linear-gradient(90deg,transparent,rgba(var(--accent-rgb, 0,229,255),.11),transparent);
       transform: skewX(-18deg);
       animation: shine 3.5s ease infinite;
     }
@@ -247,8 +238,8 @@
       padding: 9px 13px;
       background: rgba(255,68,68,.08);
       border: 1px solid rgba(255,68,68,.28);
-      border-radius: 8px;
-      color: var(--red);
+      border-radius: var(--radius-sm, 8px);
+      color: var(--red, #ff4444);
       font-size: .75rem;
       letter-spacing: .04em;
       animation: shake .4s ease;
@@ -262,10 +253,10 @@
       display: flex; align-items: center; justify-content: space-between;
       margin-top: 20px;
       padding-top: 12px;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid rgba(var(--accent-rgb, 0,229,255), 0.22);
       font-size: .58rem;
       letter-spacing: .14em;
-      color: var(--text-dim);
+      color: var(--text-dim, #5a7a94);
       text-transform: uppercase;
     }
     .footer-sep { opacity: .35; }
@@ -282,4 +273,3 @@
     @supports (padding: env(safe-area-inset-bottom)) {
       #login { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
     }
-  

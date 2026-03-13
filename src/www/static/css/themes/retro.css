@@ -1,0 +1,411 @@
+/* =====================================================
+   T.A.R.S. - Theme: Violet
+   Synthwave / Retrowave - neon purple, pink, magenta.
+   Perspective grid, retrowave sun, VHS scanlines.
+===================================================== */
+:root {
+  /* RGB components - neon purple/pink */
+  --accent-rgb:  200, 80, 255;
+  --panel-rgb:   16, 6, 28;
+  --magenta-rgb: 255, 40, 180;
+  --purple-rgb:  140, 60, 255;
+
+  /* Backgrounds - deep synthwave purple */
+  --bg:          #0a0414;
+  --bg2:         #100820;
+  --panel:       rgba(var(--panel-rgb), 0.55);
+  --panel-solid: rgba(var(--panel-rgb), 0.80);
+  --glass-blur:  18px;
+  --glass-border: rgba(var(--accent-rgb), 0.25);
+  --glass-shine: linear-gradient(135deg, rgba(255,100,255,0.08) 0%, rgba(255,255,255,0.03) 40%, transparent 60%, rgba(var(--accent-rgb),0.05) 100%);
+
+  /* Borders */
+  --border:      rgba(var(--accent-rgb), 0.20);
+  --border-hi:   rgba(var(--accent-rgb), 0.50);
+
+  /* Accent colors */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.50);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.15);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.50);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.50);
+  --gold:        #ff40b4;
+  --gold-dim:    rgba(255, 64, 180, 0.50);
+
+  /* Status colors */
+  --green:       #40ff90;
+  --orange:      #ff8040;
+  --red:         #ff3060;
+
+  /* Text - white/pink on deep purple */
+  --text:        #f0e4f8;
+  --text-dim:    #7a5a8a;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout - sharp retro */
+  --tab-h:       52px;
+  --radius:      4px;
+  --radius-sm:   2px;
+  --radius-lg:   6px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* Theme-specific: synthwave nebulas */
+  --nebula-1:       radial-gradient(circle, rgba(200,80,255,0.20) 0%, rgba(140,40,200,0.06) 50%, transparent 70%);
+  --nebula-1-anim:  violetDrift1 45s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(255,40,180,0.15) 0%, rgba(200,30,140,0.04) 50%, transparent 70%);
+  --nebula-2-anim:  violetDrift2 60s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(140,60,255,0.12) 0%, transparent 50%);
+  --nebula-blur:    100px;
+  --particle-orb-hues: 280, 320, 200;
+  --particle-rays:     none;
+
+  /* VHS scanlines */
+  --scanlines: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(200,80,255,0.015) 2px, rgba(200,80,255,0.015) 4px);
+  --scanline-opacity: 1;
+
+  /* Dark purple vignette */
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 35%, rgba(10,4,20,0.50) 80%, rgba(5,2,12,0.70) 100%);
+}
+
+/* =====================================================
+   Keyframe Animations
+===================================================== */
+
+/* Grid scroll toward viewer */
+@keyframes violetGridScroll {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 60px; }
+}
+
+/* Retrowave sun pulse */
+@keyframes violetSunPulse {
+  0%, 100% { opacity: 0.7; transform: translate(-50%, 0) scaleX(1); }
+  50%      { opacity: 0.9; transform: translate(-50%, 0) scaleX(1.02); }
+}
+
+/* Neon flicker */
+@keyframes neonFlicker {
+  0%, 100% { opacity: 1; }
+  4%       { opacity: 0.85; }
+  6%       { opacity: 1; }
+  42%      { opacity: 1; }
+  44%      { opacity: 0.9; }
+  46%      { opacity: 1; }
+  80%      { opacity: 1; }
+  82%      { opacity: 0.88; }
+  83%      { opacity: 1; }
+}
+
+/* Nebula drift */
+@keyframes violetDrift1 {
+  0%   { transform: translate(0, 0) scale(1);       opacity: 0.5; }
+  25%  { transform: translate(8vw, 12vh) scale(1.2); opacity: 0.65; }
+  50%  { transform: translate(15vw, 4vh) scale(0.9); opacity: 0.4; }
+  75%  { transform: translate(4vw, -8vh) scale(1.1); opacity: 0.6; }
+  100% { transform: translate(0, 0) scale(1);       opacity: 0.5; }
+}
+@keyframes violetDrift2 {
+  0%   { transform: translate(12vw, -6vh) scale(1);    opacity: 0.4; }
+  33%  { transform: translate(-4vw, 14vh) scale(1.15);  opacity: 0.55; }
+  66%  { transform: translate(10vw, 6vh) scale(0.85);   opacity: 0.35; }
+  100% { transform: translate(12vw, -6vh) scale(1);    opacity: 0.4; }
+}
+
+/* Neon border pulse for panels */
+@keyframes violetNeonPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(200,80,255,0.15), inset 0 0 20px rgba(200,80,255,0.03); }
+  50%      { box-shadow: 0 0 18px rgba(200,80,255,0.25), inset 0 0 30px rgba(200,80,255,0.05); }
+}
+
+/* Tab glow */
+@keyframes violetTabGlow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(200,80,255,0.4)); }
+  50%      { filter: drop-shadow(0 0 10px rgba(255,40,180,0.6)) drop-shadow(0 0 4px rgba(200,80,255,0.3)); }
+}
+
+/* =====================================================
+   Background - Perspective grid + gradient sky
+===================================================== */
+body {
+  background:
+    /* Perspective grid floor - lines converging to vanishing point */
+    repeating-linear-gradient(
+      90deg,
+      rgba(200,80,255,0.06) 0px, transparent 1px, transparent 59px, rgba(200,80,255,0.06) 60px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(200,80,255,0.04) 0px, transparent 1px, transparent 39px, rgba(200,80,255,0.04) 40px
+    ),
+    /* Sky gradient - deep purple to pink at horizon */
+    linear-gradient(
+      0deg,
+      rgba(255,60,120,0.12) 0%,
+      rgba(200,40,100,0.08) 15%,
+      rgba(100,20,80,0.05) 30%,
+      rgba(40,10,60,0.02) 50%,
+      transparent 70%
+    ),
+    var(--bg) !important;
+  background-size: 60px 40px, 60px 40px, 100% 100%, 100% 100% !important;
+  background-attachment: fixed !important;
+  animation: violetGridScroll 4s linear infinite !important;
+}
+
+/* =====================================================
+   Retrowave Sun - half circle with horizontal stripes
+   on ::before
+===================================================== */
+.nebula-layer::before {
+  content: '' !important;
+  position: fixed !important;
+  bottom: 10vh !important;
+  left: 50% !important;
+  transform: translate(-50%, 0) !important;
+  width: 280px !important;
+  height: 140px !important;
+  border-radius: 140px 140px 0 0 !important;
+  background:
+    /* Horizontal stripe gaps through the sun */
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 6px,
+      rgba(10,4,20,0.85) 6px,
+      rgba(10,4,20,0.85) 10px,
+      transparent 10px,
+      transparent 16px,
+      rgba(10,4,20,0.85) 16px,
+      rgba(10,4,20,0.85) 18px
+    ),
+    /* Sun gradient - yellow/orange center to magenta edge */
+    radial-gradient(
+      ellipse at 50% 100%,
+      rgba(255,220,60,0.9) 0%,
+      rgba(255,160,40,0.85) 25%,
+      rgba(255,80,100,0.8) 50%,
+      rgba(255,40,120,0.7) 70%,
+      rgba(200,30,160,0.5) 85%,
+      transparent 100%
+    ) !important;
+  z-index: 0 !important;
+  animation: violetSunPulse 6s ease-in-out infinite !important;
+  filter: blur(1px) !important;
+  box-shadow:
+    0 0 60px rgba(255,120,60,0.3),
+    0 0 120px rgba(255,60,120,0.15),
+    0 0 200px rgba(200,40,160,0.08) !important;
+  top: auto !important;
+}
+
+/* =====================================================
+   Mountain/City silhouette on ::after
+===================================================== */
+.nebula-layer::after {
+  content: '' !important;
+  position: fixed !important;
+  bottom: 8vh !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 180px !important;
+  background:
+    /* Cityscape silhouette built from layered gradients */
+    linear-gradient(90deg,
+      transparent 0%,
+      /* Building 1 */
+      transparent 5%, rgba(10,4,20,0.95) 5%, rgba(10,4,20,0.95) 8%, transparent 8%,
+      /* Gap */
+      transparent 10%,
+      /* Building 2 - tall */
+      transparent 12%, rgba(10,4,20,0.95) 12%, rgba(10,4,20,0.95) 15%, transparent 15%,
+      /* Building 3 */
+      transparent 18%, rgba(10,4,20,0.95) 18%, rgba(10,4,20,0.95) 22%, transparent 22%,
+      /* Gap */
+      transparent 25%,
+      /* Building 4 */
+      transparent 28%, rgba(10,4,20,0.95) 28%, rgba(10,4,20,0.95) 30%, transparent 30%,
+      /* Mountain start */
+      transparent 35%,
+      /* Building 5 */
+      transparent 40%, rgba(10,4,20,0.95) 40%, rgba(10,4,20,0.95) 44%, transparent 44%,
+      /* Gap */
+      transparent 48%,
+      /* Building 6 */
+      transparent 55%, rgba(10,4,20,0.95) 55%, rgba(10,4,20,0.95) 58%, transparent 58%,
+      /* Gap */
+      transparent 62%,
+      /* Building 7 - tall */
+      transparent 65%, rgba(10,4,20,0.95) 65%, rgba(10,4,20,0.95) 68%, transparent 68%,
+      /* Building 8 */
+      transparent 72%, rgba(10,4,20,0.95) 72%, rgba(10,4,20,0.95) 76%, transparent 76%,
+      /* Gap */
+      transparent 80%,
+      /* Building 9 */
+      transparent 85%, rgba(10,4,20,0.95) 85%, rgba(10,4,20,0.95) 88%, transparent 88%,
+      /* Building 10 */
+      transparent 92%, rgba(10,4,20,0.95) 92%, rgba(10,4,20,0.95) 95%, transparent 95%,
+      transparent 100%
+    ),
+    /* Mountain/hill silhouette underneath */
+    linear-gradient(0deg, rgba(10,4,20,0.98) 0%, rgba(10,4,20,0.6) 40%, transparent 100%) !important;
+  z-index: 0 !important;
+  border-radius: 0 !important;
+  top: auto !important;
+  box-shadow: none !important;
+}
+
+/* =====================================================
+   Glass Panels - neon purple border with glow
+===================================================== */
+.glass {
+  border: 1px solid rgba(200,80,255,0.25) !important;
+  animation: violetNeonPulse 4s ease-in-out infinite !important;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.5),
+    0 0 20px rgba(200,80,255,0.06),
+    inset 0 0 30px rgba(200,80,255,0.03),
+    inset 0 1px 0 rgba(255,140,255,0.06),
+    inset 0 -1px 0 rgba(0,0,0,0.3) !important;
+}
+
+.glass::before {
+  background: linear-gradient(
+    135deg,
+    rgba(255,100,255,0.04) 0%,
+    transparent 30%,
+    transparent 70%,
+    rgba(200,80,255,0.03) 100%
+  ) !important;
+}
+
+.glass::after {
+  border-left: 1px solid rgba(200,80,255,0.12) !important;
+}
+
+/* =====================================================
+   Tab Bar - purple to pink neon gradient
+===================================================== */
+.tab-bar::after {
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(140,60,255,0.4),
+    rgba(200,80,255,0.6),
+    rgba(255,40,180,0.65),
+    rgba(200,80,255,0.6),
+    rgba(140,60,255,0.4),
+    transparent
+  ) !important;
+  box-shadow: 0 0 20px rgba(200,80,255,0.3), 0 0 40px rgba(255,40,180,0.1) !important;
+  animation: neonFlicker 6s ease-in-out infinite !important;
+}
+
+/* =====================================================
+   Active Tab - neon glow
+===================================================== */
+.custom-tab.active i {
+  animation: violetTabGlow 3s ease-in-out infinite !important;
+}
+
+/* =====================================================
+   Chat Bubbles
+===================================================== */
+.msg-bubble-bot {
+  border-left: 2px solid rgba(200,80,255,0.50) !important;
+  box-shadow:
+    0 2px 12px rgba(0,0,0,0.4),
+    inset 0 0 25px rgba(200,80,255,0.04),
+    -4px 0 25px rgba(200,80,255,0.06) !important;
+  text-shadow: 0 0 20px rgba(200,80,255,0.04);
+}
+
+.msg-bubble-user {
+  border-right: 2px solid rgba(255,40,180,0.45) !important;
+  box-shadow:
+    0 2px 12px rgba(0,0,0,0.4),
+    inset 0 0 20px rgba(255,40,180,0.04) !important;
+}
+
+/* =====================================================
+   Input Pill - hot pink/purple neon border
+===================================================== */
+.input-pill {
+  border: 1px solid rgba(200,80,255,0.20) !important;
+}
+
+.input-pill:focus-within {
+  border-color: rgba(255,40,180,0.55) !important;
+  box-shadow:
+    0 0 0 3px rgba(255,40,180,0.10),
+    0 0 25px rgba(255,40,180,0.12),
+    0 0 50px rgba(200,80,255,0.06) !important;
+  animation: neonFlicker 4s ease-in-out infinite !important;
+}
+
+/* =====================================================
+   Watermark - synthwave gradient
+===================================================== */
+.tars-watermark {
+  background: linear-gradient(135deg, rgba(200,80,255,0.85), rgba(255,40,180,0.75), rgba(255,200,60,0.6)) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+}
+
+/* =====================================================
+   Emotion Buttons - neon glow hover
+===================================================== */
+.em-btn:hover {
+  box-shadow:
+    0 0 20px rgba(200,80,255,0.20),
+    0 0 40px rgba(255,40,180,0.08),
+    inset 0 0 20px rgba(200,80,255,0.05) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* =====================================================
+   HUD Buttons
+===================================================== */
+.hud-btn:hover {
+  box-shadow: 0 0 15px rgba(200,80,255,0.25) !important;
+}
+
+/* =====================================================
+   Particle Background
+===================================================== */
+#particleBg {
+  opacity: 0.35 !important;
+}
+
+/* =====================================================
+   Nebula Blobs - synthwave colors
+===================================================== */
+.nb-1 {
+  background: radial-gradient(circle, rgba(200,80,255,0.22) 0%, rgba(140,40,200,0.06) 50%, transparent 70%) !important;
+  animation: violetDrift1 45s ease-in-out infinite !important;
+}
+.nb-2 {
+  background: radial-gradient(circle, rgba(255,40,180,0.15) 0%, rgba(200,30,140,0.04) 50%, transparent 70%) !important;
+  animation: violetDrift2 60s ease-in-out infinite !important;
+}
+.nb-3 {
+  background: radial-gradient(circle, rgba(140,60,255,0.12) 0%, transparent 50%) !important;
+  animation: violetDrift1 75s ease-in-out infinite reverse !important;
+}

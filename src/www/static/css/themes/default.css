@@ -1,0 +1,71 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: Midnight (Default)
+   Cyan neon on deep blue — the original TARS aesthetic
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components */
+  --accent-rgb:  0, 229, 255;
+  --panel-rgb:   14, 26, 48;
+  --magenta-rgb: 255, 45, 138;
+  --purple-rgb:  180, 77, 255;
+
+  /* Backgrounds */
+  --bg:          #0a1220;
+  --bg2:         #0e1830;
+  --panel:       rgba(var(--panel-rgb), 0.55);
+  --panel-solid: rgba(var(--panel-rgb), 0.78);
+  --glass-blur:  22px;
+  --glass-border: rgba(var(--accent-rgb), 0.2);
+  --glass-shine: linear-gradient(135deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.03) 40%, transparent 60%, rgba(var(--accent-rgb),0.04) 100%);
+
+  /* Borders */
+  --border:      rgba(var(--accent-rgb), 0.18);
+  --border-hi:   rgba(var(--accent-rgb), 0.45);
+
+  /* Accent colors */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.5);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.15);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.5);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.5);
+  --gold:        rgb(var(--accent-rgb));
+  --gold-dim:    rgba(var(--accent-rgb), 0.5);
+
+  /* Status colors */
+  --green:       #39ff14;
+  --orange:      #ffb700;
+  --red:         #ff4444;
+
+  /* Text */
+  --text:        #e2eaf2;
+  --text-dim:    #5a7a94;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout */
+  --tab-h:       52px;
+  --radius:      14px;
+  --radius-sm:   8px;
+  --radius-lg:   18px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Theme-specific: default nebula + particles ── */
+  --nebula-1:       radial-gradient(circle, rgba(120, 40, 200, 0.35) 0%, rgba(80, 20, 160, 0.1) 50%, transparent 70%);
+  --nebula-2:       radial-gradient(circle, rgba(0, 180, 240, 0.25) 0%, rgba(0, 120, 200, 0.08) 50%, transparent 70%);
+  --nebula-3:       radial-gradient(circle, rgba(160, 30, 220, 0.30) 0%, rgba(100, 20, 180, 0.08) 50%, transparent 70%);
+  --particle-orb-hues: 190, 280, 320;
+}

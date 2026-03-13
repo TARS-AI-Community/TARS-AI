@@ -1,0 +1,478 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: Baby Grogu / The Mandalorian
+   "This is the Way."
+   Warm desert landscape, CSS Grogu eyes that blink,
+   Force particles floating upward, Mandalorian helmet
+   visor shape, cozy rounded everything, sage & gold
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — Grogu sage green */
+  --accent-rgb:  120, 180, 90;
+  --panel-rgb:   18, 14, 8;
+  --magenta-rgb: 200, 160, 80;
+  --purple-rgb:  140, 170, 100;
+
+  /* Backgrounds — desert night sky */
+  --bg:          #0a0804;
+  --bg2:         #100e08;
+  --panel:       rgba(var(--panel-rgb), 0.50);
+  --panel-solid: rgba(var(--panel-rgb), 0.72);
+  --glass-blur:  22px;
+  --glass-border: rgba(var(--accent-rgb), 0.16);
+  --glass-shine: linear-gradient(135deg,
+    rgba(255,240,200,0.06) 0%,
+    rgba(255,240,200,0.02) 35%,
+    transparent 55%,
+    rgba(var(--accent-rgb),0.03) 100%);
+
+  /* Borders — soft organic */
+  --border:      rgba(var(--accent-rgb), 0.14);
+  --border-hi:   rgba(var(--accent-rgb), 0.35);
+
+  /* Accent colors — sage green + desert gold */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.40);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.10);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.40);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.40);
+  --gold:        #c8a050;
+  --gold-dim:    rgba(200, 160, 80, 0.40);
+
+  /* Status colors — warm muted */
+  --green:       #78b45a;
+  --orange:      #c8a050;
+  --red:         #c05040;
+
+  /* Text — warm parchment */
+  --text:        #e8dcc8;
+  --text-dim:    #7a6e55;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout — very rounded, soft like Grogu */
+  --tab-h:       52px;
+  --radius:      20px;
+  --radius-sm:   12px;
+  --radius-lg:   24px;
+  --ease:        cubic-bezier(0.34, 1.56, 0.64, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Theme-specific ── */
+  /* Force energy + desert warmth nebula */
+  --nebula-1:       radial-gradient(circle, rgba(120,180,90,0.22) 0%, rgba(80,140,50,0.06) 45%, transparent 65%);
+  --nebula-1-size:  400px;
+  --nebula-1-anim:  groguFloat1 50s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(200,160,80,0.18) 0%, rgba(160,120,50,0.05) 45%, transparent 65%);
+  --nebula-2-size:  350px;
+  --nebula-2-anim:  groguFloat2 60s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(100,160,80,0.15) 0%, rgba(60,120,40,0.04) 45%, transparent 65%);
+  --nebula-3-size:  300px;
+  --nebula-3-anim:  groguFloat3 55s ease-in-out infinite;
+  --nebula-blur:    110px;
+
+  /* Particle system — Force green + warm gold */
+  --particle-orb-hues: 95, 42, 115;
+  --particle-rays: none;
+
+  /* No scanlines — Grogu is gentle */
+  --scanlines: none;
+  --scanline-content: none;
+  --scanline-opacity: 0;
+
+  /* Soft warm vignette */
+  --vignette: radial-gradient(ellipse at 50% 40%,
+    transparent 35%,
+    rgba(10,6,2,0.25) 55%,
+    rgba(6,4,1,0.55) 80%,
+    rgba(4,2,0,0.75) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   ANIMATIONS
+═══════════════════════════════════════════════════════ */
+
+/* Gentle floating nebulas */
+@keyframes groguFloat1 {
+  0%   { transform: translate(0, 0) scale(1);       opacity: 0.45; }
+  25%  { transform: translate(5vw, 6vh) scale(1.08); opacity: 0.55; }
+  50%  { transform: translate(10vw, 2vh) scale(1.02); opacity: 0.40; }
+  75%  { transform: translate(3vw, -3vh) scale(1.1);  opacity: 0.50; }
+  100% { transform: translate(0, 0) scale(1);       opacity: 0.45; }
+}
+@keyframes groguFloat2 {
+  0%   { transform: translate(0, 0) scale(1);        opacity: 0.40; }
+  33%  { transform: translate(-6vw, 4vh) scale(1.05); opacity: 0.50; }
+  66%  { transform: translate(4vw, -5vh) scale(1.1);  opacity: 0.45; }
+  100% { transform: translate(0, 0) scale(1);        opacity: 0.40; }
+}
+@keyframes groguFloat3 {
+  0%   { transform: translate(0, 0) scale(1);        opacity: 0.35; }
+  50%  { transform: translate(-4vw, -6vh) scale(1.1); opacity: 0.50; }
+  100% { transform: translate(0, 0) scale(1);        opacity: 0.35; }
+}
+
+/* Grogu blink — natural double-blink */
+@keyframes groguBlink {
+  0%, 38%, 44%, 70%, 76%, 100% { transform: scaleY(1); }
+  40% { transform: scaleY(0.05); }
+  42% { transform: scaleY(0.9); }
+  72% { transform: scaleY(0.05); }
+  74% { transform: scaleY(0.8); }
+}
+
+/* Force particles — float upward */
+@keyframes forceFloat1 {
+  0%   { transform: translate(0, 0) scale(0.3);   opacity: 0; }
+  10%  { opacity: 0.8; }
+  50%  { transform: translate(3vw, -30vh) scale(0.8); opacity: 0.6; }
+  80%  { opacity: 0.3; }
+  100% { transform: translate(5vw, -60vh) scale(0.2); opacity: 0; }
+}
+@keyframes forceFloat2 {
+  0%   { transform: translate(0, 0) scale(0.2);   opacity: 0; }
+  15%  { opacity: 0.7; }
+  50%  { transform: translate(-2vw, -25vh) scale(0.6); opacity: 0.5; }
+  85%  { opacity: 0.2; }
+  100% { transform: translate(-4vw, -55vh) scale(0.15); opacity: 0; }
+}
+@keyframes forceFloat3 {
+  0%   { transform: translate(0, 0) scale(0.4);   opacity: 0; }
+  12%  { opacity: 0.6; }
+  50%  { transform: translate(1vw, -35vh) scale(0.7); opacity: 0.4; }
+  100% { transform: translate(2vw, -65vh) scale(0.1); opacity: 0; }
+}
+
+/* Gentle hover float — applied to panels */
+@keyframes gentleFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+/* Grogu ear wiggle (subtle) */
+@keyframes earWiggle {
+  0%, 85%, 100% { transform: rotate(0deg); }
+  88%           { transform: rotate(-3deg); }
+  91%           { transform: rotate(2deg); }
+  94%           { transform: rotate(-1deg); }
+}
+
+/* Soft tab glow */
+@keyframes groguTabGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(120,180,90,0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(120,180,90,0.6)) drop-shadow(0 0 20px rgba(120,180,90,0.2));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   BODY — Desert landscape gradient
+═══════════════════════════════════════════════════════ */
+body {
+  background:
+    /* Stars in the night sky */
+    radial-gradient(circle 1px at 15% 8%, rgba(255,240,200,0.4) 0%, transparent 100%),
+    radial-gradient(circle 1px at 45% 12%, rgba(255,240,200,0.3) 0%, transparent 100%),
+    radial-gradient(circle 1px at 70% 5%, rgba(255,240,200,0.35) 0%, transparent 100%),
+    radial-gradient(circle 1px at 88% 15%, rgba(255,240,200,0.25) 0%, transparent 100%),
+    radial-gradient(circle 1px at 25% 18%, rgba(255,240,200,0.2) 0%, transparent 100%),
+    radial-gradient(circle 1px at 55% 3%, rgba(255,240,200,0.3) 0%, transparent 100%),
+    radial-gradient(circle 1px at 82% 22%, rgba(255,240,200,0.15) 0%, transparent 100%),
+    radial-gradient(circle 1.5px at 35% 6%, rgba(255,220,150,0.5) 0%, transparent 100%),
+    radial-gradient(circle 1px at 62% 20%, rgba(255,240,200,0.2) 0%, transparent 100%),
+    radial-gradient(circle 1px at 8% 25%, rgba(255,240,200,0.15) 0%, transparent 100%),
+    /* Desert landscape — sky to sand */
+    linear-gradient(
+      to bottom,
+      #060408 0%,
+      #0a0806 15%,
+      #0e0a06 30%,
+      #140e08 45%,
+      #1a1208 55%,
+      rgba(60,40,20,0.3) 70%,
+      rgba(90,60,30,0.15) 80%,
+      rgba(120,80,40,0.08) 90%,
+      rgba(80,55,25,0.05) 100%),
+    #0a0804 !important;
+  background-attachment: fixed !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   GROGU EYES — CSS art via .nebula-layer pseudo-elements
+   Large dark eyes with highlight spots, bottom of screen
+═══════════════════════════════════════════════════════ */
+.nebula-layer::before,
+.nebula-layer::after {
+  content: '';
+  position: fixed;
+  pointer-events: none;
+  z-index: 1;
+  border-radius: 50%;
+  animation: groguBlink 7s ease-in-out infinite;
+}
+
+/* Left eye */
+.nebula-layer::before {
+  width: 52px;
+  height: 62px;
+  bottom: 10%;
+  right: calc(50% + 12px);
+  background:
+    /* Highlight / catchlight — top right */
+    radial-gradient(circle 6px at 62% 30%, rgba(255,255,240,0.85) 0%, rgba(255,255,240,0.3) 40%, transparent 60%),
+    /* Secondary catchlight — smaller */
+    radial-gradient(circle 3px at 45% 45%, rgba(255,255,240,0.3) 0%, transparent 50%),
+    /* Iris — deep dark brown-black */
+    radial-gradient(ellipse at 50% 50%, #1a1808 0%, #121006 40%, #0a0804 60%, transparent 61%);
+  box-shadow:
+    /* Eye outline — soft green tint */
+    inset 0 0 0 3px rgba(100,140,60,0.25),
+    /* Depth shadow */
+    inset -4px -3px 8px rgba(0,0,0,0.6),
+    inset 3px 2px 6px rgba(0,0,0,0.3),
+    /* Outer glow — Force green */
+    0 0 25px rgba(120,180,90,0.12),
+    0 0 50px rgba(120,180,90,0.06),
+    /* Face shadow around eyes */
+    0 4px 15px rgba(0,0,0,0.4);
+}
+
+/* Right eye */
+.nebula-layer::after {
+  width: 52px;
+  height: 62px;
+  bottom: 10%;
+  right: calc(50% - 64px);
+  background:
+    /* Highlight / catchlight — top right */
+    radial-gradient(circle 6px at 58% 28%, rgba(255,255,240,0.85) 0%, rgba(255,255,240,0.3) 40%, transparent 60%),
+    /* Secondary catchlight */
+    radial-gradient(circle 3px at 42% 42%, rgba(255,255,240,0.3) 0%, transparent 50%),
+    /* Iris */
+    radial-gradient(ellipse at 50% 50%, #1a1808 0%, #121006 40%, #0a0804 60%, transparent 61%);
+  box-shadow:
+    inset 0 0 0 3px rgba(100,140,60,0.25),
+    inset -4px -3px 8px rgba(0,0,0,0.6),
+    inset 3px 2px 6px rgba(0,0,0,0.3),
+    0 0 25px rgba(120,180,90,0.12),
+    0 0 50px rgba(120,180,90,0.06),
+    0 4px 15px rgba(0,0,0,0.4);
+}
+
+/* ═══════════════════════════════════════════════════════
+   FORCE PARTICLES — nebula blobs become floating dots
+═══════════════════════════════════════════════════════ */
+.nb-1 {
+  width: 8px !important;
+  height: 8px !important;
+  filter: blur(3px) !important;
+  background: radial-gradient(circle, rgba(120,200,80,0.9) 0%, rgba(120,200,80,0.3) 50%, transparent 70%) !important;
+  bottom: 25% !important;
+  top: auto !important;
+  left: 30% !important;
+  animation: forceFloat1 12s ease-in-out infinite !important;
+  box-shadow: 0 0 10px rgba(120,200,80,0.5), 0 0 25px rgba(120,200,80,0.2);
+}
+
+.nb-2 {
+  width: 6px !important;
+  height: 6px !important;
+  filter: blur(2px) !important;
+  background: radial-gradient(circle, rgba(140,210,90,0.8) 0%, rgba(140,210,90,0.2) 50%, transparent 70%) !important;
+  bottom: 20% !important;
+  top: auto !important;
+  right: 35% !important;
+  animation: forceFloat2 15s ease-in-out 3s infinite !important;
+  box-shadow: 0 0 8px rgba(140,210,90,0.4), 0 0 20px rgba(140,210,90,0.15);
+}
+
+.nb-3 {
+  width: 10px !important;
+  height: 10px !important;
+  filter: blur(4px) !important;
+  background: radial-gradient(circle, rgba(100,180,70,0.85) 0%, rgba(100,180,70,0.25) 50%, transparent 70%) !important;
+  bottom: 30% !important;
+  top: auto !important;
+  left: 55% !important;
+  animation: forceFloat3 18s ease-in-out 6s infinite !important;
+  box-shadow: 0 0 12px rgba(100,180,70,0.45), 0 0 30px rgba(100,180,70,0.2);
+}
+
+/* ═══════════════════════════════════════════════════════
+   GLASS PANELS — Warm rounded, gentle float
+═══════════════════════════════════════════════════════ */
+.glass {
+  border-radius: 20px !important;
+  border: 1px solid rgba(120,180,90,0.12) !important;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.2),
+    0 2px 8px rgba(0,0,0,0.1),
+    inset 0 1px 0 rgba(255,240,200,0.06),
+    inset 0 -1px 0 rgba(0,0,0,0.08) !important;
+  animation: gentleFloat 8s ease-in-out infinite !important;
+}
+
+.glass::before {
+  background: linear-gradient(135deg,
+    rgba(200,180,120,0.05) 0%,
+    rgba(200,180,120,0.02) 30%,
+    transparent 60%,
+    rgba(120,180,90,0.02) 100%) !important;
+}
+
+.glass-deep {
+  border-radius: 20px !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TAB BAR — Warm, rounded, beskar-colored
+═══════════════════════════════════════════════════════ */
+.tab-bar {
+  background: rgba(14,10,6,0.92) !important;
+  border-bottom: 1px solid rgba(200,160,80,0.15) !important;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.2) !important;
+  border-radius: 0 !important;
+}
+
+.tab-bar::after {
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(120,180,90,0.3) 20%,
+    rgba(200,160,80,0.5) 40%,
+    rgba(120,180,90,0.6) 50%,
+    rgba(200,160,80,0.5) 60%,
+    rgba(120,180,90,0.3) 80%,
+    transparent 100%) !important;
+  box-shadow: 0 0 15px rgba(120,180,90,0.15) !important;
+  height: 2px !important;
+}
+
+/* Active tab — sage green glow */
+.custom-tab.active i {
+  animation: groguTabGlow 3s ease-in-out infinite !important;
+  color: rgba(120,180,90,0.9) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CHAT BUBBLES — Extra rounded, warm tones
+═══════════════════════════════════════════════════════ */
+.msg-bubble {
+  border-radius: 18px !important;
+}
+
+/* Bot: sage green border, cozy */
+.msg-bubble-bot {
+  border-radius: 6px 18px 18px 18px !important;
+  border-left: 3px solid rgba(120,180,90,0.45) !important;
+  background: rgba(120,180,90,0.06) !important;
+  border-top: 1px solid rgba(120,180,90,0.10) !important;
+  border-right: 1px solid rgba(120,180,90,0.06) !important;
+  border-bottom: 1px solid rgba(120,180,90,0.06) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
+}
+
+/* User: desert gold border */
+.msg-bubble-user {
+  border-radius: 18px 6px 18px 18px !important;
+  border-right: 3px solid rgba(200,160,80,0.5) !important;
+  background: rgba(200,160,80,0.06) !important;
+  border-top: 1px solid rgba(200,160,80,0.10) !important;
+  border-left: 1px solid rgba(200,160,80,0.06) !important;
+  border-bottom: 1px solid rgba(200,160,80,0.06) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   WATERMARK — Desert gold to sage gradient
+═══════════════════════════════════════════════════════ */
+.tars-watermark {
+  background: linear-gradient(180deg,
+    rgba(200,160,80,0.85) 0%,
+    rgba(120,180,90,0.7) 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+  filter: drop-shadow(0 0 4px rgba(200,160,80,0.2));
+}
+
+/* ═══════════════════════════════════════════════════════
+   INPUT — Rounded, warm glow on focus
+═══════════════════════════════════════════════════════ */
+.input-pill {
+  border-radius: 22px !important;
+  border: 1px solid rgba(120,180,90,0.12) !important;
+  background: rgba(18,14,8,0.5) !important;
+}
+
+.input-pill:focus-within {
+  border-color: rgba(120,180,90,0.4) !important;
+  box-shadow:
+    0 0 0 3px rgba(120,180,90,0.08),
+    0 0 20px rgba(120,180,90,0.08) !important;
+  background: rgba(18,14,8,0.65) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   EMOTION BUTTONS — Soft rounded, gentle interaction
+═══════════════════════════════════════════════════════ */
+.em-btn {
+  border-radius: 16px !important;
+  transition: all 0.35s var(--ease) !important;
+}
+
+.em-btn:hover {
+  box-shadow:
+    0 6px 20px rgba(0,0,0,0.2),
+    0 0 15px rgba(120,180,90,0.1),
+    inset 0 0 15px rgba(120,180,90,0.04) !important;
+  transform: translateY(-4px) scale(1.02) !important;
+  border-color: rgba(120,180,90,0.3) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SCROLLBAR — Warm rounded
+═══════════════════════════════════════════════════════ */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(10,8,4,0.5);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(120,180,90,0.3), rgba(200,160,80,0.3));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(120,180,90,0.5), rgba(200,160,80,0.5));
+}
+
+/* ═══════════════════════════════════════════════════════
+   SELECTION — Warm sage
+═══════════════════════════════════════════════════════ */
+::selection {
+  background: rgba(120,180,90,0.25);
+  color: #f0e8d4;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PARTICLE CANVAS — dim it down for cozy feel
+═══════════════════════════════════════════════════════ */
+#particleBg {
+  opacity: 0.4 !important;
+}

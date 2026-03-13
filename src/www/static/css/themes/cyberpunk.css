@@ -1,0 +1,547 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: Cyberpunk / Neon City
+   Blade Runner 2049 aesthetic — perspective grid floor,
+   digital rain, chromatic aberration glitch, neon flicker,
+   heavy scanlines, circuit traces, pure CSS maximalism
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — hot neon cyan + magenta */
+  --accent-rgb:  0, 229, 255;
+  --panel-rgb:   6, 8, 14;
+  --magenta-rgb: 255, 0, 255;
+  --purple-rgb:  180, 77, 255;
+
+  /* Backgrounds — abyss black */
+  --bg:          #040609;
+  --bg2:         #06080e;
+  --panel:       rgba(var(--panel-rgb), 0.88);
+  --panel-solid: rgba(var(--panel-rgb), 0.94);
+  --glass-blur:  18px;
+  --glass-border: rgba(var(--accent-rgb), 0.25);
+  --glass-shine: linear-gradient(135deg,
+    rgba(0,229,255,0.08) 0%,
+    rgba(0,229,255,0.02) 30%,
+    transparent 50%,
+    rgba(255,0,255,0.04) 80%,
+    rgba(255,0,255,0.08) 100%);
+
+  /* Borders — neon edges */
+  --border:      rgba(var(--accent-rgb), 0.22);
+  --border-hi:   rgba(var(--accent-rgb), 0.6);
+
+  /* Accent colors — full neon */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.5);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.2);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.5);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.5);
+  --gold:        #ffb700;
+  --gold-dim:    rgba(255, 183, 0, 0.5);
+
+  /* Status colors — neon */
+  --green:       #39ff14;
+  --orange:      #ffb700;
+  --red:         #ff2244;
+
+  /* Text — icy bright */
+  --text:        #e8f0ff;
+  --text-dim:    #5a7a99;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout */
+  --tab-h:       52px;
+  --radius:      4px;
+  --radius-sm:   2px;
+  --radius-lg:   6px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Theme-specific ── */
+  /* Neon nebula blobs — intense */
+  --nebula-1:       radial-gradient(circle, rgba(0,229,255,0.35) 0%, rgba(0,140,200,0.10) 40%, transparent 65%);
+  --nebula-1-size:  600px;
+  --nebula-1-anim:  cyberDrift1 35s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(255,0,255,0.30) 0%, rgba(180,0,200,0.08) 40%, transparent 65%);
+  --nebula-2-size:  550px;
+  --nebula-2-anim:  cyberDrift2 40s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(180,77,255,0.25) 0%, rgba(120,40,200,0.06) 40%, transparent 65%);
+  --nebula-3-size:  500px;
+  --nebula-3-anim:  cyberDrift3 45s ease-in-out infinite;
+  --nebula-blur:    80px;
+
+  /* Particle system — neon rainbow */
+  --particle-orb-hues: 185, 295, 270;
+  --particle-prism: 0,229,255; 255,0,255; 180,77,255; 0,200,240; 255,60,200; 120,0,255; 0,255,180;
+
+  /* Heavy CRT scanlines */
+  --scanlines: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0) 0px,
+    rgba(0,0,0,0) 2px,
+    rgba(0,0,0,0.25) 2px,
+    rgba(0,0,0,0.25) 4px);
+  --scanline-opacity: 1;
+
+  /* Deep tunnel vignette */
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 20%, rgba(0,0,0,0.5) 60%, rgba(0,0,0,0.85) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   ANIMATIONS
+═══════════════════════════════════════════════════════ */
+
+/* Nebula drifts */
+@keyframes cyberDrift1 {
+  0%   { transform: translate(-10vw, -8vh) scale(1);    opacity: 0.5; }
+  25%  { transform: translate(10vw, 15vh) scale(1.3);   opacity: 0.8; }
+  50%  { transform: translate(22vw, 5vh) scale(0.85);   opacity: 0.4; }
+  75%  { transform: translate(8vw, -12vh) scale(1.2);   opacity: 0.7; }
+  100% { transform: translate(-10vw, -8vh) scale(1);    opacity: 0.5; }
+}
+@keyframes cyberDrift2 {
+  0%   { transform: translate(12vw, 8vh) scale(1);      opacity: 0.4; }
+  25%  { transform: translate(-8vw, -12vh) scale(1.25); opacity: 0.7; }
+  50%  { transform: translate(-18vw, 10vh) scale(1.1);  opacity: 0.5; }
+  75%  { transform: translate(2vw, 18vh) scale(0.9);    opacity: 0.8; }
+  100% { transform: translate(12vw, 8vh) scale(1);      opacity: 0.4; }
+}
+@keyframes cyberDrift3 {
+  0%   { transform: translate(0, 10vh) scale(1);        opacity: 0.5; }
+  33%  { transform: translate(-15vw, -5vh) scale(1.15); opacity: 0.6; }
+  66%  { transform: translate(10vw, -15vh) scale(0.95); opacity: 0.7; }
+  100% { transform: translate(0, 10vh) scale(1);        opacity: 0.5; }
+}
+
+/* Digital rain — tall gradient columns animating downward */
+@keyframes digitalRain {
+  0%   { background-position: 0 -100vh; }
+  100% { background-position: 0 100vh; }
+}
+
+/* Chromatic aberration glitch on glass panels */
+@keyframes glitchShift {
+  0%, 87%, 100%  {
+    box-shadow:
+      0 8px 32px rgba(0,0,0,0.5),
+      0 0 60px rgba(0,229,255,0.08),
+      inset 0 1px 0 rgba(0,229,255,0.1),
+      inset 0 -1px 0 rgba(0,0,0,0.3);
+    transform: translate(0, 0);
+  }
+  88% {
+    box-shadow:
+      -3px 0 0 rgba(255,0,0,0.4),
+      3px 0 0 rgba(0,255,255,0.4),
+      0 8px 32px rgba(0,0,0,0.5),
+      0 0 60px rgba(0,229,255,0.15);
+    transform: translate(-1px, 0);
+  }
+  89% {
+    box-shadow:
+      4px 0 0 rgba(0,255,255,0.3),
+      -4px 0 0 rgba(255,0,0,0.3),
+      0 8px 32px rgba(0,0,0,0.5),
+      0 0 60px rgba(255,0,255,0.12);
+    transform: translate(2px, -1px);
+  }
+  90% {
+    box-shadow:
+      0 8px 32px rgba(0,0,0,0.5),
+      0 0 60px rgba(0,229,255,0.08),
+      inset 0 1px 0 rgba(0,229,255,0.1),
+      inset 0 -1px 0 rgba(0,0,0,0.3);
+    transform: translate(0, 0);
+  }
+  93% {
+    box-shadow:
+      -2px 1px 0 rgba(255,0,0,0.35),
+      2px -1px 0 rgba(0,255,255,0.35),
+      0 8px 32px rgba(0,0,0,0.5),
+      0 0 80px rgba(255,0,255,0.1);
+    transform: translate(1px, 1px);
+  }
+  94% {
+    box-shadow:
+      0 8px 32px rgba(0,0,0,0.5),
+      0 0 60px rgba(0,229,255,0.08),
+      inset 0 1px 0 rgba(0,229,255,0.1),
+      inset 0 -1px 0 rgba(0,0,0,0.3);
+    transform: translate(0, 0);
+  }
+}
+
+/* Neon sign flicker for tab bar */
+@keyframes neonFlicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 8px rgba(0,229,255,0.8), 0 0 20px rgba(0,229,255,0.4);
+  }
+  20%, 24%, 55% {
+    opacity: 0.6;
+    text-shadow: none;
+  }
+}
+
+/* Neon tab icon pulse */
+@keyframes cyberTabPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(0,229,255,0.6));
+    color: rgba(0,229,255,1);
+  }
+  50% {
+    filter: drop-shadow(0 0 14px rgba(0,229,255,0.9)) drop-shadow(0 0 28px rgba(0,229,255,0.4));
+    color: #ffffff;
+  }
+}
+
+/* Watermark neon flicker */
+@keyframes watermarkFlicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% {
+    opacity: 1;
+  }
+  20%, 24% {
+    opacity: 0.4;
+  }
+  55% {
+    opacity: 0.7;
+  }
+}
+
+/* Neon border pulse for input focus */
+@keyframes inputNeonPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 3px rgba(0,229,255,0.15),
+      0 0 30px rgba(0,229,255,0.15),
+      0 0 60px rgba(0,229,255,0.05);
+    border-color: rgba(0,229,255,0.7);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(0,229,255,0.25),
+      0 0 40px rgba(0,229,255,0.25),
+      0 0 80px rgba(0,229,255,0.1),
+      0 0 120px rgba(255,0,255,0.05);
+    border-color: rgba(0,229,255,0.9);
+  }
+}
+
+/* Circuit trace pulse */
+@keyframes circuitPulse {
+  0%   { background-position: 0 0, 0 0, 0 100vh; }
+  100% { background-position: 0 0, 0 0, 0 0; }
+}
+
+/* Tab bar accent line sweep */
+@keyframes neonLineSweep {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   BODY — Perspective grid floor + circuit traces
+═══════════════════════════════════════════════════════ */
+body {
+  background:
+    /* Neon circuit trace — horizontal lines with glowing nodes */
+    linear-gradient(90deg,
+      transparent 0%, transparent 48%,
+      rgba(0,229,255,0.06) 48%, rgba(0,229,255,0.06) 48.3%,
+      transparent 48.3%, transparent 100%) ,
+    /* Perspective grid floor — converging lines */
+    repeating-linear-gradient(
+      90deg,
+      rgba(0,229,255,0.04) 0px,
+      rgba(0,229,255,0.04) 1px,
+      transparent 1px,
+      transparent 60px),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0,229,255,0.03) 0px,
+      rgba(0,229,255,0.03) 1px,
+      transparent 1px,
+      transparent 60px),
+    /* Horizon glow — hot line at 65% from top */
+    linear-gradient(
+      to bottom,
+      #040609 0%,
+      #040609 55%,
+      rgba(0,229,255,0.03) 64%,
+      rgba(255,0,255,0.04) 65%,
+      rgba(0,229,255,0.03) 66%,
+      #040609 75%,
+      #060810 100%),
+    var(--bg) !important;
+  background-size:
+    100% 100%,
+    60px 60px,
+    60px 60px,
+    100% 100%,
+    100% 100% !important;
+}
+
+/* Apply perspective warp to the grid via a pseudo-element approach.
+   Since body itself can't have perspective transform on its background,
+   we use the grid on body and add a perspective-warped overlay. */
+
+/* ═══════════════════════════════════════════════════════
+   DIGITAL RAIN — via .nebula-layer::before
+═══════════════════════════════════════════════════════ */
+.nebula-layer::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0px,
+      transparent 18px,
+      rgba(0,229,255,0.03) 18px,
+      rgba(0,229,255,0.06) 20px,
+      transparent 20px,
+      transparent 24px,
+      rgba(0,229,255,0.02) 24px,
+      rgba(0,229,255,0.04) 25px,
+      transparent 25px,
+      transparent 40px),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 28px,
+      rgba(0,229,255,0.015) 28px,
+      rgba(0,229,255,0.015) 29px,
+      transparent 29px,
+      transparent 56px);
+  background-size: 29px 40px, 56px 100%;
+  animation: digitalRain 8s linear infinite;
+  opacity: 0.7;
+}
+
+/* ── Circuit node overlay via .nebula-layer::after ── */
+.nebula-layer::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    /* Horizontal circuit traces — thin glowing lines */
+    linear-gradient(0deg,
+      transparent 0%, transparent 30%,
+      rgba(0,229,255,0.025) 30%, rgba(0,229,255,0.025) 30.15%,
+      transparent 30.15%, transparent 60%,
+      rgba(255,0,255,0.02) 60%, rgba(255,0,255,0.02) 60.1%,
+      transparent 60.1%, transparent 100%),
+    /* Vertical circuit traces */
+    linear-gradient(90deg,
+      transparent 0%, transparent 20%,
+      rgba(0,229,255,0.02) 20%, rgba(0,229,255,0.02) 20.1%,
+      transparent 20.1%, transparent 70%,
+      rgba(255,0,255,0.018) 70%, rgba(255,0,255,0.018) 70.1%,
+      transparent 70.1%, transparent 100%),
+    /* Glowing intersection nodes */
+    radial-gradient(circle 2px at 20% 30%, rgba(0,229,255,0.15) 0%, transparent 100%),
+    radial-gradient(circle 2px at 70% 60%, rgba(255,0,255,0.12) 0%, transparent 100%),
+    radial-gradient(circle 2px at 20% 60%, rgba(0,229,255,0.1) 0%, transparent 100%),
+    radial-gradient(circle 2px at 70% 30%, rgba(255,0,255,0.1) 0%, transparent 100%),
+    radial-gradient(circle 3px at 48% 65%, rgba(0,229,255,0.2) 0%, transparent 100%);
+  opacity: 0.8;
+}
+
+/* ═══════════════════════════════════════════════════════
+   GLASS PANELS — Chromatic aberration glitch
+═══════════════════════════════════════════════════════ */
+.glass {
+  border-radius: 4px !important;
+  border: 1px solid rgba(0,229,255,0.2) !important;
+  animation: glitchShift 12s linear infinite !important;
+}
+
+.glass::before {
+  background: linear-gradient(135deg,
+    rgba(0,229,255,0.07) 0%,
+    rgba(0,229,255,0.02) 25%,
+    transparent 45%,
+    transparent 55%,
+    rgba(255,0,255,0.03) 75%,
+    rgba(255,0,255,0.07) 100%) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TAB BAR — Neon sign flicker
+═══════════════════════════════════════════════════════ */
+.tab-bar {
+  background: rgba(4,5,10,0.95) !important;
+  border-bottom: 1px solid rgba(0,229,255,0.35) !important;
+  box-shadow:
+    0 2px 30px rgba(0,229,255,0.12),
+    0 0 60px rgba(0,229,255,0.05),
+    inset 0 -1px 0 rgba(0,229,255,0.2) !important;
+}
+
+.tab-bar::after {
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(0,229,255,0.9) 20%,
+    rgba(255,0,255,0.7) 40%,
+    rgba(180,77,255,0.6) 50%,
+    rgba(255,0,255,0.7) 60%,
+    rgba(0,229,255,0.9) 80%,
+    transparent 100%) !important;
+  background-size: 200% 100% !important;
+  animation: neonLineSweep 4s linear infinite !important;
+  box-shadow:
+    0 0 20px rgba(0,229,255,0.5),
+    0 0 40px rgba(255,0,255,0.2),
+    0 0 60px rgba(0,229,255,0.1) !important;
+  height: 2px !important;
+}
+
+/* Tab icons — neon flicker */
+.custom-tab i {
+  animation: neonFlicker 5s linear infinite;
+}
+
+/* Active tab — intense neon pulse */
+.custom-tab.active i {
+  animation: cyberTabPulse 2s ease-in-out infinite, neonFlicker 8s linear infinite !important;
+  color: rgba(0,229,255,1) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CHAT BUBBLES — Neon bordered
+═══════════════════════════════════════════════════════ */
+
+/* Bot: cyan neon left border with glow */
+.msg-bubble-bot {
+  border-left: 3px solid rgba(0,229,255,0.7) !important;
+  border-radius: 2px 8px 8px 2px !important;
+  box-shadow:
+    0 4px 20px rgba(0,0,0,0.4),
+    -4px 0 20px rgba(0,229,255,0.08),
+    inset 0 0 30px rgba(0,229,255,0.04) !important;
+  background: rgba(0,229,255,0.06) !important;
+  border-top: 1px solid rgba(0,229,255,0.12) !important;
+  border-right: 1px solid rgba(0,229,255,0.08) !important;
+  border-bottom: 1px solid rgba(0,229,255,0.08) !important;
+}
+
+/* User: magenta neon right border with glow */
+.msg-bubble-user {
+  border-right: 3px solid rgba(255,0,255,0.7) !important;
+  border-radius: 8px 2px 2px 8px !important;
+  box-shadow:
+    0 4px 20px rgba(0,0,0,0.4),
+    4px 0 20px rgba(255,0,255,0.08),
+    inset 0 0 30px rgba(255,0,255,0.04) !important;
+  background: rgba(255,0,255,0.06) !important;
+  border-top: 1px solid rgba(255,0,255,0.12) !important;
+  border-left: 1px solid rgba(255,0,255,0.08) !important;
+  border-bottom: 1px solid rgba(255,0,255,0.08) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   WATERMARK — Animated neon flicker
+═══════════════════════════════════════════════════════ */
+.tars-watermark {
+  background: linear-gradient(90deg,
+    rgba(0,229,255,1) 0%,
+    rgba(180,77,255,0.8) 50%,
+    rgba(255,0,255,0.9) 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+  animation: watermarkFlicker 6s linear infinite !important;
+  filter: drop-shadow(0 0 6px rgba(0,229,255,0.4));
+}
+
+/* ═══════════════════════════════════════════════════════
+   INPUT — Neon glow on focus
+═══════════════════════════════════════════════════════ */
+.input-pill {
+  border-radius: 4px !important;
+  border: 1px solid rgba(0,229,255,0.15) !important;
+  background: rgba(6,8,14,0.6) !important;
+}
+
+.input-pill:focus-within {
+  border-color: rgba(0,229,255,0.7) !important;
+  animation: inputNeonPulse 2s ease-in-out infinite !important;
+  background: rgba(6,8,14,0.8) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   EMOTION BUTTONS — Neon hover states
+═══════════════════════════════════════════════════════ */
+.em-btn {
+  border-radius: 4px !important;
+  transition: all 0.2s var(--ease) !important;
+}
+
+.em-btn:hover {
+  box-shadow:
+    0 0 30px rgba(0,229,255,0.3),
+    0 0 60px rgba(255,0,255,0.1),
+    inset 0 0 25px rgba(0,229,255,0.08) !important;
+  transform: translateY(-3px) !important;
+  border-color: rgba(0,229,255,0.5) !important;
+}
+
+.em-btn.active {
+  box-shadow:
+    0 0 30px rgba(0,229,255,0.4),
+    0 0 60px rgba(0,229,255,0.15),
+    inset 0 0 30px rgba(0,229,255,0.06) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SCROLLBAR — Neon styled
+═══════════════════════════════════════════════════════ */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(4,6,9,0.8);
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(0,229,255,0.4), rgba(255,0,255,0.4));
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(0,229,255,0.7), rgba(255,0,255,0.7));
+}
+
+/* ═══════════════════════════════════════════════════════
+   EXTRA — Neon link styling + selection color
+═══════════════════════════════════════════════════════ */
+::selection {
+  background: rgba(0,229,255,0.3);
+  color: #fff;
+}
+
+/* All borders get the angular cyberpunk feel */
+.glass-deep {
+  border-radius: 4px !important;
+}
+
+/* Sharp angular corners on message bubbles */
+.msg-bubble {
+  border-radius: 2px 8px 8px 8px !important;
+}

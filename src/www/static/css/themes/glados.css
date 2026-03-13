@@ -1,0 +1,395 @@
+/* ═══════════════════════════════════════════════════════
+   T.A.R.S. · Theme: GLaDOS
+   "The cake is a lie."
+   Aperture Science — dual portal rings (orange + blue),
+   test chamber grid, turret scan laser, companion cube heart,
+   clinical lab panels with warning flickers
+═══════════════════════════════════════════════════════ */
+:root {
+  /* RGB components — Aperture orange as primary, portal blue as secondary */
+  --accent-rgb:  255, 160, 40;
+  --panel-rgb:   12, 14, 18;
+  --magenta-rgb: 60, 160, 255;
+  --purple-rgb:  180, 120, 60;
+
+  /* Backgrounds — dark test chamber */
+  --bg:          #08090c;
+  --bg2:         #0c0e14;
+  --panel:       rgba(var(--panel-rgb), 0.55);
+  --panel-solid: rgba(var(--panel-rgb), 0.78);
+  --glass-blur:  18px;
+  --glass-border: rgba(var(--accent-rgb), 0.12);
+  --glass-shine: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 40%, transparent 60%, rgba(var(--accent-rgb),0.02) 100%);
+
+  /* Borders — clean lab edges */
+  --border:      rgba(var(--accent-rgb), 0.14);
+  --border-hi:   rgba(var(--accent-rgb), 0.38);
+
+  /* Accent colors — portal orange + portal blue */
+  --cyan:        rgb(var(--accent-rgb));
+  --cyan-dim:    rgba(var(--accent-rgb), 0.45);
+  --cyan-glow:   rgba(var(--accent-rgb), 0.10);
+  --magenta:     rgb(var(--magenta-rgb));
+  --magenta-dim: rgba(var(--magenta-rgb), 0.45);
+  --purple:      rgb(var(--purple-rgb));
+  --purple-dim:  rgba(var(--purple-rgb), 0.45);
+  --gold:        #ffa028;
+  --gold-dim:    rgba(255, 160, 40, 0.45);
+
+  /* Status colors */
+  --green:       #66dd66;
+  --orange:      #ffa028;
+  --red:         #ff4444;
+
+  /* Text — clean white, Aperture sterile */
+  --text:        #e8e8ec;
+  --text-dim:    #6a6a78;
+
+  /* Typography */
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-hud:    'Orbitron', sans-serif;
+  --font-body:   'Rajdhani', sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 16px;
+
+  /* Layout — sharp corners like lab equipment */
+  --tab-h:       52px;
+  --radius:      5px;
+  --radius-sm:   3px;
+  --radius-lg:   6px;
+  --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+
+  /* ── Nebula: diffuse portal glows ── */
+  --nebula-1:       radial-gradient(circle, rgba(255, 140, 20, 0.15) 0%, rgba(255, 100, 0, 0.04) 45%, transparent 65%);
+  --nebula-1-size:  400px;
+  --nebula-1-anim:  portalDrift1 50s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(40, 140, 255, 0.15) 0%, rgba(20, 80, 200, 0.04) 45%, transparent 65%);
+  --nebula-2-size:  400px;
+  --nebula-2-anim:  portalDrift2 50s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(200, 200, 200, 0.03) 0%, transparent 50%);
+  --nebula-3-size:  300px;
+  --nebula-3-anim:  nebulaDrift3 70s ease-in-out infinite;
+  --nebula-blur:    90px;
+  --nebula-radius:  50%;
+
+  /* Particle system — orange/blue */
+  --particle-orb-hues: 30, 210, 35;
+  --particle-prism:    255,120,0; 255,160,40; 255,200,80; 80,180,255; 40,140,240; 60,100,200; 255,140,20;
+
+  /* Light scanlines — test chamber monitor */
+  --scanlines: repeating-linear-gradient(
+    0deg, transparent, transparent 3px,
+    rgba(255,160,40,0.008) 3px, rgba(255,160,40,0.008) 6px);
+  --scanline-opacity: 1;
+
+  /* Subtle vignette */
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0,0,0,0.45) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   PORTAL RINGS — orange (::before) and blue (::after)
+   CSS rings with transparent centers, rotating and pulsing
+═══════════════════════════════════════════════════════ */
+.nebula-layer::before {
+  content: '';
+  position: absolute;
+  top: 25%;
+  left: 15%;
+  width: 200px;
+  height: 280px;
+  border-radius: 50%;
+  background: transparent;
+  border: 6px solid rgba(255, 160, 40, 0.7);
+  box-shadow:
+    0 0 25px 8px rgba(255, 140, 20, 0.35),
+    0 0 60px 15px rgba(255, 120, 0, 0.2),
+    0 0 100px 30px rgba(255, 100, 0, 0.1),
+    inset 0 0 25px 8px rgba(255, 140, 20, 0.15),
+    inset 0 0 60px 15px rgba(255, 120, 0, 0.08);
+  animation: orangePortalSpin 20s linear infinite, orangePortalPulse 4s ease-in-out infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.nebula-layer::after {
+  content: '';
+  position: absolute;
+  bottom: 15%;
+  right: 10%;
+  width: 180px;
+  height: 260px;
+  border-radius: 50%;
+  background: transparent;
+  border: 6px solid rgba(60, 160, 255, 0.7);
+  box-shadow:
+    0 0 25px 8px rgba(40, 140, 255, 0.35),
+    0 0 60px 15px rgba(20, 100, 240, 0.2),
+    0 0 100px 30px rgba(10, 80, 220, 0.1),
+    inset 0 0 25px 8px rgba(40, 140, 255, 0.15),
+    inset 0 0 60px 15px rgba(20, 100, 240, 0.08);
+  animation: bluePortalSpin 20s linear infinite reverse, bluePortalPulse 5s ease-in-out infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Portal spin — slow rotation */
+@keyframes orangePortalSpin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes bluePortalSpin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Portal pulse — breathing glow */
+@keyframes orangePortalPulse {
+  0%, 100% { border-color: rgba(255,160,40,0.6);  box-shadow: 0 0 25px 8px rgba(255,140,20,0.3), 0 0 60px 15px rgba(255,120,0,0.15), 0 0 100px 30px rgba(255,100,0,0.08), inset 0 0 25px 8px rgba(255,140,20,0.1), inset 0 0 60px 15px rgba(255,120,0,0.05); }
+  50%      { border-color: rgba(255,180,60,0.9);  box-shadow: 0 0 35px 12px rgba(255,160,30,0.5), 0 0 80px 25px rgba(255,140,0,0.3), 0 0 130px 45px rgba(255,120,0,0.15), inset 0 0 35px 12px rgba(255,160,30,0.2), inset 0 0 80px 20px rgba(255,140,0,0.1); }
+}
+@keyframes bluePortalPulse {
+  0%, 100% { border-color: rgba(60,160,255,0.6);  box-shadow: 0 0 25px 8px rgba(40,140,255,0.3), 0 0 60px 15px rgba(20,100,240,0.15), 0 0 100px 30px rgba(10,80,220,0.08), inset 0 0 25px 8px rgba(40,140,255,0.1), inset 0 0 60px 15px rgba(20,100,240,0.05); }
+  50%      { border-color: rgba(80,180,255,0.9);  box-shadow: 0 0 35px 12px rgba(60,160,255,0.5), 0 0 80px 25px rgba(40,140,240,0.3), 0 0 130px 45px rgba(20,120,220,0.15), inset 0 0 35px 12px rgba(60,160,255,0.2), inset 0 0 80px 20px rgba(40,140,240,0.1); }
+}
+
+/* ── Nebula drift for the portal ambient glows ── */
+@keyframes portalDrift1 {
+  0%   { transform: translate(-5vw, -5vh) scale(1);   opacity: 0.5; }
+  25%  { transform: translate(5vw, 10vh) scale(1.2);   opacity: 0.7; }
+  50%  { transform: translate(15vw, 5vh) scale(0.9);   opacity: 0.4; }
+  75%  { transform: translate(8vw, -8vh) scale(1.1);   opacity: 0.6; }
+  100% { transform: translate(-5vw, -5vh) scale(1);    opacity: 0.5; }
+}
+@keyframes portalDrift2 {
+  0%   { transform: translate(5vw, 5vh) scale(1);     opacity: 0.5; }
+  25%  { transform: translate(-8vw, -5vh) scale(1.15); opacity: 0.7; }
+  50%  { transform: translate(-12vw, 8vh) scale(0.95); opacity: 0.4; }
+  75%  { transform: translate(-3vw, 12vh) scale(1.1);  opacity: 0.6; }
+  100% { transform: translate(5vw, 5vh) scale(1);     opacity: 0.5; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   TEST CHAMBER GRID BACKGROUND
+   Repeating white grid lines — Aperture Science aesthetic
+═══════════════════════════════════════════════════════ */
+body {
+  background:
+    /* Grid lines */
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.025) 0px,
+      rgba(255, 255, 255, 0.025) 1px,
+      transparent 1px,
+      transparent 60px),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.025) 0px,
+      rgba(255, 255, 255, 0.025) 1px,
+      transparent 1px,
+      transparent 60px),
+    /* Thicker grid every 4th line */
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.04) 0px,
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 1px,
+      transparent 240px),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0px,
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 1px,
+      transparent 240px),
+    var(--bg) !important;
+  background-size: 60px 60px, 60px 60px, 240px 240px, 240px 240px, 100% 100% !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TURRET SCAN — diagonal orange laser line
+═══════════════════════════════════════════════════════ */
+#particleBg::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: -100%;
+  width: 200%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 140, 20, 0.3) 42%,
+    rgba(255, 160, 40, 0.8) 48%,
+    rgba(255, 200, 100, 1) 50%,
+    rgba(255, 160, 40, 0.8) 52%,
+    rgba(255, 140, 20, 0.3) 58%,
+    transparent 65%,
+    transparent 100%);
+  box-shadow:
+    0 0 8px rgba(255, 140, 20, 0.6),
+    0 0 20px rgba(255, 120, 0, 0.3),
+    0 0 40px rgba(255, 100, 0, 0.15);
+  transform: rotate(35deg);
+  transform-origin: center center;
+  animation: turretScan 6s ease-in-out infinite;
+  z-index: 10;
+  pointer-events: none;
+}
+
+@keyframes turretScan {
+  0%   { top: -20%; left: -100%; opacity: 0; }
+  10%  { opacity: 0.8; }
+  50%  { top: 60%; left: 0%; opacity: 0.8; }
+  90%  { opacity: 0.8; }
+  100% { top: 120%; left: 100%; opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   GLASS PANELS — sharp lab equipment styling with flicker
+═══════════════════════════════════════════════════════ */
+.glass {
+  border-radius: 5px !important;
+  border: 1px solid rgba(255, 160, 40, 0.1) !important;
+  animation: panelFlicker 12s linear infinite;
+}
+
+.glass::before {
+  background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 50%, rgba(var(--accent-rgb),0.01) 100%) !important;
+}
+
+/* Warning flicker — occasional panel glitch */
+@keyframes panelFlicker {
+  0%, 88%, 90%, 92%, 94%, 100% { opacity: 1; }
+  89%  { opacity: 0.88; border-color: rgba(255,80,20,0.3); }
+  91%  { opacity: 0.95; }
+  93%  { opacity: 0.9; border-color: rgba(255,80,20,0.2); }
+}
+
+/* ═══════════════════════════════════════════════════════
+   TAB BAR — orange/blue gradient, Aperture Science
+═══════════════════════════════════════════════════════ */
+.tab-bar {
+  background: rgba(8, 10, 14, 0.9) !important;
+  border-bottom: 1px solid rgba(255, 160, 40, 0.15) !important;
+}
+
+.tab-bar::after {
+  background: linear-gradient(90deg,
+    transparent 5%,
+    rgba(60, 160, 255, 0.5) 20%,
+    rgba(255, 160, 40, 0.8) 50%,
+    rgba(60, 160, 255, 0.5) 80%,
+    transparent 95%) !important;
+  box-shadow:
+    0 0 20px rgba(255, 160, 40, 0.3),
+    0 0 40px rgba(255, 120, 0, 0.1) !important;
+}
+
+/* Active tab icon — portal orange glow */
+@keyframes portalTabGlow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(255,160,40,0.4)); }
+  50%      { filter: drop-shadow(0 0 8px rgba(255,160,40,0.7)) drop-shadow(0 0 16px rgba(255,120,0,0.3)); }
+}
+.custom-tab.active i {
+  animation: portalTabGlow 3s ease-in-out infinite !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   WATERMARK — companion cube heart hint
+═══════════════════════════════════════════════════════ */
+.tars-watermark {
+  position: relative;
+  color: rgba(255, 160, 40, 0.12) !important;
+  text-shadow: 0 0 8px rgba(255, 140, 20, 0.08) !important;
+}
+
+/* CSS heart shape overlaid on watermark area */
+.tars-watermark::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -60%) rotate(-45deg);
+  background: rgba(255, 80, 120, 0.25);
+  box-shadow: 0 0 10px rgba(255, 80, 120, 0.15);
+}
+.tars-watermark::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -60%) rotate(-45deg);
+  background: rgba(255, 80, 120, 0.25);
+  border-radius: 0;
+}
+/* The heart uses the ::before rotated square + two circular pseudo-bulges via box-shadow */
+.tars-watermark::before {
+  border-radius: 0;
+  box-shadow:
+    7px -7px 0 0 rgba(255, 80, 120, 0.25),
+    0 0 10px rgba(255, 80, 120, 0.15),
+    7px 0 0 0 rgba(255, 80, 120, 0.25),
+    0 -7px 0 0 rgba(255, 80, 120, 0.25),
+    7px -7px 8px rgba(255, 80, 120, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════
+   CHAT BUBBLES — portal-colored accents
+═══════════════════════════════════════════════════════ */
+/* Bot messages: orange portal accent */
+.msg-bubble-bot {
+  border-left: 2px solid rgba(255, 160, 40, 0.4) !important;
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.25),
+    inset 0 0 20px rgba(255, 140, 20, 0.03) !important;
+}
+
+/* User messages: blue portal accent */
+.msg-bubble-user {
+  border-right: 2px solid rgba(60, 160, 255, 0.4) !important;
+  box-shadow:
+    0 2px 8px rgba(0,0,0,0.25),
+    inset 0 0 20px rgba(40, 140, 255, 0.03) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   INPUT — lab equipment styling
+═══════════════════════════════════════════════════════ */
+.input-pill {
+  border-radius: 4px !important;
+}
+
+.input-pill:focus-within {
+  border-color: rgba(255, 160, 40, 0.4) !important;
+  box-shadow: 0 0 0 2px rgba(255, 160, 40, 0.1), 0 0 20px rgba(255, 140, 20, 0.08) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   EMOTION BUTTONS — Aperture caution style
+═══════════════════════════════════════════════════════ */
+.em-btn {
+  border-radius: 4px !important;
+}
+
+.em-btn:hover {
+  box-shadow: 0 0 20px rgba(255, 160, 40, 0.2),
+              inset 0 0 15px rgba(255, 140, 20, 0.06) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CONFIG HINTS — Aperture warning style
+═══════════════════════════════════════════════════════ */
+.config-hint {
+  border-left: 3px solid rgba(255, 160, 40, 0.5) !important;
+  border-radius: 3px !important;
+}

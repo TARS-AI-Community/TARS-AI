@@ -1393,7 +1393,13 @@ function executeAction() {
               html = html.replace(`<span>${key}</span>`,`<span>${key}</span><span class="config-array-badge">${arrInfo.type==='json'?'JSON':'LIST'}</span>`);
               html += `</label>${tagInputHtml(fid,section,key,items,arrInfo.type||'csv')}`;
             } else {
-              html += `</label><input type="text" class="form-control form-control-sm config-input" id="${fid}" data-section="${section}" data-key="${key}" value="${esc(String(value))}">`;
+              const isPassword = (fi?.type === 'password' || key.toLowerCase().includes('password'));
+              const inputType = isPassword ? 'password' : 'text';
+              if (isPassword) {
+                html += `</label><div class="config-password-wrap"><input type="${inputType}" class="form-control form-control-sm config-input" id="${fid}" data-section="${section}" data-key="${key}" value="${esc(String(value))}"><button type="button" class="config-password-toggle" data-target="${fid}" title="Show/hide password"><i class="bi bi-eye"></i></button></div>`;
+              } else {
+                html += `</label><input type="${inputType}" class="form-control form-control-sm config-input" id="${fid}" data-section="${section}" data-key="${key}" value="${esc(String(value))}">`;
+              }
             }
           }
 
@@ -1608,8 +1614,36 @@ function executeAction() {
         });
       });
 
+      // Live theme preview — swap the theme stylesheet
+      var themeSelect = document.getElementById('cfg_ACCESS_webui_theme');
+      if (themeSelect) {
+        themeSelect.addEventListener('change', function () {
+          var theme = this.value || 'midnight';
+          var link = document.getElementById('themeCSS');
+          if (link) link.href = '/static/css/themes/' + theme + '.css?v=' + Date.now();
+        });
+      }
+
       // Remote access tunnel controls
       initTunnelControls();
+
+      // Password show/hide toggle (event delegation)
+      var configForm = $('configForm');
+      if (configForm) {
+        configForm.addEventListener('click', function (e) {
+          var btn = e.target.closest('.config-password-toggle');
+          if (!btn) return;
+          var targetId = btn.getAttribute('data-target');
+          var inp = document.getElementById(targetId);
+          if (!inp) return;
+          var isHidden = inp.type === 'password';
+          inp.type = isHidden ? 'text' : 'password';
+          var icon = btn.querySelector('i');
+          if (icon) {
+            icon.className = isHidden ? 'bi bi-eye-slash' : 'bi bi-eye';
+          }
+        });
+      }
     }).catch(err => {
       $('configForm').innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error: ${err.message}</div>`;
     });

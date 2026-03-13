@@ -181,6 +181,8 @@ webui_enabled = True
 webui_port = 80
 # Web interface login password
 webui_password = tarspassword
+# Web UI color theme (auto-discovered from css/themes/ folder)
+webui_theme = default
 
 [UI]
 # On-device display width in pixels (3.5" = 480, 5–7" = 800)

@@ -347,7 +347,8 @@ def index():
                            char_greeting='Welcome back',
                            talkinghead_base_url=ipadd,
                            port=CONFIG['ACCESS'].get('webui_port', 80),
-                           user_name=CONFIG['CHAR'].get('user_name', 'User'))
+                           user_name=CONFIG['CHAR'].get('user_name', 'User'),
+                           webui_theme=CONFIG['ACCESS'].get('webui_theme', 'default'))
 
 @flask_app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -360,9 +361,11 @@ def login():
             session.permanent = True  # Maintain cookie presence
             return redirect(url_for('index'))
         else:
-            return render_template('login.html', error="Invalid password", char_name=character_name)
+            return render_template('login.html', error="Invalid password", char_name=character_name,
+                                       webui_theme=CONFIG['ACCESS'].get('webui_theme', 'default'))
 
-    return render_template('login.html', char_name=character_name)
+    return render_template('login.html', char_name=character_name,
+                           webui_theme=CONFIG['ACCESS'].get('webui_theme', 'default'))
 
 @flask_app.route('/logout')
 def logout():
@@ -1413,6 +1416,31 @@ def get_config():
                 field_options[char_key]['option_labels'] = {
                     p: p.split('/')[1] for p in char_options
                 }
+
+        # Populate webui_theme options from CSS files in themes directory
+        theme_key = 'ACCESS.webui_theme'
+        if theme_key in field_options:
+            themes_dir = os.path.join(BASE_DIR, 'www', 'static', 'css', 'themes')
+            if os.path.isdir(themes_dir):
+                theme_files = sorted([
+                    f[:-4] for f in os.listdir(themes_dir)
+                    if f.endswith('.css') and not f.startswith('.')
+                ])
+                if theme_files:
+                    # Put default first, then alphabetical
+                    if 'default' in theme_files:
+                        theme_files.remove('default')
+                        theme_files.insert(0, 'default')
+                    field_options[theme_key]['options'] = theme_files
+                    # Build labels: capitalize, keep known labels, title-case the rest
+                    known_labels = field_options[theme_key].get('option_labels', {})
+                    labels = {}
+                    for t in theme_files:
+                        if t in known_labels:
+                            labels[t] = known_labels[t]
+                        else:
+                            labels[t] = t.replace('_', ' ').replace('-', ' ').title()
+                    field_options[theme_key]['option_labels'] = labels
 
         return jsonify({
             "config": filtered_config,
