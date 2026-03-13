@@ -18,7 +18,7 @@ from modules.module_config import load_config, get_capabilities
 from modules.module_llm import process_completion, detect_emotion, detect_emotion_from_llm, llm_execute_side_effects, _sanitize_for_tts
 from modules.module_tts import play_audio_chunks, SentenceTTSPipeline
 from modules.module_messageQue import queue_message
-from modules.module_servoctl import initialize_servos
+from modules.module_servoctl import initialize_servos, set_side_effect_mode
 
 CONFIG = load_config()
 CAPABILITIES = get_capabilities()
@@ -401,7 +401,6 @@ def utterance_callback(message):
             if has_blocking_tool:
                 queue_message(f"DEBUG VOICE: Running blocking side effects inline")
                 speed.start('tools')
-                from modules.module_servoctl import set_side_effect_mode
                 set_side_effect_mode(True)
                 try:
                     llm_execute_side_effects(parsed, user_text)
@@ -418,7 +417,6 @@ def utterance_callback(message):
             elif func_calls or new_mems:
                 queue_message(f"DEBUG VOICE: Running side effects in background thread")
                 def _run_side_effects(p=parsed, u=user_text):
-                    from modules.module_servoctl import set_side_effect_mode
                     set_side_effect_mode(True)
                     try:
                         llm_execute_side_effects(p, u)
