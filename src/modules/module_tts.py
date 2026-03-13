@@ -473,7 +473,8 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 _tts_playing.clear()
                 global _tts_last_stopped
                 _tts_last_stopped = time.time()
-                _tts_needs_flush.set()
+                if not is_wakeword:
+                    _tts_needs_flush.set()
 
                 if was_interrupted:
                     break
