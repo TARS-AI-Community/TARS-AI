@@ -582,6 +582,10 @@ class STTManager:
         }
         vad_func = vad_dispatch.get(vad_method, self._is_silence_detected_rms)
 
+        # Reset Smart Turn state to prevent stale inference from previous round
+        self.smart_turn_audio_buffer.clear()
+        self._smart_turn_future = None
+
         with sd.InputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
             # Flush stale mic audio that may contain the robot's own TTS voice.
             # Read and discard ~0.5s to let room echo die down.
@@ -589,8 +593,8 @@ class STTManager:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(4):
-                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
+                    for _ in range(8):
+                        stream.read(2000)  # 8 × 2000 @ 16kHz = 1.0s
                     clear_mic_flush()
             except Exception:
                 pass
@@ -979,6 +983,7 @@ class STTManager:
 
         # Preemptive LLM generation — fired when spec transcript looks like a complete sentence
         preemptive_thread = None
+        preemptive_thread_ref = [None]  # Persistent ref — survives invalidation for join at end
         preemptive_result = [None]  # Mutable container for LLM result
         preemptive_transcript = [None]  # The transcript the LLM was fired with
         preemptive_fired = False
@@ -1017,8 +1022,8 @@ class STTManager:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(4):
-                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
+                    for _ in range(8):
+                        stream.read(2000)  # 8 × 2000 @ 16kHz = 1.0s
                     clear_mic_flush()
             except Exception:
                 pass
@@ -1092,6 +1097,7 @@ class STTManager:
                     preemptive_thread = threading.Thread(
                         target=_preemptive_llm, args=(spec_result[0],), daemon=True
                     )
+                    preemptive_thread_ref[0] = preemptive_thread
                     preemptive_thread.start()
                     if self.DEBUG:
                         queue_message(f"DEBUG: Preemptive LLM fired for: {spec_result[0][:60]}...")
@@ -1139,6 +1145,14 @@ class STTManager:
                 queue_message("INFO: Preemptive LLM returned None, falling back to normal")
         elif preemptive_fired:
             queue_message("INFO: Preemptive LLM discarded (transcript changed)")
+
+        # Always wait for preemptive thread to finish before proceeding to
+        # _emit_result → utterance_callback.  Both the preemptive and main
+        # LLM calls use the same _reply_chunk_callback global, so they must
+        # not run concurrently or chunks from both streams will be interleaved.
+        if preemptive_thread_ref[0] is not None:
+            preemptive_thread_ref[0].join(timeout=10)
+            preemptive_thread_ref[0] = None
 
         return self._emit_result(transcript, extra)
 
@@ -1193,8 +1207,8 @@ class STTManager:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(4):
-                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
+                    for _ in range(8):
+                        stream.read(2000)  # 8 × 2000 @ 16kHz = 1.0s
                     clear_mic_flush()
             except Exception:
                 pass
@@ -1264,8 +1278,8 @@ class STTManager:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(4):
-                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
+                    for _ in range(8):
+                        stream.read(2000)  # 8 × 2000 @ 16kHz = 1.0s
                     clear_mic_flush()
             except Exception:
                 pass

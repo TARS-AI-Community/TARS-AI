@@ -291,6 +291,10 @@ def utterance_callback(message):
         if stt_manager and stt_manager.is_cancelled():
             queue_message("INFO: LLM response discarded (movement interrupted)")
             if preemptive is None:
+                pipeline.finish()
+                pipeline.join(timeout=5)
+                if stt_manager:
+                    stt_manager.stop_bargein_monitor()
                 try:
                     from modules.module_chatui import socketio
                     socketio.emit('bot_message', {'message': ''})
@@ -303,6 +307,10 @@ def utterance_callback(message):
         if parsed is None:
             queue_message("DEBUG VOICE: parsed is None — LLM returned no response")
             if preemptive is None:
+                pipeline.finish()
+                pipeline.join(timeout=5)
+                if stt_manager:
+                    stt_manager.stop_bargein_monitor()
                 try:
                     from modules.module_chatui import socketio
                     socketio.emit('bot_message', {'message': ''})
@@ -326,6 +334,10 @@ def utterance_callback(message):
         if stt_manager and stt_manager.is_cancelled():
             queue_message("INFO: LLM response discarded (movement interrupted)")
             if preemptive is None:
+                pipeline.finish()
+                pipeline.join(timeout=5)
+                if stt_manager:
+                    stt_manager.stop_bargein_monitor()
                 try:
                     from modules.module_chatui import socketio
                     socketio.emit('bot_message', {'message': ''})
