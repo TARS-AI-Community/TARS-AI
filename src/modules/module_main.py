@@ -545,6 +545,7 @@ def post_utterance_callback():
     Restart listening for another utterance after handling the current one.
     """
     global stt_manager
+    queue_message("DEBUG: post_utterance_callback -> starting new recording round")
     stt_manager._transcribe_utterance()
 
 # === Initialization ===
