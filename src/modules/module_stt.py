@@ -1106,6 +1106,8 @@ class STTManager:
             queue_message(f"{self._character_name}: Sleeping...")
             print()
             STTManager._last_status_was_sleeping = True
+            if self.ui_manager:
+                self.ui_manager.set_tars_status("STANDBY")
 
         processors = {
             "fastrtc": self._detect_wake_word_fastrtc,

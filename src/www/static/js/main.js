@@ -776,7 +776,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   function _sendAudioToServer(chunks) {
-    if (!chunks.length) return;
+    if (!chunks.length || _waitingForSTT) return;
     // Merge Int16 chunks into single buffer
     let totalLen = 0;
     for (let i = 0; i < chunks.length; i++) totalLen += chunks[i].length;
@@ -879,6 +879,7 @@ document.addEventListener('DOMContentLoaded', function () {
           if (now - _vadSilenceStart >= VAD_SILENCE_MS) {
             // End of utterance
             _vadSpeaking = false;
+            _vadSilenceStart = 0;  // Reset to prevent re-triggering
             const speechDuration = now - _vadSpeechStart;
             _dbg('[MIC] VAD: silence detected | speech duration:', speechDuration, 'ms | chunks:', _micChunks.length);
             if (speechDuration >= VAD_MIN_SPEECH_MS && _micChunks.length > 0) {
