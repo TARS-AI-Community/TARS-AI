@@ -2099,7 +2099,7 @@ def dashboard_memory_edit():
             # Lite mode: update keywords and flush
             docs[index] = doc
             if hasattr(mm, '_extract_keywords'):
-                doc['_keywords'] = list(mm._extract_keywords(
+                doc['keywords'] = list(mm._extract_keywords(
                     (doc.get('user_input', '') + ' ' + doc.get('bot_response', ''))
                 ))
             mm._mark_dirty()
@@ -2265,11 +2265,13 @@ def dashboard_graph():
             links.append({"source": "hub_people", "target": pid})
 
     # ── MEMORIES: grouped by speaker / source ──
-    if mm and hasattr(mm, 'hyper_db') and mm.hyper_db.documents:
+    _has_full = mm and hasattr(mm, 'hyper_db') and mm.hyper_db.documents
+    _has_lite = mm and hasattr(mm, 'documents') and mm.documents and not _has_full
+    if _has_full or _has_lite:
         add_node({"id": "hub_memory", "name": "MEMORIES", "color": "#ffca28", "size": 22, "group": "hub"})
         links.append({"source": "BRAIN", "target": "hub_memory"})
 
-        docs = mm.hyper_db.documents
+        docs = mm.hyper_db.documents if _has_full else mm.documents
         # Classify memories into buckets
         speaker_groups = {}  # speaker name -> list of (i, doc)
         ingested = []        # memories with no user_input (bulk loaded)
@@ -2460,7 +2462,12 @@ def dashboard_stats():
     """Return summary stats for the dashboard header."""
     import modules.module_llm as _llm
     mm = _llm.memory_manager
-    mem_count = len(mm.hyper_db.documents) if mm and hasattr(mm, 'hyper_db') and mm.hyper_db.documents else 0
+    if mm and hasattr(mm, 'hyper_db') and mm.hyper_db.documents:
+        mem_count = len(mm.hyper_db.documents)
+    elif mm and hasattr(mm, 'documents') and mm.documents:
+        mem_count = len(mm.documents)
+    else:
+        mem_count = 0
     topic_count = len(mm.topic_index.get('topics', [])) if mm and hasattr(mm, 'topic_index') else 0
     from modules.module_dashboard_data import get_interactions, get_emotional_state
     interaction_count = len(get_interactions(500))
