@@ -185,7 +185,7 @@ def pause_ui_and_stt():
     if ui_manager:
         ui_manager.pause()
     if stt_manager:
-        stt_manager.cancel()  # Pause STT and flag in-flight LLM/TTS to be discarded
+        stt_manager.pause()
 
 
 def resume_ui_and_stt():
