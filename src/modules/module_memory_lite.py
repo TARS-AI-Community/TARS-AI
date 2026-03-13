@@ -149,6 +149,7 @@ class MemoryManagerLite:
                 json.dump(data, f, indent=2)
         except Exception as e:
             queue_message(f"ERROR: Failed to save lite memory: {e}")
+            raise  # re-raise so flush() knows the save failed and keeps _dirty=True
 
     def _mark_dirty(self):
         """Mark in-memory state as needing a flush to disk."""
@@ -158,8 +159,11 @@ class MemoryManagerLite:
         """Write in-memory state to disk if dirty. Called by heartbeat + shutdown."""
         if not self._dirty:
             return
-        self._save_memory()
-        self._dirty = False
+        try:
+            self._save_memory()
+            self._dirty = False
+        except Exception:
+            pass  # _dirty stays True — next periodic flush will retry
 
     def _start_periodic_flush(self):
         """Register a recurring heartbeat task to flush memory periodically."""
@@ -173,7 +177,7 @@ class MemoryManagerLite:
 
     def load_topic_index(self):
         # Try loading from embedded topics (new format — inside lite JSON)
-        if self._embedded_topics:
+        if self._embedded_topics is not None:
             self.topic_index = self._embedded_topics
             queue_message(f"LOAD: Topic index loaded with {len(self.topic_index.get('topics', []))} topics")
             # Migrate: remove legacy JSON file if it exists
