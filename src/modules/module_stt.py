@@ -583,13 +583,14 @@ class STTManager:
         vad_func = vad_dispatch.get(vad_method, self._is_silence_detected_rms)
 
         with sd.InputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
-            # Flush stale mic audio that may contain the robot's own TTS voice
+            # Flush stale mic audio that may contain the robot's own TTS voice.
+            # Read and discard ~0.5s to let room echo die down.
             try:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(8):
-                        stream.read(4000)
+                    for _ in range(4):
+                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
                     clear_mic_flush()
             except Exception:
                 pass
@@ -999,6 +1000,11 @@ class STTManager:
         else:
             vad_func = self._is_silence_detected_rms
 
+        # Reset Smart Turn state to prevent stale inference results from the
+        # previous recording round from triggering an immediate "end of turn".
+        self.smart_turn_audio_buffer.clear()
+        self._smart_turn_future = None
+
         with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
             # Flush stale mic audio that may contain the robot's own TTS voice.
             # Uses a persistent flag (not a time window) so it works even if
@@ -1007,8 +1013,8 @@ class STTManager:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(8):
-                        stream.read(4000)
+                    for _ in range(4):
+                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
                     clear_mic_flush()
             except Exception:
                 pass
@@ -1173,7 +1179,7 @@ class STTManager:
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
                     for _ in range(4):
-                        stream.read(frames_per_chunk)
+                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
                     clear_mic_flush()
             except Exception:
                 pass
@@ -1244,7 +1250,7 @@ class STTManager:
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
                     for _ in range(4):
-                        stream.read(frames_per_chunk)
+                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
                     clear_mic_flush()
             except Exception:
                 pass
