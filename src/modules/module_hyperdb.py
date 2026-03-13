@@ -298,6 +298,18 @@ class HyperDB:
             self.corpus_texts.pop(index)
             self._init_bm25_index()
 
+    def update_document(self, index, new_doc):
+        """Update a document at the given index and re-embed it."""
+        if index < 0 or index >= len(self.documents):
+            raise IndexError(f"Index {index} out of range (0-{len(self.documents)-1})")
+        self.documents[index] = new_doc
+        # Re-embed the updated document
+        new_vector = self.embedding_function([new_doc])
+        if new_vector is not None and len(new_vector) > 0:
+            self.vectors[index] = np.array(new_vector[0], dtype=np.float32)
+        if self.rag_strategy == "hybrid":
+            self._init_bm25_index()
+
     def save(self, storage_file: str):
         """
         Save the database state - only save essential data (vectors and documents).

@@ -3587,6 +3587,49 @@ body::after {
   background: rgba(239,83,80,0.6);
   border-color: #ef5350;
 }
+/* ── Editable detail fields ── */
+.detail-row-editable { cursor: text; }
+.detail-row-editable .detail-edit-icon {
+  font-size: 0.55rem;
+  opacity: 0;
+  margin-left: 4px;
+  transition: opacity 0.15s;
+  color: rgba(var(--accent-rgb),0.4);
+}
+.detail-row-editable:hover .detail-edit-icon { opacity: 1; }
+.detail-editable {
+  outline: none;
+  padding: 4px 6px;
+  margin-top: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  min-height: 1.4em;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.detail-editable:hover {
+  border-color: rgba(var(--accent-rgb),0.15);
+  background: rgba(var(--accent-rgb),0.03);
+}
+.detail-editable:focus {
+  border-color: rgba(var(--accent-rgb),0.4);
+  background: rgba(var(--accent-rgb),0.06);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb),0.08);
+}
+.detail-editable.detail-saving {
+  border-color: rgba(255,202,40,0.4);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.detail-editable.detail-saved {
+  border-color: rgba(57,255,20,0.4);
+  background: rgba(57,255,20,0.06);
+}
+.detail-editable.detail-error {
+  border-color: rgba(239,83,80,0.5);
+  background: rgba(239,83,80,0.08);
+}
 @media (max-width: 700px) {
   .dash-detail-panel.open {
     width: 240px;
@@ -3758,6 +3801,31 @@ body::after {
 .dash-topics-table tbody tr:hover td {
   background: rgba(var(--accent-rgb),0.04);
 }
+.topic-editable {
+  outline: none;
+  padding: 2px 4px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  transition: border-color 0.2s, background 0.2s;
+  display: inline-block;
+  min-width: 60px;
+}
+.topic-editable:hover { border-color: rgba(var(--accent-rgb),0.15); }
+.topic-editable:focus {
+  border-color: rgba(var(--accent-rgb),0.4);
+  background: rgba(var(--accent-rgb),0.06);
+}
+.topic-delete-btn {
+  background: none;
+  border: none;
+  color: rgba(var(--accent-rgb),0.2);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.65rem;
+  transition: color 0.2s;
+  line-height: 1;
+}
+.topic-delete-btn:hover { color: #ef5350; }
 
 /* ── Prompt debugger panel ── */
 .dash-prompt-toolbar {

@@ -2001,10 +2001,15 @@ def save_character(name):
 
 @flask_app.route('/api/dashboard/memory/delete', methods=['POST'])
 def dashboard_memory_delete():
-    """Delete a memory document by its index in HyperDB."""
+    """Delete a memory document by its index (supports both full and lite memory)."""
     import modules.module_llm as _llm
     mm = _llm.memory_manager
-    if not mm or not hasattr(mm, 'hyper_db'):
+    if not mm:
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    is_full = hasattr(mm, 'hyper_db')
+    is_lite = hasattr(mm, 'documents') and not is_full
+    if not is_full and not is_lite:
         return jsonify({"error": "Memory manager not available"}), 500
 
     data = request.get_json(silent=True) or {}
@@ -2014,20 +2019,172 @@ def dashboard_memory_delete():
 
     try:
         index = int(index)
-        doc_count = len(mm.hyper_db.documents)
+        docs = mm.hyper_db.documents if is_full else mm.documents
+        doc_count = len(docs)
         if index < 0 or index >= doc_count:
             return jsonify({"error": f"Index {index} out of range (0-{doc_count-1})"}), 400
 
         # Get the document before deleting for confirmation
-        doc = mm.hyper_db.documents[index]
+        doc = docs[index]
         preview = ''
         if isinstance(doc, dict):
             preview = doc.get('user_input', doc.get('bot_response', ''))[:80]
 
-        mm.hyper_db.remove_document(index)
-        mm.hyper_db.save(mm.memory_db_path)
+        if is_full:
+            mm.hyper_db.remove_document(index)
+            mm.hyper_db.save(mm.memory_db_path)
+            remaining = len(mm.hyper_db.documents)
+        else:
+            docs.pop(index)
+            mm._mark_dirty()
+            mm.flush()
+            remaining = len(docs)
+
         queue_message(f"DASHBOARD: Deleted memory #{index}: {preview}")
-        return jsonify({"success": True, "deleted_index": index, "remaining": len(mm.hyper_db.documents)})
+        return jsonify({"success": True, "deleted_index": index, "remaining": remaining})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/api/dashboard/memory/edit', methods=['POST'])
+def dashboard_memory_edit():
+    """Edit a memory document's fields by index (supports both full and lite memory)."""
+    import modules.module_llm as _llm
+    mm = _llm.memory_manager
+    if not mm:
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    # Determine storage backend
+    is_full = hasattr(mm, 'hyper_db')
+    is_lite = hasattr(mm, 'documents') and not is_full
+    if not is_full and not is_lite:
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    fields = data.get('fields')  # dict of field_name -> new_value
+
+    if index is None:
+        return jsonify({"error": "Missing 'index' parameter"}), 400
+    if not fields or not isinstance(fields, dict):
+        return jsonify({"error": "Missing or invalid 'fields' parameter"}), 400
+
+    try:
+        index = int(index)
+        docs = mm.hyper_db.documents if is_full else mm.documents
+        doc_count = len(docs)
+        if index < 0 or index >= doc_count:
+            return jsonify({"error": f"Index {index} out of range (0-{doc_count-1})"}), 400
+
+        doc = docs[index]
+        if not isinstance(doc, dict):
+            return jsonify({"error": "Document is not editable"}), 400
+
+        # Update allowed fields
+        allowed = {'user_input', 'bot_response', 'speaker', 'timestamp'}
+        updated = []
+        for key, value in fields.items():
+            if key in allowed:
+                doc[key] = str(value)
+                updated.append(key)
+
+        if not updated:
+            return jsonify({"error": "No valid fields to update"}), 400
+
+        if is_full:
+            # Re-embed the document with updated content
+            mm.hyper_db.update_document(index, doc)
+            mm.hyper_db.save(mm.memory_db_path)
+        else:
+            # Lite mode: update keywords and flush
+            docs[index] = doc
+            if hasattr(mm, '_extract_keywords'):
+                doc['_keywords'] = list(mm._extract_keywords(
+                    (doc.get('user_input', '') + ' ' + doc.get('bot_response', ''))
+                ))
+            mm._mark_dirty()
+            mm.flush()
+
+        queue_message(f"DASHBOARD: Edited memory #{index}: {', '.join(updated)}")
+        return jsonify({"success": True, "updated_fields": updated})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/api/dashboard/topic/edit', methods=['POST'])
+def dashboard_topic_edit():
+    """Edit a topic's fields by its index in the topic list."""
+    import modules.module_llm as _llm
+    mm = _llm.memory_manager
+    if not mm or not hasattr(mm, 'topic_index'):
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    fields = data.get('fields')
+
+    if index is None:
+        return jsonify({"error": "Missing 'index' parameter"}), 400
+    if not fields or not isinstance(fields, dict):
+        return jsonify({"error": "Missing or invalid 'fields' parameter"}), 400
+
+    try:
+        index = int(index)
+        topics = mm.topic_index.get('topics', [])
+        if index < 0 or index >= len(topics):
+            return jsonify({"error": f"Topic index {index} out of range"}), 400
+
+        topic = topics[index]
+        if not isinstance(topic, dict):
+            return jsonify({"error": "Topic is not editable"}), 400
+
+        updated = []
+        if 'topic' in fields:
+            topic['topic'] = str(fields['topic'])
+            updated.append('topic')
+        if 'mention_count' in fields:
+            try:
+                topic['mention_count'] = max(1, int(fields['mention_count']))
+                updated.append('mention_count')
+            except (ValueError, TypeError):
+                pass
+
+        if not updated:
+            return jsonify({"error": "No valid fields to update"}), 400
+
+        mm.save_topic_index()
+        mm.flush()
+        queue_message(f"DASHBOARD: Edited topic #{index}: {', '.join(updated)}")
+        return jsonify({"success": True, "updated_fields": updated})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/api/dashboard/topic/delete', methods=['POST'])
+def dashboard_topic_delete():
+    """Delete a topic by its index."""
+    import modules.module_llm as _llm
+    mm = _llm.memory_manager
+    if not mm or not hasattr(mm, 'topic_index'):
+        return jsonify({"error": "Memory manager not available"}), 500
+
+    data = request.get_json(silent=True) or {}
+    index = data.get('index')
+    if index is None:
+        return jsonify({"error": "Missing 'index' parameter"}), 400
+
+    try:
+        index = int(index)
+        topics = mm.topic_index.get('topics', [])
+        if index < 0 or index >= len(topics):
+            return jsonify({"error": f"Topic index {index} out of range"}), 400
+
+        removed = topics.pop(index)
+        name = removed.get('topic', '') if isinstance(removed, dict) else str(removed)
+        mm.save_topic_index()
+        mm.flush()
+        queue_message(f"DASHBOARD: Deleted topic #{index}: {name}")
+        return jsonify({"success": True, "deleted_topic": name, "remaining": len(topics)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2259,7 +2416,8 @@ def dashboard_graph():
                     "color": cat_colors.get(cat, "#66bb6a"),
                     "size": 5 + min(mentions * 2, 10), "group": "topic",
                     "details": {
-                        "category": cat, "mentions": mentions,
+                        "topic": topic_name,
+                        "category": cat, "mention_count": mentions,
                         "first_mentioned": t.get('first_mentioned', '')[:16] if isinstance(t, dict) else '',
                         "last_mentioned": t.get('last_mentioned', '')[:16] if isinstance(t, dict) else '',
                     }
