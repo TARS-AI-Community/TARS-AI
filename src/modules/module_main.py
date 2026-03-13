@@ -401,7 +401,12 @@ def utterance_callback(message):
             if has_blocking_tool:
                 queue_message(f"DEBUG VOICE: Running blocking side effects inline")
                 speed.start('tools')
-                llm_execute_side_effects(parsed, user_text)
+                from modules.module_servoctl import set_side_effect_mode
+                set_side_effect_mode(True)
+                try:
+                    llm_execute_side_effects(parsed, user_text)
+                finally:
+                    set_side_effect_mode(False)
                 tools_dur = speed.stop('tools')
                 # Check if side effects updated the reply (e.g. vision result, search summary)
                 updated_reply = parsed.get("reply", "") or ""
@@ -412,9 +417,15 @@ def utterance_callback(message):
                     queue_message(f"DEBUG VOICE: No reply change after side effects")
             elif func_calls or new_mems:
                 queue_message(f"DEBUG VOICE: Running side effects in background thread")
+                def _run_side_effects(p=parsed, u=user_text):
+                    from modules.module_servoctl import set_side_effect_mode
+                    set_side_effect_mode(True)
+                    try:
+                        llm_execute_side_effects(p, u)
+                    finally:
+                        set_side_effect_mode(False)
                 threading.Thread(
-                    target=llm_execute_side_effects,
-                    args=(parsed, user_text), daemon=True
+                    target=_run_side_effects, daemon=True
                 ).start()
             else:
                 queue_message(f"DEBUG VOICE: No side effects to run")
