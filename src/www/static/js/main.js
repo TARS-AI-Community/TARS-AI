@@ -1967,7 +1967,13 @@ function executeAction() {
           saveBtn.innerHTML='<i class="bi bi-check-circle-fill"></i> Saved!';
           saveBtn.classList.add('hud-btn-success');
           if (window.showToast) showToast('Configuration saved', 'success');
-          setTimeout(()=>{ saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; },2000);
+          setTimeout(()=>{
+            saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false;
+            if (confirm('Settings saved. Would you like to reboot now to apply changes?')) {
+              if (window.showToast) showToast('Rebooting...', 'success');
+              fetch('/reboot_program',{method:'POST'}).catch(()=>{});
+            }
+          },1000);
         } else { saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; if (window.showToast) showToast('Error: '+(d.error||'Unknown'), 'error'); }
       }).catch(err=>{ saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; alert('Error: '+err.message); });
   }
