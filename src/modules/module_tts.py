@@ -384,8 +384,9 @@ async def play_audio_chunks(text, config, is_wakeword=False):
     was_interrupted = False
 
     async def synthesize_chunks():
+        gen = generate_tts_audio(text, config, is_wakeword).__aiter__()
         try:
-            async for audio_chunk in generate_tts_audio(text, config, is_wakeword):
+            async for audio_chunk in gen:
                 if _tts_cancel_event.is_set():
                     break
                 # Use put_nowait with a wait loop so we can check for cancellation
@@ -398,6 +399,12 @@ async def play_audio_chunks(text, config, is_wakeword=False):
         except Exception as e:
             queue_message(f"ERROR: Synthesis failed: {e}")
         finally:
+            # Explicitly close the async generator so pending HTTP streams
+            # (ElevenLabs, OpenAI, etc.) are cleaned up before the event loop closes.
+            try:
+                await gen.aclose()
+            except Exception:
+                pass
             synthesis_done.set()
 
     async def play_chunks():
