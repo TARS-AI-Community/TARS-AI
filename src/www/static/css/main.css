@@ -4097,3 +4097,47 @@ body::after {
   .dash-log-entry { padding: 8px 10px; font-size: 0.7rem; }
   .dash-graph-container { min-height: 350px; }
 }
+
+/* ── Skill Status Indicator ───────────────────────────────────────────────── */
+.skill-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(0, 255, 255, 0.06);
+  border-left: 3px solid var(--cyan);
+  animation: msgSlideIn 0.3s var(--ease);
+}
+.skill-status-icon { font-size: 14px; }
+.skill-status-badge {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.skill-status-running  { background: rgba(0,255,255,0.15); color: var(--cyan); }
+.skill-status-completed { background: rgba(0,255,100,0.15); color: #0f8; }
+.skill-status-failed   { background: rgba(255,60,60,0.15); color: #f66; }
+.skill-status-timeout  { background: rgba(255,200,0,0.15); color: #fc0; }
+.skill-output {
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 150px;
+  overflow-y: auto;
+  color: var(--text);
+}
