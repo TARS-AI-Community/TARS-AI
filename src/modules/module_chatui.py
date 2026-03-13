@@ -482,11 +482,13 @@ def character_sprite(emo, filename):
 @flask_app.route('/start_talking')
 def start_talking_endpoint():
     socketio.emit('talking_state', {'talking': True})
+    _notify_avatar_talking(True)
     return Response("started", status=200)
 
 @flask_app.route('/stop_talking')
 def stop_talking_endpoint():
     socketio.emit('talking_state', {'talking': False})
+    _notify_avatar_talking(False)
     return Response("stopped", status=200)
 
 _EMOTION_TO_MOOD = {
@@ -564,6 +566,23 @@ def update_emotion(detected_emotion):
         _eyes_mod.set_mood_request(Mood[mood_name])
     except Exception:
         pass
+
+    # Notify avatar app of emotion change
+    try:
+        import modules.UI.apps.module_app_avatar as _avatar_mod
+        _avatar_mod.set_emotion_request(detected_emotion)
+    except Exception:
+        pass
+
+
+def _notify_avatar_talking(is_talking: bool) -> None:
+    """Notify the avatar app of a talking state change (best-effort)."""
+    try:
+        import modules.UI.apps.module_app_avatar as _avatar_mod
+        _avatar_mod.set_talking_state(is_talking)
+    except Exception:
+        pass
+
 
 def begin_bot_stream():
     """Signal web UI that a bot response is starting to stream (voice mode)."""
@@ -702,6 +721,7 @@ def _process_chat_message(msg, img_b64):
 
         def _on_first_browser_play():
             socketio.emit('talking_state', {'talking': True})
+            _notify_avatar_talking(True)
 
         pipeline = SentenceTTSPipeline(
             CONFIG['TTS']['ttsoption'],
@@ -804,12 +824,14 @@ def _process_chat_message(msg, img_b64):
         # Always emit bot_audio_done so voice mode mic can restart
         socketio.emit('bot_audio_done', {})
         socketio.emit('talking_state', {'talking': False})
+        _notify_avatar_talking(False)
 
     except Exception as e:
         queue_message(f"ERROR: process_llm failed: {e}")
         socketio.emit('bot_message', {'message': f'Error processing message: {e}', 'audio_streamed': True})
         socketio.emit('bot_audio_done', {})
         socketio.emit('talking_state', {'talking': False})
+        _notify_avatar_talking(False)
 
 @flask_app.route('/process_llm', methods=['POST'])
 def receive_user_message():
@@ -887,6 +909,7 @@ def audio_stream():
     """
     global current_chunk_index
     socketio.emit('talking_state', {'talking': True})
+    _notify_avatar_talking(True)
 
     with _audio_state_lock:
         audio_chunks_dict.clear()
