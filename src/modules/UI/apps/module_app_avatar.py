@@ -62,8 +62,11 @@ class AvatarApp:
         try:
             from modules.module_config import load_config
             config = load_config()
-            char_path = config["CHAR"]["character_card_path"]
-            self._char_name = os.path.splitext(os.path.basename(char_path))[0]
+            char_path = config["CHAR"].get("character_card_path", "")
+            if char_path:
+                self._char_name = os.path.splitext(os.path.basename(char_path))[0]
+            else:
+                self._char_name = config["CHAR"].get("character_name", "TARS")
         except Exception:
             self._char_name = "TARS"
 
