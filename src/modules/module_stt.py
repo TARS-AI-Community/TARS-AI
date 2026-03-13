@@ -1002,8 +1002,12 @@ class STTManager:
 
         # Reset Smart Turn state to prevent stale inference results from the
         # previous recording round from triggering an immediate "end of turn".
+        had_stale_future = self._smart_turn_future is not None
+        had_stale_buffer = len(self.smart_turn_audio_buffer) > 0
         self.smart_turn_audio_buffer.clear()
         self._smart_turn_future = None
+        if had_stale_future or had_stale_buffer:
+            queue_message(f"DEBUG: Reset stale Smart Turn state (future={had_stale_future}, buf_chunks={had_stale_buffer})")
 
         with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
             # Flush stale mic audio that may contain the robot's own TTS voice.
@@ -1027,18 +1031,22 @@ class STTManager:
                 if not detected_speech and silent_frames >= MAX_SILENT:
                     _, clear_bar = self._get_progress_bar()
                     clear_bar()
+                    if self.DEBUG:
+                        queue_message(f"DEBUG: Recording exit: pre-speech timeout (no speech after {silent_frames} silent frames)")
                     return None
 
                 if is_silence:
                     if speech_frames >= MIN_SPEECH and silent_frames >= MAX_SILENT:
                         _, clear_bar = self._get_progress_bar()
                         clear_bar()
+                        if self.DEBUG:
+                            queue_message(f"DEBUG: Recording exit: silence timeout (speech={speech_frames}, silent={silent_frames}, chunks={len(audio_chunks)})")
                         break
                     # Smart Turn can signal turn-complete with fewer silent frames
                     # (it clears its audio buffer when prob > 0.5, so check that)
                     if (self.vadmethod == "smart-turn" and speech_frames >= MIN_SPEECH
                             and silent_frames >= 3 and not self.smart_turn_audio_buffer):
-                        queue_message("INFO: Smart Turn detected end of turn")
+                        queue_message(f"INFO: Smart Turn detected end of turn (speech={speech_frames}, silent={silent_frames}, chunks={len(audio_chunks)})")
                         break
 
                 if not detected_speech:
@@ -1089,6 +1097,8 @@ class STTManager:
                         queue_message(f"DEBUG: Preemptive LLM fired for: {spec_result[0][:60]}...")
 
             if speech_frames < MIN_SPEECH:
+                if self.DEBUG:
+                    queue_message(f"DEBUG: Recording discarded: not enough speech ({speech_frames}<{MIN_SPEECH})")
                 return None
 
         if not audio_chunks:
@@ -1111,7 +1121,12 @@ class STTManager:
             transcript = self._sherpa_transcribe_audio(audio_chunks, RATE)
 
         if not transcript:
+            if self.DEBUG:
+                queue_message(f"DEBUG: Transcription returned empty (chunks={len(audio_chunks)}, speech_frames={speech_frames})")
             return None
+
+        audio_duration = len(audio_chunks) * 4000 / RATE
+        queue_message(f"DEBUG: Transcribed: '{transcript}' (speech={speech_frames}, chunks={len(audio_chunks)}, ~{audio_duration:.1f}s audio)")
 
         # Check if preemptive LLM result is valid (transcript matches)
         extra = None
@@ -1514,8 +1529,10 @@ class STTManager:
                     probability = self._smart_turn_future.result()
                     self._smart_turn_future = None
                     if self.DEBUG:
-                        queue_message(f"DEBUG: Smart Turn probability: {probability:.3f}")
+                        queue_message(f"DEBUG: Smart Turn probability: {probability:.3f}    ")
                     if probability > 0.5:
+                        if self.DEBUG:
+                            queue_message(f"DEBUG: Smart Turn -> end of turn (prob={probability:.3f}, detected_speech={detected_speech}, silent={silent_frames}, buf={len(self.smart_turn_audio_buffer)})")
                         clear_bar()
                         self.smart_turn_audio_buffer.clear()
                         return True, detected_speech, silent_frames
