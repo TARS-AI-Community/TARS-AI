@@ -41,6 +41,12 @@ try:
 except Exception:
     HAS_AVATAR = False
 
+try:
+    from modules.UI.apps.module_app_remote import RemoteApp
+    HAS_REMOTE = True
+except Exception:
+    HAS_REMOTE = False
+
 from UI.screensavers.module_screensaver_dashboard import DashboardAnimation
 
 AVAILABLE_APPS = {
@@ -48,6 +54,7 @@ AVAILABLE_APPS = {
     "dashboard": {"class": DashboardAnimation, "type": "opengl", "label": "Dashboard"},
     **({"eyes": {"class": EyesApp, "type": "pygame", "label": "Eyes"}} if HAS_EYES else {}),
     **({"avatar": {"class": AvatarApp, "type": "pygame", "label": "Avatar"}} if HAS_AVATAR else {}),
+    **({"remote": {"class": RemoteApp, "type": "pygame", "label": "Remote"}} if HAS_REMOTE else {}),
 }
 
 
