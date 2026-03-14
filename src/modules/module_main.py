@@ -361,10 +361,15 @@ def utterance_callback(message):
             func_calls = parsed.get("function_calls", [])
             new_mems = parsed.get("new_memories", [])
             queue_message(f"DEBUG VOICE: parsed type={type(parsed).__name__}, func_calls={func_calls}, new_memories={new_mems}")
-            has_blocking_tool = any(
-                fc.get("function") in ("capture_camera_view", "web_search", "take_photo", "sandbox_exec")
-                for fc in func_calls
-            )
+            # Check if any called skill is blocking (double-pass: placeholder → result)
+            from modules.module_skills import get_skill_manager
+            _sm = get_skill_manager()
+            def _is_blocking(func_name):
+                if _sm:
+                    meta = _sm._skill_meta.get(func_name, {})
+                    return meta.get("followup", False)
+                return False
+            has_blocking_tool = any(_is_blocking(fc.get("function", "")) for fc in func_calls)
             if has_blocking_tool:
                 queue_message(f"DEBUG VOICE: Running blocking side effects inline")
                 speed.start('tools')

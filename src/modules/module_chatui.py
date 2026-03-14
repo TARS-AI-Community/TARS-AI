@@ -1540,7 +1540,7 @@ def get_skills():
 
 @flask_app.route('/toggle_skill', methods=['POST'])
 def toggle_skill():
-    """Enable or disable a skill via config.ini [SKILLS] disabled list."""
+    """Enable or disable a skill via config.ini [SKILL:<name>] section."""
     try:
         data = request.get_json()
         skill_name = data.get("name", "")

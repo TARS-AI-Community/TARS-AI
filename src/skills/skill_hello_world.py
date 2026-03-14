@@ -14,6 +14,13 @@ Config fields (optional):
   Types: text, number, bool, select, password
   Access in execute() via: context["skill_config"]
 
+Follow-up mode (optional):
+  "followup": True  — TARS speaks a placeholder ("Let me check..."), runs the
+                      skill, then speaks the result as a follow-up response.
+  "followup": False — (default) fire-and-forget: TARS speaks the reply and the
+                      skill runs in the background. Good for actions like volume,
+                      movements, or image generation.
+
 API keys / tokens:
   Store secrets in .env (never in the skill file or config.ini).
   Access in execute() via: os.getenv("YOUR_KEY")
@@ -25,13 +32,23 @@ SKILL = {
     "name": "hello_world",
     "description": "Example skill — responds with a greeting",
 
-    # Optional: config fields shown in the web UI Skills panel
+    # Follow-up mode (optional):
+    #   True  = TARS says a placeholder, runs the skill, then speaks the result
+    #   False = (default) TARS speaks the reply and the skill runs in the background
+    "followup": False,
+
+    # Config fields (optional): shown in the web UI Skills panel
+    # Saved to [SKILL:hello_world] in config.ini. Access via context["skill_config"]
     "config": {
         "greeting": {
             "type": "text",
             "default": "Hello, World!",
             "description": "The greeting message to return",
         },
+        # Other field types:
+        # "count":   {"type": "number", "default": 1, "min": 1, "max": 10, "description": "..."},
+        # "enabled": {"type": "bool",   "default": True, "description": "..."},
+        # "mode":    {"type": "select", "default": "a", "options": ["a","b"], "description": "..."},
     },
 
     # The prompt tells the LLM when and how to call this skill

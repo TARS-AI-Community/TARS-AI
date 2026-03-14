@@ -787,6 +787,8 @@ def create_touch_menu():
 
                     elif button_pressed == 'normal' and normal_button.collidepoint(transformed_click):
                         pygame.quit()
+                        stop_tars_ai()
+                        time.sleep(0.1)
                         run_tars_ai_normal()
                         sys.exit()
 
