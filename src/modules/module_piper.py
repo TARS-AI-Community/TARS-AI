@@ -35,8 +35,31 @@ asound = ctypes.cdll.LoadLibrary('libasound.so')
 script_dir = os.path.dirname(__file__)
 model_path = os.path.join(script_dir, '..', f'character/{character_name}/voice/{character_name}.onnx')
 
+def _is_lfs_pointer(filepath):
+    """Check if a file is a Git LFS pointer instead of actual content."""
+    try:
+        with open(filepath, 'rb') as f:
+            header = f.read(20)
+            return header.startswith(b'version https://git-lfs')
+    except Exception:
+        return False
+
+voice = None
 if CONFIG['TTS']['ttsoption'] == 'piper':
-    voice = PiperVoice.load(model_path)
+    if not os.path.isfile(model_path):
+        queue_message(f"[Piper] Voice model not found: {model_path}")
+        queue_message("[Piper] Please place a valid .onnx voice model in the character voice folder.")
+    elif _is_lfs_pointer(model_path):
+        queue_message(f"[Piper] Voice model is a Git LFS pointer, not the actual file: {model_path}")
+        queue_message("[Piper] Run 'git lfs install && git lfs pull' to download the real model file.")
+    else:
+        try:
+            voice = PiperVoice.load(model_path)
+        except Exception as e:
+            queue_message(f"[Piper] Failed to load voice model: {e}")
+            queue_message(f"[Piper] The file may be corrupt: {model_path}")
+            queue_message("[Piper] Try re-downloading the .onnx voice model.")
+            voice = None
 
 async def synthesize(voice, chunk):
     """
@@ -65,6 +88,9 @@ async def text_to_speech_with_pipelining_piper(text):
     """
     Converts text to speech using the Piper model and streams audio as it's generated.
     """
+    if voice is None:
+        queue_message("[Piper] Cannot synthesize - voice model not loaded. Check logs for details.")
+        return
     # Split text into smaller chunks
     # Split at sentence boundaries and commas for faster first-chunk playback
     chunks = re.split(r'(?<=[.!?;])\s+|,\s+', text)
