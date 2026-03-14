@@ -1373,6 +1373,8 @@ _SCHEDULER_MAP = {
 
 
 class ImageGenService:
+    _progress = {}  # {task_id: {"step": int, "total": int}}
+
     def __init__(self, model_name: str = "stabilityai/stable-diffusion-xl-base-1.0", device: str = None):
         device = device or DEVICE
         self._device = device
@@ -1404,7 +1406,8 @@ class ImageGenService:
         self.pipe.scheduler = cls.from_config(self._default_scheduler_config, **kwargs)
 
     def generate(self, prompt, negative_prompt="", steps=20, cfg_scale=7.0,
-                 width=1024, height=1024, seed=-1, sampler_name=None) -> bytes:
+                 width=1024, height=1024, seed=-1, sampler_name=None,
+                 task_id=None) -> bytes:
         self._set_scheduler(sampler_name)
         generator = torch.Generator(device=self._device).manual_seed(seed) if seed >= 0 else None
         gen_kwargs = {
@@ -1414,7 +1417,16 @@ class ImageGenService:
         }
         if negative_prompt:
             gen_kwargs["negative_prompt"] = negative_prompt
-        result = self.pipe(**gen_kwargs)
+        if task_id:
+            ImageGenService._progress[task_id] = {"step": 0, "total": steps}
+            def _on_step(pipe, step_index, timestep, callback_kwargs):
+                ImageGenService._progress[task_id] = {"step": step_index + 1, "total": steps}
+                return callback_kwargs
+            gen_kwargs["callback_on_step_end"] = _on_step
+        try:
+            result = self.pipe(**gen_kwargs)
+        finally:
+            ImageGenService._progress.pop(task_id, None)
         buf = BytesIO()
         result.images[0].save(buf, format="PNG")
         return buf.getvalue()
@@ -1489,7 +1501,7 @@ _WEB_API_PATHS = {
     "/v1",           # LLM chat completions + embeddings
     "/tts",          # TTS generate + voices
     "/save_audio", "/transcribe",  # STT
-    "/caption", "/generate_image", "/sdapi",  # Vision + ImageGen
+    "/caption", "/generate_image", "/sdapi", "/imagegen_progress",  # Vision + ImageGen
 }
 # Paths exempt from ALL auth (health check, login, static API schema)
 _AUTH_EXEMPT = {"/health", "/login", "/logout", "/docs", "/openapi.json", "/redoc", "/ws/dashboard"}
@@ -2116,12 +2128,14 @@ async def generate_image_simple(request: Request):
     if not prompt:
         raise HTTPException(400, "prompt is required")
     try:
+        task_id = body.get("task_id")
         loop = asyncio.get_event_loop()
         gen_kwargs = dict(
             prompt=prompt, negative_prompt=body.get("negative_prompt", ""),
             steps=int(body.get("steps", 20)), cfg_scale=float(body.get("cfg_scale", 7.0)),
             width=int(body.get("width", 1024)), height=int(body.get("height", 1024)),
             seed=int(body.get("seed", -1)), sampler_name=body.get("sampler_name"),
+            task_id=task_id,
         )
         image_bytes = await loop.run_in_executor(None, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
         log.info(f"ImageGen: \"{prompt[:60]}\"")
@@ -2129,6 +2143,14 @@ async def generate_image_simple(request: Request):
     except Exception as e:
         log.error(f"ImageGen error: {traceback.format_exc()}")
         raise HTTPException(500, str(e))
+
+
+@app.get("/imagegen_progress/{task_id}")
+async def imagegen_progress(task_id: str):
+    info = ImageGenService._progress.get(task_id)
+    if info is None:
+        return {"step": 0, "total": 0, "active": False}
+    return {"step": info["step"], "total": info["total"], "active": True}
 
 
 # -- Embeddings Routes -------------------------------------------------
@@ -2569,7 +2591,11 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
 <div id="p-img" class="panel"><div class="glass">
   <textarea id="img-prompt" placeholder="Image prompt..."></textarea>
   <label>Negative prompt</label><input type="text" id="img-neg" placeholder="optional">
-  <button class="hud-btn" onclick="generateImg()">Generate</button>
+  <button class="hud-btn" id="img-gen-btn" onclick="generateImg()">Generate</button>
+  <div id="img-progress-wrap" style="display:none;margin:8px 0">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px"><span id="img-progress-label">Starting...</span><span id="img-progress-pct">0%</span></div>
+    <div style="height:6px;background:rgba(0,229,255,0.1);border-radius:3px;overflow:hidden"><div id="img-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#00e5ff,#7c4dff);border-radius:3px;transition:width .3s ease"></div></div>
+  </div>
   <div class="output" id="img-out">Enter a prompt and click Generate.</div>
   <img class="preview" id="img-preview" style="display:none">
 </div></div>
@@ -2716,18 +2742,45 @@ async function captionImg(){
   }catch(e){document.getElementById('vis-out').textContent='Error: '+e}
 }
 
+function _uid(){try{return crypto.randomUUID()}catch(e){return 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g,function(){return(Math.random()*16|0).toString(16)})}}
 async function generateImg(){
   const prompt=document.getElementById('img-prompt').value.trim();if(!prompt)return;
   const neg=document.getElementById('img-neg').value.trim();
-  document.getElementById('img-out').textContent='Generating...';
+  const steps=20;
+  const taskId=_uid();
+  const btn=document.getElementById('img-gen-btn');
+  btn.disabled=true;btn.style.opacity='0.5';
+  document.getElementById('img-out').textContent='';
   document.getElementById('img-preview').style.display='none';
+  const wrap=document.getElementById('img-progress-wrap');
+  const bar=document.getElementById('img-progress-bar');
+  const pctEl=document.getElementById('img-progress-pct');
+  const lbl=document.getElementById('img-progress-label');
+  wrap.style.display='block';bar.style.width='0%';pctEl.textContent='0%';lbl.textContent='Starting...';
+  let done=false;
+  const poll=setInterval(function(){
+    if(done)return;
+    fetch(base+'/imagegen_progress/'+taskId).then(function(r){return r.json()}).then(function(d){
+      if(done)return;
+      if(d.active&&d.total>0){
+        var p=Math.round(d.step/d.total*100);
+        bar.style.width=p+'%';pctEl.textContent=p+'%';
+        lbl.textContent='Step '+d.step+' / '+d.total;
+      }
+    }).catch(function(){});
+  },500);
   try{
     const resp=await fetch(base+'/generate_image',{method:'POST',headers:hdr(),
-      body:JSON.stringify({prompt,negative_prompt:neg,steps:20})});
+      body:JSON.stringify({prompt:prompt,negative_prompt:neg,steps:steps,task_id:taskId})});
+    done=true;clearInterval(poll);
+    bar.style.width='100%';pctEl.textContent='100%';lbl.textContent='Complete';
+    if(!resp.ok){document.getElementById('img-out').textContent='Error: '+resp.status+' '+resp.statusText;setTimeout(function(){wrap.style.display='none'},2000);return}
     const blob=await resp.blob();const url=URL.createObjectURL(blob);
     const img=document.getElementById('img-preview');img.src=url;img.style.display='block';
     document.getElementById('img-out').textContent='Done.';
-  }catch(e){document.getElementById('img-out').textContent='Error: '+e}
+    setTimeout(function(){wrap.style.display='none'},2000);
+  }catch(e){done=true;clearInterval(poll);wrap.style.display='none';document.getElementById('img-out').textContent='Error: '+e}
+  finally{btn.disabled=false;btn.style.opacity=''}
 }
 
 document.getElementById('chat-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}});
