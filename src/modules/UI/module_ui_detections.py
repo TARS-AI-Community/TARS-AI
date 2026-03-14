@@ -413,9 +413,9 @@ class DetectionManager:
     INACTIVE_BORDER = (150, 60, 60, 200)
     INACTIVE_TEXT = (150, 80, 80)
 
-    BUTTON_WIDTH = 90
-    BUTTON_HEIGHT = 32
-    BUTTON_SPACING = 8
+    BUTTON_WIDTH = 126
+    BUTTON_HEIGHT = 45
+    BUTTON_SPACING = 12
     BUTTON_MARGIN_LEFT = 10
     BUTTON_MARGIN_TOP = 10
 
@@ -445,6 +445,16 @@ class DetectionManager:
         self._delete_menu_active = False
         self._delete_menu_rects = []
         self._delete_menu_names = []
+
+        # Main buttons: DETECT (opens menu), LIGHT (direct toggle), FACE ID (direct toggle)
+        self._detect_button_rect = None
+        self._light_button_rect = None
+        self._faceid_button_rect = None
+        self._detect_menu_active = False
+        self._detect_menu_rect = None
+        self._detect_menu_buttons = []
+        self._detect_menu_fade = 0.0
+        self._detect_menu_fade_speed = 6.0
 
     def _init_default_detectors(self):
         light = LightRingDetector()
@@ -489,7 +499,18 @@ class DetectionManager:
 
     def toggle_detector(self, index):
         if 0 <= index < len(self.detectors):
-            self.detectors[index].enabled = not self.detectors[index].enabled
+            detector = self.detectors[index]
+            detector.enabled = not detector.enabled
+            # FACE and FACE ID are mutually exclusive
+            if detector.enabled:
+                if isinstance(detector, FaceDetector):
+                    for d in self.detectors:
+                        if isinstance(d, FaceRecognitionDetector):
+                            d.enabled = False
+                elif isinstance(detector, FaceRecognitionDetector):
+                    for d in self.detectors:
+                        if isinstance(d, FaceDetector):
+                            d.enabled = False
 
     def _get_face_id_detector(self):
         for d in self.detectors:
@@ -511,26 +532,41 @@ class DetectionManager:
         self._last_camera_y = camera_y
         self._last_camera_w = camera_w
 
-        x = camera_x - self.BUTTON_WIDTH + self.BUTTON_MARGIN_LEFT + 15
-        start_y = camera_y + self.BUTTON_MARGIN_TOP
+        btn_w = 120
+        btn_h = 44
+        spacing = 10
+        row_y = 10
+        start_x = 10
+        col = 0
 
-        row = 0
-        for i in range(len(self.detectors)):
-            y = start_y + row * (self.BUTTON_HEIGHT + self.BUTTON_SPACING)
-            self._button_rects.append(pygame.Rect(x, y, self.BUTTON_WIDTH, self.BUTTON_HEIGHT))
-            row += 1
+        face_id = self._get_face_id_detector()
 
-            face_id = self._get_face_id_detector()
-            if face_id is not None and self.detectors[i] is face_id and face_id.enabled:
-                if face_id.has_unknown or face_id.training_mode:
-                    y = start_y + row * (self.BUTTON_HEIGHT + self.BUTTON_SPACING)
-                    self._train_button_rect = pygame.Rect(x, y, self.BUTTON_WIDTH, self.BUTTON_HEIGHT)
-                    row += 1
+        # DETECT button
+        x = start_x + col * (btn_w + spacing)
+        self._detect_button_rect = pygame.Rect(x, row_y, btn_w, btn_h)
+        col += 1
 
-                if face_id.known_names:
-                    y = start_y + row * (self.BUTTON_HEIGHT + self.BUTTON_SPACING)
-                    self._delete_button_rect = pygame.Rect(x, y, self.BUTTON_WIDTH, self.BUTTON_HEIGHT)
-                    row += 1
+        # LIGHT button
+        x = start_x + col * (btn_w + spacing)
+        self._light_button_rect = pygame.Rect(x, row_y, btn_w, btn_h)
+        col += 1
+
+        # FACE ID button
+        x = start_x + col * (btn_w + spacing)
+        self._faceid_button_rect = pygame.Rect(x, row_y, btn_w, btn_h)
+        col += 1
+
+        # TRAIN and DELETE buttons (only when FACE ID is enabled)
+        if face_id is not None and face_id.enabled:
+            if face_id.has_unknown or face_id.training_mode:
+                x = start_x + col * (btn_w + spacing)
+                self._train_button_rect = pygame.Rect(x, row_y, btn_w, btn_h)
+                col += 1
+
+            if face_id.known_names:
+                x = start_x + col * (btn_w + spacing)
+                self._delete_button_rect = pygame.Rect(x, row_y, btn_w, btn_h)
+                col += 1
 
     def _ensure_font(self):
         if self._button_font is None:
@@ -539,11 +575,118 @@ class DetectionManager:
             except Exception:
                 self._button_font = pygame.font.SysFont("monospace", 14)
 
+    def _draw_cam_button(self, surface, rect, label, active=False, color_type=None):
+        """Draw a styled button matching the terminal UI style."""
+        if color_type == "train":
+            bg_color = self.TRAIN_BG
+            border_color = self.TRAIN_BORDER
+            text_color = self.TRAIN_TEXT
+        elif color_type == "train_active":
+            bg_color = self.TRAIN_ACTIVE_BG
+            border_color = (0, 255, 0)
+            text_color = (0, 255, 0)
+        elif color_type == "delete":
+            bg_color = (50, 10, 10, 220)
+            border_color = (200, 60, 60)
+            text_color = (200, 80, 80)
+        elif active:
+            bg_color = self.ACTIVE_BG
+            border_color = (*self.PRIMARY_COLOR, 255)
+            text_color = self.PRIMARY_COLOR
+        else:
+            bg_color = self.INACTIVE_BG
+            border_color = self.INACTIVE_BORDER
+            text_color = self.INACTIVE_TEXT
+
+        pygame.draw.rect(surface, bg_color, rect)
+        pygame.draw.rect(surface, border_color, rect, 2)
+
+        inner_rect = rect.inflate(-4, -4)
+        pygame.draw.rect(surface, (*self.ACCENT_COLOR, 150), inner_rect, 1)
+
+        bracket_size = 6
+        pygame.draw.line(surface, border_color, rect.topleft,
+                         (rect.left + bracket_size, rect.top), 2)
+        pygame.draw.line(surface, border_color, rect.topleft,
+                         (rect.left, rect.top + bracket_size), 2)
+        pygame.draw.line(surface, border_color, rect.topright,
+                         (rect.right - bracket_size, rect.top), 2)
+        pygame.draw.line(surface, border_color,
+                         (rect.right - 1, rect.top),
+                         (rect.right - 1, rect.top + bracket_size), 2)
+
+        text_surface = self._button_font.render(label, True, text_color)
+        text_rect = text_surface.get_rect(center=rect.center)
+        surface.blit(text_surface, text_rect)
+
+    def _init_detect_menu(self, surface_w, surface_h):
+        """Build the detect menu with toggles for non-FaceID detectors."""
+        menu_detectors = [(i, d) for i, d in enumerate(self.detectors)
+                          if not isinstance(d, (FaceRecognitionDetector, LightRingDetector))]
+        btn_w = 280
+        btn_h = 84
+        spacing = 20
+        num = len(menu_detectors)
+        total_h = num * btn_h + (num - 1) * spacing
+        modal_w = btn_w + 60
+        modal_h = total_h + 100
+        modal_x = surface_w // 2 - modal_w // 2
+        modal_y = surface_h // 2 - modal_h // 2
+        self._detect_menu_rect = pygame.Rect(modal_x, modal_y, modal_w, modal_h)
+
+        self._detect_menu_buttons = []
+        start_y = modal_y + 70
+        for idx, (det_index, detector) in enumerate(menu_detectors):
+            rect = pygame.Rect(
+                surface_w // 2 - btn_w // 2,
+                start_y + idx * (btn_h + spacing),
+                btn_w, btn_h
+            )
+            self._detect_menu_buttons.append({
+                "label": detector.name,
+                "detector_index": det_index,
+                "rect": rect
+            })
+
+    def _draw_detect_menu(self, surface):
+        """Draw the detect menu overlay."""
+        sw, sh = surface.get_size()
+        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surface.blit(overlay, (0, 0))
+
+        if not self._detect_menu_rect:
+            return
+
+        pygame.draw.rect(surface, (10, 25, 30, 250), self._detect_menu_rect)
+        pygame.draw.rect(surface, self.PRIMARY_COLOR, self._detect_menu_rect, 3)
+
+        inner = self._detect_menu_rect.inflate(-6, -6)
+        pygame.draw.rect(surface, (*self.ACCENT_COLOR, 100), inner, 1)
+
+        title = self._button_font.render("DETECTORS", True, self.PRIMARY_COLOR)
+        title_rect = title.get_rect(
+            center=(self._detect_menu_rect.centerx, self._detect_menu_rect.top + 35)
+        )
+        surface.blit(title, title_rect)
+
+        line_y = self._detect_menu_rect.top + 60
+        pygame.draw.line(surface, self.PRIMARY_COLOR,
+                        (self._detect_menu_rect.left + 20, line_y),
+                        (self._detect_menu_rect.right - 20, line_y), 2)
+
+        for button in self._detect_menu_buttons:
+            rect = button["rect"]
+            det_index = button["detector_index"]
+            detector = self.detectors[det_index]
+            self._draw_cam_button(surface, rect, detector.name, active=detector.enabled)
+
     def draw_buttons(self, surface, camera_x, camera_y, camera_w):
         if not self.detectors:
             return
 
         self._ensure_font()
+        self._surface_w, self._surface_h = surface.get_size()
 
         face_id = self._get_face_id_detector()
         train_should_show = (face_id is not None and face_id.enabled and
@@ -553,7 +696,7 @@ class DetectionManager:
                               len(face_id.known_names) > 0)
         delete_is_showing = self._delete_button_rect is not None
 
-        needs_rebuild = (len(self._button_rects) != len(self.detectors) or
+        needs_rebuild = (self._detect_button_rect is None or
                          camera_x != self._last_camera_x or
                          camera_y != self._last_camera_y or
                          camera_w != self._last_camera_w or
@@ -562,72 +705,39 @@ class DetectionManager:
         if needs_rebuild:
             self._build_button_rects(camera_x, camera_y, camera_w)
 
-        for i, detector in enumerate(self.detectors):
-            rect = self._button_rects[i]
-            active = detector.enabled
+        # Draw DETECT button (always same style — it just opens the menu)
+        self._draw_cam_button(surface, self._detect_button_rect, "DETECT",
+                              active=True)
 
-            if active:
-                bg_color = self.ACTIVE_BG
-                border_color = (*self.PRIMARY_COLOR, 255)
-                text_color = self.PRIMARY_COLOR
-            else:
-                bg_color = self.INACTIVE_BG
-                border_color = self.INACTIVE_BORDER
-                text_color = self.INACTIVE_TEXT
+        # Draw LIGHT button
+        light = self._get_light_ring_detector()
+        light_active = light is not None and light.enabled
+        self._draw_cam_button(surface, self._light_button_rect, "LIGHT",
+                              active=light_active)
 
-            pygame.draw.rect(surface, bg_color, rect)
-            pygame.draw.rect(surface, border_color, rect, 2)
+        # Draw FACE ID button
+        faceid_active = face_id is not None and face_id.enabled
+        self._draw_cam_button(surface, self._faceid_button_rect, "FACE ID",
+                              active=faceid_active)
 
-            inner_rect = rect.inflate(-4, -4)
-            pygame.draw.rect(surface, (*self.ACCENT_COLOR, 150), inner_rect, 1)
-
-            bracket_size = 6
-            pygame.draw.line(surface, border_color, rect.topleft,
-                             (rect.left + bracket_size, rect.top), 2)
-            pygame.draw.line(surface, border_color, rect.topleft,
-                             (rect.left, rect.top + bracket_size), 2)
-            pygame.draw.line(surface, border_color, rect.topright,
-                             (rect.right - bracket_size, rect.top), 2)
-            pygame.draw.line(surface, border_color,
-                             (rect.right - 1, rect.top),
-                             (rect.right - 1, rect.top + bracket_size), 2)
-
-            text_surface = self._button_font.render(detector.name, True, text_color)
-            text_rect = text_surface.get_rect(center=rect.center)
-            surface.blit(text_surface, text_rect)
-
+        # Draw TRAIN button
         if self._train_button_rect is not None:
-            rect = self._train_button_rect
-            face_id = self._get_face_id_detector()
             is_training = face_id is not None and face_id.training_mode
-
             if is_training:
-                bg = self.TRAIN_ACTIVE_BG
-                border = (0, 255, 0)
-                text_color = (0, 255, 0)
-                label = face_id.training_status
+                self._draw_cam_button(surface, self._train_button_rect,
+                                      face_id.training_status, color_type="train_active")
             else:
-                bg = self.TRAIN_BG
-                border = self.TRAIN_BORDER
-                text_color = self.TRAIN_TEXT
-                label = "TRAIN"
+                self._draw_cam_button(surface, self._train_button_rect,
+                                      "TRAIN", color_type="train")
 
-            pygame.draw.rect(surface, bg, rect)
-            pygame.draw.rect(surface, border, rect, 2)
-            text_surface = self._button_font.render(label, True, text_color)
-            text_rect = text_surface.get_rect(center=rect.center)
-            surface.blit(text_surface, text_rect)
-
+        # Draw DELETE button
         if self._delete_button_rect is not None:
-            rect = self._delete_button_rect
-            bg = (50, 10, 10, 220)
-            border = (200, 60, 60)
-            text_color = (200, 80, 80)
-            pygame.draw.rect(surface, bg, rect)
-            pygame.draw.rect(surface, border, rect, 2)
-            text_surface = self._button_font.render("DELETE", True, text_color)
-            text_rect = text_surface.get_rect(center=rect.center)
-            surface.blit(text_surface, text_rect)
+            self._draw_cam_button(surface, self._delete_button_rect,
+                                  "DELETE", color_type="delete")
+
+        # Draw menus/overlays
+        if self._detect_menu_active:
+            self._draw_detect_menu(surface)
 
         if self._delete_menu_active:
             self._draw_delete_menu(surface)
@@ -713,6 +823,12 @@ class DetectionManager:
         surface.blit(hint, (box_x + 10, box_y + 72))
 
     def handle_key_event(self, event):
+        if self._detect_menu_active:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self._detect_menu_active = False
+                return True
+            return True
+
         if self._delete_menu_active:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self._delete_menu_active = False
@@ -761,6 +877,21 @@ class DetectionManager:
             self._delete_menu_active = False
             return True
 
+        # Handle detect menu clicks (toggle detectors, stay open)
+        if self._detect_menu_active:
+            for button in self._detect_menu_buttons:
+                if button["rect"].collidepoint(pos):
+                    now = pygame.time.get_ticks()
+                    if now - self._last_click_time < self._click_cooldown:
+                        return True
+                    self._last_click_time = now
+                    self.toggle_detector(button["detector_index"])
+                    return True
+            # Tap outside menu to close
+            if self._detect_menu_rect and not self._detect_menu_rect.collidepoint(pos):
+                self._detect_menu_active = False
+            return True
+
         now = pygame.time.get_ticks()
         if now - self._last_click_time < self._click_cooldown:
             return False
@@ -778,13 +909,34 @@ class DetectionManager:
                 self._name_input_text = ""
             return True
 
-        for i, rect in enumerate(self._button_rects):
-            if rect.collidepoint(pos):
-                self._last_click_time = now
-                self.toggle_detector(i)
-                if isinstance(self.detectors[i], FaceRecognitionDetector):
-                    self._last_camera_w = None
-                return True
+        # DETECT button opens the detect menu
+        if self._detect_button_rect is not None and self._detect_button_rect.collidepoint(pos):
+            self._last_click_time = now
+            self._detect_menu_active = True
+            sw = getattr(self, '_surface_w', 480)
+            sh = getattr(self, '_surface_h', 480)
+            self._init_detect_menu(sw, sh)
+            return True
+
+        # LIGHT button toggles directly
+        if self._light_button_rect is not None and self._light_button_rect.collidepoint(pos):
+            self._last_click_time = now
+            light = self._get_light_ring_detector()
+            if light is not None:
+                idx = self.detectors.index(light)
+                self.toggle_detector(idx)
+            return True
+
+        # FACE ID button toggles directly
+        if self._faceid_button_rect is not None and self._faceid_button_rect.collidepoint(pos):
+            self._last_click_time = now
+            face_id = self._get_face_id_detector()
+            if face_id is not None:
+                idx = self.detectors.index(face_id)
+                self.toggle_detector(idx)
+                self._last_camera_w = None
+            return True
+
         return False
 
     def get_detection_summary(self):

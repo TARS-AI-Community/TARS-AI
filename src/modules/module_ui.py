@@ -213,6 +213,7 @@ class UIManager(threading.Thread):
         self.current_background_index = (self.current_background_index + 1) % len(self.background_types)
         self.next_background = self.background_types[self.current_background_index]
         self.background_change_requested = True
+        return self.next_background.upper()
 
     def toggle_camera(self):
         self.show_camera = not self.show_camera
@@ -317,6 +318,8 @@ class UIManager(threading.Thread):
         self.silence_progress = progress
         if self.spectrum_system is not None:
             self.spectrum_system.silence(progress, self.speechdelay)
+        if self.terminal_system is not None:
+            self.terminal_system.set_silence_progress(progress, self.speechdelay)
 
     def save_memory(self):
         if self.terminal_system is not None:
@@ -452,9 +455,11 @@ class UIManager(threading.Thread):
             current_idx = styles.index(self.spectrum_system.style)
             next_idx = (current_idx + 1) % len(styles)
             self.spectrum_system.style = styles[next_idx]
-            self.spectrum_style = styles[next_idx]  
+            self.spectrum_style = styles[next_idx]
 
-            self._save_ui_settings()  
+            self._save_ui_settings()
+            return styles[next_idx].upper()
+        return None
 
     def _render_surface_to_opengl(self, surface, texture_id):
         """Helper to render a pygame surface as an OpenGL texture"""
