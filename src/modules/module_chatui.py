@@ -39,6 +39,10 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit as _sio_emit
 
 
+# Boot ID — unique per process, used to detect reboot completion
+import uuid as _uuid
+BOOT_ID = str(_uuid.uuid4())
+
 # === Custom Modules ===
 from modules.module_config import load_config
 from modules.module_config import CONFIG_METADATA as CONFIG_UI_FIELDS
@@ -1582,6 +1586,12 @@ def save_skill_config():
         return jsonify({"error": str(e)}), 500
 
 
+@flask_app.route('/boot_id', methods=['GET'])
+def get_boot_id():
+    """Return the current boot ID — changes after every restart."""
+    return jsonify({"boot_id": BOOT_ID})
+
+
 @flask_app.route('/reboot_program', methods=['POST'])
 def reboot_program():
     """
@@ -1591,15 +1601,18 @@ def reboot_program():
     try:
         queue_message("INFO: Reboot requested from web UI - restarting program...")
 
-        def do_restart():
-            import time as _time
-            _time.sleep(1)  # Give response time to send
-            app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'app.py'))
-            args = [sys.executable, app_path] + sys.argv[1:]
-            os.execv(sys.executable, args)
+        import subprocess
+        launcher = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'tars-launcher.sh'))
+        app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'app.py'))
+        pid = str(os.getpid())
 
-        import threading
-        threading.Thread(target=do_restart, daemon=True).start()
+        # Launch tars-launcher.sh --reboot (detached — survives parent death)
+        subprocess.Popen(
+            ['bash', launcher, '--reboot', pid, sys.executable, app_path] + sys.argv[1:],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
         return jsonify({"success": True, "message": "Rebooting..."})
     except Exception as e:

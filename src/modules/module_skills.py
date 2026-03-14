@@ -127,6 +127,7 @@ class SkillManager:
         config.read(config_path)
 
         # Migrate any leftover [SKILLS] disabled= list from old format
+        needs_cleanup = False
         if config.has_section('SKILLS'):
             old_disabled = config.get('SKILLS', 'disabled', fallback='').strip()
             if old_disabled:
@@ -134,7 +135,7 @@ class SkillManager:
                     name = name.strip()
                     if name:
                         self._disabled.add(name)
-            self._remove_section_from_file('SKILLS')
+            needs_cleanup = True
 
         for section in config.sections():
             if not section.startswith('SKILL:'):
@@ -147,7 +148,14 @@ class SkillManager:
             self._skill_config[skill_name] = items
 
         # One-time migration: copy values from old legacy sections into [SKILL:*]
-        self._migrate_legacy_sections(config)
+        migrated = self._migrate_legacy_sections(config)
+
+        # Single cleanup pass: remove [SKILLS] and write migrated sections
+        if needs_cleanup:
+            self._remove_section_from_file('SKILLS')
+        if migrated:
+            for skill_name in self._skill_config:
+                self._save_skill_section(skill_name)
 
     def _remove_section_from_file(self, section_name):
         """Remove a section and its fields from config.ini using line-level editing."""
@@ -157,15 +165,15 @@ class SkillManager:
         header = f'[{section_name}]'
         lines = open(config_path, 'r').readlines()
         new_lines = []
-        in_section = False
+        skip = False
         for line in lines:
             stripped = line.strip()
             if stripped == header:
-                in_section = True
+                skip = True
                 continue
-            elif in_section and stripped.startswith('[') and stripped.endswith(']'):
-                in_section = False
-            if not in_section:
+            elif skip and stripped.startswith('[') and stripped.endswith(']'):
+                skip = False
+            if not skip:
                 new_lines.append(line)
         with open(config_path, 'w') as f:
             f.writelines(new_lines)
@@ -203,7 +211,6 @@ class SkillManager:
                     values[field] = config.get(old_section, field)
             if values:
                 self._skill_config[skill_name] = values
-                self._save_skill_section(skill_name)
                 queue_message(f"SKILLS: Migrated [{old_section}] -> [SKILL:{skill_name}]")
                 migrated = True
         return migrated
@@ -223,17 +230,17 @@ class SkillManager:
         values = self._skill_config.get(name, {})
         lines = open(config_path, 'r').readlines()
 
-        # Remove existing section
+        # Remove ALL existing occurrences of this section (handles duplicates)
         new_lines = []
-        in_section = False
+        skip = False
         for line in lines:
             stripped = line.strip()
             if stripped == section_header:
-                in_section = True
+                skip = True
                 continue
-            elif in_section and stripped.startswith('[') and stripped.endswith(']'):
-                in_section = False
-            if not in_section:
+            elif skip and stripped.startswith('[') and stripped.endswith(']'):
+                skip = False
+            if not skip:
                 new_lines.append(line)
 
         # Only write the section if it has something to store

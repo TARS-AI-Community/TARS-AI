@@ -543,9 +543,9 @@ class TarsConfigManager:
             
             final_sections[section_name] = final_section
 
-        # Preserve dynamic sections (e.g. [SKILL:home_assistant]) not in template
+        # Preserve dynamic sections not in template (skip SKILL:* — managed by skill manager)
         for section_name, existing_section in existing_sections.items():
-            if section_name not in template_sections:
+            if section_name not in template_sections and not section_name.startswith('SKILL:'):
                 final_sections[section_name] = existing_section
 
         self.write_config_file(final_sections)
