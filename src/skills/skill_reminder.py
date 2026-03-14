@@ -106,8 +106,19 @@ def _fire_reminder(task_id, meta):
         except Exception:
             pass
 
+    # Push to OpenGL terminal UI
+    display_text = llm_reply if llm_reply else f"Reminder: {message}"
+    try:
+        from modules.module_main import ui_manager
+        from modules.module_config import load_config
+        _cfg = load_config()
+        character_name = _cfg['CHAR']['character_name']
+        if ui_manager:
+            ui_manager.update_data(character_name, display_text, character_name)
+    except Exception:
+        pass
+
     # Push to web UI
-    display_text = llm_reply if llm_reply else f"**Reminder:** {message}"
     try:
         from modules.module_chatui import socketio
         socketio.emit('bot_message', {'message': display_text})
