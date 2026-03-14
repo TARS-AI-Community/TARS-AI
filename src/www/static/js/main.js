@@ -2359,14 +2359,58 @@ function executeAction() {
 
     overlay.querySelector('#rebootNo').onclick = close;
     overlay.querySelector('#rebootYes').onclick = function() {
-      this.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Rebooting…';
-      this.disabled = true;
-      overlay.querySelector('#rebootNo').disabled = true;
-      if (window.showToast) showToast('Rebooting...', 'success');
-      fetch('/reboot_program', { method: 'POST' }).catch(() => {});
-      setTimeout(close, 2000);
+      const card = overlay.querySelector('.reboot-card');
+
+      // Get current boot ID before rebooting
+      fetch('/boot_id').then(r => r.json()).then(data => {
+        const oldBootId = data.boot_id;
+
+        // Replace the confirm card with a rebooting status screen
+        card.innerHTML = `
+          <div class="reboot-icon"><i class="bi bi-arrow-repeat spin"></i></div>
+          <div class="reboot-title">REBOOTING</div>
+          <p class="reboot-subtitle">Waiting for TARS to come back online…</p>
+          <div class="reboot-progress"><div class="reboot-progress-bar"></div></div>
+        `;
+
+        fetch('/reboot_program', { method: 'POST' }).catch(() => {});
+
+        // Poll until boot ID changes (new process has started)
+        let attempts = 0;
+        const maxAttempts = 120; // 60 seconds max
+        const pollInterval = setInterval(() => {
+          attempts++;
+          fetch('/boot_id', { cache: 'no-store' })
+            .then(r => r.json())
+            .then(d => {
+              if (d.boot_id && d.boot_id !== oldBootId) {
+                clearInterval(pollInterval);
+                cancelAnimationFrame(animId);
+                card.innerHTML = `
+                  <div class="reboot-icon" style="color:var(--green)"><i class="bi bi-check-circle-fill"></i></div>
+                  <div class="reboot-title" style="color:var(--green)">ONLINE</div>
+                  <p class="reboot-subtitle">TARS is back. Reloading…</p>
+                `;
+                setTimeout(() => window.location.reload(), 800);
+              }
+            })
+            .catch(() => {}); // Server down, keep polling
+          if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            card.querySelector('.reboot-subtitle').textContent = 'Reboot is taking longer than expected. Try refreshing manually.';
+          }
+        }, 500);
+      }).catch(() => {
+        // Can't get boot ID, fall back to simple reboot
+        fetch('/reboot_program', { method: 'POST' }).catch(() => {});
+        card.innerHTML = `
+          <div class="reboot-icon"><i class="bi bi-arrow-repeat spin"></i></div>
+          <div class="reboot-title">REBOOTING</div>
+          <p class="reboot-subtitle">Please refresh the page in a few seconds.</p>
+        `;
+      });
     };
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    overlay.addEventListener('click', e => { /* don't close during reboot */ });
   };
 })();
 

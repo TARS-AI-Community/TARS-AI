@@ -2293,6 +2293,26 @@ body::after {
 }
 .reboot-actions .hud-btn { flex: 1; padding: 0.55rem 1rem; }
 
+.reboot-progress {
+  width: 100%;
+  height: 3px;
+  background: rgba(var(--accent-rgb), 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 1rem;
+}
+.reboot-progress-bar {
+  height: 100%;
+  width: 30%;
+  background: rgba(var(--accent-rgb), 0.6);
+  border-radius: 2px;
+  animation: rebootPulse 1.2s ease-in-out infinite;
+}
+@keyframes rebootPulse {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
 /* ══════════════════════════════════════════════
    EMOTIONS TAB
 ══════════════════════════════════════════════ */
