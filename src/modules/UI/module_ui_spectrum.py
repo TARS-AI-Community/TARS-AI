@@ -587,7 +587,8 @@ class SpectrumSystem:
         elif self.style == 'spectrogram':
             self.draw_spectrogram(self.spectrum_surface)
 
-        self.draw_silence_progress(self.spectrum_surface)
+        # Silence progress is now shown in the terminal status pill
+        # self.draw_silence_progress(self.spectrum_surface)
 
         if self.bg_alpha > 0:
             bg_surface = pygame.Surface((self.width, self.spectrum_height), pygame.SRCALPHA)

@@ -126,16 +126,26 @@ class TerminalSystem:
         self._load_messages()
 
         self.top_buttons = [
-            {"label": "CLEAR", "code": "CLR-01", "rect": None, "active": False, "color": None, "position": "left"},
-            {"label": "BG", "code": "BG-SW", "rect": None, "active": False, "color": None, "position": "left"},
-            {"label": "WAVE", "code": "SPK-CY", "rect": None, "active": False, "color": None, "position": "left"},
             {"label": "PWR-DN", "code": "PWR-DN", "rect": None, "active": False, "color": "warning", "position": "right"},
         ]
 
-        self.bottom_buttons = [
-            {"label": "APP", "code": "APP-01", "rect": None, "active": False, "color": None, "position": "left"},
-            {"label": "CAM", "code": "CAM-01", "rect": None, "active": False, "color": None, "position": "left"},
-        ]
+        self.bottom_buttons = []
+
+        self.show_main_menu = False
+        self.main_menu_buttons = []
+        self.main_menu_rect = None
+        self.cam_back_rect = None
+
+        self._main_menu_fade = 0.0
+        self._app_menu_fade = 0.0
+        self._menu_fade_speed = 6.0  # per second
+
+        self._toast_text = None
+        self._toast_time = 0
+        self._toast_duration = 2.0
+
+        self._silence_progress = 0
+        self._silence_max = 0
 
         self._init_buttons()
 
@@ -206,30 +216,29 @@ class TerminalSystem:
 
     def _init_buttons(self):
         button_width = 90
-        button_height_top = self.toolbar_height - 10
-        button_height_bottom = self.bottom_toolbar_height - 10
+        button_height_top = self.toolbar_height - 4
+        button_height_bottom = self.bottom_toolbar_height - 4
         button_spacing = 8
-        start_y_top = 5
-        start_y_bottom = self.toolbar_height + self.terminal_height + 5
+        start_y_top = 2
+        start_y_bottom = self.toolbar_height + self.terminal_height + 2
 
-        left_x = 10
+        left_x = 2
         left_index = 0
 
         for button in self.top_buttons:
             if button.get("position") == "right":
-                x = self.width - button_width - 10
+                x = self.width - button_width - 2
             else:
                 x = left_x + left_index * (button_width + button_spacing)
                 left_index += 1
-
             button["rect"] = pygame.Rect(x, start_y_top, button_width, button_height_top)
 
-        left_x = 10
+        left_x = 4
         left_index = 0
 
         for button in self.bottom_buttons:
             if button.get("position") == "right":
-                x = self.width - button_width - 10
+                x = self.width - button_width - 2
             else:
                 x = left_x + left_index * (button_width + button_spacing)
                 left_index += 1
@@ -303,46 +312,27 @@ class TerminalSystem:
             self.scroll_up(3)
 
     def _init_scroll_buttons(self):
-        btn_width = 60
-        btn_height = 50
-        margin = 10
-        x = self.width - btn_width - margin
-        top_y = self.toolbar_height + 50
-        bottom_y = self.toolbar_height + self.terminal_height - btn_height - margin
-        self.scroll_up_rect = pygame.Rect(x, top_y, btn_width, btn_height)
-        self.scroll_down_rect = pygame.Rect(x, bottom_y, btn_width, btn_height)
+        btn_width = 100
+        btn_height = self.toolbar_height - 4
+        spacing = 8
+        # Place side by side on the left side
+        up_x = 2
+        down_x = up_x + btn_width + spacing
+        y = 2
+        self.scroll_up_rect = pygame.Rect(up_x, y, btn_width, btn_height)
+        self.scroll_down_rect = pygame.Rect(down_x, y, btn_width, btn_height)
         self.scroll_held = None
         self.scroll_hold_start = 0
         self.scroll_hold_last = 0
 
     def handle_scroll_hold(self):
-        if not self.scroll_held:
-            return
-        now = pygame.time.get_ticks()
-        if now - self.scroll_hold_start < 300:
-            return
-        if now - self.scroll_hold_last < 60:
-            return
-        self.scroll_hold_last = now
-        if self.scroll_held == "up":
-            self.scroll_down(2)
-        else:
-            self.scroll_up(2)
+        pass
 
     def handle_mouse_down(self, pos):
-        if self.scroll_up_rect and self.scroll_up_rect.collidepoint(pos):
-            self.scroll_held = "up"
-            self.scroll_hold_start = pygame.time.get_ticks()
-            self.scroll_hold_last = self.scroll_hold_start
-            return
-        if self.scroll_down_rect and self.scroll_down_rect.collidepoint(pos):
-            self.scroll_held = "down"
-            self.scroll_hold_start = pygame.time.get_ticks()
-            self.scroll_hold_last = self.scroll_hold_start
-            return
+        pass
 
     def handle_mouse_up(self):
-        self.scroll_held = None
+        pass
 
     def _draw_scroll_buttons(self, surface):
         if not self.scroll_up_rect or not self.scroll_down_rect:
@@ -355,7 +345,7 @@ class TerminalSystem:
             pygame.draw.rect(surface, (*self.border_color, 150), rect, 2)
 
             cx, cy = rect.centerx, rect.centery
-            arrow_size = 12
+            arrow_size = 8
             if direction == "up":
                 points = [(cx, cy - arrow_size), (cx - arrow_size, cy + arrow_size), (cx + arrow_size, cy + arrow_size)]
             else:
@@ -397,9 +387,9 @@ class TerminalSystem:
         self.app_list = app_list
 
     def _init_app_menu(self):
-        button_width = 200
-        button_height = 50
-        button_spacing = 12
+        button_width = 280
+        button_height = 84
+        button_spacing = 20
         num_apps = len(self.app_list)
         if num_apps == 0:
             return
@@ -478,9 +468,9 @@ class TerminalSystem:
     def draw_back_button(self, surface):
         bar_y = self.height - self.bottom_toolbar_height
         button_width = 90
-        button_height = self.bottom_toolbar_height - 10
-        x = 10
-        y = bar_y + 5
+        button_height = self.bottom_toolbar_height - 4
+        x = 2
+        y = bar_y + 2
         self.back_button_rect = pygame.Rect(x, y, button_width, button_height)
 
         bottom_bar_bg = pygame.Surface((self.width, self.bottom_toolbar_height), pygame.SRCALPHA)
@@ -501,7 +491,7 @@ class TerminalSystem:
         status_color = status_colors.get(self.tars_status, self.dim_text_color)
         status_text = self.tars_status
         status_surface = self._status_font.render(status_text, True, status_color)
-        status_x = x + button_width + 15
+        status_x = x + button_width + 8
         pad_x, pad_y = 12, 12
         pill_w = status_surface.get_width() + pad_x * 2
         pill_h = status_surface.get_height() + pad_y * 2
@@ -509,30 +499,39 @@ class TerminalSystem:
         pill_rect = pygame.Rect(status_x, pill_y, pill_w, pill_h)
         pill_bg = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
         pill_bg.fill((0, 0, 0, 220))
+
+        if (self.tars_status == "LISTENING" and self._silence_max > 0
+                and self._silence_progress > 0):
+            pct = min(1.0, self._silence_progress / self._silence_max)
+            fill_w = int((pill_w - 4) * pct)
+            if fill_w > 0:
+                pygame.draw.rect(pill_bg, (*status_color, 160),
+                                 (2, 2, fill_w, pill_h - 4),
+                                 border_radius=4)
+
         pygame.draw.rect(pill_bg, (*status_color, 200), (0, 0, pill_w, pill_h), 2, border_radius=6)
         surface.blit(pill_bg, pill_rect)
         text_rect = status_surface.get_rect(center=pill_rect.center)
         surface.blit(status_surface, text_rect)
 
-        right_x = self.width - 10
+        right_x = self.width - 2
 
         if self.cpu_temp_module and self.show_cpu_temp:
             cpu_width = 80
             cpu_height = button_height
             right_x -= cpu_width
             self._draw_cpu_temp_indicator(surface, right_x, y, cpu_width, cpu_height)
-            right_x -= 8
+            right_x -= 4
 
         if self.battery_module:
             battery_width = 60
             battery_height = button_height
             right_x -= battery_width
             self._draw_battery_indicator(surface, right_x, y, battery_width, battery_height)
-            right_x -= 8
+            right_x -= 4
 
         if self._wifi_icon_gray is not None:
             wifi_size = button_height
-            right_x -= 8
             right_x -= wifi_size
             self._draw_wifi_icon(surface, right_x, y, wifi_size)
 
@@ -578,18 +577,143 @@ class TerminalSystem:
             }
         ]
 
+    def _init_main_menu(self):
+        button_width = 280
+        button_height = 84
+        button_spacing = 20
+        menu_items = [
+            {"label": "APP", "code": "APP-01"},
+            {"label": "CAM", "code": "CAM-01"},
+            {"label": "BG", "code": "BG-SW"},
+            {"label": "WAVE", "code": "SPK-CY"},
+            {"label": "CLEAR", "code": "CLR-01"},
+        ]
+        num = len(menu_items)
+        total_height = num * button_height + (num - 1) * button_spacing
+        modal_width = button_width + 60
+        modal_height = total_height + 100
+        modal_x = self.width // 2 - modal_width // 2
+        modal_y = self.height // 2 - modal_height // 2
+        self.main_menu_rect = pygame.Rect(modal_x, modal_y, modal_width, modal_height)
+
+        self.main_menu_buttons = []
+        start_y = modal_y + 70
+        for i, item in enumerate(menu_items):
+            rect = pygame.Rect(
+                self.width // 2 - button_width // 2,
+                start_y + i * (button_height + button_spacing),
+                button_width,
+                button_height
+            )
+            self.main_menu_buttons.append({
+                "label": item["label"],
+                "code": item["code"],
+                "rect": rect
+            })
+
+    def _draw_main_menu(self, surface):
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surface.blit(overlay, (0, 0))
+
+        if not self.main_menu_rect:
+            return
+
+        pygame.draw.rect(surface, (*self.bg_panel, 250), self.main_menu_rect)
+        pygame.draw.rect(surface, self.border_color, self.main_menu_rect, 3)
+
+        inner_rect = self.main_menu_rect.inflate(-6, -6)
+        pygame.draw.rect(surface, (*self.accent_color, 100), inner_rect, 1)
+
+        title = "MENU"
+        title_surface = self.title_font.render(title, True, self.primary_color)
+        title_rect = title_surface.get_rect(
+            center=(self.main_menu_rect.centerx, self.main_menu_rect.top + 35)
+        )
+        surface.blit(title_surface, title_rect)
+
+        line_y = self.main_menu_rect.top + 60
+        pygame.draw.line(surface, self.border_color,
+                        (self.main_menu_rect.left + 20, line_y),
+                        (self.main_menu_rect.right - 20, line_y), 2)
+
+        for button in self.main_menu_buttons:
+            rect = button["rect"]
+            label = button["label"]
+
+            bg_color = (20, 60, 80, 220)
+            border_color = self.primary_color
+            text_color = self.primary_color
+
+            pygame.draw.rect(surface, bg_color, rect)
+            pygame.draw.rect(surface, border_color, rect, 2)
+
+            inner = rect.inflate(-4, -4)
+            pygame.draw.rect(surface, (*self.accent_color, 150), inner, 1)
+
+            corner_size = 8
+            pygame.draw.line(surface, border_color, rect.topleft,
+                           (rect.left + corner_size, rect.top), 3)
+            pygame.draw.line(surface, border_color, rect.topleft,
+                           (rect.left, rect.top + corner_size), 3)
+            pygame.draw.line(surface, border_color,
+                           (rect.right - 1, rect.top), (rect.right - corner_size - 1, rect.top), 3)
+            pygame.draw.line(surface, border_color,
+                           (rect.right - 1, rect.top), (rect.right - 1, rect.top + corner_size), 3)
+
+            text_surface = self.toolbar_font.render(label, True, text_color)
+            text_rect = text_surface.get_rect(center=rect.center)
+            surface.blit(text_surface, text_rect)
+
     def handle_click(self, pos: Tuple[int, int]):
         if self.scroll_up_rect and self.scroll_up_rect.collidepoint(pos):
-            self.scroll_down(5)
+            self.scroll_up(2)
             return
         if self.scroll_down_rect and self.scroll_down_rect.collidepoint(pos):
-            self.scroll_up(5)
+            self.scroll_down(2)
             return
 
         now = pygame.time.get_ticks()
         if now - self.last_click_time < self.click_cooldown:
             return
         self.last_click_time = now
+
+        # Handle main menu clicks
+        if self.show_main_menu:
+            for button in self.main_menu_buttons:
+                if button["rect"].collidepoint(pos):
+                    label = button["label"]
+                    if label == "CLEAR":
+                        self.clear_messages()
+                    elif label == "BG":
+                        if self.on_background_change:
+                            result = self.on_background_change()
+                            if result:
+                                self._toast_text = result
+                                self._toast_time = time.time()
+                    elif label == "WAVE":
+                        if self.on_spectrum_change:
+                            result = self.on_spectrum_change()
+                            if result:
+                                self._toast_text = result
+                                self._toast_time = time.time()
+                    elif label == "CAM":
+                        if self.on_camera_toggle:
+                            self.on_camera_toggle()
+                    elif label == "APP":
+                        if self.app_list:
+                            self.show_main_menu = False
+                            self.show_app_menu = True
+                            self._init_app_menu()
+                            return
+                    # BG and WAVE stay open to cycle; others close the menu
+                    if label not in ("BG", "WAVE"):
+                        self.show_main_menu = False
+                    return
+
+            if self.main_menu_rect and not self.main_menu_rect.collidepoint(pos):
+                self.show_main_menu = False
+            return
 
         if self.show_app_menu:
             for button in self.app_menu_buttons:
@@ -620,29 +744,31 @@ class TerminalSystem:
                 self.show_power_menu = False
             return
 
+        # Check PWR-DN button in top toolbar
         for button in self.top_buttons:
             if button["rect"] and button["rect"].collidepoint(pos):
-                if button["label"] == "CLEAR":
-                    self.clear_messages()
-                elif button["label"] == "BG":
-                    if self.on_background_change:
-                        self.on_background_change()
-                elif button["label"] == "WAVE":
-                    if self.on_spectrum_change:
-                        self.on_spectrum_change()
-                elif button["label"] == "PWR-DN":
+                if button["label"] == "PWR-DN":
                     self.show_power_menu = True
                     self._init_power_menu()
+                return
 
-        for button in self.bottom_buttons:
-            if button["rect"] and button["rect"].collidepoint(pos):
-                if button["label"] == "CAM":
-                    if self.on_camera_toggle:
-                        self.on_camera_toggle()
-                elif button["label"] == "APP":
-                    if self.app_list:
-                        self.show_app_menu = True
-                        self._init_app_menu()
+        # Back button exits camera view
+        if self.cam_back_rect and self.cam_back_rect.collidepoint(pos):
+            if self.on_camera_toggle:
+                self.on_camera_toggle()
+            return
+
+        # Tap on the terminal area opens the main menu (150px dead zone top and bottom)
+        menu_zone_top = self.toolbar_height + 150
+        menu_zone_bottom = self.toolbar_height + self.terminal_height - 150
+        menu_zone_height = menu_zone_bottom - menu_zone_top
+        if menu_zone_height <= 0:
+            return
+        terminal_rect = pygame.Rect(0, menu_zone_top, self.width, menu_zone_height)
+        if not self.camera_active and terminal_rect.collidepoint(pos):
+            self.show_main_menu = True
+            self._init_main_menu()
+            return
 
     def think(self):
         self.thinking = True
@@ -653,6 +779,10 @@ class TerminalSystem:
 
     def set_tars_status(self, status):
         self.tars_status = status
+
+    def set_silence_progress(self, progress, max_value):
+        self._silence_progress = progress
+        self._silence_max = max_value
 
     def add_memory(self):
         self.memory_pulse = 1.0
@@ -678,6 +808,17 @@ class TerminalSystem:
             self.scan_line = (self.scan_line + 4) % self.terminal_height
 
         self.status_blink = (self.status_blink + 0.1) % (2 * 3.14159)
+
+        # Animate menu fades
+        fade_step = self._menu_fade_speed / 30.0  # assume ~30fps
+        if self.show_main_menu:
+            self._main_menu_fade = min(1.0, self._main_menu_fade + fade_step)
+        else:
+            self._main_menu_fade = max(0.0, self._main_menu_fade - fade_step)
+        if self.show_app_menu:
+            self._app_menu_fade = min(1.0, self._app_menu_fade + fade_step)
+        else:
+            self._app_menu_fade = max(0.0, self._app_menu_fade - fade_step)
 
         if self.cpu_temp_module:
             if current_time - self.last_cpu_update_time >= self.cpu_update_interval:
@@ -1019,15 +1160,6 @@ class TerminalSystem:
                                        is_active,
                                        button.get("color"))
 
-        if self.battery_module:
-            battery_width = 60
-            battery_height = self.toolbar_height - 10
-            battery_x = self.width - battery_width - 120
-            battery_y = 5
-            self._draw_battery_indicator(self.overlay_surface, battery_x, battery_y, 
-                                        battery_width, battery_height)
-
-
         terminal_rect = pygame.Rect(0, self.toolbar_height, self.width, self.terminal_height)
         terminal_bg = pygame.Surface((self.width, self.terminal_height), pygame.SRCALPHA)
         terminal_bg.fill((*self.bg_terminal, self.bg_alpha))
@@ -1193,18 +1325,16 @@ class TerminalSystem:
         pygame.draw.line(self.overlay_surface, (*self.accent_color, 100), 
                         (0, bottom_toolbar_y + 1), (self.width, bottom_toolbar_y + 1), 1)
 
-        for button in self.bottom_buttons:
-            if button["rect"]:
-                if button["label"] == "CAM":
-                    is_active = self.camera_active
-                elif button["label"] == "APP":
-                    is_active = self.app_active
-                else:
-                    is_active = False
-                self._draw_tech_button(self.overlay_surface, button["rect"],
-                                       button["label"], button["code"],
-                                       is_active,
-                                       button.get("color"))
+        # Draw back button when camera is active
+        if self.camera_active:
+            back_w = 90
+            back_h = self.bottom_toolbar_height - 4
+            back_x = 2
+            back_y = bottom_toolbar_y + 2
+            self.cam_back_rect = pygame.Rect(back_x, back_y, back_w, back_h)
+            self._draw_tech_button(self.overlay_surface, self.cam_back_rect, "<-", "BCK-01", active=True)
+        else:
+            self.cam_back_rect = None
 
         # Draw status badge (STANDBY/LISTENING/THINKING/TALKING)
         status_colors = {
@@ -1215,9 +1345,7 @@ class TerminalSystem:
         }
         s_color = status_colors.get(self.tars_status, self.dim_text_color)
         s_surface = self._status_font.render(self.tars_status, True, s_color)
-        # Position after bottom buttons
-        last_btn = self.bottom_buttons[-1] if self.bottom_buttons else None
-        s_x = (last_btn["rect"].right + 15) if (last_btn and last_btn["rect"]) else 10
+        s_x = (self.cam_back_rect.right + 8) if self.cam_back_rect else 2
         s_pad_x, s_pad_y = 12, 12
         s_pill_w = s_surface.get_width() + s_pad_x * 2
         s_pill_h = s_surface.get_height() + s_pad_y * 2
@@ -1225,26 +1353,45 @@ class TerminalSystem:
         s_pill_rect = pygame.Rect(s_x, s_pill_y, s_pill_w, s_pill_h)
         s_pill_bg = pygame.Surface((s_pill_w, s_pill_h), pygame.SRCALPHA)
         s_pill_bg.fill((0, 0, 0, 220))
+
+        # Draw silence progress fill inside the pill when LISTENING
+        if (self.tars_status == "LISTENING" and self._silence_max > 0
+                and self._silence_progress > 0):
+            pct = min(1.0, self._silence_progress / self._silence_max)
+            fill_w = int((s_pill_w - 4) * pct)
+            if fill_w > 0:
+                fill_color = (*s_color, 160)
+                pygame.draw.rect(s_pill_bg, fill_color,
+                                 (2, 2, fill_w, s_pill_h - 4),
+                                 border_radius=4)
+
         pygame.draw.rect(s_pill_bg, (*s_color, 200), (0, 0, s_pill_w, s_pill_h), 2, border_radius=6)
         self.overlay_surface.blit(s_pill_bg, s_pill_rect)
         s_text_rect = s_surface.get_rect(center=s_pill_rect.center)
         self.overlay_surface.blit(s_surface, s_text_rect)
 
+        right_x = self.width - 2
+
         if self.cpu_temp_module and self.show_cpu_temp:
             cpu_width = 80
-            cpu_height = self.bottom_toolbar_height - 10
-            cpu_x = self.width - cpu_width - 10
-            cpu_y = bottom_toolbar_y + 5
-            self._draw_cpu_temp_indicator(self.overlay_surface, cpu_x, cpu_y,
+            cpu_height = self.bottom_toolbar_height - 4
+            right_x -= cpu_width
+            self._draw_cpu_temp_indicator(self.overlay_surface, right_x, bottom_toolbar_y + 2,
                                           cpu_width, cpu_height)
+            right_x -= 4
+
+        if self.battery_module:
+            battery_width = 60
+            battery_height = self.bottom_toolbar_height - 4
+            right_x -= battery_width
+            self._draw_battery_indicator(self.overlay_surface, right_x, bottom_toolbar_y + 2,
+                                         battery_width, battery_height)
+            right_x -= 4
 
         if self._wifi_icon_gray is not None:
-            wifi_size = self.bottom_toolbar_height - 10
-            wifi_x = self.width - wifi_size - 10
-            if self.cpu_temp_module and self.show_cpu_temp:
-                wifi_x -= (80 + 8)
-            wifi_y = bottom_toolbar_y + 5
-            self._draw_wifi_icon(self.overlay_surface, wifi_x, wifi_y, wifi_size)
+            wifi_size = self.bottom_toolbar_height - 4
+            right_x -= wifi_size
+            self._draw_wifi_icon(self.overlay_surface, right_x, bottom_toolbar_y + 2, wifi_size)
 
         if not self.camera_active:
             self._draw_scroll_buttons(self.overlay_surface)
@@ -1253,6 +1400,27 @@ class TerminalSystem:
 
         if self.show_power_menu:
             self._draw_power_menu(surface)
+
+        if self.show_main_menu:
+            self._draw_main_menu(surface)
+
+        if self._toast_text:
+            elapsed = time.time() - self._toast_time
+            if elapsed < self._toast_duration:
+                if elapsed > self._toast_duration - 0.5:
+                    alpha = int(255 * (self._toast_duration - elapsed) / 0.5)
+                else:
+                    alpha = 255
+                toast_surface = self._status_font.render(self._toast_text, True, self.primary_color)
+                toast_surface.set_alpha(alpha)
+                if self.main_menu_rect:
+                    toast_rect = toast_surface.get_rect(centerx=self.main_menu_rect.centerx,
+                                                        bottom=self.main_menu_rect.top - 10)
+                else:
+                    toast_rect = toast_surface.get_rect(centerx=self.width // 2, top=12)
+                surface.blit(toast_surface, toast_rect)
+            else:
+                self._toast_text = None
 
         if self.show_app_menu:
             self._draw_app_menu(surface)
