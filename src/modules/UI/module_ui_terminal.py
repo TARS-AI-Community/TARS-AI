@@ -119,7 +119,8 @@ class TerminalSystem:
         self.scroll_down_rect = None
 
         self.log_dir = Path(__file__).resolve().parent.parent.parent / "memory"
-        self.log_file = self.log_dir / "terminal_log.json"
+        char_name = CONFIG['CHAR']['character_name']
+        self.log_file = self.log_dir / f"terminal_log_{char_name}.json"
         self.max_log_messages = 100
 
         self._ensure_log_dir()
