@@ -540,12 +540,24 @@ class TarsConfigManager:
                         )
                 
                 final_section.fields[field_name] = final_field
-            
+
+            # For SKILL:* sections, preserve extra fields not in the template
+            # (skill configs like url, service, etc. are managed by the skill manager)
+            if section_name.startswith('SKILL:') and section_name in existing_sections:
+                for field_name, existing_field in existing_sections[section_name].fields.items():
+                    if field_name not in final_section.fields:
+                        final_section.fields[field_name] = ConfigField(
+                            name=field_name,
+                            value=existing_field.value,
+                            inline_comment=existing_field.inline_comment,
+                            description_comments=existing_field.description_comments.copy() if existing_field.description_comments else []
+                        )
+
             final_sections[section_name] = final_section
 
-        # Preserve dynamic sections not in template (skip SKILL:* — managed by skill manager)
+        # Preserve dynamic sections not in template (including SKILL:* sections)
         for section_name, existing_section in existing_sections.items():
-            if section_name not in template_sections and not section_name.startswith('SKILL:'):
+            if section_name not in template_sections:
                 final_sections[section_name] = existing_section
 
         self.write_config_file(final_sections)
@@ -666,7 +678,25 @@ class TarsConfigManager:
                     )
                     
                     final_section.fields[field_name] = final_field
-                
+
+                # For SKILL:* sections, preserve extra fields not in the template
+                # (skill configs like url, service, etc. are managed by the skill manager)
+                if section_name.startswith('SKILL:') and section_name in existing_sections:
+                    for extra_field, existing_field in existing_sections[section_name].fields.items():
+                        if extra_field not in final_section.fields:
+                            if section_name in config_data and extra_field in config_data[section_name]:
+                                extra_value = str(config_data[section_name][extra_field])
+                                actions_taken.append(f"Updated [{section_name}] {extra_field}")
+                            else:
+                                extra_value = existing_field.value
+                                actions_taken.append(f"Preserved [{section_name}] {extra_field}")
+                            final_section.fields[extra_field] = ConfigField(
+                                name=extra_field,
+                                value=extra_value,
+                                inline_comment=existing_field.inline_comment,
+                                description_comments=existing_field.description_comments.copy() if existing_field.description_comments else []
+                            )
+
                 final_sections[section_name] = final_section
 
             # Preserve dynamic sections (e.g. [SKILL:home_assistant]) not in template

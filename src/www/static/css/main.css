@@ -1531,6 +1531,7 @@ body::after {
 }
 
 .config-header-left i { color: var(--gold); font-size: 16px; filter: drop-shadow(0 0 6px rgba(var(--accent-rgb),0.4)); }
+.config-header-actions { display: flex; gap: 8px; align-items: center; }
 
 .config-body {
   flex: 1;
