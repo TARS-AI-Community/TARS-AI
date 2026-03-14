@@ -151,13 +151,31 @@ def execute(parameters, context):
                 queue_message(f"[SD] WebUI image emit failed: {_e}")
         _callback = _on_image_ready
 
+    def _notify_user(msg):
+        """Send a message to the user via SocketIO and TTS."""
+        try:
+            from modules.module_chatui import socketio
+            socketio.emit('bot_message', {'message': msg})
+        except Exception:
+            pass
+        try:
+            from modules.module_tts import generate_tts_audio
+            from modules.module_config import load_config
+            cfg = load_config()
+            generate_tts_audio(msg, cfg['TTS']['ttsoption'])
+        except Exception:
+            pass
+
     def _generate_bg():
         queue_message("[SD] Background generation thread started")
         try:
             result = generate_image(prompt, skill_config=skill_config, on_image_ready=_callback)
             queue_message(f"[SD] Background generation done: {result}")
+            if result and "failed" in result.lower():
+                _notify_user(f"Sorry, image generation failed.")
         except Exception as _e:
             queue_message(f"[SD] Background image generation failed: {_e}")
+            _notify_user(f"Sorry, image generation failed.")
 
     if source == "webui":
         try:
