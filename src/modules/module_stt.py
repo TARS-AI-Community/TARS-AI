@@ -1365,16 +1365,9 @@ class STTManager:
 
             def update(frames, max_frames):
                 self.ui_manager.silence(frames)
-                if show_console:
-                    progress = int((frames / max_frames) * bar_length)
-                    sys.stdout.write(f"\r[SILENCE: {'#' * progress}{'-' * (bar_length - progress)}] {frames}/{max_frames}")
-                    sys.stdout.flush()
 
             def clear():
                 self.ui_manager.silence(0)
-                if show_console:
-                    sys.stdout.write("\r" + " " * (bar_length + 30) + "\r")
-                    sys.stdout.flush()
 
             self._progress_bar_funcs = (update, clear)
         return self._progress_bar_funcs
