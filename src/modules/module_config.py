@@ -1007,8 +1007,8 @@ CONFIG_METADATA = {
         'screensaver_list': {
             'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
             'type': 'screensaver_select',
-            'options': ['random', 'blackhole', 'waves', 'matrix', 'starfield', 'hyperspace', 'terminal', 'face', 'fractal', 'pacman', 'nebulas', 'pictures', 'dashboard', 'defrag', 'bounce', 'endurance'],
-            'description': 'Pick which screensaver animations play on the TARS display when idle. Select "random" to cycle through all of them, or pick specific ones you like. Each one is a different cool animation - try them out and see which ones you enjoy!'
+            'options': ['random', 'blackhole', 'waves', 'matrix', 'starfield', 'hyperspace', 'terminal', 'face', 'fractal', 'pacman', 'nebulas', 'pictures', 'dashboard', 'defrag', 'bounce', 'endurance', 'dream'],
+            'description': 'Pick which screensaver animations play on the TARS display when idle. Select "random" to cycle through all of them, or pick specific ones you like. "dream" visualizes recent memories as abstract neural patterns driven by TARS\' emotional state.'
         },
     },
     'CONTROLS': {
