@@ -565,10 +565,9 @@ document.addEventListener('DOMContentLoaded', function () {
     audioStarted = false;
     stop_talking();
     if (window.showToast) showToast('Connection lost — reconnecting...', 'error');
-    setTimeout(() => {
-      if (connDot) connDot.className = 'conn-dot reconnecting';
-      socket.connect();
-    }, 2000);
+    // Socket.IO auto-reconnects — do NOT manually call socket.connect()
+    // as that creates duplicate connections
+    if (connDot) connDot.className = 'conn-dot reconnecting';
   });
   socket.on('reconnect_attempt', () => {
     if (connDot) connDot.className = 'conn-dot reconnecting';
@@ -792,7 +791,13 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       return;
     }
+    // Guard: ignore duplicate transcriptions if already processing
+    if (_botResponding) {
+      _dbg('[MIC] STT result ignored — bot already responding:', text);
+      return;
+    }
     _dbg('[MIC] STT result:', text);
+    _botResponding = true;  // set immediately to block duplicates
     voiceStatus.textContent = 'Processing...';
     displayUserMessage(text);
     sendUserMessage(text);

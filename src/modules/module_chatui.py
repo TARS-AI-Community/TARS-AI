@@ -36,7 +36,7 @@ from flask import (
     send_from_directory,
 )
 from flask_cors import CORS
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, emit as _sio_emit
 
 
 # === Custom Modules ===
@@ -187,12 +187,12 @@ def handle_browser_audio(data):
     try:
         audio_b64 = data.get('audio', '') if isinstance(data, dict) else ''
         if not audio_b64:
-            socketio.emit('browser_transcription', {'text': '', 'error': 'No audio data'})
+            _sio_emit('browser_transcription', {'text': '', 'error': 'No audio data'})
             return
 
         audio_bytes = base64.b64decode(audio_b64)
         if len(audio_bytes) < 1000:
-            socketio.emit('browser_transcription', {'text': ''})
+            _sio_emit('browser_transcription', {'text': ''})
             return
 
         sample_rate = int(data.get('sample_rate', 16000))
@@ -201,7 +201,7 @@ def handle_browser_audio(data):
         audio_np = np.frombuffer(audio_bytes, dtype=np.int16)
         rms = np.sqrt(np.mean(audio_np.astype(np.float64) ** 2))
         if rms < 200:
-            socketio.emit('browser_transcription', {'text': ''})
+            _sio_emit('browser_transcription', {'text': ''})
             return
 
         # Try local STT first (sherpa-onnx via the existing STTManager)
@@ -212,7 +212,7 @@ def handle_browser_audio(data):
             text = _browser_transcribe_openai(audio_bytes, sample_rate)
 
         if text is None:
-            socketio.emit('browser_transcription', {'text': '', 'error': 'No STT backend available (no local sherpa-onnx and no OPENAI_API_KEY)'})
+            _sio_emit('browser_transcription', {'text': '', 'error': 'No STT backend available (no local sherpa-onnx and no OPENAI_API_KEY)'})
             return
 
         text = text.strip()
@@ -229,11 +229,11 @@ def handle_browser_audio(data):
             except Exception as e:
                 queue_message(f"WARNING: Browser speaker ID failed: {e}")
 
-        socketio.emit('browser_transcription', {'text': text})
+        _sio_emit('browser_transcription', {'text': text})
 
     except Exception as e:
         queue_message(f"ERROR: browser_audio transcription failed: {e}")
-        socketio.emit('browser_transcription', {'text': '', 'error': str(e)})
+        _sio_emit('browser_transcription', {'text': '', 'error': str(e)})
 
 
 def _browser_transcribe_local(audio_np, sample_rate):
