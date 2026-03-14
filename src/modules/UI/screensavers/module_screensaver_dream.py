@@ -5,6 +5,9 @@ Uses a Compositional Pattern-Producing Network (CPPN) driven by emotional state
 to generate organic, flowing visuals that represent TARS "dreaming" about recent
 conversations. Text fragments are color-coded by emotion and the background
 palette smoothly morphs to match the dominant emotion of visible memories.
+
+Performance: CPPN intensity frames are pre-computed on reset() so zero numpy
+runs during rendering. Runtime cost is just surface blits and circle draws.
 """
 import pygame
 import numpy as np
@@ -32,7 +35,7 @@ _RADAR_AXES = list(_PALETTES.keys())
 _PAL_DARK  = {k: np.array(v[0], dtype=np.float32) for k, v in _PALETTES.items()}
 _PAL_BRIGHT = {k: np.array(v[1], dtype=np.float32) for k, v in _PALETTES.items()}
 
-# Pre-compute emotion text colors (avoid recomputing per frame)
+# Pre-compute emotion text colors (lookup table, no per-frame math)
 _EMOTION_TEXT_COLORS = {}
 for _emo, (_d, _b) in _PALETTES.items():
     _EMOTION_TEXT_COLORS[_emo] = (
@@ -57,6 +60,8 @@ class DreamAnimation:
     """TARS dream-state screensaver — CPPN neural patterns + floating memories."""
 
     _PALETTE_LERP_SPEED = 0.4
+    _NUM_PRECOMPUTED = 30       # intensity frames pre-computed on reset
+    _FRAMES_PER_INTENSITY = 6   # how many render frames each intensity is shown
 
     def __init__(self, screen, width, height, show_time=False):
         self.screen = screen
@@ -105,10 +110,12 @@ class DreamAnimation:
         self.t_speed = 0.008
         self._last = time_mod.time()
 
-        # ── CPPN frame caching ───────────────────────────────────────────
-        self._cppn_interval = 10
-        self._cppn_counter = 0
-        self._cached_bg = None
+        # ── Pre-computed intensity frames ────────────────────────────────
+        self._intensity_frames = []     # list of (gh, gw) float32 arrays
+        self._frame_index = 0           # current position in the loop
+        self._frame_counter = 0         # counts render frames before advancing
+        self._cached_bg = None          # colored + upscaled surface
+        self._needs_recolor = True      # flag: palette changed, recolor current frame
 
         # ── Emotion / palette ────────────────────────────────────────────
         self.emo = {a: 0 for a in _RADAR_AXES}
@@ -125,7 +132,7 @@ class DreamAnimation:
 
         # ── Palette check throttle ───────────────────────────────────────
         self._palette_check_counter = 0
-        self._palette_check_interval = 15  # only re-evaluate every 15 frames
+        self._palette_check_interval = 15
 
         # ── Text fragments ───────────────────────────────────────────────
         self.mem_pool = []
@@ -133,12 +140,12 @@ class DreamAnimation:
         self.next_frag = 0.0
         self._text_cache = {}
 
+        # ── Cached label surfaces (4 dot variations) ─────────────────────
+        self._label_surfaces = []
+
         # ── Particles ────────────────────────────────────────────────────
         self.particles = []
         self.max_particles = 8
-
-        # ── Pre-allocated glow surfaces ──────────────────────────────────
-        self._glow_cache = {}
 
         # ── Pulse effect ─────────────────────────────────────────────────
         self.pulse_active = False
@@ -203,19 +210,17 @@ class DreamAnimation:
         self._target_bright[:] = _PAL_BRIGHT[emotion]
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  PALETTE LERP (smooth background transitions)
+    #  PALETTE LERP
     # ═════════════════════════════════════════════════════════════════════════
 
     def _update_palette(self, dt):
         """Determine dominant emotion from visible fragments and lerp palette."""
-        # Throttle: only re-evaluate dominant emotion every N frames
         self._palette_check_counter += 1
         do_check = self._palette_check_counter >= self._palette_check_interval
         if do_check:
             self._palette_check_counter = 0
 
         if do_check and self.frags:
-            # Simple tally — no Counter, just a dict
             counts = {}
             for f in self.frags:
                 r = f["age"] / f["life"]
@@ -223,10 +228,7 @@ class DreamAnimation:
                     e = f["emotion"]
                     counts[e] = counts.get(e, 0) + 1
 
-            if counts:
-                dominant = max(counts, key=counts.get)
-            else:
-                dominant = self.base_emotion
+            dominant = max(counts, key=counts.get) if counts else self.base_emotion
 
             if dominant != self.current_emotion:
                 self.current_emotion = dominant
@@ -240,12 +242,18 @@ class DreamAnimation:
 
         # Lerp current palette toward target
         t = min(1.0, self._PALETTE_LERP_SPEED * dt)
+        old_dark_sum = self.dark[0] + self.dark[1] + self.dark[2]
         self.dark   += (self._target_dark   - self.dark)   * t
         self.bright += (self._target_bright - self.bright) * t
         self._color_range = self.bright - self.dark
 
+        # Flag recolor if palette shifted meaningfully
+        new_dark_sum = self.dark[0] + self.dark[1] + self.dark[2]
+        if abs(new_dark_sum - old_dark_sum) > 0.5:
+            self._needs_recolor = True
+
     # ═════════════════════════════════════════════════════════════════════════
-    #  CPPN ENGINE
+    #  CPPN ENGINE (pre-computed on reset, zero numpy at runtime)
     # ═════════════════════════════════════════════════════════════════════════
 
     def _init_cppn(self):
@@ -265,32 +273,31 @@ class DreamAnimation:
         self.W3 = (rng.randn(H, 1) * 0.5).astype(np.float32)
         self.b3 = (rng.randn(1) * 0.1).astype(np.float32)
 
-    def _cppn_frame(self):
-        """Compute CPPN intensity map (H x W) for current time step."""
+    def _precompute_frames(self):
+        """Pre-compute all CPPN intensity frames on reset. ~120KB total RAM."""
+        self._intensity_frames = []
         t = self.t
+        for _ in range(self._NUM_PRECOMPUTED):
+            breathe = math.sin(t * 0.15) * 0.5 + 0.5
 
-        self._inp[:, 3] = math.sin(t * 0.7)
-        self._inp[:, 4] = math.cos(t * 0.5)
-        self._inp[:, 5] = self.breathe
+            self._inp[:, 3] = math.sin(t * 0.7)
+            self._inp[:, 4] = math.cos(t * 0.5)
+            self._inp[:, 5] = breathe
 
-        h = np.sin(self._inp @ self.W1 + self.b1)
-        h = np.sin(h @ self.W2 + self.b2)
-        # Fast sigmoid: x/(1+|x|)*0.5+0.5 — no np.exp
-        raw = (h @ self.W3 + self.b3).flatten()
-        out = raw / (1.0 + np.abs(raw)) * 0.5 + 0.5
+            h = np.sin(self._inp @ self.W1 + self.b1)
+            h = np.sin(h @ self.W2 + self.b2)
+            raw = (h @ self.W3 + self.b3).flatten()
+            out = raw / (1.0 + np.abs(raw)) * 0.5 + 0.5
+            out *= self._radial
 
-        out *= self._radial
+            self._intensity_frames.append(out.reshape(self.gh, self.gw))
+            t += self.t_speed * self._FRAMES_PER_INTENSITY
 
-        if self.pulse_active:
-            # Cheaper gaussian approximation: 1 - clamp(|x|/w)
-            dist = np.abs(self.cr - self.pulse_pos)
-            ring = np.clip(1.0 - dist * 6.0, 0, 1)
-            out = np.clip(out + ring * 0.45, 0, 1)
+        self._frame_index = 0
+        self._frame_counter = 0
 
-        return out.reshape(self.gh, self.gw)
-
-    def _to_surface(self, intensity):
-        """Map (H,W) intensities to colored pygame surface, upscale to screen."""
+    def _colorize_frame(self, intensity):
+        """Apply current palette to a pre-computed intensity map → upscaled surface."""
         i = intensity[:, :, np.newaxis]
         colors = self.dark + i * self._color_range
         colors = np.clip(colors, 0, 255).astype(np.uint8)
@@ -352,8 +359,7 @@ class DreamAnimation:
         key = (text, color)
         if key not in self._text_cache:
             ts = self.font_frag.render(text, True, color)
-            sh = self.font_frag.render(text, True, (0, 0, 0))
-            self._text_cache[key] = (ts, sh)
+            self._text_cache[key] = ts
         return self._text_cache[key]
 
     def _draw_frags(self):
@@ -370,11 +376,8 @@ class DreamAnimation:
                 continue
 
             text_color = _EMOTION_TEXT_COLORS.get(f["emotion"], _EMOTION_TEXT_COLORS["neutral"])
-            ts, sh = self._get_text_surfaces(f["text"], text_color)
+            ts = self._get_text_surfaces(f["text"], text_color)
             ix, iy = int(f["x"]), int(f["y"])
-
-            sh.set_alpha(alpha)
-            self.screen.blit(sh, (ix + 1, iy + 1))
 
             ts.set_alpha(alpha)
             self.screen.blit(ts, (ix, iy))
@@ -382,15 +385,6 @@ class DreamAnimation:
     # ═════════════════════════════════════════════════════════════════════════
     #  PARTICLES
     # ═════════════════════════════════════════════════════════════════════════
-
-    def _get_glow_surface(self, radius):
-        """Return a cached glow surface for the given radius."""
-        if radius not in self._glow_cache:
-            size = radius * 2
-            surf = pygame.Surface((size, size), pygame.SRCALPHA)
-            pygame.draw.circle(surf, (255, 255, 255, 50), (radius, radius), radius)
-            self._glow_cache[radius] = surf
-        return self._glow_cache[radius]
 
     def _spawn_particle(self):
         if len(self.particles) >= self.max_particles:
@@ -429,14 +423,19 @@ class DreamAnimation:
                 min(255, int(b[1] * a + 70 * a)),
                 min(255, int(b[2] * a + 70 * a)),
             )
-            ix, iy = int(p["x"]), int(p["y"])
-
-            # Core dot only — skip glow blit for performance
-            pygame.draw.circle(self.screen, color, (ix, iy), p["sz"])
+            pygame.draw.circle(self.screen, color, (int(p["x"]), int(p["y"])), p["sz"])
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  LABEL
+    #  LABEL (pre-cached)
     # ═════════════════════════════════════════════════════════════════════════
+
+    def _build_label_cache(self):
+        """Pre-render the 4 dot variations of the label."""
+        self._label_surfaces = []
+        for dots in range(4):
+            text = "DREAM CYCLE" + "." * dots
+            ts = self.font_label.render(text, True, (190, 190, 190))
+            self._label_surfaces.append(ts)
 
     def _draw_label(self):
         self.label_alpha += self.label_dir * 0.006
@@ -448,8 +447,7 @@ class DreamAnimation:
             self.label_dir = 1
 
         dots = int(time_mod.time() * 0.7) % 4
-        text = "DREAM CYCLE" + "." * dots
-        ts = self.font_label.render(text, True, (190, 190, 190))
+        ts = self._label_surfaces[dots]
         ts.set_alpha(int(self.label_alpha * 180))
         self.screen.blit(ts, (self.width - ts.get_width() - 12, self.height - 22))
 
@@ -461,10 +459,9 @@ class DreamAnimation:
         self.t = random.uniform(0, 100)
         self.frags = []
         self.particles = []
-        self._glow_cache = {}
         self._text_cache = {}
         self._cached_bg = None
-        self._cppn_counter = 0
+        self._needs_recolor = True
         self._palette_check_counter = 0
         self.pulse_active = False
         self.pulse_pos = 0.0
@@ -476,13 +473,8 @@ class DreamAnimation:
 
         self._load_data()
         self._init_cppn()
-
-        # Trigger nightly memory consolidation (runs once per day, background thread)
-        try:
-            from modules.module_dream import try_dream_consolidation
-            try_dream_consolidation()
-        except Exception:
-            pass
+        self._precompute_frames()   # all numpy happens here
+        self._build_label_cache()
 
         for _ in range(5):
             self._spawn_particle()
@@ -517,27 +509,36 @@ class DreamAnimation:
     def render(self):
         self.screen.fill((0, 0, 0))
 
-        try:
-            # 1 — CPPN background (recompute only every N frames)
-            self._cppn_counter += 1
-            if self._cached_bg is None or self._cppn_counter >= self._cppn_interval:
-                self._cppn_counter = 0
-                intensity = self._cppn_frame()
-                self._cached_bg = self._to_surface(intensity)
+        # 1 — Background from pre-computed intensity frames
+        if self._intensity_frames:
+            try:
+                # Advance frame index every N render frames
+                self._frame_counter += 1
+                advance = self._frame_counter >= self._FRAMES_PER_INTENSITY
+                if advance:
+                    self._frame_counter = 0
+                    self._frame_index = (self._frame_index + 1) % len(self._intensity_frames)
+                    self._needs_recolor = True
 
-            breathe_alpha = int(210 + 45 * math.sin(self.t * 0.3))
-            self._cached_bg.set_alpha(breathe_alpha)
-            self.screen.blit(self._cached_bg, (0, 0))
-        except Exception:
-            pass
+                # Only re-colorize when frame advances or palette changes
+                if self._needs_recolor or self._cached_bg is None:
+                    self._needs_recolor = False
+                    intensity = self._intensity_frames[self._frame_index]
+                    self._cached_bg = self._colorize_frame(intensity)
 
-        # 2 — Particles (dots only, no glow blits)
+                breathe_alpha = int(210 + 45 * math.sin(self.t * 0.3))
+                self._cached_bg.set_alpha(breathe_alpha)
+                self.screen.blit(self._cached_bg, (0, 0))
+            except Exception:
+                pass
+
+        # 2 — Particles (dots only)
         self._draw_particles()
 
-        # 3 — Text fragments (emotion-colored)
+        # 3 — Text fragments (emotion-colored, no shadow)
         self._draw_frags()
 
-        # 4 — Dream label
+        # 4 — Dream label (pre-cached surfaces)
         self._draw_label()
 
         # 5 — Time overlay
