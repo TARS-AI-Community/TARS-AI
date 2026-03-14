@@ -2290,6 +2290,189 @@ def dashboard_topic_delete():
         return jsonify({"error": str(e)}), 500
 
 
+@flask_app.route('/api/dashboard/person/rename', methods=['POST'])
+def dashboard_person_rename():
+    """Rename a person across voice memory, face database, and all conversation memories."""
+    data = request.get_json(silent=True) or {}
+    old_name = data.get('old_name', '').strip()
+    new_name = data.get('new_name', '').strip()
+
+    if not old_name or not new_name:
+        return jsonify({"error": "Missing 'old_name' or 'new_name'"}), 400
+    if old_name == new_name:
+        return jsonify({"error": "Names are identical"}), 400
+
+    results = {"voice": False, "face": False, "memories": 0}
+
+    # ── Rename in voice memory (also renames tagged memories) ──
+    try:
+        from modules.module_speaker_id import get_speaker_id_manager
+        sid = get_speaker_id_manager()
+        if sid and sid.enabled:
+            results["voice"] = sid.rename_speaker(old_name, new_name)
+    except Exception as e:
+        queue_message(f"WARNING: Person rename voice error: {e}")
+
+    # ── Rename in face database ──
+    try:
+        from modules.module_identity import get_identity_manager
+        im = get_identity_manager()
+        if im:
+            fd = im._get_face_id_detector()
+            if fd:
+                results["face"] = fd.rename_face(old_name, new_name)
+    except Exception:
+        pass
+
+    # Fallback: rename face directly via numpy if identity manager unavailable
+    if not results["face"]:
+        try:
+            import numpy as np
+            face_db = os.path.join(BASE_DIR, 'vision', 'faces', 'known_faces.npz')
+            if os.path.exists(face_db):
+                fdata = np.load(face_db, allow_pickle=True)
+                names = fdata['names'].tolist()
+                if old_name in names:
+                    embs = [fdata[f'emb_{i}'] for i in range(len(names))]
+                    if new_name in names:
+                        # Merge embeddings
+                        old_idx = names.index(old_name)
+                        new_idx = names.index(new_name)
+                        avg = (embs[old_idx] + embs[new_idx]) / 2.0
+                        avg = avg / np.linalg.norm(avg)
+                        embs[new_idx] = avg
+                        names.pop(old_idx)
+                        embs.pop(old_idx)
+                    else:
+                        idx = names.index(old_name)
+                        names[idx] = new_name
+                    save_dict = {'names': np.array(names, dtype=object)}
+                    for i, emb in enumerate(embs):
+                        save_dict[f'emb_{i}'] = emb
+                    np.savez(str(face_db), **save_dict)
+                    results["face"] = True
+        except Exception as e:
+            queue_message(f"WARNING: Person rename face fallback error: {e}")
+
+    # ── Rename speaker tag in memories (if voice rename didn't already do it) ──
+    if not results["voice"]:
+        try:
+            import modules.module_llm as _llm
+            mm = _llm.memory_manager
+            if mm:
+                count = 0
+                if hasattr(mm, 'hyper_db'):
+                    for entry in mm.hyper_db.dict():
+                        doc = entry.get('document', {})
+                        if doc.get('speaker') == old_name:
+                            doc['speaker'] = new_name
+                            count += 1
+                    if count:
+                        mm.hyper_db.save(mm.memory_db_path)
+                elif hasattr(mm, 'documents'):
+                    for doc in mm.documents:
+                        if doc.get('speaker') == old_name:
+                            doc['speaker'] = new_name
+                            count += 1
+                    if count:
+                        mm._save_memory()
+                results["memories"] = count
+        except Exception as e:
+            queue_message(f"WARNING: Person rename memories error: {e}")
+
+    if not results["voice"] and not results["face"]:
+        return jsonify({"error": f"Person '{old_name}' not found in voice or face databases"}), 404
+
+    queue_message(f"DASHBOARD: Renamed person '{old_name}' → '{new_name}' (voice={results['voice']}, face={results['face']}, memories={results['memories']})")
+    return jsonify({"success": True, "old_name": old_name, "new_name": new_name, "results": results})
+
+
+@flask_app.route('/api/dashboard/person/delete', methods=['POST'])
+def dashboard_person_delete():
+    """Delete a person from voice memory, face database, and optionally their memories."""
+    data = request.get_json(silent=True) or {}
+    name = data.get('name', '').strip()
+    delete_memories = data.get('delete_memories', False)
+
+    if not name:
+        return jsonify({"error": "Missing 'name' parameter"}), 400
+
+    results = {"voice": False, "face": False, "memories_deleted": 0}
+
+    # ── Remove from voice memory ──
+    try:
+        from modules.module_speaker_id import get_speaker_id_manager
+        sid = get_speaker_id_manager()
+        if sid and sid.enabled:
+            results["voice"] = sid.remove_speaker(name)
+    except Exception as e:
+        queue_message(f"WARNING: Person delete voice error: {e}")
+
+    # ── Remove from face database ──
+    try:
+        from modules.module_identity import get_identity_manager
+        im = get_identity_manager()
+        if im:
+            fd = im._get_face_id_detector()
+            if fd:
+                results["face"] = fd.delete_face(name)
+    except Exception:
+        pass
+
+    # Fallback: delete face directly via numpy
+    if not results["face"]:
+        try:
+            import numpy as np
+            face_db = os.path.join(BASE_DIR, 'vision', 'faces', 'known_faces.npz')
+            if os.path.exists(face_db):
+                fdata = np.load(face_db, allow_pickle=True)
+                names = fdata['names'].tolist()
+                if name in names:
+                    idx = names.index(name)
+                    embs = [fdata[f'emb_{i}'] for i in range(len(names))]
+                    names.pop(idx)
+                    embs.pop(idx)
+                    save_dict = {'names': np.array(names, dtype=object)}
+                    for i, emb in enumerate(embs):
+                        save_dict[f'emb_{i}'] = emb
+                    np.savez(str(face_db), **save_dict)
+                    results["face"] = True
+        except Exception as e:
+            queue_message(f"WARNING: Person delete face fallback error: {e}")
+
+    # ── Optionally delete their memories ──
+    if delete_memories:
+        try:
+            import modules.module_llm as _llm
+            mm = _llm.memory_manager
+            if mm:
+                if hasattr(mm, 'hyper_db'):
+                    docs = mm.hyper_db.documents
+                    to_remove = [i for i, d in enumerate(docs) if isinstance(d, dict) and d.get('speaker') == name]
+                    for idx in reversed(to_remove):
+                        mm.hyper_db.remove_document(idx)
+                    if to_remove:
+                        mm._mark_dirty()
+                        mm.flush()
+                    results["memories_deleted"] = len(to_remove)
+                elif hasattr(mm, 'documents'):
+                    before = len(mm.documents)
+                    mm.documents = [d for d in mm.documents if not (isinstance(d, dict) and d.get('speaker') == name)]
+                    removed = before - len(mm.documents)
+                    if removed:
+                        mm._mark_dirty()
+                        mm.flush()
+                    results["memories_deleted"] = removed
+        except Exception as e:
+            queue_message(f"WARNING: Person delete memories error: {e}")
+
+    if not results["voice"] and not results["face"]:
+        return jsonify({"error": f"Person '{name}' not found"}), 404
+
+    queue_message(f"DASHBOARD: Deleted person '{name}' (voice={results['voice']}, face={results['face']}, memories_deleted={results['memories_deleted']})")
+    return jsonify({"success": True, "name": name, "results": results})
+
+
 @flask_app.route('/api/dashboard/graph')
 def dashboard_graph():
     """Return nodes+links for a brain-like D3 knowledge graph."""

@@ -3021,6 +3021,11 @@ function $(id) { return document.getElementById(id); }
       el.textContent = original;
       return;
     }
+    // Person name rename uses its own handler
+    if (nodeType === 'person') {
+      _savePersonRename(el);
+      return;
+    }
     el.classList.add('detail-saving');
     var url;
     if (nodeType === 'memory') {
@@ -3137,6 +3142,96 @@ function $(id) { return document.getElementById(id); }
     actions.appendChild(btn);
   }
 
+  // ── Person rename handler ──
+  function _addPersonRenameField(personName) {
+    var html = '<div class="detail-row detail-row-editable">' +
+      '<span class="detail-label">name <i class="bi bi-pencil detail-edit-icon"></i></span>' +
+      '<div class="detail-editable detail-person-name" contenteditable="true" spellcheck="false"' +
+      ' data-type="person" data-original="' + escapeHtml(personName) + '">' + escapeHtml(personName) + '</div></div>';
+    return html;
+  }
+
+  function _savePersonRename(el) {
+    var original = el.getAttribute('data-original');
+    var newVal = el.textContent.trim();
+    if (newVal === original || !newVal) {
+      el.textContent = original;
+      return;
+    }
+    el.classList.add('detail-saving');
+    fetch('/api/dashboard/person/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_name: original, new_name: newVal })
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      el.classList.remove('detail-saving');
+      if (data.success) {
+        el.classList.add('detail-saved');
+        el.setAttribute('data-original', newVal);
+        // Update graph node
+        if (_selectedNode) {
+          _selectedNode.name = newVal;
+          _selectedNode.id = 'person_' + newVal;
+          d3.selectAll('text').filter(function (d) { return d && d === _selectedNode; })
+            .text(newVal.length > 20 ? newVal.substring(0, 18) + '..' : newVal);
+          var titleEl = document.getElementById('dshDetailTitle');
+          if (titleEl) titleEl.textContent = newVal;
+        }
+        setTimeout(function () { el.classList.remove('detail-saved'); }, 1500);
+      } else {
+        el.classList.add('detail-error');
+        var errMsg = data.error || 'Failed';
+        setTimeout(function () { el.classList.remove('detail-error'); el.textContent = original; }, 2000);
+      }
+    }).catch(function () {
+      el.classList.remove('detail-saving');
+      el.classList.add('detail-error');
+      setTimeout(function () { el.classList.remove('detail-error'); el.textContent = original; }, 2000);
+    });
+  }
+
+  function _addPersonDeleteButton(actions, personName, node) {
+    var btn = document.createElement('button');
+    btn.className = 'dash-delete-btn';
+    btn.innerHTML = '<i class="bi bi-trash3"></i> Delete Person';
+    var clickCount = 0;
+    btn.addEventListener('click', function () {
+      clickCount++;
+      if (clickCount === 1) {
+        btn.classList.add('confirm');
+        btn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Click again to confirm';
+        setTimeout(function () { clickCount = 0; btn.classList.remove('confirm'); btn.innerHTML = '<i class="bi bi-trash3"></i> Delete Person'; }, 3000);
+      } else {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
+        fetch('/api/dashboard/person/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: personName, delete_memories: false })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (data.success) {
+            btn.innerHTML = '<i class="bi bi-check2"></i> Deleted';
+            btn.style.color = '#39ff14';
+            btn.style.borderColor = 'rgba(57,255,20,0.3)';
+            d3.selectAll('circle').filter(function (d) { return d.id === node.id; }).transition().duration(300).attr('r', 0).remove();
+            d3.selectAll('line').filter(function (d) { return d.source.id === node.id || d.target.id === node.id; }).transition().duration(300).attr('opacity', 0).remove();
+            setTimeout(function () { drawer.classList.remove('open'); }, 800);
+          } else {
+            btn.innerHTML = '<i class="bi bi-x-circle"></i> ' + (data.error || 'Failed');
+            btn.style.color = '#ef5350';
+            btn.disabled = false;
+            clickCount = 0;
+          }
+        }).catch(function () {
+          btn.innerHTML = '<i class="bi bi-x-circle"></i> Error';
+          btn.disabled = false;
+          clickCount = 0;
+        });
+      }
+    });
+    actions.appendChild(btn);
+  }
+
   function showDetail(node) {
     _selectedNode = node;
     var title = document.getElementById('dshDetailTitle');
@@ -3146,13 +3241,27 @@ function $(id) { return document.getElementById(id); }
 
     var isMemory = node.group === 'memory' && node.id && node.id.startsWith('mem_');
     var isTopic = node.group === 'topic' && node.id && node.id.startsWith('topic_');
+    var isPerson = node.group === 'person' && node.id && node.id.startsWith('person_');
     var nodeIndex = -1;
     if (isMemory) nodeIndex = parseInt(node.id.replace('mem_', ''), 10);
     if (isTopic) nodeIndex = parseInt(node.id.replace('topic_', ''), 10);
 
     var html = '';
     html += '<div class="detail-row"><span class="detail-label">Type</span><br>' + (node.group || '--') + '</div>';
-    if (node.details) {
+
+    if (isPerson) {
+      // Editable name field for person nodes
+      html += _addPersonRenameField(node.name);
+      // Show remaining details as read-only
+      if (node.details) {
+        Object.keys(node.details).forEach(function (k) {
+          var v = node.details[k];
+          if (v !== '' && v !== null && v !== undefined) {
+            html += '<div class="detail-row"><span class="detail-label">' + k.replace(/_/g, ' ') + '</span><br>' + escapeHtml(String(v)) + '</div>';
+          }
+        });
+      }
+    } else if (node.details) {
       var nodeType = isMemory ? 'memory' : (isTopic ? 'topic' : '');
       Object.keys(node.details).forEach(function (k) {
         var v = node.details[k];
@@ -3167,9 +3276,11 @@ function $(id) { return document.getElementById(id); }
     }
     body.innerHTML = html;
 
-    // Action buttons (delete for memories and topics)
+    // Action buttons
     actions.innerHTML = '';
-    if (isMemory && !isNaN(nodeIndex)) {
+    if (isPerson) {
+      _addPersonDeleteButton(actions, node.name, node);
+    } else if (isMemory && !isNaN(nodeIndex)) {
       _addDeleteButton(actions, 'memory', nodeIndex, node);
     } else if (isTopic && !isNaN(nodeIndex)) {
       _addDeleteButton(actions, 'topic', nodeIndex, node);

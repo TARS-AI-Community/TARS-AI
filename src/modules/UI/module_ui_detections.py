@@ -318,6 +318,23 @@ class FaceRecognitionDetector(BaseDetector):
         self.training_status = "SAVED"
         self.training_mode = False
 
+    def rename_face(self, old_name, new_name):
+        if old_name not in self.known_names:
+            return False
+        idx = self.known_names.index(old_name)
+        if new_name in self.known_names:
+            # Merge: replace existing target embedding with average of both
+            new_idx = self.known_names.index(new_name)
+            avg = (self.known_embeddings[idx] + self.known_embeddings[new_idx]) / 2.0
+            avg = avg / np.linalg.norm(avg)
+            self.known_embeddings[new_idx] = avg
+            self.known_names.pop(idx)
+            self.known_embeddings.pop(idx)
+        else:
+            self.known_names[idx] = new_name
+        self._save_database()
+        return True
+
     def delete_face(self, name):
         if name in self.known_names:
             idx = self.known_names.index(name)
