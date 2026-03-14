@@ -61,7 +61,8 @@ text_to_speech_with_pipelining_openai = None
 try:
     from modules.module_piper import text_to_speech_with_pipelining_piper as _piper
     text_to_speech_with_pipelining_piper = _piper
-except ImportError:
+except Exception as e:
+    queue_message(f"[TTS] Piper module failed to load: {e}")
     pass
 
 try:
