@@ -491,6 +491,45 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
+  // ── Generic media display — any skill can emit 'bot_media' ─────────────────
+  // Payload: { type: "image"|"stream"|"video", url: "...", label: "..." }
+  //   - image:  displays a static <img> (url can be data: URI or path)
+  //   - stream: displays an MJPEG <img> with a stop/close button
+  //   - video:  displays an <video> element
+  socket.on('bot_media', d => {
+    const chatBody = document.querySelector('.chat-messages');
+    const row = document.createElement('div');
+    row.className = 'msg-row msg-bot';
+    const label = d.label || '';
+    const url = d.url || '';
+    const type = (d.type || 'image').toLowerCase();
+    let inner = '';
+
+    if (label) {
+      inner += '<div style="font-size:0.85em;opacity:0.7;margin-bottom:4px">' + label + '</div>';
+    }
+
+    if (type === 'stream') {
+      inner +=
+        '<div style="position:relative;display:inline-block;max-width:100%">' +
+          '<img src="' + url + '" style="max-width:100%;border-radius:8px;" alt="' + label + '">' +
+          '<button onclick="this.parentElement.querySelector(\'img\').src=\'\';this.closest(\'.msg-row\').remove();" ' +
+            'style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:16px;" ' +
+            'title="Stop stream">&times;</button>' +
+        '</div>';
+    } else if (type === 'video') {
+      inner +=
+        '<video controls autoplay muted style="max-width:100%;border-radius:8px;" src="' + url + '"></video>';
+    } else {
+      inner +=
+        '<img style="max-width:100%;border-radius:8px;" src="' + url + '" alt="' + label + '">';
+    }
+
+    row.innerHTML = '<div class="msg-bubble msg-bubble-bot">' + inner + '</div>';
+    chatBody.appendChild(row);
+    chatBody.scrollTop = chatBody.scrollHeight;
+  });
+
   socket.on('bot_message', d => {
     _dbg('[DEBUG] bot_message | audio_streamed:', d.audio_streamed, '| hasStreamRow:', !!_streamRow, '| msgLen:', (d.message||'').length);
     removeTypingMessage();
@@ -2234,7 +2273,7 @@ function executeAction() {
             if (window.showToast) showToast('Configuration saved', 'success');
             setTimeout(()=>{
               saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false;
-              showRebootConfirm();
+              showRebootConfirm({subtitle: 'Settings saved successfully.<br>Reboot now to apply changes?'});
             },1000);
           });
         } else { saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; if (window.showToast) showToast('Error: '+(d.error||'Unknown'), 'error'); }
@@ -2249,8 +2288,13 @@ function executeAction() {
   const saveBtn = $('saveConfigBtn');
   if (saveBtn) saveBtn.addEventListener('click', e => { e.preventDefault(); saveConfiguration(); });
 
+  const rebootBtn = $('rebootBtn');
+  if (rebootBtn) rebootBtn.addEventListener('click', e => { e.preventDefault(); window.showRebootConfirm(); });
+
   /* ── Reboot Confirm Modal ─────────────────────── */
-  window.showRebootConfirm = function() {
+  window.showRebootConfirm = function(opts) {
+    opts = opts || {};
+    const subtitle = opts.subtitle || 'Reboot now to apply changes?';
     // Source position: save button center
     const srcBtn = $('saveConfigBtn');
     const srcRect = srcBtn ? srcBtn.getBoundingClientRect() : null;
@@ -2268,7 +2312,7 @@ function executeAction() {
       <div class="reboot-card">
         <div class="reboot-icon"><i class="bi bi-arrow-repeat"></i></div>
         <div class="reboot-title">REBOOT REQUIRED</div>
-        <p class="reboot-subtitle">Settings saved successfully.<br>Reboot now to apply changes?</p>
+        <p class="reboot-subtitle">${subtitle}</p>
         <div class="reboot-actions">
           <button class="hud-btn hud-btn-ghost" id="rebootNo">Later</button>
           <button class="hud-btn hud-btn-primary" id="rebootYes"><i class="bi bi-power"></i> Reboot Now</button>
