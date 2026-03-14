@@ -393,7 +393,9 @@ def _handle_analyze(cam, cam_name, context, skill_config):
         query = f"This is a frame from the '{cam_name}' security camera. {user_input}" if user_input else \
                 f"Describe what you see in this security camera frame from the '{cam_name}' camera."
 
+        queue_message(f"[NetworkCam] Calling process_image with processor={vision_processor}, query={query[:80]}")
         description = process_image(b64, query)
+        queue_message(f"[NetworkCam] process_image returned: {str(description)[:200] if description else '(empty/None)'}")
 
         if description and not str(description).startswith("Error"):
             if vision_processor in ("blip", "server_hosted"):
