@@ -2223,11 +2223,12 @@ function executeAction() {
     fetch('/save_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
       .then(r=>r.json()).then(d => {
         if (d.success) {
-          // Save skill configs in parallel
-          const skillPromises = skillSaves.map(s =>
-            fetch('/save_skill_config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(s) })
-          );
-          Promise.all(skillPromises).then(() => {
+          // Save all skill configs sequentially to avoid file write races
+          let chain = Promise.resolve();
+          for (const s of skillSaves) {
+            chain = chain.then(() => fetch('/save_skill_config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(s) }));
+          }
+          chain.then(() => {
             saveBtn.innerHTML='<i class="bi bi-check-circle-fill"></i> Saved!';
             saveBtn.classList.add('hud-btn-success');
             if (window.showToast) showToast('Configuration saved', 'success');

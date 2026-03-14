@@ -2,6 +2,7 @@
 
 SKILL = {
     "name": "web_search",
+    "followup": True,
     "description": "Search the web for current information",
     "prompt": """web_search
    Triggers: ONLY use when:
