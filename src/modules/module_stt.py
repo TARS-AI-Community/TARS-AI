@@ -323,6 +323,7 @@ class STTManager:
 
     def _load_silero_model(self):
         """Load Silero STT model via Torch Hub into the stt folder."""
+        global torch
         if torch is None:
             queue_message("WARNING: Silero STT not available (torch not installed)")
             return
@@ -331,7 +332,6 @@ class STTManager:
             stt_folder = _stt_dir()
             os.makedirs(stt_folder, exist_ok=True)
             # Override torch.hub.get_dir to return stt_folder directly
-            import torch.hub
             torch.hub.get_dir = lambda: stt_folder
 
             self.silero_model, self.decoder, self.utils = torch.hub.load(
