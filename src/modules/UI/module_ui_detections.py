@@ -549,7 +549,7 @@ class DetectionManager:
         self._last_camera_y = camera_y
         self._last_camera_w = camera_w
 
-        btn_w = 120
+        btn_w = 110
         btn_h = 44
         spacing = 10
         row_y = 10
