@@ -170,7 +170,7 @@ scheduled_tasks.json
 
 # State files (UI preferences, terminal log)
 src/modules/UI/ui_settings.json
-src/memory/terminal_log.json
+src/memory/terminal_log_*.json
 
 # Character Data & Personas
 *persona.ini
