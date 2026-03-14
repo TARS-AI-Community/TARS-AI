@@ -2504,9 +2504,11 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .tab.disabled{opacity:.25;cursor:not-allowed;pointer-events:none}
 .panel{display:none}
 .panel.active{display:block}
-textarea,input[type=text],select{width:100%;padding:12px 16px;background:rgba(0,229,255,0.04);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:13px;margin:6px 0;outline:none;transition:border-color .2s}
+textarea,input[type=text],input[type=number],select{width:100%;padding:12px 16px;background:rgba(0,229,255,0.04);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-mono);font-size:13px;margin:6px 0;outline:none;transition:border-color .2s;box-sizing:border-box}
 textarea{height:110px;resize:vertical}
-textarea:focus,input[type=text]:focus,select:focus{border-color:var(--border-hi);box-shadow:0 0 12px rgba(0,229,255,0.08)}
+textarea:focus,input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--border-hi);box-shadow:0 0 12px rgba(0,229,255,0.08)}
+input[type=number]{-moz-appearance:textfield}input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.img-params{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:10px 0}.img-params label{font-size:9px;margin-bottom:2px}.img-params input{padding:8px 10px;font-size:12px;margin:2px 0}
 select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2300e5ff'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
 select option{background:var(--bg2);color:var(--text)}
 label{font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);display:block;margin-top:10px}
@@ -2591,6 +2593,13 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
 <div id="p-img" class="panel"><div class="glass">
   <textarea id="img-prompt" placeholder="Image prompt..."></textarea>
   <label>Negative prompt</label><input type="text" id="img-neg" placeholder="optional">
+  <div class="img-params">
+    <div><label>Width</label><input type="number" id="img-width" value="1024" min="64" step="64"></div>
+    <div><label>Height</label><input type="number" id="img-height" value="1024" min="64" step="64"></div>
+    <div><label>Steps</label><input type="number" id="img-steps" value="20" min="1" max="150"></div>
+    <div><label>CFG</label><input type="number" id="img-cfg" value="7.0" min="1" max="30" step="0.5"></div>
+    <div><label>Seed</label><input type="number" id="img-seed" value="-1" min="-1" placeholder="-1"></div>
+  </div>
   <button class="hud-btn" id="img-gen-btn" onclick="generateImg()">Generate</button>
   <div id="img-progress-wrap" style="display:none;margin:8px 0">
     <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px"><span id="img-progress-label">Starting...</span><span id="img-progress-pct">0%</span></div>
@@ -2746,7 +2755,11 @@ function _uid(){try{return crypto.randomUUID()}catch(e){return 'xxxx-xxxx-xxxx-x
 async function generateImg(){
   const prompt=document.getElementById('img-prompt').value.trim();if(!prompt)return;
   const neg=document.getElementById('img-neg').value.trim();
-  const steps=20;
+  const steps=parseInt(document.getElementById('img-steps').value)||20;
+  const width=parseInt(document.getElementById('img-width').value)||1024;
+  const height=parseInt(document.getElementById('img-height').value)||1024;
+  const cfg=parseFloat(document.getElementById('img-cfg').value)||7.0;
+  const seed=parseInt(document.getElementById('img-seed').value);
   const taskId=_uid();
   const btn=document.getElementById('img-gen-btn');
   btn.disabled=true;btn.style.opacity='0.5';
@@ -2771,7 +2784,7 @@ async function generateImg(){
   },500);
   try{
     const resp=await fetch(base+'/generate_image',{method:'POST',headers:hdr(),
-      body:JSON.stringify({prompt:prompt,negative_prompt:neg,steps:steps,task_id:taskId})});
+      body:JSON.stringify({prompt:prompt,negative_prompt:neg,steps:steps,width:width,height:height,cfg_scale:cfg,seed:isNaN(seed)?-1:seed,task_id:taskId})});
     done=true;clearInterval(poll);
     bar.style.width='100%';pctEl.textContent='100%';lbl.textContent='Complete';
     if(!resp.ok){document.getElementById('img-out').textContent='Error: '+resp.status+' '+resp.statusText;setTimeout(function(){wrap.style.display='none'},2000);return}
@@ -2785,6 +2798,19 @@ async function generateImg(){
 
 document.getElementById('chat-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}});
 loadVoices();
+fetch(base+'/api/settings').then(function(r){return r.json()}).then(function(d){
+  if(d.imagegen){
+    if(d.imagegen.default_steps)document.getElementById('img-steps').value=d.imagegen.default_steps;
+    if(d.imagegen.default_cfg)document.getElementById('img-cfg').value=d.imagegen.default_cfg;
+  }
+}).catch(function(){});
+(function(){
+  var p=document.getElementById('img-prompt'),n=document.getElementById('img-neg');
+  var sp=localStorage.getItem('img-prompt'),sn=localStorage.getItem('img-neg');
+  if(sp)p.value=sp;if(sn)n.value=sn;
+  p.addEventListener('input',function(){localStorage.setItem('img-prompt',p.value)});
+  n.addEventListener('input',function(){localStorage.setItem('img-neg',n.value)});
+})();
 
 // Vision: image preview + drag-and-drop
 (function(){
