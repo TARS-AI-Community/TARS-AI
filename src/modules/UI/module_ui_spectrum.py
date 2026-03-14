@@ -35,7 +35,7 @@ class SpectrumSystem:
         self.bg_alpha = bg_alpha
 
         self.spectrum_height = int(height * 0.3)
-        self.spectrum_y = height - self.spectrum_height
+        self.spectrum_y = height - self.spectrum_height + 20
 
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
@@ -44,7 +44,9 @@ class SpectrumSystem:
 
         self.spectrum = np.zeros(64)
         self.spectrum_smoothed = np.zeros(64)
-        self.smoothing_factor = 0.3
+        self.smoothing_factor = 0.45
+        self._peak_level = 0.2  # running peak for dynamic normalization
+        self._peak_decay = 0.99  # faster decay for more responsiveness
 
         self.num_bars = 64
         self.bar_spacing = 2
@@ -147,11 +149,13 @@ class SpectrumSystem:
 
         magnitude = np.abs(fft_data)
 
-        magnitude = np.where(magnitude > 0, magnitude, 1e-10)  
+        magnitude = np.where(magnitude > 0, magnitude, 1e-10)
         magnitude_db = 20 * np.log10(magnitude)
 
-        magnitude_db = np.clip(magnitude_db, -60, 0)  
-        magnitude_normalized = (magnitude_db + 60) / 60
+        magnitude_db = np.clip(magnitude_db, -30, 0)
+        magnitude_normalized = (magnitude_db + 30) / 30
+        # Power curve to exaggerate differences between quiet and loud
+        magnitude_normalized = magnitude_normalized ** 1.3
 
         useful_bins = len(magnitude_normalized) // 2
         spectrum_data = magnitude_normalized[:useful_bins]
@@ -193,10 +197,15 @@ class SpectrumSystem:
 
             spectrum_data = resampled
 
-        if np.max(spectrum_data) > 0:
-            spectrum_data = spectrum_data / np.max(spectrum_data)
+        # Dynamic normalization: track a slow-decaying peak so volume changes are visible
+        current_max = np.max(spectrum_data)
+        self._peak_level = max(current_max, self._peak_level * self._peak_decay)
+        self._peak_level = max(self._peak_level, 0.05)  # minimum floor
 
-        self.spectrum_smoothed = (self.spectrum_smoothed * (1 - self.smoothing_factor) + 
+        if self._peak_level > 0:
+            spectrum_data = np.clip(spectrum_data / self._peak_level, 0.0, 1.0)
+
+        self.spectrum_smoothed = (self.spectrum_smoothed * (1 - self.smoothing_factor) +
                                  spectrum_data * self.smoothing_factor)
 
         self.spectrum = self.spectrum_smoothed

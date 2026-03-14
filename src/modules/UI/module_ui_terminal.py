@@ -1213,21 +1213,93 @@ class TerminalSystem:
 
             terminal_draw_height = self.toolbar_height + self.terminal_height - start_y - self.padding
 
-            line_count = 0
-            for key, value, msg_type, line_text, line_idx in visible_lines:
-                if y_offset + self.line_height > self.toolbar_height + self.terminal_height - self.padding:
+            # Pre-scan visible lines to build message groups for pill backgrounds
+            pill_pad_x = 14
+            pill_pad_y = 6
+            pill_gap = 16
+            char_name = CONFIG['CHAR']['character_name']
+
+            # Build groups with gap-aware y positions
+            non_sys = set()
+            for s in ("SYSTEM", "SYS", "INFO", "WARNING", "ERROR", "DEBUG", "DEBUG VOICE"):
+                non_sys.add(s)
+
+            groups = []
+            current_group = None
+            prev_was_chat = False
+            temp_y = y_offset
+            line_y_map = []  # maps each visible line index to its actual y position
+
+            for i, (key, value, msg_type, line_text, line_idx) in enumerate(visible_lines):
+                if temp_y + self.line_height > self.toolbar_height + self.terminal_height - self.padding:
                     break
+
+                # Add gap between different message groups
+                if line_idx == 0 and current_group is not None:
+                    temp_y += pill_gap
+
+                if line_idx == 0:
+                    if current_group is not None:
+                        groups.append(current_group)
+                    current_group = {"key": key, "start_y": temp_y, "line_count": 1}
+                elif current_group is not None and current_group["key"] == key:
+                    current_group["line_count"] += 1
+                else:
+                    if current_group is not None:
+                        groups.append(current_group)
+                    current_group = {"key": key, "start_y": temp_y, "line_count": 1}
+
+                line_y_map.append(temp_y)
+                temp_y += self.line_height
+
+            if current_group is not None:
+                groups.append(current_group)
+
+            # Draw pill backgrounds
+            for group in groups:
+                gy = group["start_y"] - pill_pad_y
+                gh = group["line_count"] * self.line_height + pill_pad_y * 2
+                gx = self.padding - pill_pad_x + 13
+                gw = self.width - gx - (self.padding - pill_pad_x - 25) - 40
+
+                pill_center_y = group["start_y"] + (group["line_count"] * self.line_height) / 2
+                progress = (pill_center_y - start_y) / terminal_draw_height
+                progress = max(0.0, min(1.0, progress))
+                fade_alpha = 1.0 if progress < 0.5 else max(0.0, 1.0 - ((progress - 0.5) / 0.5))
+
+                gkey = group["key"].upper()
+                if group["key"] == char_name:
+                    pill_color = (20, 60, 90, int(90 * fade_alpha))
+                    outline_color = (60, 130, 180, int(150 * fade_alpha))
+                elif gkey in ("SYSTEM", "SYS", "INFO", "WARNING", "ERROR", "DEBUG", "DEBUG VOICE"):
+                    pill_color = (70, 70, 80, int(70 * fade_alpha))
+                    outline_color = (130, 130, 140, int(120 * fade_alpha))
+                else:  # user (any name)
+                    pill_color = (60, 45, 75, int(80 * fade_alpha))
+                    outline_color = (120, 90, 150, int(150 * fade_alpha))
+
+                pill_surface = pygame.Surface((gw, gh), pygame.SRCALPHA)
+                pygame.draw.rect(pill_surface, pill_color, (0, 0, gw, gh), border_radius=8)
+                pygame.draw.rect(pill_surface, outline_color, (0, 0, gw, gh), width=2, border_radius=8)
+                self.overlay_surface.blit(pill_surface, (gx, gy))
+
+            # Draw text
+            line_count = 0
+            for i, (key, value, msg_type, line_text, line_idx) in enumerate(visible_lines):
+                if i >= len(line_y_map):
+                    break
+                y_offset = line_y_map[i]
 
                 progress = (y_offset - start_y) / terminal_draw_height
                 progress = max(0.0, min(1.0, progress))
-                fade_alpha = 1.0 - (progress * 0.9)
+                fade_alpha = 1.0 if progress < 0.5 else max(0.0, 1.0 - ((progress - 0.5) / 0.5))
 
                 if line_idx == 0 and ':' in line_text:
                     parts = line_text.split(':', 1)
                     if len(parts) == 2:
                         user_part, msg_part = parts
 
-                        if user_part == CONFIG['CHAR']['character_name']:
+                        if user_part == char_name:
                             msg_color = (100, 200, 255)
                             code_color_base = (100, 200, 255)
                         elif user_part.upper() == "USER":
@@ -1253,7 +1325,7 @@ class TerminalSystem:
                         temp_surface2.blit(msg_surface, (0, 0))
                         self.overlay_surface.blit(temp_surface2, (x_pos + code_surface.get_width() + 5, y_offset))
                 else:
-                    if key == CONFIG['CHAR']['character_name']:
+                    if key == char_name:
                         cont_color = (100, 200, 255)
                     elif key.upper() == "USER":
                         cont_color = (255, 255, 255)
@@ -1267,7 +1339,6 @@ class TerminalSystem:
                     temp_surface.blit(text_surface, (0, 0))
                     self.overlay_surface.blit(temp_surface, (self.padding + 25, y_offset))
 
-                y_offset += self.line_height
                 line_count += 1
 
         if self.action_flash > 0:
@@ -1306,18 +1377,10 @@ class TerminalSystem:
         pygame.draw.line(self.overlay_surface, bracket_color,
                         (term_right, term_bottom), (term_right, term_bottom - bracket_size), bracket_thickness)
 
-        gradient_height = 60
-        gradient_start_y = self.toolbar_height + self.terminal_height - gradient_height
-
-        for i in range(gradient_height):
-            alpha = int((i / gradient_height) * 30)
-            pygame.draw.line(self.overlay_surface, (0, 0, 0, alpha),
-                           (5, gradient_start_y + i), (self.width - 5, gradient_start_y + i), 1)
-
         bottom_toolbar_y = self.toolbar_height + self.terminal_height
         bottom_toolbar_rect = pygame.Rect(0, bottom_toolbar_y, self.width, self.bottom_toolbar_height)
         bottom_toolbar_bg = pygame.Surface((self.width, self.bottom_toolbar_height), pygame.SRCALPHA)
-        bottom_toolbar_bg.fill((*self.bg_terminal, self.bg_alpha + 20))
+        bottom_toolbar_bg.fill((*self.bg_terminal, self.bg_alpha))
         self.overlay_surface.blit(bottom_toolbar_bg, (0, bottom_toolbar_y))
 
         pygame.draw.line(self.overlay_surface, (*self.border_color, 200), 
