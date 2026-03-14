@@ -191,6 +191,7 @@ dashboard.ini
 !CASE.onnx*
 !KIPP.onnx*
 !PLEX.onnx*
+!Bishop.onnx*
 
 # Speech-to-text (STT) Folder
 stt/
@@ -200,11 +201,17 @@ src/tts/cache/
 src/tts/*_templates.pkl
 
 # Character Image Exceptions
-character/
-!character/TARS/images/neutral/**
-!character/KIPP/images/neutral/**
-!character/CASE/images/neutral/**
-!character/PLEX/images/neutral/**
+src/character/**
+!src/character/TARS/
+!src/character/TARS/**
+!src/character/KIPP/
+!src/character/KIPP/**
+!src/character/CASE/
+!src/character/CASE/**
+!src/character/PLEX/
+!src/character/PLEX/**
+!src/character/Bishop/
+!src/character/Bishop/**
 
 tarsdiscordbot/
 src/memory/prompt_history/
