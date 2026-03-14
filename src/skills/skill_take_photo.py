@@ -5,6 +5,7 @@ import threading
 
 SKILL = {
     "name": "take_photo",
+    "description": "Take and save photos from the camera",
     "prompt": """take_photo
    Triggers: Use when the user wants to take/snap a photo or picture (to KEEP, not to analyze)
      * "take a photo", "snap a picture", "take my picture", "photo of me"

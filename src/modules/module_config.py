@@ -343,7 +343,7 @@ def load_config():
     persona_config.read(persona_path)
 
     required_sections = [
-        'CONTROLS', 'STT', 'CHAR', 'LLM', 'VISION', 'EMOTION', 'TTS', 'DISCORD', 'STABLE_DIFFUSION'
+        'CONTROLS', 'STT', 'CHAR', 'LLM', 'VISION', 'EMOTION', 'TTS'
     ]
     missing_sections = [section for section in required_sections if section not in config]
 
@@ -463,16 +463,6 @@ def load_config():
             "embedding_source": config.get('RAG', 'embedding_source', fallback='local'),
             "embedding_url": config.get('RAG', 'embedding_url', fallback=''),
         },
-        "HOME_ASSISTANT": {
-            "enabled": config.getboolean('HOME_ASSISTANT', 'enabled'),
-            "url": config['HOME_ASSISTANT']['url'],
-            "HA_TOKEN": os.getenv('HA_TOKEN'),
-        },
-        "DISCORD": {
-            "TOKEN": os.getenv('DISCORD_TOKEN'),
-            "channel_id": config['DISCORD']['channel_id'],
-            "enabled": config.getboolean('DISCORD', 'enabled'),
-        },
         "SERVO": {
             "arms_present": config.getboolean('SERVO', 'arms_present'),
             "leftMainMin": config['SERVO']['leftMainMin'],
@@ -505,24 +495,6 @@ def load_config():
             "forwardRightLeg": config['SERVO']['forwardRightLeg'],
             "backRightLeg": config['SERVO']['backRightLeg'],
             "perfectRightLegOffset": config['SERVO']['perfectRightLegOffset'],
-        },
-        "STABLE_DIFFUSION": {
-            "enabled": config.getboolean('STABLE_DIFFUSION', 'enabled'),
-            "service": config['STABLE_DIFFUSION']['service'],
-            "url": config['STABLE_DIFFUSION']['url'],
-            "comfyui_workflow": config.get('STABLE_DIFFUSION', 'comfyui_workflow', fallback='Documentation/Comfy_UI_SD.json'),
-            "comfyui_img2img_workflow": config.get('STABLE_DIFFUSION', 'comfyui_img2img_workflow', fallback='Documentation/Comfy_UI_IMG2IMG.json'),
-            "seed": int(config['STABLE_DIFFUSION']['seed']),
-            "denoising_strength": float(config['STABLE_DIFFUSION']['denoising_strength']),
-            "steps": int(config['STABLE_DIFFUSION']['steps']),
-            "cfg_scale": float(config['STABLE_DIFFUSION']['cfg_scale']),
-            "sampler_name": config['STABLE_DIFFUSION']['sampler_name'].strip('"'),
-            "prompt_prefix": config['STABLE_DIFFUSION']['prompt_prefix'],
-            "prompt_postfix": config['STABLE_DIFFUSION']['prompt_postfix'],
-            "negative_prompt": config['STABLE_DIFFUSION']['negative_prompt'],
-            "width": int(config['STABLE_DIFFUSION']['width']),
-            "height": int(config['STABLE_DIFFUSION']['height']),
-            "restore_faces": config.getboolean('STABLE_DIFFUSION', 'restore_faces'),
         },
         "ACCESS": {
             "webui_enabled": config.getboolean('ACCESS', 'webui_enabled', fallback=True),
@@ -1058,94 +1030,6 @@ CONFIG_METADATA = {
         'battery_cutoff_voltage': {
             'depends_on': [{'field': 'battery_enabled', 'values': ['True', 'true']}],
             'description': 'The lowest voltage your battery should ever reach. Going below this can permanently damage it. 3S LiPo = 10.5V, 4S LiPo = 14V. TARS uses this as the 0% reference point and will shut down before reaching it if auto_shutdown is ON.'
-        },
-    },
-    'HOME_ASSISTANT': {
-        '__description__': 'Let TARS control your smart home lights, switches, and devices through voice',
-        'enabled': {
-            'description': 'Turn ON to connect TARS to your Home Assistant smart home system. Once connected, you can say things like "turn off the living room lights" or "what temperature is the bedroom?" and TARS will control your smart home devices. You need a Home Assistant server already running on your network, and you need to create a Long-Lived Access Token in Home Assistant (go to your HA profile page > scroll to bottom > create token) and paste it into your .env file as HOME_ASSISTANT_TOKEN.'
-        },
-        'url': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'description': 'The web address of your Home Assistant server. This is usually your HA server\'s IP address followed by port 8123. For example: http://192.168.1.50:8123. You can find this in your Home Assistant settings, or just try typing your HA server\'s IP with :8123 at the end. IMPORTANT: The access token goes in the .env file, NOT here.'
-        },
-    },
-    'DISCORD': {
-        '__description__': 'Let TARS chat in a Discord server as a bot',
-        'enabled': {
-            'description': 'Turn ON to have TARS run as a Discord bot. TARS will join a specific Discord channel and respond to messages there. To set this up: 1) Go to discord.com/developers, create a new Application, go to Bot tab, create a bot, and copy the token. 2) Put that token in your .env file as DISCORD_TOKEN. 3) Invite the bot to your Discord server using the OAuth2 URL generator. 4) Set the channel_id below to the channel you want TARS to chat in.'
-        },
-        'channel_id': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'description': 'The ID number of the Discord channel where TARS should listen and respond. To get this: Open Discord, go to Settings > Advanced > turn on "Developer Mode". Then right-click the channel you want TARS in and click "Copy Channel ID". Paste that number here. It will be a long number like 811470553139249186.'
-        },
-    },
-    'STABLE_DIFFUSION': {
-        '__description__': 'Let TARS create images from text descriptions (requires a separate computer running an image generator)',
-        'enabled': {
-            'description': 'Turn ON to let TARS generate images during conversation. When someone asks TARS to draw or create an image, it will send the request to an image generation server (running on a separate computer - your Pi is not powerful enough for this). You need to have AUTOMATIC1111, ComfyUI, or an OpenAI account set up first. If you do not have any of these, leave this OFF.'
-        },
-        'service': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'options': ['automatic1111', 'comfyui', 'openai', 'external'],
-            'description': 'Which image generation backend to use. "automatic1111" is the most popular free option - a web interface for Stable Diffusion. "comfyui" is a more advanced, node-based alternative. "openai" uses DALL-E in the cloud (costs money per image, requires OPENAI_API_KEY). "external" sends requests to your TARS app-server instance (uses EXTERNAL_API_KEY from .env, server must have ImageGen service enabled).'
-        },
-        'url': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
-            'description': 'The web address of your image generation server. Format: http://IP-ADDRESS:PORT. For AUTOMATIC1111 default port is 7860, ComfyUI is 8188, external app-server is 5678. Ignored when using "openai".'
-        },
-        'comfyui_workflow': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['comfyui']}],
-            'description': 'Only used if your service is set to "comfyui". This is the path to a workflow file (a JSON file that tells ComfyUI exactly how to generate an image). The default workflow is included in the Documentation folder. Advanced users can create custom workflows in ComfyUI and point to them here.'
-        },
-        'comfyui_img2img_workflow': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['comfyui']}],
-            'description': 'Same as above but for image-to-image generation (where TARS modifies an existing image instead of creating one from scratch). Only used with ComfyUI.'
-        },
-        'seed': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
-            'description': 'Controls randomness in generated images. Leave at -1 for normal use - each image will be unique and different. If you set this to a specific number (like 12345), the EXACT same image will be generated every time you use the same prompt. This is useful for testing or if you found an image you like and want to reproduce it.'
-        },
-        'denoising_strength': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui']}],
-            'description': 'A number between 0.0 and 1.0 that controls how much creative freedom the image generator has. At lower values (0.3-0.5), images have more creative variation but may have some imperfections. At higher values (0.5-0.7), images are cleaner but more generic. When using image-to-image mode (modifying an existing image), lower values keep the original image more intact, while higher values change it more dramatically. 0.5 is a good starting point.'
-        },
-        'steps': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
-            'description': 'How many passes the AI makes over the image while creating it. More steps = better quality but takes longer to generate. 20 is a good starting point that balances speed and quality. Going above 30-40 usually does not improve the image much but makes it take noticeably longer. Going below 15 can make images look blurry or unfinished.'
-        },
-        'cfg_scale': {
-            'label': 'CFG Scale',
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
-            'description': 'How closely the generated image follows your text description. Think of it as a "creativity vs accuracy" slider. At low values (1-5), the AI takes a lot of creative freedom and the image might not match your description well but could look artistic. At medium values (7-9), there is a good balance (recommended). At high values (10-20), the AI tries very hard to match your exact words, but the image can start looking artificial or over-processed.'
-        },
-        'sampler_name': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
-            'description': 'The algorithm used to create the image. Different samplers produce slightly different artistic results. For ComfyUI use names like "euler_ancestral" (fast, recommended), "euler", "dpmpp_2m", "dpmpp_2m_sde". For Automatic1111 use names like "Euler a", "DPM++ 2M Karras". You generally do not need to change this unless you are experienced with Stable Diffusion and want to experiment with different visual styles.'
-        },
-        'width': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
-            'description': 'Width of the generated image in pixels. Bigger images have more detail but take longer to generate. For the standard TARS display, 480 pixels wide works well. For Stable Diffusion 1.5, the native resolution is 512x512. For SDXL, it is 1024x1024. Try to match your model\'s native resolution for best results.'
-        },
-        'height': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111', 'comfyui', 'external']}],
-            'description': 'Height of the generated image in pixels. Works the same as width. For the TARS display, 320 pixels tall matches the screen well. Together with width, this determines the aspect ratio (shape) of the image - 480x320 gives a wide/landscape image, 320x480 gives a tall/portrait image.'
-        },
-        'restore_faces': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'service', 'values': ['automatic1111']}],
-            'description': 'When ON, the image generator runs an extra step to fix faces in the generated image. AI image generators often struggle with faces - they might look distorted, have extra eyes, or weird features. This post-processing step detects faces and cleans them up. Turn ON if you are generating images of people or characters.'
-        },
-        'prompt_prefix': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'description': 'Text that gets automatically added to the BEGINNING of every image prompt. Use this to set a consistent art style for all generated images. For example, "in the style of midjourney" makes images look polished and artistic. You could also use "photorealistic" or "oil painting style" or "anime style". Leave empty if you do not want a default style.'
-        },
-        'prompt_postfix': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'description': 'Text that gets automatically added to the END of every image prompt. Use this to ensure consistent quality. The default adds terms like "high def" and "highly detailed" which help produce better-looking images. You can customize this to match your preferences.'
-        },
-        'negative_prompt': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
-            'description': 'A list of things you do NOT want in the generated images. The AI will try to avoid these. The default list helps prevent common ugly artifacts like deformed body parts, extra limbs, and bad anatomy. You can add your own terms if you notice recurring problems. For example, add "blurry" if images keep coming out unfocused, or "watermark" to avoid watermark-like artifacts.'
         },
     },
 }

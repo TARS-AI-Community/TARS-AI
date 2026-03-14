@@ -4,6 +4,107 @@ import threading
 
 SKILL = {
     "name": "generate_image",
+    "description": "Generate images from text descriptions",
+    "config": {
+        "service": {
+            "type": "select",
+            "default": "automatic1111",
+            "options": ["automatic1111", "comfyui", "openai", "external"],
+            "description": "Image generation backend to use",
+        },
+        "url": {
+            "type": "text",
+            "default": "http://192.168.1.100:7860",
+            "description": "Image generation server URL (A1111 :7860, ComfyUI :8188)",
+            "depends_on": {"field": "service", "values": ["automatic1111", "comfyui", "external"]},
+        },
+        "prompt_prefix": {
+            "type": "text",
+            "default": "in the style of midjourney",
+            "description": "Text added before every image prompt (sets style)",
+        },
+        "prompt_postfix": {
+            "type": "text",
+            "default": "clearly defined,high def,(detailed scene and background),key visual,vibrant,highly detailed",
+            "description": "Text added after every image prompt (quality terms)",
+        },
+        "negative_prompt": {
+            "type": "text",
+            "default": "deformed,black and white,disfigured,low contrast,extra limbs,bad anatomy,bad hands",
+            "description": "Terms to avoid in generated images",
+            "depends_on": {"field": "service", "values": ["automatic1111", "comfyui", "external"]},
+        },
+        "seed": {
+            "type": "number",
+            "default": -1,
+            "description": "Random seed (-1 = random, fixed = reproducible)",
+            "depends_on": {"field": "service", "values": ["automatic1111", "comfyui", "external"]},
+        },
+        "steps": {
+            "type": "number",
+            "default": 20,
+            "min": 1,
+            "max": 100,
+            "description": "Diffusion steps (20-30 = good balance)",
+            "depends_on": {"field": "service", "values": ["automatic1111", "comfyui", "external"]},
+        },
+        "cfg_scale": {
+            "type": "number",
+            "default": 7,
+            "min": 1,
+            "max": 30,
+            "description": "Prompt adherence (1-5 loose, 7-9 balanced, 10+ strict)",
+            "depends_on": {"field": "service", "values": ["automatic1111", "comfyui", "external"]},
+        },
+        "sampler_name": {
+            "type": "text",
+            "default": "euler",
+            "description": "Sampler algorithm (euler_ancestral, dpmpp_2m, etc.)",
+            "depends_on": {"field": "service", "values": ["automatic1111", "comfyui", "external"]},
+        },
+        "denoising_strength": {
+            "type": "number",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Noise reduction strength (img2img: how much image changes)",
+            "depends_on": {"field": "service", "values": ["automatic1111", "comfyui"]},
+        },
+        "width": {
+            "type": "number",
+            "default": 480,
+            "min": 64,
+            "max": 2048,
+            "description": "Output image width in pixels",
+            "depends_on": {"field": "service", "values": ["automatic1111", "comfyui", "external"]},
+        },
+        "height": {
+            "type": "number",
+            "default": 320,
+            "min": 64,
+            "max": 2048,
+            "description": "Output image height in pixels",
+            "depends_on": {"field": "service", "values": ["automatic1111", "comfyui", "external"]},
+        },
+        "restore_faces": {
+            "type": "bool",
+            "default": False,
+            "description": "Enable face restoration post-processing",
+            "depends_on": {"field": "service", "values": ["automatic1111"]},
+        },
+        "comfyui_workflow": {
+            "type": "text",
+            "default": "Documentation/Comfy_UI_SD.json",
+            "description": "ComfyUI text-to-image workflow JSON path",
+            "depends_on": {"field": "service", "values": ["comfyui"]},
+        },
+        "comfyui_img2img_workflow": {
+            "type": "text",
+            "default": "Documentation/Comfy_UI_IMG2IMG.json",
+            "description": "ComfyUI image-to-image workflow JSON path",
+            "depends_on": {"field": "service", "values": ["comfyui"]},
+        },
+    },
     "prompt": """generate_image
     Triggers: Use when the user asks you to CREATE, GENERATE, DRAW, or MAKE an image/picture/photo/artwork.
       * "generate a photo of", "draw me a", "create an image of", "make a picture of"
@@ -31,6 +132,7 @@ def execute(parameters, context):
     if not prompt:
         return "No image description provided."
 
+    skill_config = context.get("skill_config", {})
     queue_message(f"Generating image: {prompt}")
     source = context.get("source", "voice")
 
@@ -52,7 +154,7 @@ def execute(parameters, context):
     def _generate_bg():
         queue_message("[SD] Background generation thread started")
         try:
-            result = generate_image(prompt, on_image_ready=_callback)
+            result = generate_image(prompt, skill_config=skill_config, on_image_ready=_callback)
             queue_message(f"[SD] Background generation done: {result}")
         except Exception as _e:
             queue_message(f"[SD] Background image generation failed: {_e}")

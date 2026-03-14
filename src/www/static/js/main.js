@@ -1318,9 +1318,8 @@ function executeAction() {
     'VISION':'bi-eye-fill','EMOTION':'bi-emoji-smile-fill','TTS':'bi-volume-up-fill',
     'UI':'bi-display-fill','RAG':'bi-database-fill',
     'ACCESS':'bi-key-fill',
-    'HOME_ASSISTANT':'bi-house-fill','DISCORD':'bi-discord',
-    'STABLE_DIFFUSION':'bi-image-fill',
     'BATTERY':'bi-battery-half',
+    'SKILLS':'bi-lightning-fill',
     'MISC':'bi-wrench-adjustable',
     'CHARACTER_EDITOR':'bi-person-lines-fill'
   };
@@ -1329,22 +1328,19 @@ function executeAction() {
     'STT':'Speech','LLM':'AI Model','VISION':'Vision','EMOTION':'Emotion',
     'TTS':'Voice','UI':'Display','RAG':'Memory',
     'ACCESS':'Access',
-    'HOME_ASSISTANT':'Home Asst','DISCORD':'Discord',
-    'STABLE_DIFFUSION':'Img Gen',
     'BATTERY':'Battery',
+    'SKILLS':'Skills',
     'MISC':'Misc',
     'CHARACTER_EDITOR':'Character'
   };
 
   const SECTION_ORDER = [
-    'CHAR', 'LLM',
+    'CHAR', 'LLM', 'SKILLS',
     'STT', 'TTS',
     'EMOTION', 'VISION', 'RAG',
     'UI', 'ACCESS',
     'CONTROLS',
-    'BATTERY',
-    'HOME_ASSISTANT', 'DISCORD',
-    'STABLE_DIFFUSION'
+    'BATTERY'
   ];
 
   // Character editor tile is appended after config sections
@@ -1352,13 +1348,216 @@ function executeAction() {
 
   let activeConfigSection = null;
 
+  function _skillFieldHtml(skillName, key, fieldDef, value) {
+    const fid = `skill_${skillName}_${key}`;
+    const desc = fieldDef.description || '';
+    const label = fieldDef.label || key.replace(/_/g, ' ');
+    const type = fieldDef.type || 'text';
+    let h = `<div class="col-md-6 col-lg-4 skill-cfg-field" data-skill-field="${key}"><div class="field-wrapper">`;
+    h += `<label for="${fid}" class="form-label d-flex align-items-center gap-1"><span>${label}</span>`;
+    if (desc) h += `<span class="config-tooltip-wrap" data-tip="${esc(desc)}"><i class="bi bi-info-circle config-tooltip-icon"></i></span>`;
+
+    if (type === 'bool') {
+      const chk = (value === true || value === 'true' || value === 'True') ? 'checked' : '';
+      h += `</label><div class="form-check form-switch mt-1"><input class="form-check-input config-toggle skill-cfg-input" type="checkbox" id="${fid}" data-skill="${skillName}" data-key="${key}" ${chk}><label class="form-check-label small" for="${fid}">${chk?'Enabled':'Disabled'}</label></div>`;
+    } else if (type === 'select' && fieldDef.options) {
+      h += `</label><select class="form-select form-select-sm config-input skill-cfg-input" id="${fid}" data-skill="${skillName}" data-key="${key}">`;
+      fieldDef.options.forEach(opt => { h += `<option value="${opt}"${String(value)===String(opt)?' selected':''}>${opt}</option>`; });
+      h += '</select>';
+    } else if (type === 'number') {
+      h += `</label><input type="number" class="form-control form-control-sm config-input skill-cfg-input" id="${fid}" data-skill="${skillName}" data-key="${key}" value="${esc(String(value??fieldDef.default??''))}"`;
+      if (fieldDef.min !== undefined) h += ` min="${fieldDef.min}"`;
+      if (fieldDef.max !== undefined) h += ` max="${fieldDef.max}"`;
+      h += '>';
+    } else if (type === 'password') {
+      h += `</label><div class="config-password-wrap"><input type="password" class="form-control form-control-sm config-input skill-cfg-input" id="${fid}" data-skill="${skillName}" data-key="${key}" value="${esc(String(value??''))}"><button type="button" class="config-password-toggle" data-target="${fid}" title="Show/hide"><i class="bi bi-eye"></i></button></div>`;
+    } else {
+      h += `</label><input type="text" class="form-control form-control-sm config-input skill-cfg-input" id="${fid}" data-skill="${skillName}" data-key="${key}" value="${esc(String(value??''))}">`;
+    }
+    h += '</div></div>';
+    return h;
+  }
+
+  function _checkSkillDeps(skillName) {
+    // Show/hide skill config fields based on depends_on
+    const panel = document.querySelector(`.skill-config-panel[data-skill-panel="${skillName}"]`);
+    const card = document.querySelector(`.skill-card[data-skill-name="${skillName}"]`);
+    if (!panel) return;
+    const schema = card?._skillSchema || {};
+    panel.querySelectorAll('.skill-cfg-field').forEach(fieldEl => {
+      const key = fieldEl.dataset.skillField;
+      const dep = schema[key]?.depends_on;
+      if (!dep) return;
+      const depInput = panel.querySelector(`.skill-cfg-input[data-key="${dep.field}"]`);
+      if (!depInput) return;
+      const depVal = depInput.type === 'checkbox' ? (depInput.checked ? 'true' : 'false') : depInput.value;
+      const allowed = (dep.values || []).map(String);
+      fieldEl.style.display = allowed.includes(depVal) ? '' : 'none';
+    });
+  }
+
+  function loadSkillsPanel() {
+    const grid = document.getElementById('skillsGrid');
+    if (!grid) return;
+    grid.innerHTML = '<div class="config-loading"><div class="hud-spinner"></div><span>Loading skills…</span></div>';
+    fetch('/get_skills').then(r => r.json()).then(data => {
+      if (!data.skills || !data.skills.length) {
+        grid.innerHTML = '<div class="text-center p-3 text-muted">No skills discovered</div>';
+        return;
+      }
+      // Skill toggle cards in a grid — each skill card followed by its own config panel
+      let html = '<div class="row g-2">';
+      for (const skill of data.skills) {
+        const chk = skill.enabled ? 'checked' : '';
+        const label = skill.name.replace(/_/g, ' ');
+        const desc = skill.description || '';
+        const hasConfig = skill.config_schema && Object.keys(skill.config_schema).length > 0;
+
+        html += `<div class="col-md-6 col-lg-4"><div class="field-wrapper skill-card" data-skill-name="${skill.name}">`;
+        html += `<label class="form-label d-flex align-items-center gap-1 mb-0">
+          <span style="text-transform:capitalize">${label}</span>
+          ${desc ? `<span class="config-tooltip-wrap" data-tip="${esc(desc)}"><i class="bi bi-info-circle config-tooltip-icon"></i></span>` : ''}
+        </label>`;
+        html += `<div class="d-flex align-items-center justify-content-between mt-1">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input config-toggle skill-toggle" type="checkbox" data-skill="${skill.name}" ${chk}>
+            <label class="form-check-label small">${chk?'Enabled':'Disabled'}</label>
+          </div>`;
+        if (hasConfig) {
+          html += `<button class="hud-btn hud-btn-sm hud-btn-ghost skill-expand-btn" data-skill="${skill.name}" title="Settings" style="padding:2px 8px;font-size:12px;"><i class="bi bi-gear"></i></button>`;
+        }
+        html += `</div></div></div>`;
+
+        // Config panel right after this skill's card — full row width
+        if (hasConfig) {
+          html += `<div class="col-12 skill-config-panel" data-skill-panel="${skill.name}" style="display:none;">`;
+          html += `<div class="field-wrapper" style="padding:16px;">`;
+          html += `<div class="d-flex align-items-center justify-content-between mb-3">`;
+          html += `<label class="form-label mb-0 d-flex align-items-center gap-1"><i class="bi bi-gear"></i> <span style="text-transform:capitalize">${label} Settings</span></label>`;
+          html += `<button class="hud-btn hud-btn-sm hud-btn-ghost skill-collapse-btn" data-skill="${skill.name}" title="Close"><i class="bi bi-x-lg"></i></button>`;
+          html += `</div>`;
+          html += '<div class="row g-2">';
+          for (const [key, fieldDef] of Object.entries(skill.config_schema)) {
+            const val = skill.config_values[key] ?? fieldDef.default ?? '';
+            html += _skillFieldHtml(skill.name, key, fieldDef, val);
+          }
+          html += '</div>';
+          html += `</div></div>`;
+        }
+      }
+      html += '</div>';
+      grid.innerHTML = html;
+
+      // Store schema refs on card elements for depends_on checks
+      for (const skill of data.skills) {
+        const card = grid.querySelector(`.skill-card[data-skill-name="${skill.name}"]`);
+        if (card) card._skillSchema = skill.config_schema || {};
+      }
+
+      // Wire up toggle handlers
+      grid.querySelectorAll('.skill-toggle').forEach(toggle => {
+        toggle.addEventListener('change', function() {
+          const name = this.dataset.skill;
+          const enabled = this.checked;
+          const lbl = this.nextElementSibling;
+          if (lbl) lbl.textContent = enabled ? 'Enabled' : 'Disabled';
+          fetch('/toggle_skill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, enabled })
+          }).then(r => r.json()).then(res => {
+            if (res.success) {
+              showToast(`Skill "${name.replace(/_/g,' ')}" ${enabled?'enabled':'disabled'}`, 'success');
+            } else {
+              showToast(`Failed: ${res.error}`, 'error');
+              toggle.checked = !enabled;
+              if (lbl) lbl.textContent = !enabled ? 'Enabled' : 'Disabled';
+            }
+          }).catch(() => { showToast('Failed to toggle skill', 'error'); toggle.checked = !enabled; });
+        });
+      });
+
+      // Wire up expand/collapse — show full-width panel below grid
+      grid.querySelectorAll('.skill-expand-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const name = this.dataset.skill;
+          const panel = grid.querySelector(`.skill-config-panel[data-skill-panel="${name}"]`);
+          if (panel) {
+            // Close any other open panels first
+            grid.querySelectorAll('.skill-config-panel').forEach(p => {
+              if (p !== panel) p.style.display = 'none';
+            });
+            grid.querySelectorAll('.skill-expand-btn').forEach(b => {
+              if (b !== this) b.querySelector('i').className = 'bi bi-gear';
+            });
+            const shown = panel.style.display !== 'none';
+            panel.style.display = shown ? 'none' : 'block';
+            this.querySelector('i').className = shown ? 'bi bi-gear' : 'bi bi-chevron-up';
+            if (!shown) {
+              _checkSkillDeps(name);
+              panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }
+        });
+      });
+      // Wire up close buttons inside panels
+      grid.querySelectorAll('.skill-collapse-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const name = this.dataset.skill;
+          const panel = grid.querySelector(`.skill-config-panel[data-skill-panel="${name}"]`);
+          if (panel) panel.style.display = 'none';
+          const expandBtn = grid.querySelector(`.skill-expand-btn[data-skill="${name}"]`);
+          if (expandBtn) expandBtn.querySelector('i').className = 'bi bi-gear';
+        });
+      });
+
+      // Wire up bool toggle labels
+      grid.querySelectorAll('.skill-cfg-input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', function() {
+          const lbl = this.nextElementSibling;
+          if (lbl) lbl.textContent = this.checked ? 'Enabled' : 'Disabled';
+          _checkSkillDeps(this.dataset.skill);
+        });
+      });
+
+      // Wire up select/text change for depends_on
+      grid.querySelectorAll('.skill-cfg-input:not([type="checkbox"])').forEach(input => {
+        input.addEventListener('change', function() { _checkSkillDeps(this.dataset.skill); });
+      });
+
+      // Wire up password toggles
+      grid.querySelectorAll('.config-password-toggle').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const input = document.getElementById(this.dataset.target);
+          if (input) {
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            this.querySelector('i').className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+          }
+        });
+      });
+
+      // Initial depends_on check for all skills
+      for (const skill of data.skills) {
+        _checkSkillDeps(skill.name);
+      }
+
+      // Re-bind tooltips for dynamically rendered skill elements
+      initConfigTooltips();
+    }).catch(err => {
+      grid.innerHTML = `<div class="text-center p-3 text-danger">Failed to load skills: ${err.message}</div>`;
+    });
+  }
+
   function loadConfiguration() {
     fetch('/get_config').then(r=>r.json()).then(data => {
       const form = $('configForm');
 
       // Order sections: SECTION_ORDER first, then any extras from backend
+      // SKILLS is always shown (it has its own data source, not config.ini)
       const allSections = Object.keys(data.config);
-      const ordered = SECTION_ORDER.filter(s => allSections.includes(s));
+      const alwaysShow = ['SKILLS'];
+      const ordered = SECTION_ORDER.filter(s => allSections.includes(s) || alwaysShow.includes(s));
       allSections.forEach(s => { if (!ordered.includes(s)) ordered.push(s); });
 
       // Build icon grid
@@ -1387,8 +1586,19 @@ function executeAction() {
               <i class="bi ${icon}"></i><span>${label}</span>
               ${desc?`<small>${desc.description||desc}</small>`:''}
             </div>
-          </div>
-          <div class="config-panel-body"><div class="row g-2">`;
+          </div>`;
+
+        // Skills section: dynamic skill toggles loaded from API
+        if (section === 'SKILLS') {
+          html += `<div class="config-panel-body">
+            <div class="skills-grid" id="skillsGrid">
+              <div class="config-loading"><div class="hud-spinner"></div><span>Loading skills…</span></div>
+            </div>
+          </div></div>`;
+          continue;
+        }
+
+        html += `<div class="config-panel-body"><div class="row g-2">`;
 
         for (const [key, value] of Object.entries(fields)) {
           const fid = `cfg_${section}_${key}`, fi = data.field_options[`${section}.${key}`], desc2 = fi?.description||'';
@@ -1576,6 +1786,7 @@ function executeAction() {
             this.classList.add('active');
             grid.classList.add('has-active');
             activeConfigSection = target;
+            if (target === 'SKILLS') loadSkillsPanel();
             if (target === 'CHARACTER_EDITOR' && window.onCharacterEditorOpen) window.onCharacterEditorOpen();
             setTimeout(() => panel.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
           }
@@ -1990,16 +2201,41 @@ function executeAction() {
     const origHtml=saveBtn.innerHTML, origClass=saveBtn.className;
     saveBtn.innerHTML='<i class="bi bi-arrow-clockwise spin"></i> Saving…'; saveBtn.disabled=true;
 
+    // Also collect skill config values from any skill panels
+    const skillSaves = [];
+    document.querySelectorAll('.skill-card[data-skill-name]').forEach(card => {
+      const name = card.dataset.skillName;
+      const schema = card._skillSchema || {};
+      if (!Object.keys(schema).length) return;
+      const panel = document.querySelector(`.skill-config-panel[data-skill-panel="${name}"]`);
+      if (!panel) return;
+      const values = {};
+      panel.querySelectorAll('.skill-cfg-input').forEach(input => {
+        const key = input.dataset.key;
+        const fieldType = schema[key]?.type || 'text';
+        if (input.type === 'checkbox') values[key] = input.checked;
+        else if (fieldType === 'number') values[key] = Number(input.value);
+        else values[key] = input.value;
+      });
+      if (Object.keys(values).length) skillSaves.push({ name, values });
+    });
+
     fetch('/save_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
       .then(r=>r.json()).then(d => {
         if (d.success) {
-          saveBtn.innerHTML='<i class="bi bi-check-circle-fill"></i> Saved!';
-          saveBtn.classList.add('hud-btn-success');
-          if (window.showToast) showToast('Configuration saved', 'success');
-          setTimeout(()=>{
-            saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false;
-            showRebootConfirm();
-          },1000);
+          // Save skill configs in parallel
+          const skillPromises = skillSaves.map(s =>
+            fetch('/save_skill_config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(s) })
+          );
+          Promise.all(skillPromises).then(() => {
+            saveBtn.innerHTML='<i class="bi bi-check-circle-fill"></i> Saved!';
+            saveBtn.classList.add('hud-btn-success');
+            if (window.showToast) showToast('Configuration saved', 'success');
+            setTimeout(()=>{
+              saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false;
+              showRebootConfirm();
+            },1000);
+          });
         } else { saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; if (window.showToast) showToast('Error: '+(d.error||'Unknown'), 'error'); }
       }).catch(err=>{ saveBtn.innerHTML=origHtml; saveBtn.className=origClass; saveBtn.disabled=false; alert('Error: '+err.message); });
   }

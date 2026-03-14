@@ -18,6 +18,7 @@ from datetime import datetime
 
 SKILL = {
     "name": "sandbox_exec",
+    "description": "Execute Python code in a sandboxed environment",
     "prompt": """sandbox_exec
    Triggers: When you need to execute Python code to answer the user's question. Use this for:
      * Mathematical calculations, data processing, or logic that benefits from real computation

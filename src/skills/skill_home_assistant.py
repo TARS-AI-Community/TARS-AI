@@ -1,9 +1,18 @@
 """Skill: home_assistant — Control smart home devices via Home Assistant."""
 
+import os
 import requests
 
 SKILL = {
     "name": "home_assistant",
+    "description": "Control smart home devices via Home Assistant",
+    "config": {
+        "url": {
+            "type": "text",
+            "default": "http://192.168.1.1:8123",
+            "description": "Home Assistant server URL (e.g. http://192.168.1.50:8123)",
+        },
+    },
     "prompt": """home_assistant
     Triggers: Use when the user wants to control smart home devices or ask about their status.
       * "open the garage", "turn off the lights", "is the front door locked"
@@ -18,28 +27,28 @@ Response: {{"question": "Turn off the living room lights", "reply": "On it.", "f
 }
 
 
-def _send_prompt_to_homeassistant(prompt, config):
-    """Send a natural language command to Home Assistant's conversation API.
-
-    Returns:
-        dict: The response from Home Assistant API or an error dict.
-    """
+def _send_prompt_to_homeassistant(prompt, skill_config):
+    """Send a natural language command to Home Assistant's conversation API."""
     from modules.module_messageQue import queue_message
 
-    if not config.get('HOME_ASSISTANT', {}).get('enabled'):
-        return {"error": "Home Assistant is disabled"}
+    url = skill_config.get("url", "").rstrip("/")
+    token = os.getenv("HA_TOKEN", "")
 
-    ha_config = config['HOME_ASSISTANT']
+    if not url:
+        return {"error": "Home Assistant URL not configured"}
+    if not token:
+        return {"error": "Home Assistant token not configured (set HA_TOKEN in .env)"}
+
     headers = {
-        "Authorization": f"Bearer {ha_config['HA_TOKEN']}",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    url = f"{ha_config['url']}/api/conversation/process"
+    api_url = f"{url}/api/conversation/process"
     data = {"text": prompt.strip()}
 
     queue_message(f"HA Data: {data}")
     try:
-        response = requests.post(url, json=data, headers=headers, timeout=15)
+        response = requests.post(api_url, json=data, headers=headers, timeout=15)
         if response.ok:
             queue_message(f"HA Response: {response.json()}")
             return response.json()
@@ -57,9 +66,9 @@ def execute(parameters, context):
     if not prompt:
         return "No command provided for Home Assistant."
 
-    config = context.get("config", {})
+    skill_config = context.get("skill_config", {})
     queue_message(f"Home Assistant: {prompt}")
-    ha_response = _send_prompt_to_homeassistant(prompt, config)
+    ha_response = _send_prompt_to_homeassistant(prompt, skill_config)
 
     if isinstance(ha_response, dict) and "error" in ha_response:
         return f"Home Assistant error: {ha_response['error']}"

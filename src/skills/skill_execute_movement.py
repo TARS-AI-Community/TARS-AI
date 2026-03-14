@@ -4,6 +4,7 @@ import threading
 
 SKILL = {
     "name": "execute_movement",
+    "description": "Perform physical movements and gestures",
     "prompt": """execute_movement
    Triggers: Use ONLY when user explicitly commands movement
      * "walk forward", "turn left", "step back", "move backward"

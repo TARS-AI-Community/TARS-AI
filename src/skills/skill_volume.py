@@ -5,6 +5,7 @@ import re
 
 SKILL = {
     "name": "volume",
+    "description": "Adjust speaker volume",
     "prompt": """volume
    Triggers: "raise volume", "lower volume", "set volume to X", "mute", "what's the volume", "check volume"
    Parameters: {{"action": "get|set|increase|decrease", "value": number (optional, not needed for get)}}

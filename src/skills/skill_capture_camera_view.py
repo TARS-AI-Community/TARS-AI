@@ -4,6 +4,7 @@ import threading
 
 SKILL = {
     "name": "capture_camera_view",
+    "description": "Capture and analyze what the camera sees",
     "prompt": """capture_camera_view
    Triggers: MUST USE when user asks ANY question about vision/seeing:
      * "what do you see", "look at", "what's visible", "describe surroundings"

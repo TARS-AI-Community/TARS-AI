@@ -1521,6 +1521,67 @@ def save_config():
         }), 500
 
 
+@flask_app.route('/get_skills', methods=['GET'])
+def get_skills():
+    """Return all discovered skills with config schemas and current values."""
+    try:
+        from modules.module_skills import get_skill_manager
+        sm = get_skill_manager()
+        if sm is None:
+            return jsonify({"skills": []})
+        return jsonify({"skills": sm.get_skills_info()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/toggle_skill', methods=['POST'])
+def toggle_skill():
+    """Enable or disable a skill via config.ini [SKILLS] disabled list."""
+    try:
+        data = request.get_json()
+        skill_name = data.get("name", "")
+        enabled = data.get("enabled", True)
+
+        if not skill_name:
+            return jsonify({"error": "Missing skill name"}), 400
+
+        from modules.module_skills import get_skill_manager
+        sm = get_skill_manager()
+        if sm is None:
+            return jsonify({"error": "Skill manager not initialized"}), 500
+
+        sm.set_enabled(skill_name, enabled)
+        queue_message(f"SKILLS: {'Enabled' if enabled else 'Disabled'} skill '{skill_name}'")
+        return jsonify({"success": True, "name": skill_name, "enabled": enabled})
+    except Exception as e:
+        queue_message(f"ERROR: Failed to toggle skill: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/save_skill_config', methods=['POST'])
+def save_skill_config():
+    """Save config values for a specific skill."""
+    try:
+        data = request.get_json()
+        skill_name = data.get("name", "")
+        values = data.get("values", {})
+
+        if not skill_name:
+            return jsonify({"error": "Missing skill name"}), 400
+
+        from modules.module_skills import get_skill_manager
+        sm = get_skill_manager()
+        if sm is None:
+            return jsonify({"error": "Skill manager not initialized"}), 500
+
+        sm.set_skill_config_bulk(skill_name, values)
+        queue_message(f"SKILLS: Config updated for '{skill_name}'")
+        return jsonify({"success": True, "name": skill_name})
+    except Exception as e:
+        queue_message(f"ERROR: Failed to save skill config: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @flask_app.route('/reboot_program', methods=['POST'])
 def reboot_program():
     """
