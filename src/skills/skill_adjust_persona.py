@@ -2,6 +2,7 @@
 
 SKILL = {
     "name": "adjust_persona",
+    "description": "Dynamically adjust personality traits like humor and formality",
     "prompt": """adjust_persona
    Triggers: "set [trait] to X", "change [trait]", "update [trait]", "make [trait] X"
    Parameters: {{"trait": "trait_name", "value": 0-100}}

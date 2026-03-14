@@ -542,9 +542,14 @@ class TarsConfigManager:
                 final_section.fields[field_name] = final_field
             
             final_sections[section_name] = final_section
-        
+
+        # Preserve dynamic sections (e.g. [SKILL:home_assistant]) not in template
+        for section_name, existing_section in existing_sections.items():
+            if section_name not in template_sections:
+                final_sections[section_name] = existing_section
+
         self.write_config_file(final_sections)
-        
+
         print(f"\n✅ TARS: Configuration synchronization complete!")
         print(f"TARS: The cosmic dance of data alignment is finished, Cooper.")
 
@@ -663,9 +668,14 @@ class TarsConfigManager:
                     final_section.fields[field_name] = final_field
                 
                 final_sections[section_name] = final_section
-            
+
+            # Preserve dynamic sections (e.g. [SKILL:home_assistant]) not in template
+            for section_name, existing_section in existing_sections.items():
+                if section_name not in template_sections:
+                    final_sections[section_name] = existing_section
+
             self.write_config_file(final_sections)
-            
+
             return True, f"Configuration updated successfully ({len(actions_taken)} changes)", actions_taken
             
         except Exception as e:

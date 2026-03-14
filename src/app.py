@@ -66,10 +66,6 @@ if USE_LITE_MEMORY:
 else:
     from modules.module_memory import MemoryManager
 
-# === Conditional Discord Import ===
-if CONFIG['DISCORD']['enabled']:
-    from modules.module_main import start_discord_bot, process_discord_message_callback
-
 # === Conditional Vision Import ===
 VISION_AVAILABLE = False
 if CONFIG['VISION']['enabled']:
@@ -256,6 +252,7 @@ def init_app():
 
 def start_discord_in_thread():
     """Start the Discord bot in a separate thread."""
+    from modules.module_main import start_discord_bot, process_discord_message_callback
     discord_thread = threading.Thread(
         target=start_discord_bot,
         args=(process_discord_message_callback,),
@@ -374,8 +371,10 @@ if __name__ == "__main__":
     except Exception as e:
         queue_message(f"WARNING: Identity coordinator not available: {e}")
 
-    # === Discord ===
-    if CONFIG['DISCORD']['enabled']:
+    # === Discord (enabled via Skills panel) ===
+    from modules.module_skills import get_skill_manager
+    _sm = get_skill_manager()
+    if _sm and _sm.is_enabled('discord') and os.getenv('DISCORD_TOKEN'):
         start_discord_in_thread()
 
     # === Initialize Managers ===

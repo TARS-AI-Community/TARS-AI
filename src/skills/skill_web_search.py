@@ -2,6 +2,7 @@
 
 SKILL = {
     "name": "web_search",
+    "description": "Search the web for current information",
     "prompt": """web_search
    Triggers: ONLY use when:
      * User asks about weather: "what's the weather", "is it cold outside"

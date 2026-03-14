@@ -8,14 +8,13 @@ It allows the bot to respond to messages and mentions in a specified Discord cha
 """
 
 # === Standard Libraries ===
+import os
 import discord
 
 # === Custom Modules ===
-from modules.module_config import load_config
 from modules.module_messageQue import queue_message
 
 # === Constants and Globals ===
-CONFIG = load_config()
 process_discord_message_callback = None
 
 # === Initialization ===
@@ -34,7 +33,10 @@ def start_discord_bot(callback):
     global process_discord_message_callback
     process_discord_message_callback = callback
 
-    bot_token = CONFIG['DISCORD']['TOKEN']
+    bot_token = os.getenv('DISCORD_TOKEN', '')
+    if not bot_token:
+        queue_message("ERROR: DISCORD_TOKEN not set in .env")
+        return
     client.run(bot_token)
     
 async def replace_mentions_with_usernames(content):

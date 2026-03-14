@@ -2,6 +2,7 @@
 
 SKILL = {
     "name": "reminder",
+    "description": "Set timed reminders and alerts",
     "prompt": """reminder
    Triggers: When the user asks you to:
      * Set a reminder, alarm, or timer: "remind me in 5 minutes", "set a timer for 30 seconds", "alarm in 2 hours"

@@ -242,52 +242,6 @@ battery_initial_voltage = 12
 # Minimum safe discharge voltage (3S LiPo: 10.5V, 4S: 14V)
 battery_cutoff_voltage = 10
 
-[HOME_ASSISTANT]
-# Enable Home Assistant integration (requires HOME_ASSISTANT_TOKEN in .env)
-enabled = False
-# Home Assistant server URL (e.g., http://192.168.1.50:8123)
-url = http://192.168.1.1:8123
-
-[DISCORD]
-# Enable Discord bot (requires DISCORD_TOKEN in .env)
-enabled = False
-# Discord channel ID (right-click channel > Copy Channel ID in Developer Mode)
-channel_id = 23434653456345
-
-[STABLE_DIFFUSION]
-# Enable image generation
-enabled = False
-# Backend: automatic1111 | comfyui | openai | external (use app-server)
-service = automatic1111
-# Image generation server URL (automatic1111 default: :7860, comfyui default: :8188)
-url = http://192.168.1.100:7860
-# Text added before every image prompt (sets overall style)
-prompt_prefix = in the style of midjourney
-# Text added after every image prompt (sets quality terms)
-prompt_postfix = clearly defined,high def,(detailed scene and background),key visual,vibrant,highly detailed
-# Random seed (-1 = random, fixed = reproducible)
-seed = -1
-# Diffusion sampler (euler_ancestral = fast + quality; dpmpp_2m = detailed)
-# ComfyUI sampler names: euler, euler_ancestral, dpmpp_2m, dpmpp_2m_sde, dpmpp_sde, uni_pc, etc.
-sampler_name = euler
-# Noise reduction strength 0.0–1.0 (img2img: how much image changes)
-denoising_strength = 0.5
-# Diffusion steps (20–30 = good balance; 50+ = diminishing returns)
-steps = 20
-# CFG scale: prompt adherence (1–5 = loose, 7–9 = balanced, 10+ = strict)
-cfg_scale = 7
-# Output image size (SD 1.5 native: 512x512, SDXL: 1024x1024)
-width = 480
-height = 320
-# Enable face restoration post-processing (useful for portraits)
-restore_faces = False
-# Terms to avoid in generated images
-negative_prompt = deformed,black and white,disfigured,low contrast,extra limbs,bad anatomy,bad hands
-# ComfyUI text-to-image workflow JSON path
-comfyui_workflow = Documentation/Comfy_UI_SD.json
-# ComfyUI image-to-image workflow JSON path
-comfyui_img2img_workflow = Documentation/Comfy_UI_IMG2IMG.json
-
 [SERVO]
 # True if arm servos are physically installed (affects movement calculations)
 arms_present = False
@@ -327,3 +281,13 @@ rightForearmOffset = 0
 rightHandMin = 300
 rightHandMax = 420
 rightHandOffset = 0
+
+[SKILL:discord]
+disabled = true
+channel_id = 811470553139249186
+
+[SKILL:home_assistant]
+disabled = true
+
+[SKILL:generate_image]
+disabled = true

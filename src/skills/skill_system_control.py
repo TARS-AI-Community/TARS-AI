@@ -4,6 +4,7 @@ import threading
 
 SKILL = {
     "name": "system_control",
+    "description": "Shut down, restart, or exit the program",
     "prompt": """system_control
    Triggers: Use ONLY when the user explicitly asks to exit/quit the program OR shut down/power off the device.
      * Exit: "exit the program", "quit the program", "close the program", "stop the program", "exit TARS", "quit TARS"

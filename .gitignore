@@ -168,8 +168,9 @@ interaction_log.json
 reminders.json
 scheduled_tasks.json
 
-# State files (UI preferences, terminal log — now in src/state/)
-src/state/
+# State files (UI preferences, terminal log)
+src/modules/UI/ui_settings.json
+src/memory/terminal_log.json
 
 # Character Data & Personas
 *persona.ini

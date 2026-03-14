@@ -27,6 +27,7 @@ import os
 
 SKILL = {
     "name": "browser",
+    "description": "Open websites and play videos on the display",
     "prompt": """browser
    Triggers: "open [website]", "go to [site]", "visit [url]", "play [video]", "show me [video]", "watch [video]"
    Parameters: {{"action": "open_url|play_youtube", "url": "https://... (for open_url)", "query": "search terms (for play_youtube)", "description": "optional"}}

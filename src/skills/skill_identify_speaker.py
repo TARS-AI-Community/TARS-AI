@@ -2,6 +2,7 @@
 
 SKILL = {
     "name": "identify_speaker_name",
+    "description": "Identify and remember who is speaking",
     "prompt": """identify_speaker_name
     Triggers: ONLY when someone explicitly tells you their name AND either:
       * The current speaker is UNKNOWN (system prompt says "Current speaker: UNKNOWN")

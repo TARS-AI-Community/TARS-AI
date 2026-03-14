@@ -5,6 +5,7 @@ import threading
 
 SKILL = {
     "name": "launch_retropie",
+    "description": "Launch RetroPie for retro gaming",
     "prompt": """launch_retropie
    Triggers: Use when user wants to play retro games or launch RetroPie/EmulationStation
      * "start retropie", "launch retropie", "open retropie"
