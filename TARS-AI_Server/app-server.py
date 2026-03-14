@@ -1501,7 +1501,7 @@ _WEB_API_PATHS = {
     "/v1",           # LLM chat completions + embeddings
     "/tts",          # TTS generate + voices
     "/save_audio", "/transcribe",  # STT
-    "/caption", "/generate_image", "/sdapi", "/imagegen_progress",  # Vision + ImageGen
+    "/caption", "/generate_image", "/sdapi", "/imagegen_progress", "/imagegen_gallery",  # Vision + ImageGen
 }
 # Paths exempt from ALL auth (health check, login, static API schema)
 _AUTH_EXEMPT = {"/health", "/login", "/logout", "/docs", "/openapi.json", "/redoc", "/ws/dashboard"}
@@ -2139,10 +2139,72 @@ async def generate_image_simple(request: Request):
         )
         image_bytes = await loop.run_in_executor(None, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
         log.info(f"ImageGen: \"{prompt[:60]}\"")
-        return StreamingResponse(BytesIO(image_bytes), media_type="image/png")
+        # Save to output folder with timestamp metadata
+        out_dir = Path(__file__).parent / "output" / "imagegen"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        fname = f"{ts}_{uuid.uuid4().hex[:8]}.png"
+        fpath = out_dir / fname
+        from PIL import Image as PILImage, PngImagePlugin
+        img_obj = PILImage.open(BytesIO(image_bytes))
+        meta = PngImagePlugin.PngInfo()
+        meta.add_text("timestamp", time.strftime("%Y-%m-%d %H:%M:%S"))
+        meta.add_text("prompt", prompt)
+        meta.add_text("negative_prompt", body.get("negative_prompt", ""))
+        meta.add_text("steps", str(gen_kwargs["steps"]))
+        meta.add_text("cfg_scale", str(gen_kwargs["cfg_scale"]))
+        meta.add_text("width", str(gen_kwargs["width"]))
+        meta.add_text("height", str(gen_kwargs["height"]))
+        meta.add_text("seed", str(gen_kwargs["seed"]))
+        img_obj.save(str(fpath), pnginfo=meta)
+        return StreamingResponse(BytesIO(image_bytes), media_type="image/png",
+                                 headers={"X-Image-Filename": fname})
     except Exception as e:
         log.error(f"ImageGen error: {traceback.format_exc()}")
         raise HTTPException(500, str(e))
+
+
+@app.get("/imagegen_gallery")
+async def imagegen_gallery_list():
+    out_dir = Path(__file__).parent / "output" / "imagegen"
+    if not out_dir.exists():
+        return {"images": []}
+    files = sorted(out_dir.glob("*.png"), key=lambda f: f.stat().st_mtime, reverse=True)
+    results = []
+    for f in files:
+        meta = {}
+        try:
+            from PIL import Image as PILImage
+            img = PILImage.open(str(f))
+            meta = dict(img.info) if img.info else {}
+            img.close()
+        except Exception:
+            pass
+        results.append({"filename": f.name, "meta": meta})
+    return {"images": results}
+
+
+@app.get("/imagegen_gallery/file/{filename}")
+async def imagegen_gallery_file(filename: str):
+    import re
+    if not re.match(r'^[\w\-]+\.png$', filename):
+        raise HTTPException(400, "Invalid filename")
+    fpath = Path(__file__).parent / "output" / "imagegen" / filename
+    if not fpath.exists():
+        raise HTTPException(404, "File not found")
+    return StreamingResponse(open(str(fpath), "rb"), media_type="image/png")
+
+
+@app.delete("/imagegen_gallery/{filename}")
+async def imagegen_gallery_delete(filename: str):
+    import re
+    if not re.match(r'^[\w\-]+\.png$', filename):
+        raise HTTPException(400, "Invalid filename")
+    fpath = Path(__file__).parent / "output" / "imagegen" / filename
+    if not fpath.exists():
+        raise HTTPException(404, "File not found")
+    fpath.unlink()
+    return {"ok": True}
 
 
 @app.get("/imagegen_progress/{task_id}")
@@ -2526,6 +2588,14 @@ label{font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-trans
 audio{width:100%;margin-top:12px;border-radius:var(--radius-sm);outline:none}
 audio::-webkit-media-controls-panel{background:var(--bg2)}
 img.preview{max-width:100%;max-height:400px;margin-top:12px;border:1px solid var(--border);border-radius:var(--radius-sm)}
+.img-gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.img-gallery-item{position:relative;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:rgba(0,0,0,0.2);transition:border-color .2s}
+.img-gallery-item:hover{border-color:var(--border-hi)}
+.img-gallery-item img{width:100%;display:block;cursor:pointer}
+.img-gallery-item .img-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:1px solid rgba(255,68,68,0.4);background:rgba(10,18,32,0.85);color:var(--red);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;opacity:.6;transition:opacity .2s}
+.img-gallery-item .img-del:hover{opacity:1;background:rgba(255,68,68,0.2);border-color:var(--red)}
+.img-gallery-item .img-meta{position:absolute;bottom:0;left:0;right:0;padding:4px 6px;background:linear-gradient(transparent,rgba(0,0,0,0.8));font-size:9px;color:var(--text-dim);opacity:0;transition:opacity .2s;pointer-events:none}
+.img-gallery-item:hover .img-meta{opacity:1}
 input[type=file]{font-family:var(--font-mono);font-size:12px;color:var(--text-dim)}
 input[type=file]::file-selector-button{font-family:var(--font-hud);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:8px 16px;border:1px solid rgba(0,229,255,0.3);border-radius:var(--radius-sm);background:rgba(0,229,255,0.06);color:var(--cyan);cursor:pointer;margin-right:10px;transition:all .2s}
 input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);border-color:var(--border-hi)}
@@ -2600,13 +2670,16 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
     <div><label>CFG</label><input type="number" id="img-cfg" value="7.0" min="1" max="30" step="0.5"></div>
     <div><label>Seed</label><input type="number" id="img-seed" value="-1" min="-1" placeholder="-1"></div>
   </div>
-  <button class="hud-btn" id="img-gen-btn" onclick="generateImg()">Generate</button>
+  <div style="display:flex;gap:8px;align-items:stretch;margin:6px 0">
+    <button class="hud-btn" id="img-gen-btn" onclick="generateImg()" style="margin:0;white-space:nowrap">Generate</button>
+    <div id="img-out" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(0,229,255,0.1);border-radius:var(--radius-sm);padding:0 12px;display:flex;align-items:center;font-size:12px;color:var(--text-dim);min-height:0">Enter a prompt and click Generate.</div>
+  </div>
   <div id="img-progress-wrap" style="display:none;margin:8px 0">
     <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px"><span id="img-progress-label">Starting...</span><span id="img-progress-pct">0%</span></div>
     <div style="height:6px;background:rgba(0,229,255,0.1);border-radius:3px;overflow:hidden"><div id="img-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#00e5ff,#7c4dff);border-radius:3px;transition:width .3s ease"></div></div>
   </div>
-  <div class="output" id="img-out">Enter a prompt and click Generate.</div>
-  <img class="preview" id="img-preview" style="display:none">
+  <div id="img-preview-wrap" style="display:none;text-align:center;margin-top:12px"><img id="img-preview" style="max-width:100%;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
+  <div id="img-gallery" style="margin-top:12px"></div>
 </div></div>
 <div style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap">
   <a href="/" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Dashboard</a>
@@ -2764,7 +2837,7 @@ async function generateImg(){
   const btn=document.getElementById('img-gen-btn');
   btn.disabled=true;btn.style.opacity='0.5';
   document.getElementById('img-out').textContent='';
-  document.getElementById('img-preview').style.display='none';
+  document.getElementById('img-preview-wrap').style.display='none';
   const wrap=document.getElementById('img-progress-wrap');
   const bar=document.getElementById('img-progress-bar');
   const pctEl=document.getElementById('img-progress-pct');
@@ -2789,9 +2862,10 @@ async function generateImg(){
     bar.style.width='100%';pctEl.textContent='100%';lbl.textContent='Complete';
     if(!resp.ok){document.getElementById('img-out').textContent='Error: '+resp.status+' '+resp.statusText;setTimeout(function(){wrap.style.display='none'},2000);return}
     const blob=await resp.blob();const url=URL.createObjectURL(blob);
-    const img=document.getElementById('img-preview');img.src=url;img.style.display='block';
+    const img=document.getElementById('img-preview');img.src=url;document.getElementById('img-preview-wrap').style.display='block';
     document.getElementById('img-out').textContent='Done.';
     setTimeout(function(){wrap.style.display='none'},2000);
+    loadGallery();
   }catch(e){done=true;clearInterval(poll);wrap.style.display='none';document.getElementById('img-out').textContent='Error: '+e}
   finally{btn.disabled=false;btn.style.opacity=''}
 }
@@ -2811,6 +2885,34 @@ fetch(base+'/api/settings').then(function(r){return r.json()}).then(function(d){
   p.addEventListener('input',function(){localStorage.setItem('img-prompt',p.value)});
   n.addEventListener('input',function(){localStorage.setItem('img-neg',n.value)});
 })();
+
+async function loadGallery(){
+  var g=document.getElementById('img-gallery');
+  try{
+    var r=await fetch(base+'/imagegen_gallery');var d=await r.json();
+    if(!d.images||!d.images.length){g.innerHTML='';return}
+    var html='<label style="margin-top:8px">Gallery</label><div class="img-gallery-grid">';
+    d.images.forEach(function(item){
+      var m=item.meta||{};
+      var tip=(m.prompt||'')+(m.timestamp?'\n'+m.timestamp:'')+(m.steps?'\nSteps: '+m.steps:'')+(m.cfg_scale?'  CFG: '+m.cfg_scale:'')+(m.seed?'  Seed: '+m.seed:'');
+      html+='<div class="img-gallery-item">';
+      html+='<img src="'+base+'/imagegen_gallery/file/'+item.filename+'" title="'+tip.replace(/"/g,'&quot;')+'" onclick="document.getElementById(\'img-preview\').src=this.src;document.getElementById(\'img-preview-wrap\').style.display=\'block\'">';
+      html+='<button class="img-del" onclick="deleteGalleryImg(event,\''+item.filename+'\')">&times;</button>';
+      html+='<div class="img-meta">'+(m.prompt?m.prompt.substring(0,40):'')+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+    g.innerHTML=html;
+  }catch(e){g.innerHTML=''}
+}
+async function deleteGalleryImg(e,fname){
+  e.stopPropagation();e.preventDefault();
+  try{
+    await fetch(base+'/imagegen_gallery/'+fname,{method:'DELETE'});
+    loadGallery();
+  }catch(e){}
+}
+loadGallery();
 
 // Vision: image preview + drag-and-drop
 (function(){
