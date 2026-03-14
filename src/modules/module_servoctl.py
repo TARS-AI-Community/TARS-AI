@@ -337,14 +337,22 @@ def initialize_servos():
         if controls.get('enabled', False) or controls.get('voicemovement', False):
             queue_message("WARNING: Cannot initialize servos - PCA9685 not available")
         return
-    
+
     try:
         for channel in range(16):
             pca.channels[channel].duty_cycle = 0
     except Exception as e:
         queue_message(f"Error initializing servos: {e}")
-    
+
     time.sleep(0.1)
+
+    # Gently re-engage servos at their saved positions before moving to neutral
+    if servo_positions:
+        for channel, value in servo_positions.items():
+            set_servo_pwm(int(channel), value)
+            time.sleep(0.02)
+        time.sleep(0.3)
+
     reset_positions()
     print("All servos initialized")
 
@@ -362,28 +370,35 @@ def disable_all_servos():
 
 def reset_positions():
     global servo_positions
-    
-    servo_positions[0] = leftNeutralHeight
-    servo_positions[1] = rightNeutralHeight
-    servo_positions[2] = neutralLeftLeg
-    servo_positions[3] = neutralRightLeg
-    servo_positions[4] = leftMainMin
-    servo_positions[5] = leftForarmMin
-    servo_positions[6] = leftHandMin
-    servo_positions[7] = rightMainMin
-    servo_positions[8] = rightForarmMin
-    servo_positions[9] = rightHandMin
-    
+
+    # Use saved positions as starting points (don't overwrite them)
+    # This ensures smooth movement from last known position to neutral
+    neutral_defaults = {
+        0: leftNeutralHeight,
+        1: rightNeutralHeight,
+        2: neutralLeftLeg,
+        3: neutralRightLeg,
+        4: leftMainMin,
+        5: leftForarmMin,
+        6: leftHandMin,
+        7: rightMainMin,
+        8: rightForarmMin,
+        9: rightHandMin,
+    }
+    for ch, val in neutral_defaults.items():
+        if ch not in servo_positions:
+            servo_positions[ch] = val
+
     disable_all_servos()
-    
+
     move_legs(30, 30, 50, 50, 0.5)
     time.sleep(0.2)
     move_legs(50, 50, 50, 50, 0.5)
     time.sleep(0.3)
-    
+
     move_arm(1, 1, 1, 1, 1, 1, 0.3)
     time.sleep(0.5)
-    
+
     disable_all_servos()
 
 def move_servos_synchronized(movements, speed_factor, easing_strength=None):
