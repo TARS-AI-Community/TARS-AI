@@ -135,9 +135,8 @@ def _bootstrap_deps():
         print("[TARS] Try manually: pip install torch transformers fastapi uvicorn accelerate")
         sys.exit(rc)
 
-    # llama-cpp-python is optional — install separately so failures don't block startup
-    subprocess.call([sys.executable, "-m", "pip", "install",
-                     "llama-cpp-python>=0.3.0", "--quiet"])
+    # llama-cpp-python is installed on-demand at runtime (see _ensure_llamacpp)
+    # to avoid compiler requirements. Skipping it here.
 
     print("[TARS] Dependencies installed. Restarting...")
     _restart_self()
@@ -261,115 +260,102 @@ def get_system_stats() -> dict:
         return {}
 
 
-def _check_cuda_vs_integration() -> bool:
-    """Return True if CUDA Visual Studio integration files are present."""
-    import glob
-    # CUDA installs MSBuild customization files into VS when VS integration is selected
-    patterns = [
-        "C:/Program Files*/Microsoft Visual Studio/*/BuildTools/MSBuild/Microsoft/VC/*/BuildCustomizations/CUDA*.targets",
-        "C:/Program Files*/Microsoft Visual Studio/*/Community/MSBuild/Microsoft/VC/*/BuildCustomizations/CUDA*.targets",
-        "C:/Program Files*/Microsoft Visual Studio/*/Professional/MSBuild/Microsoft/VC/*/BuildCustomizations/CUDA*.targets",
-        "C:/Program Files*/Microsoft Visual Studio/*/Enterprise/MSBuild/Microsoft/VC/*/BuildCustomizations/CUDA*.targets",
-    ]
-    return any(glob.glob(p) for p in patterns)
 
+def _ensure_llamacpp():
+    """Install llama-cpp-python using pre-built wheels only — no compiler required.
 
-def _check_vulkan_sdk() -> bool:
-    """Return True if Vulkan SDK is installed."""
-    return bool(os.environ.get("VULKAN_SDK") or
-                os.path.isdir("C:/VulkanSDK") or
-                os.path.isdir("C:/Program Files (x86)/VulkanSDK"))
+    Strategy:
+      1. Already installed with GPU support → do nothing.
+      2. CUDA available → try matching CUDA pre-built wheel (--prefer-binary).
+      3. Fall back to CPU pre-built wheel (--prefer-binary).
+      4. Never attempt a source build — avoids Visual Studio / compiler requirements.
 
-
-def _ensure_llamacpp_gpu():
-    """Ensure llama-cpp-python has GPU support. Pre-checks toolchain before attempting build.
-    Uses a stamp file to avoid retrying failed builds on every startup."""
-    if DEVICE != "cuda":
-        return
-    try:
-        from llama_cpp import llama_supports_gpu_offload  # type: ignore[import]
-        if llama_supports_gpu_offload():
-            return  # Already has GPU support
-    except ImportError:
-        return  # Not installed — will raise a clear error when first used
-
-    # Don't retry if a previous GPU build attempt already failed
-    stamp = Path(__file__).parent / ".llamacpp_gpu_failed"
-    if stamp.exists():
-        hint = ""
-        vi = sys.version_info
-        if vi.major == 3 and vi.minor >= 13:
-            hint = " Pre-built CUDA wheels only exist for Python <=3.12."
-        log.warning("llama-cpp-python running on CPU (GPU build previously failed)."
-                    f"{hint} Delete .llamacpp_gpu_failed to retry.")
-        return
-
+    Uses a stamp file so a failed install isn't retried on every startup.
+    Delete .llamacpp_install_failed to force a retry.
+    """
+    import importlib
     import subprocess
 
-    # Try 1: Pre-built CUDA wheel (fastest install, no build tools needed)
-    log.info("llama-cpp-python: trying pre-built CUDA 12.4 wheel...")
-    rc = subprocess.call([
-        sys.executable, "-m", "pip", "install", "llama-cpp-python",
-        "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cu124",
-        "--force-reinstall", "--no-cache-dir", "--quiet",
-    ])
-    if rc == 0:
+    # Already installed — check for GPU support if on CUDA
+    try:
+        importlib.invalidate_caches()
+        from llama_cpp import llama_supports_gpu_offload  # type: ignore[import]
+        if DEVICE != "cuda" or llama_supports_gpu_offload():
+            return  # Good to go
+        # Installed but CPU-only and we have a GPU — fall through to reinstall
+        log.info("llama-cpp-python installed but CPU-only — attempting GPU wheel upgrade...")
+    except ImportError:
+        log.info("llama-cpp-python not found — installing pre-built wheel...")
+
+    stamp = Path(__file__).parent / ".llamacpp_install_failed"
+    if stamp.exists():
+        log.warning(
+            "llama-cpp-python pre-built wheel install previously failed — skipping.\n"
+            "  Delete .llamacpp_install_failed to retry.\n"
+            "  GGUF models will not be available."
+        )
+        return
+
+    def _try_wheel(label: str, index_url: str) -> bool:
+        log.info(f"llama-cpp-python: trying {label} pre-built wheel...")
+        rc = subprocess.call([
+            sys.executable, "-m", "pip", "install", "llama-cpp-python",
+            "--extra-index-url", index_url,
+            "--prefer-binary",          # never compile from source
+            "--force-reinstall",
+            "--no-cache-dir",
+            "--quiet",
+        ])
+        if rc != 0:
+            return False
+        # Verify the install actually worked
         try:
-            import importlib
             importlib.invalidate_caches()
-            from llama_cpp import llama_supports_gpu_offload  # type: ignore[import]
-            if llama_supports_gpu_offload():
-                log.info("llama-cpp-python CUDA wheel installed. Restarting...")
-                _restart_self()
+            import llama_cpp  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
+    # Detect CUDA version from torch so we pick the right wheel index
+    cuda_ver = None
+    if DEVICE == "cuda":
+        try:
+            raw = torch.version.cuda  # e.g. "12.4"
+            cuda_ver = "cu" + raw.replace(".", "")[:3]  # → "cu124"
         except Exception:
             pass
 
-    # Try 2: Build from source with CUDA or Vulkan
-    has_cuda_vs = _check_cuda_vs_integration()
-    has_vulkan  = _check_vulkan_sdk()
+    installed = False
 
-    if not has_cuda_vs and not has_vulkan:
-        stamp.write_text("No CUDA VS integration or Vulkan SDK found.\n")
+    if cuda_ver:
+        gpu_index = f"https://abetlen.github.io/llama-cpp-python/whl/{cuda_ver}"
+        installed = _try_wheel(f"CUDA {torch.version.cuda}", gpu_index)
+        if not installed:
+            # Try adjacent CUDA versions (wheels aren't published for every minor)
+            for fallback in ("cu125", "cu123", "cu122"):
+                if fallback != cuda_ver:
+                    fb_index = f"https://abetlen.github.io/llama-cpp-python/whl/{fallback}"
+                    installed = _try_wheel(f"CUDA fallback ({fallback})", fb_index)
+                    if installed:
+                        break
+
+    if not installed:
+        installed = _try_wheel("CPU", "https://abetlen.github.io/llama-cpp-python/whl/cpu")
+
+    if installed:
+        log.info("llama-cpp-python installed successfully. Restarting...")
+        _restart_self()
+    else:
+        stamp.write_text("Pre-built wheel install failed — delete this file to retry.\n")
         log.warning(
-            "llama-cpp-python GPU build skipped — no compatible GPU SDK found.\n"
-            "  To enable GPU, install one of the following then delete .llamacpp_gpu_failed:\n"
-            "  CUDA:   install CUDA 12.x from https://developer.nvidia.com/cuda-toolkit-archive\n"
-            "          (select 'Visual Studio Integration' during install)\n"
-            "  Vulkan: install Vulkan SDK from https://vulkan.lunarg.com/sdk/home\n"
-            "  Running on CPU until then."
+            "llama-cpp-python could not be installed from pre-built wheels.\n"
+            "  GGUF models will not be available.\n"
+            "  Delete .llamacpp_install_failed to retry on next startup.\n"
+            "  Manual install: pip install llama-cpp-python --prefer-binary "
+            "--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu"
         )
-        return
 
-    subprocess.call([sys.executable, "-m", "pip", "install",
-                     "cmake==3.30.5", "scikit-build-core", "pyproject-metadata", "ninja",
-                     "--quiet"])
-
-    def _try_build(label: str, cmake_args: str) -> bool:
-        log.info(f"llama-cpp-python: building with {label}...")
-        env = {**os.environ, "CMAKE_ARGS": cmake_args}
-        rc = subprocess.call(
-            [sys.executable, "-m", "pip", "install", "llama-cpp-python",
-             "--no-build-isolation", "--no-cache-dir", "--force-reinstall"],
-            env=env,
-        )
-        if rc == 0:
-            log.info(f"llama-cpp-python built with {label}. Restarting...")
-            _restart_self()
-        return rc == 0
-
-    if has_cuda_vs and _try_build("CUDA", "-DGGML_CUDA=on"):
-        return
-    if has_vulkan and _try_build("Vulkan", "-DGGML_VULKAN=on"):
-        return
-
-    stamp.write_text("GPU build failed — delete this file to retry.\n")
-    log.warning(
-        "llama-cpp-python GPU build failed — running on CPU.\n"
-        "  CUDA: ensure CUDA 12.x is installed with Visual Studio Integration component.\n"
-        "  Vulkan: ensure Vulkan SDK glslc is in PATH."
-    )
-
-# _ensure_llamacpp_gpu() is called on-demand when LLM backend is "llamacpp"
+# _ensure_llamacpp() is called on-demand when LLM backend is "llamacpp"
 
 
 def resolve_service_device(cfg_value: str) -> str:
@@ -3174,7 +3160,7 @@ def _load_single_service(name: str, args):
             log.info(f"LLM backend auto-detected: {backend}")
 
         if backend == "llamacpp":
-            _ensure_llamacpp_gpu()
+            _ensure_llamacpp()
             SERVICES["llm"] = LlamaCppService(
                 model_path=args.llm_model, n_ctx=n_ctx, n_gpu_layers=n_gpu,
                 n_batch=n_batch, flash_attn=flash_attn,
@@ -3280,8 +3266,24 @@ if __name__ == "__main__":
     gpu = get_gpu_stats()
     api_key = _active_config.get("server", "api_key", fallback="") if _active_config else ""
     proto = "https" if args.ssl_cert else "http"
+
+    # Resolve display address — replace 0.0.0.0 with the actual LAN IP
+    import socket as _socket
+    display_host = args.host
+    if args.host in ("0.0.0.0", ""):
+        try:
+            # Connect to an external address (doesn't send data) to find the
+            # outbound interface IP — works on Windows, macOS, and Linux
+            with _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM) as _s:
+                _s.connect(("8.8.8.8", 80))
+                display_host = _s.getsockname()[0]
+        except Exception:
+            display_host = "localhost"
+
+    base_url = f"{proto}://{display_host}:{args.port}"
+
     log.info("=" * 50)
-    log.info(f"TARS-AI Server ready on {proto}://{args.host}:{args.port}")
+    log.info(f"TARS-AI Server ready on {base_url}")
     log.info(f"Services: {', '.join(s.upper() for s in SERVICES)}")
     if gpu:
         log.info(f"GPU: {gpu['name']} — {gpu['vram_allocated_gb']:.1f}/{gpu['vram_total_gb']:.1f} GB VRAM")
@@ -3289,9 +3291,13 @@ if __name__ == "__main__":
         log.info(f"Auth: API key enabled ({api_key[:6]}...)")
     else:
         log.info(f"Auth: OPEN (no API key set — set one in Settings or config-server.ini)")
-    log.info(f"Dashboard:  {proto}://{args.host}:{args.port}/")
-    log.info(f"Settings:   {proto}://{args.host}:{args.port}/ui")
-    log.info(f"Playground: {proto}://{args.host}:{args.port}/playground")
+    log.info(f"Dashboard:  {base_url}/")
+    log.info(f"Settings:   {base_url}/ui")
+    log.info(f"Playground: {base_url}/playground")
+    if api_key:
+        log.info(f"API Key:    {api_key}")
+    else:
+        log.info(f"API Key:    none (open access)")
     log.info("=" * 50)
 
     uvicorn_kwargs = {

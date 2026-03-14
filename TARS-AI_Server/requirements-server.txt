@@ -41,8 +41,9 @@ qrcode[pil]>=7.0
 # Quantization (8-bit / 4-bit LLM inference)
 bitsandbytes>=0.43.0
 
-# LLM - llama.cpp backend (GGUF models, much faster than transformers on consumer GPUs)
-# CPU build installed here. The server auto-upgrades to a pre-built CUDA wheel on first run
-# if a GPU is detected. Manual CUDA install (if auto fails):
-#   pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124 --force-reinstall
-llama-cpp-python>=0.3.0
+# LLM - llama.cpp backend (GGUF models)
+# NOT listed here — installed automatically at runtime by app-server.py using
+# pre-built wheels (no compiler required). See _ensure_llamacpp() in app-server.py.
+# Manual install if needed:
+#   GPU: pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124 --prefer-binary
+#   CPU: pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu --prefer-binary

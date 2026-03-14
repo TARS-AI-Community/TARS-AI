@@ -162,6 +162,7 @@ TARS_lite.json
 initial_memory.loaded
 initial_memory.json
 voice_memory.json
+voice_memory.json.bak
 last_prompt.txt
 pi_version
 interaction_log.json
