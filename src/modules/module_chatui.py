@@ -2219,8 +2219,11 @@ def dashboard_topic_delete():
 @flask_app.route('/api/dashboard/graph')
 def dashboard_graph():
     """Return nodes+links for a brain-like D3 knowledge graph."""
+    from datetime import datetime, timedelta
     import modules.module_llm as _llm
     mm = _llm.memory_manager
+    max_memories = request.args.get('max_memories', 500, type=int)
+    hours = request.args.get('hours', 0, type=int)  # 0 = no time filter
     nodes = []
     links = []
     node_ids = set()
@@ -2298,15 +2301,39 @@ def dashboard_graph():
         add_node({"id": "hub_memory", "name": "MEMORIES", "color": "#ffca28", "size": 22, "group": "hub"})
         links.append({"source": "BRAIN", "target": "hub_memory"})
 
-        docs = mm.hyper_db.documents if _has_full else mm.documents
+        all_docs = mm.hyper_db.documents if _has_full else mm.documents
+
+        # Time filter: only include documents within the requested window
+        cutoff = None
+        if hours > 0:
+            cutoff = datetime.now() - timedelta(hours=hours)
+
+        # Take most recent documents up to the cap
+        docs_indexed = []
+        for i, doc in enumerate(all_docs):
+            if not isinstance(doc, dict):
+                continue
+            if cutoff:
+                ts = doc.get('timestamp', '')
+                if ts:
+                    try:
+                        doc_dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                        if doc_dt < cutoff:
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+            docs_indexed.append((i, doc))
+
+        # Cap total memories to prevent browser lag
+        if len(docs_indexed) > max_memories:
+            docs_indexed = docs_indexed[-max_memories:]
+
         # Classify memories into buckets
         speaker_groups = {}  # speaker name -> list of (i, doc)
         ingested = []        # memories with no user_input (bulk loaded)
         conversations = []   # memories with user_input but no/unknown speaker
 
-        for i, doc in enumerate(docs):
-            if not isinstance(doc, dict):
-                continue
+        for i, doc in docs_indexed:
             user_in = doc.get('user_input', '').strip()
             bot_resp = doc.get('bot_response', '').strip()
             speaker = doc.get('speaker', '').strip()
@@ -2454,7 +2481,7 @@ def dashboard_graph():
                 links.append({"source": cat_nid, "target": nid})
 
 
-    return jsonify({"nodes": nodes, "links": links})
+    return jsonify({"nodes": nodes, "links": links, "total_memories": len(nodes)})
 
 
 @flask_app.route('/api/dashboard/mood')
