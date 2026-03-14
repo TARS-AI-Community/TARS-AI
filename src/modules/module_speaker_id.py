@@ -208,14 +208,6 @@ class SpeakerIDManager:
 
     def _save_voice_data(self):
         """Atomically write voice data cache to disk. Must be called under _file_lock."""
-        # Keep a backup of the last good state before overwriting
-        bak_path = self._memory_path + '.bak'
-        if os.path.exists(self._memory_path) and os.path.getsize(self._memory_path) > 2:
-            try:
-                import shutil
-                shutil.copy2(self._memory_path, bak_path)
-            except Exception:
-                pass
         tmp_path = self._memory_path + '.tmp'
         with open(tmp_path, 'w') as f:
             json.dump(self._voice_data, f, indent=2)
@@ -223,30 +215,24 @@ class SpeakerIDManager:
 
     def _load_voice_memory(self):
         """Load enrolled speaker embeddings from JSON file into the manager and cache."""
-        # Try primary file first, fall back to .bak if corrupt/empty
-        for path in [self._memory_path, self._memory_path + '.bak']:
-            if not os.path.exists(path) or os.path.getsize(path) < 2:
-                continue
-            try:
-                with self._file_lock:
-                    with open(path, 'r') as f:
-                        self._voice_data = json.load(f)
+        if not os.path.exists(self._memory_path) or os.path.getsize(self._memory_path) < 2:
+            queue_message("INFO: No voice memory found — starting fresh")
+            return
+        try:
+            with self._file_lock:
+                with open(self._memory_path, 'r') as f:
+                    self._voice_data = json.load(f)
 
-                for speaker in self._voice_data.get("speakers", []):
-                    name = speaker["name"]
-                    embeddings = speaker.get("embeddings", [])
-                    if embeddings:
-                        self._manager.add(name, embeddings)
-                        queue_message(f"INFO: Speaker ID restored '{name}' ({len(embeddings)} vectors)")
+            for speaker in self._voice_data.get("speakers", []):
+                name = speaker["name"]
+                embeddings = speaker.get("embeddings", [])
+                if embeddings:
+                    self._manager.add(name, embeddings)
+                    queue_message(f"INFO: Speaker ID restored '{name}' ({len(embeddings)} vectors)")
 
-                if path != self._memory_path:
-                    queue_message(f"WARNING: Loaded voice memory from backup ({path})")
-                return
-
-            except Exception as e:
-                queue_message(f"WARNING: Failed to load voice memory from {path}: {e}")
-
-        queue_message("INFO: No voice memory found — starting fresh")
+        except Exception as e:
+            queue_message(f"WARNING: Failed to load voice memory: {e}")
+            queue_message("INFO: No voice memory found — starting fresh")
 
     def _add_speaker_to_memory(self, name: str, embeddings, role: str = "guest"):
         """Add embedding(s) for a speaker to voice memory cache, disk, and manager.
