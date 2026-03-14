@@ -213,7 +213,7 @@ font_size = 12
 screensaver_timer = 300
 # Seconds per screensaver when using multiple animations
 screensaver_cycle_interval = 300
-# Screensaver animations: random, or names like face,matrix,starfield (Available animations: blackhole, waves, matrix, starfield, hyperspace, terminal, face, fractal, pacman, nebulas, pictures, dashboard, defrag, bounce, endurance, toasters, aquarium)
+# Screensaver animations: random, or names like face,matrix,starfield (Available animations: blackhole, waves, matrix, starfield, hyperspace, terminal, face, fractal, pacman, nebulas, pictures, dashboard, defrag, bounce, endurance, toasters, aquarium, dream)
 screensaver_list = random
 
 [CONTROLS]

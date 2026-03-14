@@ -2786,7 +2786,7 @@ body::after {
 
   /* enable internal scrolling on tabs that need it */
   #wifi.tab-pane, #emotions.tab-pane, #nexus.tab-pane,
-  #config.tab-pane, #body.tab-pane { overflow-y: auto; }
+  #config.tab-pane, #body.tab-pane, #dashboard.tab-pane { overflow-y: auto; }
 
   /* ── CHAT TAB MOBILE ── */
   .chat-wrap {
@@ -3087,7 +3087,7 @@ body::after {
   .tab-pane, .tab-pane.fade:not(.show) { position: relative; inset: auto; flex: 0 0 100%; width: 100%; height: 100%; opacity: 1; visibility: visible; pointer-events: none; transition: none; overflow: hidden; }
   .tab-pane.active { pointer-events: auto; }
   #wifi.tab-pane, #emotions.tab-pane, #nexus.tab-pane,
-  #config.tab-pane, #body.tab-pane { overflow-y: auto; }
+  #config.tab-pane, #body.tab-pane, #dashboard.tab-pane { overflow-y: auto; }
 
   /* Motion: side-by-side in landscape */
   .motion-wrap { flex-direction: row; }
@@ -3406,12 +3406,12 @@ body::after {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  height: calc(100vh - var(--tab-h));
+  height: 100%;
   overflow: hidden;
 }
 @media (max-width: 768px) {
   .dash-wrap {
-    padding-bottom: 72px; /* space for mobile nav */
+    padding: 6px 8px 4px;
   }
 }
 
@@ -3516,7 +3516,7 @@ body::after {
 }
 .dash-graph-container {
   flex: 1;
-  min-height: 400px;
+  min-height: 0;
   background: radial-gradient(ellipse at center, rgba(var(--accent-rgb),0.03) 0%, rgba(10,18,32,0.5) 70%);
   border: 1px solid rgba(var(--accent-rgb),0.1);
   border-radius: var(--radius);
@@ -3528,6 +3528,65 @@ body::after {
 .dash-graph-container svg {
   width: 100%;
   height: 100%;
+}
+
+/* Graph controls bar */
+.dash-graph-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 6px 12px;
+  background: rgba(10,18,32,0.5);
+  border: 1px solid rgba(var(--accent-rgb),0.1);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: rgba(226,234,242,0.6);
+  flex-shrink: 0;
+}
+.dash-graph-controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+}
+.dash-graph-controls input[type="range"] {
+  width: 100px;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
+.dash-graph-controls select {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text);
+  background: rgba(5,10,20,0.7);
+  border: 1px solid rgba(var(--accent-rgb),0.2);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%2300e5ff' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 22px;
+}
+.dash-graph-controls select:focus {
+  border-color: rgba(var(--accent-rgb),0.4);
+}
+.dash-graph-controls select option {
+  background: #0a1220;
+  color: var(--text);
+}
+.dash-graph-controls .dash-graph-node-count {
+  margin-left: auto;
+  opacity: 0.5;
+  font-size: 0.65rem;
+  letter-spacing: 0.5px;
 }
 
 /* Detail side panel — floating card over graph edge */
@@ -4086,7 +4145,7 @@ body::after {
 
 /* Responsive */
 @media (max-width: 600px) {
-  .dash-wrap { padding: 8px 8px 80px; gap: 8px; }
+  .dash-wrap { padding: 6px 8px 4px; gap: 8px; }
   .dash-stats-strip { gap: 4px; }
   .dash-stat { padding: 8px 4px; min-width: 60px; }
   .dash-stat-value { font-size: 1rem; }
@@ -4095,7 +4154,6 @@ body::after {
   .dash-chart-title { font-size: 0.55rem; letter-spacing: 1px; }
   .dash-detail-drawer { width: 260px; right: -280px; }
   .dash-log-entry { padding: 8px 10px; font-size: 0.7rem; }
-  .dash-graph-container { min-height: 350px; }
 }
 
 /* ── Skill Status Indicator ───────────────────────────────────────────────── */

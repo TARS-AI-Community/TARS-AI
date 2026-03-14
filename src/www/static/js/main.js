@@ -565,10 +565,9 @@ document.addEventListener('DOMContentLoaded', function () {
     audioStarted = false;
     stop_talking();
     if (window.showToast) showToast('Connection lost — reconnecting...', 'error');
-    setTimeout(() => {
-      if (connDot) connDot.className = 'conn-dot reconnecting';
-      socket.connect();
-    }, 2000);
+    // Socket.IO auto-reconnects — do NOT manually call socket.connect()
+    // as that creates duplicate connections
+    if (connDot) connDot.className = 'conn-dot reconnecting';
   });
   socket.on('reconnect_attempt', () => {
     if (connDot) connDot.className = 'conn-dot reconnecting';
@@ -792,7 +791,13 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       return;
     }
+    // Guard: ignore duplicate transcriptions if already processing
+    if (_botResponding) {
+      _dbg('[MIC] STT result ignored — bot already responding:', text);
+      return;
+    }
     _dbg('[MIC] STT result:', text);
+    _botResponding = true;  // set immediately to block duplicates
     voiceStatus.textContent = 'Processing...';
     displayUserMessage(text);
     sendUserMessage(text);
@@ -3003,10 +3008,42 @@ function $(id) { return document.getElementById(id); }
 
   // ── GRAPH ──
   function loadGraph() {
-    fetch('/api/dashboard/graph').then(function (r) { return r.json(); }).then(function (data) {
-      renderGraph(data.nodes, data.links);
-    }).catch(function () {});
+    var maxNodes = 500, hours = 0;
+    var slider = document.getElementById('dshGraphMaxNodes');
+    var hoursSelect = document.getElementById('dshGraphHours');
+    if (slider) maxNodes = parseInt(slider.value) || 500;
+    if (hoursSelect) hours = parseInt(hoursSelect.value) || 0;
+    fetch('/api/dashboard/graph?max_memories=' + maxNodes + '&hours=' + hours)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        renderGraph(data.nodes, data.links);
+        var countEl = document.getElementById('dshGraphNodeCount');
+        if (countEl) countEl.textContent = data.nodes.length + ' nodes';
+      }).catch(function () {});
   }
+
+  // Graph control event listeners
+  (function () {
+    var slider = document.getElementById('dshGraphMaxNodes');
+    var valLabel = document.getElementById('dshGraphMaxNodesVal');
+    var hoursSelect = document.getElementById('dshGraphHours');
+    var debounceTimer = null;
+    if (slider) {
+      slider.addEventListener('input', function () {
+        if (valLabel) valLabel.textContent = slider.value;
+      });
+      slider.addEventListener('change', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(loadGraph, 300);
+      });
+    }
+    if (hoursSelect) {
+      hoursSelect.addEventListener('change', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(loadGraph, 300);
+      });
+    }
+  })();
 
   function renderGraph(nodes, links) {
     var container = document.getElementById('dshGraphSvg');

@@ -34,6 +34,24 @@
     <!-- ── GRAPH panel ── -->
     <div class="dash-panel active" id="dshGraph">
       <div class="section-label"><span>Memory &amp; Knowledge Graph</span></div>
+      <div class="dash-graph-controls">
+        <label>
+          Max nodes
+          <input type="range" id="dshGraphMaxNodes" min="50" max="2000" step="50" value="500">
+          <span id="dshGraphMaxNodesVal">500</span>
+        </label>
+        <label>
+          Time window
+          <select id="dshGraphHours">
+            <option value="0" selected>All time</option>
+            <option value="24">Last 24h</option>
+            <option value="48">Last 48h</option>
+            <option value="168">Last 7 days</option>
+            <option value="720">Last 30 days</option>
+          </select>
+        </label>
+        <span class="dash-graph-node-count" id="dshGraphNodeCount"></span>
+      </div>
       <div class="dash-graph-layout">
         <div class="dash-graph-container" id="dshGraphSvg"></div>
         <div class="dash-detail-panel" id="dshDetailDrawer">
