@@ -191,6 +191,7 @@ dashboard.ini
 !CASE.onnx*
 !KIPP.onnx*
 !PLEX.onnx*
+!Bishop.onnx*
 
 # Speech-to-text (STT) Folder
 stt/
