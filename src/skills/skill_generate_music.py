@@ -109,21 +109,39 @@ def _save_track(audio_bytes: bytes, name: str, metadata: dict) -> str:
     return slug
 
 
+_playback_cancel = threading.Event()
+
+
+def stop_playback():
+    """Stop any auto-playing music. Can be called from other skills or modules."""
+    _playback_cancel.set()
+
+
 def _play_file_simple(path: str, name: str):
-    """Minimal standalone audio playback in a background thread (no tars_radio dependency)."""
+    """Play audio in a background thread with TTS/STT ducking and cancel support."""
     import sounddevice as sd
     import soundfile as sf
     import numpy as np
     import time
 
-    def _is_tts_active():
+    def _should_duck():
         try:
             from modules.module_tts import is_tts_playing
-            return is_tts_playing()
+            if is_tts_playing():
+                return True
         except Exception:
-            return False
+            pass
+        try:
+            from modules.module_stt import get_stt_manager
+            stt = get_stt_manager()
+            if stt is not None and not stt._last_status_was_sleeping:
+                return True
+        except Exception:
+            pass
+        return False
 
     def _play():
+        _playback_cancel.clear()
         try:
             from modules.module_messageQue import queue_message as qm
             qm(f"[MusicGen] Auto-playing: {name}")
@@ -137,12 +155,13 @@ def _play_file_simple(path: str, name: str):
                 )
                 stream.start()
                 try:
-                    while True:
-                        # Duck for TTS
-                        if _is_tts_active():
+                    while not _playback_cancel.is_set():
+                        if _should_duck():
                             stream.stop()
-                            while _is_tts_active():
+                            while _should_duck() and not _playback_cancel.is_set():
                                 time.sleep(0.1)
+                            if _playback_cancel.is_set():
+                                break
                             stream.start()
 
                         block = audio.read(blocksize, dtype="float32")
