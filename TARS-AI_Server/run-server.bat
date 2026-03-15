@@ -137,11 +137,11 @@ if !errorlevel! == 0 (
     if "%HAS_GPU%"=="1" (
         echo  [....] NVIDIA GPU detected - installing PyTorch CUDA 12.4 build...
         echo         ^(This is a large download ~2.5 GB, please wait^)
-        "%VENV_PIP%" install "torch>=2.6.0" "torchaudio>=2.6.0" ^
+        "%VENV_PIP%" install "torch>=2.6.0" "torchaudio>=2.6.0" "torchvision>=0.21.0" ^
             --index-url https://download.pytorch.org/whl/cu124
     ) else (
         echo  [....] No NVIDIA GPU - installing PyTorch CPU build...
-        "%VENV_PIP%" install "torch>=2.6.0" "torchaudio>=2.6.0"
+        "%VENV_PIP%" install "torch>=2.6.0" "torchaudio>=2.6.0" "torchvision>=0.21.0"
     )
     if !errorlevel! neq 0 (
         echo  [FAIL] Failed to install PyTorch.

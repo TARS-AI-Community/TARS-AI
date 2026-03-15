@@ -817,6 +817,42 @@ spin_loader() {
     fi
 }
 
+_ensure_swap() {
+    # Pi Zero 2 (512MB) and Pi 3 (1GB) need extra swap for pip/builds
+    local min_swap_mb=1024
+    local swap_file="/var/tars_swap"
+    local current_swap_kb=$(free | awk '/^Swap:/{print $2}')
+    local current_swap_mb=$((current_swap_kb / 1024))
+
+    if [[ $current_swap_mb -ge $min_swap_mb ]]; then
+        echo "|  [OK] Swap: ${current_swap_mb}MB (sufficient)"
+        return 0
+    fi
+
+    tars_say "Low swap detected (${current_swap_mb}MB). Adding temporary swap for install..." "info"
+
+    # Expand dphys-swapfile if available (preferred on Raspberry Pi OS)
+    if [ -f /etc/dphys-swapfile ]; then
+        sudo sed -i "s/^CONF_SWAPSIZE=.*/CONF_SWAPSIZE=${min_swap_mb}/" /etc/dphys-swapfile
+        sudo systemctl restart dphys-swapfile 2>/dev/null || sudo dphys-swapfile setup && sudo dphys-swapfile swapon
+        local new_swap_kb=$(free | awk '/^Swap:/{print $2}')
+        local new_swap_mb=$((new_swap_kb / 1024))
+        echo "|  [OK] Swap expanded to ${new_swap_mb}MB via dphys-swapfile"
+        return 0
+    fi
+
+    # Fallback: create a swap file manually
+    if [ ! -f "$swap_file" ]; then
+        sudo dd if=/dev/zero of="$swap_file" bs=1M count=$min_swap_mb status=none
+        sudo chmod 600 "$swap_file"
+        sudo mkswap "$swap_file" >/dev/null
+    fi
+    sudo swapon "$swap_file" 2>/dev/null || true
+    local new_swap_kb=$(free | awk '/^Swap:/{print $2}')
+    local new_swap_mb=$((new_swap_kb / 1024))
+    echo "|  [OK] Swap expanded to ${new_swap_mb}MB via swap file"
+}
+
 retry_pip_install() {
     local n=1
     local max=5
@@ -824,28 +860,62 @@ retry_pip_install() {
     local req_file="$HOME/.local/share/tars_a/requirements_${PI_VERSION}.txt"
 
     tars_say "Initiating Python dependency installation for ${PI_VERSION^^}..." "info"
-    
+
+    # Ensure enough swap for low-memory devices
+    if [[ "$PI_VERSION" == "pizero2" || "$PI_VERSION" == "pi3" ]]; then
+        _ensure_swap
+    fi
+
     while true; do
         echo "+===============================================================+"
         echo "| Attempt: $n/$max"
         echo "+===============================================================+"
-        
-        if pip install -r "$req_file"; then
-            tars_say "Python dependencies synchronized successfully." "success"
-            break
-        else
-            if [[ $n -lt $max ]]; then
-                tars_say "Connection interference detected. Retrying in $delay seconds..." "warning"
-                for ((i=delay; i>0; i--)); do
-                    echo -ne "\r|  >>> Retry countdown: $i seconds... "
-                    sleep 1
-                done
-                echo ""
-                ((n++))
+
+        if [[ "$PI_VERSION" == "pizero2" || "$PI_VERSION" == "pi3" ]]; then
+            # Install one package at a time to limit peak memory usage
+            local failed=0
+            local total=$(grep -v "^#" "$req_file" | grep -v "^$" | wc -l)
+            local count=0
+            while IFS= read -r line; do
+                # Strip inline comments and trim whitespace
+                local pkg=$(echo "$line" | sed 's/#.*//' | xargs)
+                [[ -z "$pkg" ]] && continue
+                count=$((count + 1))
+                echo -ne "\r|  [$count/$total] Installing: $pkg                              "
+                if ! pip install --no-cache-dir "$pkg" >/dev/null 2>&1; then
+                    echo -e "\r|  [!] Failed: $pkg                                             "
+                    failed=$((failed + 1))
+                fi
+            done < "$req_file"
+            echo ""
+            if [[ $failed -eq 0 ]]; then
+                tars_say "Python dependencies synchronized successfully." "success"
+                break
             else
-                tars_say "Critical failure. Unable to establish connection after $max attempts." "error"
-                exit 1
+                tars_say "$failed package(s) failed to install." "warning"
+                if [[ $n -ge $max ]]; then
+                    tars_say "Some packages could not be installed after $max attempts." "error"
+                    break
+                fi
             fi
+        else
+            if pip install -r "$req_file"; then
+                tars_say "Python dependencies synchronized successfully." "success"
+                break
+            fi
+        fi
+
+        if [[ $n -lt $max ]]; then
+            tars_say "Connection interference detected. Retrying in $delay seconds..." "warning"
+            for ((i=delay; i>0; i--)); do
+                echo -ne "\r|  >>> Retry countdown: $i seconds... "
+                sleep 1
+            done
+            echo ""
+            ((n++))
+        else
+            tars_say "Critical failure. Unable to establish connection after $max attempts." "error"
+            exit 1
         fi
     done
 }

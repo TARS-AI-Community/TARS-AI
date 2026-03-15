@@ -2915,7 +2915,12 @@ _SERVICE_PACKAGES = {
     "stt":        ["faster-whisper>=1.0.0"],
     "tts":        ["piper-tts>=1.2.0"],
     "imagegen":   ["diffusers>=0.27.0"],
-    "musicgen":    ["ace-step @ git+https://github.com/ace-step/ACE-Step.git"],
+    "musicgen":    [
+        "loguru", "soundfile", "librosa", "py3langid", "pypinyin",
+        "cutlet", "fugashi[unidic-lite]", "hangul-romanize", "num2words",
+        "spacy",
+        "ace-step @ git+https://github.com/ace-step/ACE-Step.git",
+    ],
     "embeddings": ["sentence-transformers>=2.2.0"],
 }
 
@@ -2945,7 +2950,33 @@ def _try_install_service_deps(name: str) -> bool:
         return False
     log.info(f"Installing missing packages for {name.upper()}: {', '.join(pkgs)}")
     env = {**os.environ, "PYTHONUTF8": "1"}
-    rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet"] + pkgs, env=env)
+    # Suppress pip's noisy dependency-resolver warnings (stderr)
+    _pip_stderr = _sp.DEVNULL if name == "musicgen" else None
+    if name == "musicgen":
+        # Install lightweight deps first, then ace-step with --no-deps
+        # to prevent it from downgrading transformers/torch/accelerate
+        no_deps_pkgs = [p for p in pkgs if "ace-step" in p.lower() or "ACE-Step" in p]
+        normal_pkgs = [p for p in pkgs if p not in no_deps_pkgs]
+        rc = 0
+        # Install torchvision from the same index as torch (CUDA or CPU)
+        try:
+            import torchvision  # noqa: F401
+        except ImportError:
+            tv_cmd = [sys.executable, "-m", "pip", "install", "--quiet", "torchvision"]
+            try:
+                import torch as _t
+                if hasattr(_t.version, 'cuda') and _t.version.cuda:
+                    cuda_ver = _t.version.cuda.replace(".", "")
+                    tv_cmd += ["--index-url", f"https://download.pytorch.org/whl/cu{cuda_ver}"]
+            except Exception:
+                pass
+            _sp.call(tv_cmd, env=env, stderr=_pip_stderr)
+        if normal_pkgs:
+            rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet"] + normal_pkgs, env=env, stderr=_pip_stderr)
+        if rc == 0 and no_deps_pkgs:
+            rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet", "--no-deps"] + no_deps_pkgs, env=env, stderr=_pip_stderr)
+    else:
+        rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet"] + pkgs, env=env)
     if rc == 0:
         # Clean up any ~* leftovers and verify the module is actually importable
         _cleanup_stale_pip_dirs()
@@ -2956,7 +2987,16 @@ def _try_install_service_deps(name: str) -> bool:
     # First attempt failed — clean up stale dirs and force reinstall
     _cleanup_stale_pip_dirs()
     log.info(f"Retrying install for {name.upper()} with --force-reinstall...")
-    rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet", "--force-reinstall"] + pkgs, env=env)
+    if name == "musicgen":
+        no_deps_pkgs = [p for p in pkgs if "ace-step" in p.lower() or "ACE-Step" in p]
+        normal_pkgs = [p for p in pkgs if p not in no_deps_pkgs]
+        rc = 0
+        if normal_pkgs:
+            rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet", "--force-reinstall"] + normal_pkgs, env=env)
+        if rc == 0 and no_deps_pkgs:
+            rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet", "--force-reinstall", "--no-deps"] + no_deps_pkgs, env=env)
+    else:
+        rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet", "--force-reinstall"] + pkgs, env=env)
     _cleanup_stale_pip_dirs()
     import importlib
     importlib.invalidate_caches()
@@ -2988,25 +3028,13 @@ def _load_service_safe(name: str, args):
                 with contextlib.redirect_stdout(io.StringIO()):
                     _load_single_service(name, args)
                 return
-            except (ImportError, ModuleNotFoundError):
-                # Package installed but still not importable — stale DLL locks on Windows
-                # Force reinstall with clean state
+            except (ImportError, ModuleNotFoundError) as retry_exc:
+                # Package installed but still not importable
                 _cleanup_stale_pip_dirs()
-                log.warning(f"{name.upper()}: module still not importable after install, forcing reinstall...")
-                import subprocess as _sp
-                pkgs = _SERVICE_PACKAGES.get(name, [])
-                if pkgs:
-                    env = {**os.environ, "PYTHONUTF8": "1"}
-                    _sp.call([sys.executable, "-m", "pip", "install", "--quiet", "--force-reinstall", "--no-deps"] + pkgs, env=env)
-                    _cleanup_stale_pip_dirs()
-                    import importlib
-                    importlib.invalidate_caches()
-                    try:
-                        with contextlib.redirect_stdout(io.StringIO()):
-                            _load_single_service(name, args)
-                        return
-                    except Exception:
-                        pass
+                missing_mod = getattr(retry_exc, 'name', None) or str(retry_exc)
+                log.warning(f"{name.upper()}: missing module '{missing_mod}' after install — install it manually and restart")
+                import importlib
+                importlib.invalidate_caches()
                 _cleanup_failed_service(name)
             except Exception:
                 _cleanup_failed_service(name)
