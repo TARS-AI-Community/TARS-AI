@@ -9,6 +9,7 @@ Services:
   - LLM:        Local language model (default: Qwen3-4B, with KV cache + token counting)
   - Vision:     Image captioning via BLIP or vision-capable LLM
   - ImageGen:   Image generation via diffusers (Automatic1111-compatible, scheduler selection)
+  - MusicGen:   Music generation from text prompts (facebook/musicgen via transformers)
   - Embeddings: Sentence embeddings for RAG/memory (sentence-transformers)
 
 Security:
@@ -176,6 +177,7 @@ log = logging.getLogger("tars-server")
 for _lib in (
     "transformers", "diffusers", "huggingface_hub", "sentence_transformers",
     "filelock", "urllib3", "httpx", "torch", "ctranslate2", "safetensors",
+    "uvicorn", "uvicorn.error", "uvicorn.protocols", "websockets", "asyncio",
 ):
     logging.getLogger(_lib).setLevel(logging.ERROR)
 
@@ -379,7 +381,7 @@ CONFIG_FILE = Path(__file__).parent / "config-server.ini"
 _CONFIG_DEFAULTS = {
     "server":     {"port": "5678", "api_key": ""},
     "services":   {"stt": "true", "tts": "true", "llm": "true", "vision": "true",
-                   "imagegen": "false", "embeddings": "false"},
+                   "imagegen": "false", "musicgen": "false", "embeddings": "false"},
     "stt":        {"whisper_model": "large-v3", "compute_type": "auto", "vad_filter": "true", "device": "auto"},
     "llm":        {"model": "Qwen/Qwen3-4B",
                    "dtype": "auto", "quantize": "none", "backend": "auto",
@@ -389,6 +391,7 @@ _CONFIG_DEFAULTS = {
     "tts":        {"voices_dir": "", "default_voice": "", "cache_size": "100"},
     "vision":     {"model": "Salesforce/blip-image-captioning-base", "device": "auto"},
     "imagegen":   {"model": "stabilityai/stable-diffusion-xl-base-1.0", "default_steps": "20", "default_cfg": "7.0", "device": "auto"},
+    "musicgen":   {"model": "ACE-Step/ACE-Step-v1-3.5B", "default_duration": "60", "default_steps": "60", "default_cfg": "15.0", "device": "auto"},
     "embeddings": {"model": "all-MiniLM-L6-v2", "device": "auto"},
 }
 
@@ -469,6 +472,7 @@ _ENDPOINT_SERVICE = {
     "/tts/": "tts",
     "/caption": "vision",
     "/sdapi/": "imagegen", "/generate_image": "imagegen",
+    "/generate_music": "musicgen", "/musicgen_gallery": "musicgen",
     "/v1/embeddings": "embeddings",
 }
 
@@ -1460,11 +1464,84 @@ class EmbeddingsService:
 
 
 # ===================================================================
+# MusicGen Service (ACE-Step — music with vocals/lyrics)
+# ===================================================================
+class MusicGenService:
+    _progress = {}  # {task_id: {"status": str, "pct": int}}
+
+    def __init__(self, model_name: str = "ACE-Step/ACE-Step-v1-3.5B", device: str = None):
+        device = device or DEVICE
+        self._device = device
+        log.info(f"Loading ACE-Step music generation model (device: {device})...")
+        self.model_name = model_name
+        cache_dir = MODELS_DIR / "musicgen"
+        cache_dir.mkdir(exist_ok=True)
+        from acestep.pipeline_ace_step import ACEStepPipeline
+        device_id = 0 if device == "cuda" else -1
+        self.pipe = ACEStepPipeline(
+            checkpoint_dir=str(cache_dir),
+            device_id=device_id if device == "cuda" else 0,
+            dtype="bfloat16" if device == "cuda" else "float32",
+            cpu_offload=(device != "cuda"),
+        )
+        log.info("ACE-Step music generation model loaded")
+
+    def generate(self, prompt: str, lyrics: str = "", duration_sec: float = 60.0,
+                 infer_steps: int = 60, guidance_scale: float = 15.0,
+                 seed: int = -1, task_id: str = None) -> bytes:
+        """Generate music with vocals from prompt + lyrics. Returns WAV bytes."""
+        if task_id:
+            MusicGenService._progress[task_id] = {"status": "processing", "pct": 0}
+
+        try:
+            if task_id:
+                MusicGenService._progress[task_id] = {"status": "generating", "pct": 10}
+
+            manual_seeds = [seed] if seed >= 0 else None
+            # Use [inst] tag if no lyrics provided
+            actual_lyrics = lyrics.strip() if lyrics.strip() else "[inst]"
+
+            result = self.pipe(
+                prompt=prompt,
+                lyrics=actual_lyrics,
+                audio_duration=duration_sec,
+                infer_step=infer_steps,
+                guidance_scale=guidance_scale,
+                scheduler_type="euler",
+                cfg_type="apg",
+                manual_seeds=manual_seeds,
+                batch_size=1,
+                format="wav",
+            )
+
+            if task_id:
+                MusicGenService._progress[task_id] = {"status": "encoding", "pct": 90}
+
+            # Result is a list: [filepath1, ..., params_dict]
+            audio_path = result[0]
+            with open(audio_path, "rb") as f:
+                audio_bytes = f.read()
+            # Clean up the temp file
+            try:
+                os.unlink(audio_path)
+            except Exception:
+                pass
+            return audio_bytes
+        finally:
+            if task_id:
+                MusicGenService._progress.pop(task_id, None)
+
+    def unload(self):
+        del self.pipe
+        self.pipe = None
+
+
+# ===================================================================
 # FastAPI app
 # ===================================================================
 app = FastAPI(
     title="TARS-AI Companion Server", version="2.0",
-    description="Offload STT, TTS, LLM, Vision, ImageGen, and Embeddings from your Raspberry Pi.",
+    description="Offload STT, TTS, LLM, Vision, ImageGen, MusicGen, and Embeddings from your Raspberry Pi.",
     swagger_ui_init_oauth={"usePkceWithAuthorizationCodeGrant": False},
     swagger_ui_parameters={"persistAuthorization": True},
     openapi_tags=[],
@@ -1502,6 +1579,7 @@ _WEB_API_PATHS = {
     "/tts",          # TTS generate + voices
     "/save_audio", "/transcribe",  # STT
     "/caption", "/generate_image", "/sdapi", "/imagegen_progress", "/imagegen_gallery",  # Vision + ImageGen
+    "/generate_music", "/musicgen_progress", "/musicgen_gallery",  # MusicGen
 }
 # Paths exempt from ALL auth (health check, login, static API schema)
 _AUTH_EXEMPT = {"/health", "/login", "/logout", "/docs", "/openapi.json", "/redoc", "/ws/dashboard"}
@@ -1862,10 +1940,18 @@ async def ws_dashboard(ws: WebSocket):
                 "latency": TRACKER.get_latency_stats(),
                 "recent_logs": TRACKER.get_recent(20),
             }
-            await ws.send_json(data)
+            try:
+                await ws.send_json(data)
+            except Exception:
+                break
             await asyncio.sleep(2)
     except (WebSocketDisconnect, Exception):
         pass
+    finally:
+        try:
+            await ws.close()
+        except Exception:
+            pass
 
 
 # -- Logs endpoint -----------------------------------------------------
@@ -2192,7 +2278,8 @@ async def imagegen_gallery_file(filename: str):
     fpath = Path(__file__).parent / "output" / "imagegen" / filename
     if not fpath.exists():
         raise HTTPException(404, "File not found")
-    return StreamingResponse(open(str(fpath), "rb"), media_type="image/png")
+    from starlette.responses import FileResponse
+    return FileResponse(str(fpath), media_type="image/png")
 
 
 @app.delete("/imagegen_gallery/{filename}")
@@ -2213,6 +2300,115 @@ async def imagegen_progress(task_id: str):
     if info is None:
         return {"step": 0, "total": 0, "active": False}
     return {"step": info["step"], "total": info["total"], "active": True}
+
+
+# -- MusicGen Routes ---------------------------------------------------
+
+@app.post("/generate_music")
+async def generate_music(request: Request):
+    if "musicgen" not in SERVICES:
+        raise HTTPException(503, "Music generation service not loaded")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+    prompt = body.get("prompt", "")
+    if not prompt:
+        raise HTTPException(400, "prompt is required")
+    try:
+        task_id = body.get("task_id")
+        lyrics = body.get("lyrics", "")
+        loop = asyncio.get_event_loop()
+        gen_kwargs = dict(
+            prompt=prompt,
+            lyrics=lyrics,
+            duration_sec=float(body.get("duration", 60)),
+            infer_steps=int(body.get("steps", 60)),
+            guidance_scale=float(body.get("guidance_scale", 15.0)),
+            seed=int(body.get("seed", -1)),
+            task_id=task_id,
+        )
+        audio_bytes = await loop.run_in_executor(None, lambda: SERVICES["musicgen"].generate(**gen_kwargs))
+        log.info(f"MusicGen: \"{prompt[:60]}\"")
+        # Save to output folder with JSON sidecar metadata
+        out_dir = Path(__file__).parent / "output" / "musicgen"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        fname = f"{ts}_{uuid.uuid4().hex[:8]}.wav"
+        fpath = out_dir / fname
+        with open(str(fpath), "wb") as f:
+            f.write(audio_bytes)
+        meta = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "prompt": prompt,
+            "lyrics": lyrics,
+            "duration": gen_kwargs["duration_sec"],
+            "steps": gen_kwargs["infer_steps"],
+            "guidance_scale": gen_kwargs["guidance_scale"],
+            "seed": gen_kwargs["seed"],
+        }
+        with open(str(fpath).replace(".wav", ".json"), "w") as f:
+            json.dump(meta, f)
+        return StreamingResponse(BytesIO(audio_bytes), media_type="audio/wav",
+                                 headers={"X-Audio-Filename": fname})
+    except Exception as e:
+        log.error(f"MusicGen error: {traceback.format_exc()}")
+        raise HTTPException(500, str(e))
+
+
+@app.get("/musicgen_gallery")
+async def musicgen_gallery_list():
+    out_dir = Path(__file__).parent / "output" / "musicgen"
+    if not out_dir.exists():
+        return {"tracks": []}
+    files = sorted(out_dir.glob("*.wav"), key=lambda f: f.stat().st_mtime, reverse=True)
+    results = []
+    for f in files:
+        meta = {}
+        json_path = str(f).replace(".wav", ".json")
+        if os.path.exists(json_path):
+            try:
+                with open(json_path) as jf:
+                    meta = json.load(jf)
+            except Exception:
+                pass
+        results.append({"filename": f.name, "meta": meta})
+    return {"tracks": results}
+
+
+@app.get("/musicgen_gallery/file/{filename}")
+async def musicgen_gallery_file(filename: str):
+    import re
+    if not re.match(r'^[\w\-]+\.wav$', filename):
+        raise HTTPException(400, "Invalid filename")
+    fpath = Path(__file__).parent / "output" / "musicgen" / filename
+    if not fpath.exists():
+        raise HTTPException(404, "File not found")
+    from starlette.responses import FileResponse
+    return FileResponse(str(fpath), media_type="audio/wav")
+
+
+@app.delete("/musicgen_gallery/{filename}")
+async def musicgen_gallery_delete(filename: str):
+    import re
+    if not re.match(r'^[\w\-]+\.wav$', filename):
+        raise HTTPException(400, "Invalid filename")
+    fpath = Path(__file__).parent / "output" / "musicgen" / filename
+    if not fpath.exists():
+        raise HTTPException(404, "File not found")
+    fpath.unlink()
+    json_path = str(fpath).replace(".wav", ".json")
+    if os.path.exists(json_path):
+        os.unlink(json_path)
+    return {"ok": True}
+
+
+@app.get("/musicgen_progress/{task_id}")
+async def musicgen_progress(task_id: str):
+    info = MusicGenService._progress.get(task_id)
+    if info is None:
+        return {"status": "idle", "pct": 0, "active": False}
+    return {"status": info["status"], "pct": info["pct"], "active": True}
 
 
 # -- Embeddings Routes -------------------------------------------------
@@ -2585,8 +2781,24 @@ label{font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-trans
 .msg.user{background:rgba(0,229,255,0.06);border-left:2px solid var(--cyan);color:var(--cyan)}
 .msg.assistant{background:rgba(180,77,255,0.06);border-left:2px solid var(--purple);color:var(--text)}
 .msg.error{background:rgba(255,68,68,0.06);border-left:2px solid var(--red);color:var(--red)}
-audio{width:100%;margin-top:12px;border-radius:var(--radius-sm);outline:none}
-audio::-webkit-media-controls-panel{background:var(--bg2)}
+audio.native-audio{width:100%;margin-top:12px;border-radius:var(--radius-sm);outline:none;height:36px}
+audio.native-audio::-webkit-media-controls-panel{background:linear-gradient(135deg,#1a3a5c,#0d2240);border-radius:8px}
+.tars-player{display:flex;align-items:center;gap:10px;padding:10px 14px;background:linear-gradient(135deg,#0d1b2e,#0a1220);border:1px solid var(--border);border-radius:var(--radius-sm);user-select:none;max-width:350px}
+.tars-player .tp-btn{width:36px;height:36px;border-radius:50%;border:1px solid rgba(0,229,255,0.3);background:rgba(0,229,255,0.06);color:var(--cyan);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .2s;font-size:14px;padding:0;outline:none;font-family:inherit;line-height:1}
+.tars-player .tp-btn:hover{background:rgba(0,229,255,0.15);border-color:var(--border-hi);box-shadow:0 0 12px rgba(0,229,255,0.15)}
+.tars-player .tp-track{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+.tars-player .tp-bar-wrap{width:100%;height:14px;background:transparent;cursor:pointer;position:relative;display:flex;align-items:center}
+.tars-player .tp-bar-bg{width:100%;height:4px;background:rgba(0,229,255,0.1);border-radius:2px;position:absolute}
+.tars-player .tp-bar{height:4px;background:linear-gradient(90deg,#00e5ff,#7c4dff);border-radius:2px;width:0%;position:absolute;pointer-events:none}
+.tars-player .tp-thumb{width:10px;height:10px;border-radius:50%;background:var(--cyan);position:absolute;left:0%;transform:translateX(-50%);opacity:0;transition:opacity .15s;pointer-events:none;box-shadow:0 0 6px rgba(0,229,255,0.4)}
+.tars-player .tp-bar-wrap:hover .tp-thumb{opacity:1}
+.tars-player .tp-time{display:flex;gap:6px;font-family:var(--font-mono);font-size:10px;color:var(--text-dim)}
+.tars-player .tp-time span:last-of-type{margin-left:auto}
+.tars-player .tp-title{flex:1;font-family:var(--font-mono);font-size:9px;color:var(--cyan-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+.tars-player .tp-del{width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,68,68,0.4);background:rgba(10,18,32,0.85);color:var(--red);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:.5;transition:opacity .2s}
+.tars-player .tp-del:hover{opacity:1;background:rgba(255,68,68,0.2);border-color:var(--red)}
+.tars-player.tp-sm{padding:6px 10px;gap:8px}
+.tars-player.tp-sm .tp-btn{width:28px;height:28px;font-size:11px}
 img.preview{max-width:100%;max-height:400px;margin-top:12px;border:1px solid var(--border);border-radius:var(--radius-sm)}
 .img-gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
 .img-gallery-item{position:relative;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:rgba(0,0,0,0.2);transition:border-color .2s}
@@ -2612,6 +2824,7 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   <div class="tab" data-svc="tts" onclick="switchTab('tts')">TTS</div>
   <div class="tab" data-svc="vision" onclick="switchTab('vis')">Vision</div>
   <div class="tab" data-svc="imagegen" onclick="switchTab('img')">Image Gen</div>
+  <div class="tab" data-svc="musicgen" onclick="switchTab('mus')">Music Gen</div>
 </div>
 <div id="p-chat" class="panel active"><div class="glass" style="display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border)">
@@ -2648,7 +2861,6 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
       <button class="hud-btn" style="margin:0;padding:6px 14px;font-size:9px;height:36px;flex-shrink:0" onclick="const a=document.getElementById('tts-audio');if(a.src){const l=document.createElement('a');l.href=a.src;l.download='tts_output.wav';l.click()}">Save</button>
     </div>
   </div>
-<style>#tts-audio::-webkit-media-controls-panel{background:linear-gradient(135deg,#1a3a5c,#0d2240);border-radius:8px}#tts-audio::-webkit-media-controls-current-time-display,#tts-audio::-webkit-media-controls-time-remaining-display{color:#7cb8ff}#tts-audio::-webkit-media-controls-play-button{filter:brightness(2)}#tts-audio::-webkit-media-controls-timeline{filter:hue-rotate(200deg) brightness(1.4)}</style>
 </div></div>
 <div id="p-vis" class="panel"><div class="glass">
   <label>Image</label>
@@ -2681,6 +2893,28 @@ input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);bor
   <div id="img-preview-wrap" style="display:none;text-align:center;margin-top:12px"><img id="img-preview" style="max-width:100%;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
   <div id="img-gallery" style="margin-top:12px"></div>
 </div></div>
+<div id="p-mus" class="panel"><div class="glass">
+  <label>Style / Genre prompt</label>
+  <textarea id="mus-prompt" placeholder="Describe the music style... e.g. 'upbeat electronic dance music with a catchy melody'" style="height:60px"></textarea>
+  <label>Lyrics <span style="opacity:.5;font-weight:400;text-transform:none;letter-spacing:0">(leave empty for instrumental, use [verse] [chorus] [bridge] tags)</span></label>
+  <textarea id="mus-lyrics" placeholder="[verse]&#10;Your lyrics here...&#10;&#10;[chorus]&#10;Chorus lyrics here..." style="height:120px"></textarea>
+  <div class="img-params" style="grid-template-columns:repeat(4,1fr)">
+    <div><label>Duration (sec)</label><input type="number" id="mus-duration" value="60" min="10" max="600" step="5"></div>
+    <div><label>Steps</label><input type="number" id="mus-steps" value="60" min="10" max="150" step="1"></div>
+    <div><label>CFG</label><input type="number" id="mus-cfg" value="15.0" min="1" max="30" step="0.5"></div>
+    <div><label>Seed</label><input type="number" id="mus-seed" value="-1" min="-1" placeholder="-1"></div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:stretch;margin:6px 0">
+    <button class="hud-btn" id="mus-gen-btn" onclick="generateMusic()" style="margin:0;white-space:nowrap">Generate</button>
+    <div id="mus-out" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(0,229,255,0.1);border-radius:var(--radius-sm);padding:0 12px;display:flex;align-items:center;font-size:12px;color:var(--text-dim);min-height:0">Enter a prompt and click Generate.</div>
+  </div>
+  <div id="mus-progress-wrap" style="display:none;margin:8px 0">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px"><span id="mus-progress-label">Starting...</span><span id="mus-progress-pct">0%</span></div>
+    <div style="height:6px;background:rgba(0,229,255,0.1);border-radius:3px;overflow:hidden"><div id="mus-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#00e5ff,#7c4dff);border-radius:3px;transition:width .3s ease"></div></div>
+  </div>
+  <div id="mus-player" style="display:none;margin-top:10px"></div>
+  <div id="mus-gallery" style="margin-top:12px"></div>
+</div></div>
 <div style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap">
   <a href="/" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Dashboard</a>
   <a href="/ui" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Settings</a>
@@ -2696,7 +2930,7 @@ function hdrForm(){return {}}
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  const map={chat:0,stt:1,tts:2,vis:3,img:4};
+  const map={chat:0,stt:1,tts:2,vis:3,img:4,mus:5};
   document.querySelectorAll('.tab')[map[name]].classList.add('active');
   document.getElementById('p-'+name).classList.add('active');
   if(name==='tts')loadVoices();
@@ -2877,6 +3111,11 @@ fetch(base+'/api/settings').then(function(r){return r.json()}).then(function(d){
     if(d.imagegen.default_steps)document.getElementById('img-steps').value=d.imagegen.default_steps;
     if(d.imagegen.default_cfg)document.getElementById('img-cfg').value=d.imagegen.default_cfg;
   }
+  if(d.musicgen){
+    if(d.musicgen.default_duration)document.getElementById('mus-duration').value=d.musicgen.default_duration;
+    if(d.musicgen.default_steps)document.getElementById('mus-steps').value=d.musicgen.default_steps;
+    if(d.musicgen.default_cfg)document.getElementById('mus-cfg').value=d.musicgen.default_cfg;
+  }
 }).catch(function(){});
 (function(){
   var p=document.getElementById('img-prompt'),n=document.getElementById('img-neg');
@@ -2895,9 +3134,9 @@ async function loadGallery(){
     d.images.forEach(function(item){
       var m=item.meta||{};
       var tip=(m.prompt||'')+(m.timestamp?'\n'+m.timestamp:'')+(m.steps?'\nSteps: '+m.steps:'')+(m.cfg_scale?'  CFG: '+m.cfg_scale:'')+(m.seed?'  Seed: '+m.seed:'');
-      html+='<div class="img-gallery-item">';
-      html+='<img src="'+base+'/imagegen_gallery/file/'+item.filename+'" title="'+tip.replace(/"/g,'&quot;')+'" onclick="document.getElementById(\'img-preview\').src=this.src;document.getElementById(\'img-preview-wrap\').style.display=\'block\'">';
-      html+='<button class="img-del" onclick="deleteGalleryImg(event,\''+item.filename+'\')">&times;</button>';
+      html+='<div class="img-gallery-item" data-file="'+item.filename+'">';
+      html+='<img src="'+base+'/imagegen_gallery/file/'+item.filename+'" title="'+tip.replace(/"/g,'&quot;')+'">';
+      html+='<button class="img-del" data-del="'+item.filename+'">&times;</button>';
       html+='<div class="img-meta">'+(m.prompt?m.prompt.substring(0,40):'')+'</div>';
       html+='</div>';
     });
@@ -2905,14 +3144,171 @@ async function loadGallery(){
     g.innerHTML=html;
   }catch(e){g.innerHTML=''}
 }
-async function deleteGalleryImg(e,fname){
-  e.stopPropagation();e.preventDefault();
-  try{
-    await fetch(base+'/imagegen_gallery/'+fname,{method:'DELETE'});
-    loadGallery();
-  }catch(e){}
-}
+document.getElementById('img-gallery').addEventListener('click',function(e){
+  var del=e.target.closest('[data-del]');
+  if(del){
+    e.stopPropagation();e.preventDefault();
+    fetch(base+'/imagegen_gallery/'+del.getAttribute('data-del'),{method:'DELETE'}).then(function(){loadGallery()});
+    return;
+  }
+  var item=e.target.closest('.img-gallery-item');
+  if(item&&e.target.tagName==='IMG'){
+    document.getElementById('img-preview').src=e.target.src;
+    document.getElementById('img-preview-wrap').style.display='block';
+  }
+});
 loadGallery();
+
+// Custom audio player
+function _fmt(s){if(!s||!isFinite(s))return '0:00';var m=Math.floor(s/60),sec=Math.floor(s%60);return m+':'+(sec<10?'0':'')+sec}
+function createPlayer(container,src,small,title,onDelete){
+  container.innerHTML='';
+  var audio=new Audio();
+  audio.preload='auto';
+  audio.crossOrigin='anonymous';
+  var wrap=document.createElement('div');wrap.className='tars-player'+(small?' tp-sm':'');
+  var btn=document.createElement('button');btn.className='tp-btn';btn.type='button';btn.textContent='\u25B6';
+  var track=document.createElement('div');track.className='tp-track';
+  var barWrap=document.createElement('div');barWrap.className='tp-bar-wrap';
+  var barBg=document.createElement('div');barBg.className='tp-bar-bg';
+  var bar=document.createElement('div');bar.className='tp-bar';
+  var thumb=document.createElement('div');thumb.className='tp-thumb';
+  var timeRow=document.createElement('div');timeRow.className='tp-time';
+  var tCur=document.createElement('span');tCur.textContent='0:00';
+  var tDur=document.createElement('span');tDur.textContent='0:00';
+  barWrap.appendChild(barBg);barWrap.appendChild(bar);barWrap.appendChild(thumb);
+  timeRow.appendChild(tCur);
+  if(title){var titleEl=document.createElement('div');titleEl.className='tp-title';titleEl.textContent=title;titleEl.title=title;timeRow.appendChild(titleEl)}
+  timeRow.appendChild(tDur);
+  track.appendChild(barWrap);track.appendChild(timeRow);
+  wrap.appendChild(btn);wrap.appendChild(track);
+  if(onDelete){
+    var delBtn=document.createElement('button');delBtn.className='tp-del';delBtn.type='button';delBtn.textContent='\u00D7';
+    delBtn.addEventListener('click',function(e){e.stopPropagation();e.preventDefault();onDelete()});
+    wrap.appendChild(delBtn);
+  }
+  container.appendChild(wrap);
+
+  var dragging=false,ready=false;
+
+  function updateBar(){
+    if(!ready||!isFinite(audio.duration))return;
+    var p=audio.currentTime/audio.duration*100;
+    bar.style.width=p+'%';thumb.style.left=p+'%';
+    tCur.textContent=_fmt(audio.currentTime);
+  }
+
+  function seek(clientX){
+    if(!ready||!isFinite(audio.duration))return;
+    var r=barWrap.getBoundingClientRect();
+    var p=Math.max(0,Math.min(1,(clientX-r.left)/r.width));
+    audio.currentTime=p*audio.duration;
+    updateBar();
+  }
+
+  btn.addEventListener('click',function(){
+    if(!ready)return;
+    if(audio.paused){audio.play()}else{audio.pause()}
+  });
+
+  audio.addEventListener('loadedmetadata',function(){ready=true;tDur.textContent=_fmt(audio.duration)});
+  audio.addEventListener('canplay',function(){ready=true;tDur.textContent=_fmt(audio.duration)});
+  audio.addEventListener('play',function(){btn.textContent='\u23F8'});
+  audio.addEventListener('pause',function(){btn.textContent='\u25B6'});
+  audio.addEventListener('timeupdate',function(){if(!dragging)updateBar()});
+  audio.addEventListener('ended',function(){btn.textContent='\u25B6';bar.style.width='0%';thumb.style.left='0%';tCur.textContent='0:00'});
+
+  barWrap.addEventListener('mousedown',function(e){
+    e.preventDefault();
+    dragging=true;seek(e.clientX);
+    function onMove(ev){ev.preventDefault();seek(ev.clientX)}
+    function onUp(){dragging=false;document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp)}
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  });
+
+  barWrap.addEventListener('touchstart',function(e){
+    dragging=true;seek(e.touches[0].clientX);
+    function onMove(ev){seek(ev.touches[0].clientX)}
+    function onEnd(){dragging=false;document.removeEventListener('touchmove',onMove);document.removeEventListener('touchend',onEnd)}
+    document.addEventListener('touchmove',onMove,{passive:true});
+    document.addEventListener('touchend',onEnd);
+  },{passive:true});
+
+  audio.src=src;
+  return audio;
+}
+
+// MusicGen
+async function generateMusic(){
+  var prompt=document.getElementById('mus-prompt').value.trim();if(!prompt)return;
+  var lyrics=document.getElementById('mus-lyrics').value;
+  var duration=parseFloat(document.getElementById('mus-duration').value)||60;
+  var steps=parseInt(document.getElementById('mus-steps').value)||60;
+  var cfg=parseFloat(document.getElementById('mus-cfg').value)||15.0;
+  var seed=parseInt(document.getElementById('mus-seed').value);
+  var taskId=_uid();
+  var btn=document.getElementById('mus-gen-btn');
+  btn.disabled=true;btn.style.opacity='0.5';
+  document.getElementById('mus-out').textContent='';
+  document.getElementById('mus-player').style.display='none';
+  var wrap=document.getElementById('mus-progress-wrap');
+  var bar=document.getElementById('mus-progress-bar');
+  var pctEl=document.getElementById('mus-progress-pct');
+  var lbl=document.getElementById('mus-progress-label');
+  wrap.style.display='block';bar.style.width='0%';pctEl.textContent='0%';lbl.textContent='Starting...';
+  var done=false;
+  var poll=setInterval(function(){
+    if(done)return;
+    fetch(base+'/musicgen_progress/'+taskId).then(function(r){return r.json()}).then(function(d){
+      if(done)return;
+      if(d.active){
+        bar.style.width=d.pct+'%';pctEl.textContent=d.pct+'%';
+        lbl.textContent=d.status.charAt(0).toUpperCase()+d.status.slice(1)+'...';
+      }
+    }).catch(function(){});
+  },500);
+  try{
+    var resp=await fetch(base+'/generate_music',{method:'POST',headers:hdr(),
+      body:JSON.stringify({prompt:prompt,lyrics:lyrics,duration:duration,steps:steps,guidance_scale:cfg,seed:isNaN(seed)?-1:seed,task_id:taskId})});
+    done=true;clearInterval(poll);
+    bar.style.width='100%';pctEl.textContent='100%';lbl.textContent='Complete';
+    if(!resp.ok){document.getElementById('mus-out').textContent='Error: '+resp.status+' '+resp.statusText;setTimeout(function(){wrap.style.display='none'},2000);return}
+    var blob=await resp.blob();var url=URL.createObjectURL(blob);
+    var playerDiv=document.getElementById('mus-player');
+    playerDiv.style.display='block';
+    var audio=createPlayer(playerDiv,url,false);
+    audio.play();
+    document.getElementById('mus-out').textContent='Done.';
+    setTimeout(function(){wrap.style.display='none'},2000);
+    loadMusicGallery();
+  }catch(e){done=true;clearInterval(poll);wrap.style.display='none';document.getElementById('mus-out').textContent='Error: '+e}
+  finally{btn.disabled=false;btn.style.opacity=''}
+}
+async function loadMusicGallery(){
+  var g=document.getElementById('mus-gallery');
+  try{
+    var r=await fetch(base+'/musicgen_gallery');var d=await r.json();
+    if(!d.tracks||!d.tracks.length){g.innerHTML='';return}
+    g.innerHTML='<label style="margin-top:8px">Gallery</label>';
+    d.tracks.forEach(function(item){
+      var m=item.meta||{};
+      var playerWrap=document.createElement('div');playerWrap.style.cssText='margin:6px 0';
+      createPlayer(playerWrap,base+'/musicgen_gallery/file/'+item.filename,true,m.prompt||'',function(){
+        fetch(base+'/musicgen_gallery/'+item.filename,{method:'DELETE'}).then(function(){loadMusicGallery()});
+      });
+      g.appendChild(playerWrap);
+    });
+  }catch(e){g.innerHTML=''}
+}
+(function(){
+  var p=document.getElementById('mus-prompt'),l=document.getElementById('mus-lyrics');
+  var sp=localStorage.getItem('mus-prompt'),sl=localStorage.getItem('mus-lyrics');
+  if(sp)p.value=sp;if(sl)l.value=sl;
+  p.addEventListener('input',function(){localStorage.setItem('mus-prompt',p.value)});
+  l.addEventListener('input',function(){localStorage.setItem('mus-lyrics',l.value)});
+})();
+loadMusicGallery();
 
 // Vision: image preview + drag-and-drop
 (function(){
@@ -2949,7 +3345,7 @@ fetch(base+'/health').then(r=>r.json()).then(d=>{
   const cur=document.querySelector('.tab.active');
   if(!cur||cur.classList.contains('disabled')){
     if(firstAvail){
-      const map={llm:'chat',stt:'stt',tts:'tts',vision:'vis',imagegen:'img'};
+      const map={llm:'chat',stt:'stt',tts:'tts',vision:'vis',imagegen:'img',musicgen:'mus'};
       switchTab(map[firstAvail.dataset.svc]||'chat');
     }
   }
@@ -3088,6 +3484,7 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
       <tr><td class="svc-name">LLM <span class="info-i">i<span class="tip">Large Language Model: Runs a local AI model for chat responses. Supports HuggingFace transformers or llama.cpp GGUF models. Most GPU-intensive service.</span></span></td><td><input type="checkbox" id="svc-llm"></td><td><select id="dev-llm"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
       <tr><td class="svc-name">Vision <span class="info-i">i<span class="tip">Image captioning: Analyzes images and generates text descriptions. Supports BLIP, BLIP-2, Moondream, Florence-2, and other HuggingFace vision models.</span></span></td><td><input type="checkbox" id="svc-vision"></td><td><select id="dev-vision"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
       <tr><td class="svc-name">ImageGen <span class="info-i">i<span class="tip">Image generation: Creates images from text prompts using Stable Diffusion. Very GPU-intensive — requires significant VRAM.</span></span></td><td><input type="checkbox" id="svc-imagegen"></td><td><select id="dev-imagegen"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
+      <tr><td class="svc-name">MusicGen <span class="info-i">i<span class="tip">Music generation: Creates music audio from text prompts using Facebook MusicGen. GPU-recommended for reasonable generation times.</span></span></td><td><input type="checkbox" id="svc-musicgen"></td><td><select id="dev-musicgen"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
       <tr><td class="svc-name">Embeddings <span class="info-i">i<span class="tip">Text embeddings: Converts text into numerical vectors for semantic search. Used by TARS memory system (RAG). Lightweight — works well on CPU.</span></span></td><td><input type="checkbox" id="svc-embeddings"></td><td><select id="dev-embeddings"><option value="auto">auto</option><option value="cuda">cuda (GPU)</option><option value="cpu">cpu</option></select></td></tr>
     </tbody>
   </table>
@@ -3143,6 +3540,14 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
       <div class="form-row"><label>Default Steps <span class="info-i">i<span class="tip">Number of diffusion steps per image. More steps = higher quality but slower generation. 20-30 is typical for good results. Can be overridden per request via the API.</span></span></label><input type="number" id="s-imagegen-steps"></div>
       <div class="form-row"><label>Default CFG <span class="info-i">i<span class="tip">Classifier-free guidance scale. Higher values follow the text prompt more closely but can look artificial. Lower values are more creative but may drift from the prompt. 7-8 is a good default.</span></span></label><input type="number" id="s-imagegen-cfg" step="0.1"></div>
     </div>
+    <!-- MusicGen Config -->
+    <div class="glass">
+      <h2>MusicGen Configuration</h2>
+      <div class="form-row"><label>Model <span class="info-i">i<span class="tip">ACE-Step model for music generation with vocals and lyrics. Default 'ACE-Step/ACE-Step-v1-3.5B' (3.5B params). Downloaded automatically on first use. Requires 8+ GB VRAM.</span></span></label><input type="text" id="s-musicgen-model"></div>
+      <div class="form-row"><label>Default Duration (sec) <span class="info-i">i<span class="tip">Default music duration in seconds. ACE-Step supports 10-600 seconds (up to 10 minutes). 60 seconds is a good default.</span></span></label><input type="number" id="s-musicgen-duration" min="10" max="600" step="5"></div>
+      <div class="form-row"><label>Default Steps <span class="info-i">i<span class="tip">Number of diffusion steps. More steps = higher quality but slower. 60 is recommended. Can be overridden per request.</span></span></label><input type="number" id="s-musicgen-steps" min="10" max="150" step="1"></div>
+      <div class="form-row"><label>Default CFG <span class="info-i">i<span class="tip">Classifier-free guidance scale. Higher values follow the prompt more closely. 15.0 is the recommended default for ACE-Step.</span></span></label><input type="number" id="s-musicgen-cfg" step="0.5"></div>
+    </div>
     <!-- Embeddings Config -->
     <div class="glass">
       <h2>Embeddings Configuration</h2>
@@ -3176,11 +3581,13 @@ async function loadSettings(){
     document.getElementById('svc-llm').checked=d.services.llm==='true';
     document.getElementById('svc-vision').checked=d.services.vision==='true';
     document.getElementById('svc-imagegen').checked=d.services.imagegen==='true';
+    document.getElementById('svc-musicgen').checked=d.services.musicgen==='true';
     document.getElementById('svc-embeddings').checked=d.services.embeddings==='true';
     setSelect('dev-stt',d.stt.device||'auto');
     setSelect('dev-llm',d.llm.device||'auto');
     setSelect('dev-vision',d.vision.device||'auto');
     setSelect('dev-imagegen',d.imagegen.device||'auto');
+    setSelect('dev-musicgen',d.musicgen.device||'auto');
     setSelect('dev-embeddings',d.embeddings.device||'auto');
     setSelect('s-stt-model',d.stt.whisper_model);
     setSelect('s-stt-compute',d.stt.compute_type);
@@ -3201,6 +3608,10 @@ async function loadSettings(){
     document.getElementById('s-imagegen-model').value=d.imagegen.model;
     document.getElementById('s-imagegen-steps').value=d.imagegen.default_steps;
     document.getElementById('s-imagegen-cfg').value=d.imagegen.default_cfg;
+    document.getElementById('s-musicgen-model').value=d.musicgen.model;
+    document.getElementById('s-musicgen-duration').value=d.musicgen.default_duration;
+    document.getElementById('s-musicgen-steps').value=d.musicgen.default_steps;
+    document.getElementById('s-musicgen-cfg').value=d.musicgen.default_cfg;
     document.getElementById('s-embeddings-model').value=d.embeddings.model;
     // Disable cuda options if no GPU
     if(!d._meta.has_cuda){
@@ -3223,12 +3634,13 @@ async function saveSettings(){
   st.textContent='Saving...';st.className='save-status';
   const body={
     server:{port:document.getElementById('s-port').value,api_key:document.getElementById('s-apikey').value},
-    services:{stt:document.getElementById('svc-stt').checked?'true':'false',tts:document.getElementById('svc-tts').checked?'true':'false',llm:document.getElementById('svc-llm').checked?'true':'false',vision:document.getElementById('svc-vision').checked?'true':'false',imagegen:document.getElementById('svc-imagegen').checked?'true':'false',embeddings:document.getElementById('svc-embeddings').checked?'true':'false'},
+    services:{stt:document.getElementById('svc-stt').checked?'true':'false',tts:document.getElementById('svc-tts').checked?'true':'false',llm:document.getElementById('svc-llm').checked?'true':'false',vision:document.getElementById('svc-vision').checked?'true':'false',imagegen:document.getElementById('svc-imagegen').checked?'true':'false',musicgen:document.getElementById('svc-musicgen').checked?'true':'false',embeddings:document.getElementById('svc-embeddings').checked?'true':'false'},
     stt:{whisper_model:document.getElementById('s-stt-model').value,compute_type:document.getElementById('s-stt-compute').value,vad_filter:document.getElementById('s-stt-vad').checked?'true':'false',device:document.getElementById('dev-stt').value},
     llm:{model:document.getElementById('s-llm-model').value,backend:document.getElementById('s-llm-backend').value,dtype:document.getElementById('s-llm-dtype').value,quantize:document.getElementById('s-llm-quantize').value,n_ctx:document.getElementById('s-llm-nctx').value,n_gpu_layers:document.getElementById('s-llm-ngpu').value,kv_cache_sessions:document.getElementById('s-llm-kvs').value,kv_cache_ttl:document.getElementById('s-llm-kvt').value,device:document.getElementById('dev-llm').value},
     tts:{default_voice:document.getElementById('s-tts-voice').value,voices_dir:window._ttsVoicesDir||'',cache_size:document.getElementById('s-tts-cache').value},
     vision:{model:document.getElementById('s-vision-model').value,device:document.getElementById('dev-vision').value},
     imagegen:{model:document.getElementById('s-imagegen-model').value,default_steps:document.getElementById('s-imagegen-steps').value,default_cfg:document.getElementById('s-imagegen-cfg').value,device:document.getElementById('dev-imagegen').value},
+    musicgen:{model:document.getElementById('s-musicgen-model').value,default_duration:document.getElementById('s-musicgen-duration').value,default_steps:document.getElementById('s-musicgen-steps').value,default_cfg:document.getElementById('s-musicgen-cfg').value,device:document.getElementById('dev-musicgen').value},
     embeddings:{model:document.getElementById('s-embeddings-model').value,device:document.getElementById('dev-embeddings').value}
   };
   try{
@@ -3264,12 +3676,13 @@ def parse_args():
     )
     p.add_argument("--port", type=int, default=int(cfg["server"]["port"]))
     p.add_argument("--host", default="0.0.0.0")
-    p.add_argument("--services", nargs="+", choices=["stt", "tts", "llm", "vision", "imagegen", "embeddings"], default=None)
+    p.add_argument("--services", nargs="+", choices=["stt", "tts", "llm", "vision", "imagegen", "musicgen", "embeddings"], default=None)
     p.add_argument("--no-stt", action="store_true", default=not cfg.getboolean("services", "stt"))
     p.add_argument("--no-tts", action="store_true", default=not cfg.getboolean("services", "tts"))
     p.add_argument("--no-llm", action="store_true", default=not cfg.getboolean("services", "llm"))
     p.add_argument("--no-vision", action="store_true", default=not cfg.getboolean("services", "vision"))
     p.add_argument("--no-imagegen", action="store_true", default=not cfg.getboolean("services", "imagegen"))
+    p.add_argument("--no-musicgen", action="store_true", default=not cfg.getboolean("services", "musicgen"))
     p.add_argument("--no-embeddings", action="store_true", default=not cfg.getboolean("services", "embeddings"))
     p.add_argument("--whisper-model", default=cfg["stt"]["whisper_model"])
     p.add_argument("--whisper-compute", default=cfg["stt"]["compute_type"])
@@ -3278,6 +3691,7 @@ def parse_args():
     p.add_argument("--llm-dtype", default=cfg["llm"]["dtype"], choices=["auto", "float16", "bfloat16", "float32"])
     p.add_argument("--vision-model", default=cfg["vision"]["model"])
     p.add_argument("--imagegen-model", default=cfg["imagegen"]["model"])
+    p.add_argument("--musicgen-model", default=cfg["musicgen"]["model"])
     p.add_argument("--embeddings-model", default=cfg["embeddings"]["model"])
     p.add_argument("--ssl-cert", default=None, help="Path to SSL certificate for HTTPS")
     p.add_argument("--ssl-key", default=None, help="Path to SSL private key for HTTPS")
@@ -3287,12 +3701,13 @@ def parse_args():
 def resolve_services(args) -> list[str]:
     if args.services:
         return args.services
-    services = ["stt", "tts", "llm", "vision", "imagegen", "embeddings"]
+    services = ["stt", "tts", "llm", "vision", "imagegen", "musicgen", "embeddings"]
     if args.no_stt: services.remove("stt")
     if args.no_tts: services.remove("tts")
     if args.no_llm: services.remove("llm")
     if args.no_vision: services.remove("vision")
     if args.no_imagegen: services.remove("imagegen")
+    if args.no_musicgen: services.remove("musicgen")
     if args.no_embeddings: services.remove("embeddings")
     return services
 
@@ -3356,6 +3771,9 @@ def _load_single_service(name: str, args):
     elif name == "imagegen":
         dev = resolve_service_device(cfg.get("imagegen", "device", fallback="auto"))
         SERVICES["imagegen"] = ImageGenService(model_name=args.imagegen_model, device=dev)
+    elif name == "musicgen":
+        dev = resolve_service_device(cfg.get("musicgen", "device", fallback="auto"))
+        SERVICES["musicgen"] = MusicGenService(model_name=args.musicgen_model, device=dev)
     elif name == "embeddings":
         dev = resolve_service_device(cfg.get("embeddings", "device", fallback="auto"))
         SERVICES["embeddings"] = EmbeddingsService(model_name=args.embeddings_model, device=dev)
@@ -3365,6 +3783,7 @@ _SERVICE_PACKAGES = {
     "stt":        ["faster-whisper>=1.0.0"],
     "tts":        ["piper-tts>=1.2.0"],
     "imagegen":   ["diffusers>=0.27.0"],
+    "musicgen":    ["ace-step @ git+https://github.com/ace-step/ACE-Step.git"],
     "embeddings": ["sentence-transformers>=2.2.0"],
 }
 
@@ -3375,7 +3794,8 @@ def _try_install_service_deps(name: str) -> bool:
     if not pkgs:
         return False
     log.info(f"Installing missing packages for {name.upper()}: {', '.join(pkgs)}")
-    rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet"] + pkgs)
+    env = {**os.environ, "PYTHONUTF8": "1"}
+    rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet"] + pkgs, env=env)
     return rc == 0
 
 def load_services(args):
