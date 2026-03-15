@@ -235,14 +235,42 @@ document.getElementById('img-gallery').addEventListener('click',function(e){
 loadGallery();
 
 // Custom audio player
+var _activeMusAudio=null;
+var _galleryAudios=[];
+function _stopActiveMusic(){if(_activeMusAudio){try{_activeMusAudio.pause();_activeMusAudio.src=''}catch(e){}_allPlayers=_allPlayers.filter(function(a){return a!==_activeMusAudio})}_activeMusAudio=null}
+function _stopAllGalleryAudio(){_galleryAudios.forEach(function(a){try{a.pause();a.src=''}catch(e){}_allPlayers=_allPlayers.filter(function(p){return p!==a})});_galleryAudios=[]}
 function _fmt(s){if(!s||!isFinite(s))return '0:00';var m=Math.floor(s/60),sec=Math.floor(s%60);return m+':'+(sec<10?'0':'')+sec}
+var _playerVolume=parseFloat(localStorage.getItem('tp-vol'))||0.5;
+var _allPlayers=[];
+function _pauseAllPlayers(except){_allPlayers.forEach(function(a){if(a!==except&&!a.paused)a.pause()})}
 function createPlayer(container,src,small,title,onDelete){
   container.innerHTML='';
   var audio=new Audio();
+  _allPlayers.push(audio);
   audio.preload='auto';
   audio.crossOrigin='anonymous';
+  audio.volume=_playerVolume;
   var wrap=document.createElement('div');wrap.className='tars-player'+(small?' tp-sm':'');
   var btn=document.createElement('button');btn.className='tp-btn';btn.type='button';btn.textContent='\u25B6';
+  // Volume control
+  var volWrap=document.createElement('div');volWrap.className='tp-vol';
+  var volIcon=document.createElement('button');volIcon.className='tp-vol-icon';volIcon.type='button';
+  volIcon.textContent=_playerVolume>0?(_playerVolume>0.5?'\uD83D\uDD0A':'\uD83D\uDD09'):'\uD83D\uDD07';
+  var volSlider=document.createElement('input');volSlider.type='range';volSlider.className='tp-vol-slider';
+  volSlider.min='0';volSlider.max='1';volSlider.step='0.05';volSlider.value=_playerVolume;
+  var prevVol=_playerVolume;
+  volSlider.addEventListener('input',function(){
+    var v=parseFloat(volSlider.value);audio.volume=v;_playerVolume=v;
+    localStorage.setItem('tp-vol',v);
+    volIcon.textContent=v>0?(v>0.5?'\uD83D\uDD0A':'\uD83D\uDD09'):'\uD83D\uDD07';
+    prevVol=v>0?v:prevVol;
+  });
+  volIcon.addEventListener('click',function(){
+    if(audio.volume>0){prevVol=audio.volume;volSlider.value='0';audio.volume=0;_playerVolume=0;volIcon.textContent='\uD83D\uDD07'}
+    else{var v=prevVol||0.5;volSlider.value=v;audio.volume=v;_playerVolume=v;volIcon.textContent=v>0.5?'\uD83D\uDD0A':'\uD83D\uDD09'}
+    localStorage.setItem('tp-vol',_playerVolume);
+  });
+  volWrap.appendChild(volIcon);volWrap.appendChild(volSlider);
   var track=document.createElement('div');track.className='tp-track';
   var barWrap=document.createElement('div');barWrap.className='tp-bar-wrap';
   var barBg=document.createElement('div');barBg.className='tp-bar-bg';
@@ -256,7 +284,7 @@ function createPlayer(container,src,small,title,onDelete){
   if(title){var titleEl=document.createElement('div');titleEl.className='tp-title';titleEl.textContent=title;titleEl.title=title;timeRow.appendChild(titleEl)}
   timeRow.appendChild(tDur);
   track.appendChild(barWrap);track.appendChild(timeRow);
-  wrap.appendChild(btn);wrap.appendChild(track);
+  wrap.appendChild(btn);wrap.appendChild(volWrap);wrap.appendChild(track);
   if(onDelete){
     var delBtn=document.createElement('button');delBtn.className='tp-del';delBtn.type='button';delBtn.textContent='\u00D7';
     delBtn.addEventListener('click',function(e){e.stopPropagation();e.preventDefault();onDelete()});
@@ -288,7 +316,7 @@ function createPlayer(container,src,small,title,onDelete){
 
   audio.addEventListener('loadedmetadata',function(){ready=true;tDur.textContent=_fmt(audio.duration)});
   audio.addEventListener('canplay',function(){ready=true;tDur.textContent=_fmt(audio.duration)});
-  audio.addEventListener('play',function(){btn.textContent='\u23F8'});
+  audio.addEventListener('play',function(){_pauseAllPlayers(audio);btn.textContent='\u23F8'});
   audio.addEventListener('pause',function(){btn.textContent='\u25B6'});
   audio.addEventListener('timeupdate',function(){if(!dragging)updateBar()});
   audio.addEventListener('ended',function(){btn.textContent='\u25B6';bar.style.width='0%';thumb.style.left='0%';tCur.textContent='0:00'});
@@ -325,6 +353,7 @@ async function generateMusic(){
   var taskId=_uid();
   var btn=document.getElementById('mus-gen-btn');
   btn.disabled=true;btn.style.opacity='0.5';
+  _stopActiveMusic();
   document.getElementById('mus-out').textContent='';
   document.getElementById('mus-player').style.display='none';
   var wrap=document.getElementById('mus-progress-wrap');
@@ -352,7 +381,9 @@ async function generateMusic(){
     var blob=await resp.blob();var url=URL.createObjectURL(blob);
     var playerDiv=document.getElementById('mus-player');
     playerDiv.style.display='block';
+    _stopActiveMusic();
     var audio=createPlayer(playerDiv,url,false);
+    _activeMusAudio=audio;
     audio.play();
     document.getElementById('mus-out').textContent='Done.';
     setTimeout(function(){wrap.style.display='none'},2000);
@@ -362,6 +393,7 @@ async function generateMusic(){
 }
 async function loadMusicGallery(){
   var g=document.getElementById('mus-gallery');
+  _stopAllGalleryAudio();
   try{
     var r=await fetch(base+'/musicgen_gallery');var d=await r.json();
     if(!d.tracks||!d.tracks.length){g.innerHTML='';return}
@@ -369,9 +401,11 @@ async function loadMusicGallery(){
     d.tracks.forEach(function(item){
       var m=item.meta||{};
       var playerWrap=document.createElement('div');playerWrap.style.cssText='margin:6px 0';
-      createPlayer(playerWrap,base+'/musicgen_gallery/file/'+item.filename,true,m.prompt||'',function(){
-        fetch(base+'/musicgen_gallery/'+item.filename,{method:'DELETE'}).then(function(){loadMusicGallery()});
+      var galAudio=createPlayer(playerWrap,base+'/musicgen_gallery/file/'+item.filename,true,m.prompt||'',function(){
+        try{galAudio.pause();galAudio.removeAttribute('src');galAudio.load()}catch(e){}
+        setTimeout(function(){fetch(base+'/musicgen_gallery/'+item.filename,{method:'DELETE'}).then(function(){loadMusicGallery()})},200);
       });
+      _galleryAudios.push(galAudio);
       g.appendChild(playerWrap);
     });
   }catch(e){g.innerHTML=''}

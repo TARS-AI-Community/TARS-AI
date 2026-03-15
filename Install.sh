@@ -1079,6 +1079,17 @@ main() {
         local random_pass=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 8)
         sed -i "s/^webui_password = tarspassword$/webui_password = ${random_pass}/" config.ini
         tars_say "Generated random WebUI password: ${random_pass}" "info"
+
+        # Set OpenAI defaults for Pi Zero 2 (LLM, STT, TTS)
+        if [[ "$PI_VERSION" == "pizero2" ]]; then
+            tars_say "Applying Pi Zero 2 defaults (OpenAI for LLM, STT, TTS)..." "info"
+            sed -i "s/^llm_backend = other$/llm_backend = openai/" config.ini
+            sed -i "s/^stt_processor = fastrtc$/stt_processor = openai/" config.ini
+            sed -i "s/^ttsoption = piper$/ttsoption = openai/" config.ini
+            sed -i "s/^vad_method = smart-turn$/vad_method = rms/" config.ini
+            sed -i "s/^contextsize = 4000$/contextsize = 2000/" config.ini
+            tars_say "Pi Zero 2 config defaults applied." "success"
+        fi
     fi
     sudo chown $ACTUAL_USER:$ACTUAL_USER config.ini 2>/dev/null
     chmod 664 config.ini

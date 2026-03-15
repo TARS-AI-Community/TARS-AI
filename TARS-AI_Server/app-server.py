@@ -2287,7 +2287,16 @@ async def musicgen_gallery_delete(filename: str):
     fpath = Path(__file__).parent / "output" / "musicgen" / filename
     if not fpath.exists():
         raise HTTPException(404, "File not found")
-    fpath.unlink()
+    # Retry unlink in case the browser hasn't fully released the file handle yet (Windows)
+    import time as _time
+    for _attempt in range(5):
+        try:
+            fpath.unlink()
+            break
+        except PermissionError:
+            if _attempt == 4:
+                raise HTTPException(423, "File is locked — try again in a moment")
+            _time.sleep(0.3)
     json_path = str(fpath).replace(".wav", ".json")
     if os.path.exists(json_path):
         os.unlink(json_path)
