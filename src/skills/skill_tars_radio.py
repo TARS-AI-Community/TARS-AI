@@ -960,6 +960,7 @@ def execute(parameters, context):
         "play": lambda: _do_play(parameters, skill_config),
         "stop": lambda: _do_stop(),
         "skip": lambda: _do_skip(),
+        "next": lambda: _do_skip(),
         "pause": lambda: _do_pause(),
         "resume": lambda: _do_resume(),
         "download": lambda: _do_download(parameters),
