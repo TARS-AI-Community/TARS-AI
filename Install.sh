@@ -79,14 +79,16 @@ select_pi_version() {
         HAS_DEVICE_SECTION=true
     fi
 
-    if [ "$has_device_section" = false ]; then
-        PI_VERSION="pi5"
-        HAS_DEVICE_SECTION=false
-        tars_say "No [DEVICE] section found, defaulting to PI5" "info"
-        mkdir -p "$tars_data_dir"
-        echo "$PI_VERSION" > "$pi_version_file"
-        _display_profile_summary
-        return
+    if [ "$has_device_section" = true ]; then
+        # Already configured — read existing version from config
+        PI_VERSION=$(grep -A5 '^\[DEVICE\]' "$config_file" | grep '^raspberry_version' | sed 's/.*=\s*//' | tr -d '[:space:]')
+        if [ -n "$PI_VERSION" ]; then
+            tars_say "Device already configured: ${PI_VERSION^^} (from config.ini)" "info"
+            mkdir -p "$tars_data_dir"
+            echo "$PI_VERSION" > "$pi_version_file"
+            _display_profile_summary
+            return
+        fi
     fi
 
     echo ""
