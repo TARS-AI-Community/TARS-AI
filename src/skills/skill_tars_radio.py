@@ -256,6 +256,13 @@ class MusicPlayer:
         self._now_playing = track_meta or {"name": Path(track_path).stem, "_path": track_path}
         self._playing.set()
 
+        # Signal STT that speaker is active so recording loops abort
+        try:
+            from modules.module_tts import set_speaker_active, clear_speaker_active
+        except ImportError:
+            set_speaker_active = clear_speaker_active = lambda: None
+
+        set_speaker_active()
         try:
             self._play_with_soundfile(track_path, gain)
         except Exception as e:
@@ -265,6 +272,7 @@ class MusicPlayer:
             except Exception as e2:
                 queue_message(f"[Radio] ffmpeg also failed: {e2}")
         finally:
+            clear_speaker_active()
             self._playing.clear()
             self._now_playing = None
 
