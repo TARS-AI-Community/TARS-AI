@@ -498,6 +498,16 @@ def _speak_tts(text: str):
             except Exception:
                 pass
 
+        # Pause STT during playback so wake word detector doesn't hear our own voice
+        _stt = None
+        try:
+            from modules.module_stt import get_stt_manager
+            _stt = get_stt_manager()
+            if _stt:
+                _stt.pause()
+        except Exception:
+            pass
+
         # Monkey-patch generate_tts_audio temporarily so play_audio_chunks streams to browser too
         import modules.module_tts as _tts_mod
         _tts_mod.generate_tts_audio = _tee_generate
@@ -505,6 +515,12 @@ def _speak_tts(text: str):
             asyncio.run(play_audio_chunks(text, tts_option))
         finally:
             _tts_mod.generate_tts_audio = _orig_generate
+            # Resume STT after playback
+            if _stt:
+                try:
+                    _stt.resume()
+                except Exception:
+                    pass
     except Exception as e:
         queue_message(f"[Radio] TTS failed: {e}")
 
