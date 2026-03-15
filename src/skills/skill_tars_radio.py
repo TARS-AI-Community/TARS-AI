@@ -535,10 +535,10 @@ def _speak_tts(text: str):
             except Exception:
                 pass
 
-        # Set core state to TALKING — STT auto-aborts recording when
-        # is_tts_playing() is True, no manual pause needed
-        from modules.module_state import set_tars_state, TarsState
-        set_tars_state(TarsState.TALKING)
+        # Don't set TarsState here — this runs in the radio background thread
+        # and would interfere with the main voice pipeline's state machine.
+        # play_audio_chunks sets _tts_playing which causes STT recording to
+        # abort automatically.
 
         # Monkey-patch generate_tts_audio temporarily so play_audio_chunks streams to browser too
         import modules.module_tts as _tts_mod
@@ -547,7 +547,6 @@ def _speak_tts(text: str):
             asyncio.run(play_audio_chunks(text, tts_option))
         finally:
             _tts_mod.generate_tts_audio = _orig_generate
-            set_tars_state(TarsState.STANDBY)
     except Exception as e:
         queue_message(f"[Radio] TTS failed: {e}")
 
