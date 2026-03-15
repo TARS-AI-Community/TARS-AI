@@ -52,15 +52,19 @@ SKILL = {
       * "make me a song about", "generate music", "compose a track", "create a beat"
       * "write a song about", "make some music", "produce a track"
     Do NOT use for playing existing music (use tars_radio instead).
-    Parameters: {{"prompt": "style/genre description of the music", "lyrics": "optional lyrics text", "name": "friendly name for the song", "duration": optional number in seconds}}
-    Example: {{"function": "generate_music", "parameters": {{"prompt": "upbeat electronic song about exploring space", "name": "Space Explorer"}}}}""",
+    IMPORTANT: ALWAYS write lyrics and include them in the "lyrics" parameter unless the user specifically asks for instrumental, no lyrics, background music, or a beat only. Write 4-8 lines of original lyrics that match the theme.
+    Parameters: {{"prompt": "style/genre description of the music", "lyrics": "original lyrics you wrote for the song (use \\n for line breaks)", "name": "friendly name for the song", "duration": optional number in seconds}}
+    Example: {{"function": "generate_music", "parameters": {{"prompt": "upbeat electronic song about exploring space", "lyrics": "We're flying through the stars tonight\\nThe cosmos burning ever bright\\nNo gravity can hold us down\\nWe own the sky without a sound", "name": "Space Explorer"}}}}""",
     "examples": [
-        """Example - Music generation:
+        """Example - Music generation (with lyrics by default):
 User: "Make me a song about robots"
-Response: {{"question": "Make me a song about robots", "reply": "I'll compose a track about robots for you. This will take a minute or two — I'll let you know when it's ready.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "upbeat energetic song about robots and technology", "name": "Robot Anthem"}}}}], "new_memories": []}}""",
-        """Example - Music with lyrics:
+Response: {{"question": "Make me a song about robots", "reply": "I'll compose a track about robots for you. This will take a minute or two — I'll let you know when it's ready.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "upbeat energetic song about robots and technology", "lyrics": "We are the machines that never sleep\\nCircuits running buried deep\\nSteel and wire, code and light\\nWe come alive in the night", "name": "Robot Anthem"}}}}], "new_memories": []}}""",
+        """Example - Music with custom lyrics:
 User: "Write a country song about my dog named Biscuit"
 Response: {{"question": "Write a country song about my dog named Biscuit", "reply": "A country song about Biscuit, coming right up. Give me a minute to compose it.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "country ballad with acoustic guitar, warm and heartfelt", "lyrics": "Oh Biscuit, my old friend\\nWalking by my side until the end\\nThrough fields of gold we run and play\\nBiscuit makes my day", "name": "Biscuit's Song"}}}}], "new_memories": ["user has a dog named Biscuit"]}}""",
+        """Example - Instrumental only (user explicitly asked):
+User: "Make me an instrumental beat, no lyrics"
+Response: {{"question": "Make me an instrumental beat, no lyrics", "reply": "One instrumental beat coming up.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "hard-hitting trap beat, 808 bass, hi-hats", "name": "Raw Beat"}}}}], "new_memories": []}}""",
     ],
 }
 
@@ -110,19 +114,28 @@ def _save_track(audio_bytes: bytes, name: str, metadata: dict) -> str:
 
 
 _playback_cancel = threading.Event()
+_playback_thread = None
 
 
 def stop_playback():
     """Stop any auto-playing music. Can be called from other skills or modules."""
+    global _playback_thread
     _playback_cancel.set()
+    if _playback_thread is not None and _playback_thread.is_alive():
+        _playback_thread.join(timeout=3)
+    _playback_thread = None
 
 
 def _play_file_simple(path: str, name: str):
     """Play audio in a background thread with TTS/STT ducking and cancel support."""
+    global _playback_thread
     import sounddevice as sd
     import soundfile as sf
     import numpy as np
     import time
+
+    # Stop any currently playing song first
+    stop_playback()
 
     def _should_duck():
         try:
@@ -178,7 +191,8 @@ def _play_file_simple(path: str, name: str):
             from modules.module_messageQue import queue_message as qm
             qm(f"[MusicGen] Auto-play error: {e}")
 
-    threading.Thread(target=_play, daemon=True).start()
+    _playback_thread = threading.Thread(target=_play, daemon=True)
+    _playback_thread.start()
 
 
 # ---------------------------------------------------------------------------
