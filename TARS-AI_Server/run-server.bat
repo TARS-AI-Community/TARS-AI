@@ -29,25 +29,27 @@ if not exist "%SERVER%" (
 )
 
 :: ---------------------------------------------------------------------------
-:: Step 1 — Find Python 3.10+
+:: Step 1 — Require Python 3.11
 :: ---------------------------------------------------------------------------
-echo  [....] Checking Python...
+echo  [....] Checking Python 3.11...
 
 set "PYTHON_CMD="
-for %%C in (python python3) do (
-    if not defined PYTHON_CMD (
-        where %%C >nul 2>&1
-        if !errorlevel! == 0 (
-            for /f "tokens=2 delims= " %%V in ('%%C --version 2^>^&1') do (
-                for /f "tokens=1,2 delims=." %%M in ("%%V") do (
-                    if %%M == 3 (
-                        if %%N GEQ 10 (
-                            set "PYTHON_CMD=%%C"
-                            echo  [ OK ] Found Python %%V
-                        ) else (
-                            echo  [ !! ] Python %%V is too old ^(need 3.10+^)
-                        )
-                    )
+:: Try the py launcher first (most reliable on Windows)
+py -3.11 --version >nul 2>&1
+if !errorlevel! == 0 (
+    set "PYTHON_CMD=py -3.11"
+    for /f "tokens=2 delims= " %%V in ('py -3.11 --version 2^>^&1') do (
+        echo  [ OK ] Found Python %%V
+    )
+) else (
+    :: Fallback: check if 'python' happens to be 3.11
+    where python >nul 2>&1
+    if !errorlevel! == 0 (
+        for /f "tokens=2 delims= " %%V in ('python --version 2^>^&1') do (
+            for /f "tokens=1,2 delims=." %%M in ("%%V") do (
+                if %%M == 3 if %%N == 11 (
+                    set "PYTHON_CMD=python"
+                    echo  [ OK ] Found Python %%V
                 )
             )
         )
@@ -56,30 +58,46 @@ for %%C in (python python3) do (
 
 if not defined PYTHON_CMD (
     echo.
-    echo  [FAIL] Python 3.10+ not found.
+    echo  [FAIL] Python 3.11 not found.
     echo.
-    echo         Install it from: https://www.python.org/downloads/
-    echo         Or via winget:   winget install Python.Python.3.11
+    echo         Install it via:  winget install Python.Python.3.11
+    echo         Or download:     https://www.python.org/downloads/release/python-3119/
     echo.
     echo         Make sure to check "Add Python to PATH" during install.
     goto :error
 )
 
 :: ---------------------------------------------------------------------------
-:: Step 2 — Create venv if needed
+:: Step 2 — Create venv if needed (recreate if wrong Python version)
 :: ---------------------------------------------------------------------------
 echo  [....] Setting up virtual environment...
 
+set "NEED_VENV=0"
 if exist "%VENV_PYTHON%" (
-    echo  [ OK ] Virtual environment already exists - skipping.
+    :: Check if existing venv uses Python 3.11
+    for /f "tokens=2 delims= " %%V in ('"%VENV_PYTHON%" --version 2^>^&1') do (
+        for /f "tokens=1,2 delims=." %%M in ("%%V") do (
+            if %%M == 3 if %%N == 11 (
+                echo  [ OK ] Virtual environment already uses Python 3.11 - skipping.
+            ) else (
+                echo  [ !! ] Existing venv uses Python %%M.%%N, need 3.11 - recreating...
+                rmdir /s /q "%VENV_DIR%"
+                set "NEED_VENV=1"
+            )
+        )
+    )
 ) else (
+    set "NEED_VENV=1"
+)
+
+if "!NEED_VENV!"=="1" (
     echo         Creating .venv in %VENV_DIR%...
     %PYTHON_CMD% -m venv "%VENV_DIR%"
     if !errorlevel! neq 0 (
         echo  [FAIL] Failed to create virtual environment.
         goto :error
     )
-    echo  [ OK ] Virtual environment created.
+    echo  [ OK ] Virtual environment created with Python 3.11.
 )
 
 :: ---------------------------------------------------------------------------

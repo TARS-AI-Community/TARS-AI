@@ -2311,6 +2311,7 @@ import platform as _platform
 _tunnel_process = None
 _tunnel_url = None
 _tunnel_error = None
+_tunnel_starting = False
 _tunnel_lock = Lock()
 _CLOUDFLARED_DIR = Path(__file__).parent / "bin"
 
@@ -2454,6 +2455,8 @@ def _get_tunnel_status():
             return {"state": "active", "url": _tunnel_url}
         if _tunnel_process:
             _tunnel_process = None
+        if _tunnel_starting:
+            return {"state": "starting"}
         return {"state": "inactive"}
 
 
@@ -2477,15 +2480,19 @@ async def tunnel_start():
     port = int(_active_config.get("server", "port", fallback="5678")) if _active_config else 5678
 
     def _bg_start():
-        global _tunnel_error
-        if not _cloudflared_bin():
-            ok, err = _install_cloudflared()
+        global _tunnel_error, _tunnel_starting
+        _tunnel_starting = True
+        try:
+            if not _cloudflared_bin():
+                ok, err = _install_cloudflared()
+                if not ok:
+                    _tunnel_error = err
+                    return
+            ok, result = _start_tunnel(port)
             if not ok:
-                _tunnel_error = err
-                return
-        ok, result = _start_tunnel(port)
-        if not ok:
-            _tunnel_error = result
+                _tunnel_error = result
+        finally:
+            _tunnel_starting = False
 
     Thread(target=_bg_start, daemon=True).start()
     return {"state": "starting"}
