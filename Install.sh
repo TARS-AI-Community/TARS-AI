@@ -68,6 +68,62 @@ tars_say() {
     echo ""
 }
 
+# Download a model to stt/ — auto-installs on Pi5, prompts otherwise
+# Usage: download_model "name" "prompt text" "url" "local_path" [pi_versions]
+#   local_path: filename (saves with -O) or empty string (extracts tar archive)
+#   pi_versions: space-separated list of profiles, default "pi5 pi4"
+download_model() {
+    local name=$1 prompt_msg=$2 url=$3 local_path=$4
+    local versions=${5:-"pi5 pi4"}
+
+    # Check if this profile should get this model
+    local dominated=false
+    for v in $versions; do [[ "$PI_VERSION" == "$v" ]] && dominated=true; done
+    $dominated || return 0
+
+    # Skip if already installed
+    if [[ -n "$local_path" ]]; then
+        [[ -f "stt/$local_path" ]] && return 0
+    else
+        # For tar archives, check if extracted dir exists (dirname from tarball)
+        local dirname="${url##*/}"
+        dirname="${dirname%.tar.bz2}"
+        [[ -d "stt/$dirname" ]] && return 0
+    fi
+
+    # Confirm (auto-yes on Pi5)
+    if [[ "$PI_VERSION" != "pi5" ]]; then
+        echo ""
+        read -p "| ${prompt_msg} [y/N] " -n 1 -r
+        echo
+        [[ $REPLY =~ ^[Yy]$ ]] || return 0
+    fi
+
+    tars_say "Downloading ${name}..." "info"
+    mkdir -p stt
+
+    if [[ -n "$local_path" ]]; then
+        # Direct file download
+        if wget -q --show-progress -O "stt/$local_path" "$url"; then
+            echo "|  [OK] ${name} installed"
+        else
+            echo "| [!] Failed to download ${name}"
+        fi
+    else
+        # Tar archive: download, extract, cleanup
+        local archive="${url##*/}"
+        cd stt
+        if wget -q --show-progress "$url"; then
+            tar xjf "$archive"
+            rm "$archive"
+            echo "|  [OK] ${name} installed"
+        else
+            echo "| [!] Failed to download ${name}"
+        fi
+        cd ..
+    fi
+}
+
 select_pi_version() {
     local tars_data_dir="src/memory"
     local pi_version_file="$tars_data_dir/pi_version"
@@ -1052,103 +1108,21 @@ main() {
     cd src
     echo ""
 
-    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
-        if [ ! -d "stt/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17" ]; then
-            echo ""
-            read -p "| Download sherpa-onnx SenseVoiceTiny model (~1GB)? [y/N] " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                tars_say "Downloading SenseVoiceTiny model..." "info"
-                mkdir -p stt
-                cd stt
-                if wget -q --show-progress https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2; then
-                    tar xjf sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
-                    rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
-                    
-                    echo "|  [OK] SenseVoiceTiny model installed"
-                else
-                    echo "| [!] Failed to download SenseVoiceTiny model"
-                fi
-                cd ..
-            fi
-        fi
-    fi
+    # STT model downloads (auto-install on Pi5, prompt on others)
+    download_model "SenseVoiceTiny" "Download sherpa-onnx SenseVoiceTiny model (~1GB)?" \
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2" ""
 
-    # Sherpa-onnx Silero VAD model (~2MB, enables sherpa-onnx VAD without torch)
-    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" || "$PI_VERSION" == "pi3" ]]; then
-        if [ ! -f "stt/silero_vad.onnx" ]; then
-            echo ""
-            read -p "| Download sherpa-onnx Silero VAD model (~2MB)? [y/N] " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                tars_say "Downloading Silero VAD model..." "info"
-                mkdir -p stt
-                if wget -q --show-progress -O stt/silero_vad.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx; then
-                    echo "|  [OK] Silero VAD model installed"
-                else
-                    echo "| [!] Failed to download Silero VAD model"
-                fi
-            fi
-        fi
-    fi
+    download_model "Silero VAD" "Download sherpa-onnx Silero VAD model (~2MB)?" \
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx" "silero_vad.onnx" "pi5 pi4 pi3"
 
-    # Sherpa-onnx GTCRN denoiser model (~5MB, optional audio denoising)
-    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
-        if [ ! -f "stt/gtcrn_simple.onnx" ]; then
-            echo ""
-            read -p "| Download sherpa-onnx speech denoiser model (~5MB)? [y/N] " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                tars_say "Downloading GTCRN denoiser model..." "info"
-                mkdir -p stt
-                if wget -q --show-progress -O stt/gtcrn_simple.onnx https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-enhancement-models/gtcrn_simple.onnx; then
-                    echo "|  [OK] GTCRN denoiser model installed"
-                else
-                    echo "| [!] Failed to download GTCRN denoiser model"
-                fi
-            fi
-        fi
-    fi
+    download_model "GTCRN denoiser" "Download sherpa-onnx speech denoiser model (~5MB)?" \
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/speech-enhancement-models/gtcrn_simple.onnx" "gtcrn_simple.onnx"
 
-    # Sherpa-onnx punctuation model (~200MB, optional punctuation restoration)
-    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
-        if [ ! -d "stt/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12" ]; then
-            echo ""
-            read -p "| Download sherpa-onnx punctuation model (~200MB)? [y/N] " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                tars_say "Downloading punctuation model..." "info"
-                mkdir -p stt
-                cd stt
-                if wget -q --show-progress https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2; then
-                    tar xjf sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2
-                    rm sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2
-                    echo "|  [OK] Punctuation model installed"
-                else
-                    echo "| [!] Failed to download punctuation model"
-                fi
-                cd ..
-            fi
-        fi
-    fi
+    download_model "Punctuation model" "Download sherpa-onnx punctuation model (~200MB)?" \
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2" ""
 
-    # Pipecat Smart Turn v3.2 model (~9MB, semantic turn detection for VAD)
-    if [[ "$PI_VERSION" == "pi5" || "$PI_VERSION" == "pi4" ]]; then
-        if [ ! -f "stt/smart-turn-v3.2-cpu.onnx" ]; then
-            echo ""
-            read -p "| Download Smart Turn v3.2 model (~9MB, semantic end-of-speech)? [y/N] " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                tars_say "Downloading Smart Turn model..." "info"
-                mkdir -p stt
-                if wget -q --show-progress -O stt/smart-turn-v3.2-cpu.onnx https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx; then
-                    echo "|  [OK] Smart Turn model installed"
-                else
-                    echo "| [!] Failed to download Smart Turn model"
-                fi
-            fi
-        fi
-    fi
+    download_model "Smart Turn v3.2" "Download Smart Turn v3.2 model (~9MB, semantic end-of-speech)?" \
+        "https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx" "smart-turn-v3.2-cpu.onnx"
 
     if [ -z "$DISPLAY" ]; then
         export DISPLAY=:0
