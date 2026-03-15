@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html><head><title>TARS-AI Login</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/www/css/login.css">
+</head><body>
+<div class="card">
+  <h1>TARS-AI</h1>
+  <div class="sub">Server Access</div>
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{NEXT}}">
+    <label>API Key</label>
+    <input type="password" name="password" placeholder="Enter your API key" autofocus autocomplete="current-password">
+    <button type="submit">Authenticate</button>
+  </form>
+  <div class="err">{{ERROR}}</div>
+</div>
+</body></html>
