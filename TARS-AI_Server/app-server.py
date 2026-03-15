@@ -1517,9 +1517,16 @@ class MusicGenService:
             dtype="bfloat16" if device == "cuda" else "float32",
             cpu_offload=(device != "cuda"),
         )
+        # ACEStepPipeline.__init__ only configures — weights are lazy-loaded on first
+        # __call__ which re-scans HuggingFace cache every time. Pre-load them now so
+        # the first request is fast and subsequent restarts don't re-fetch file listings.
+        if not self.pipe.loaded:
+            log.info("ACE-Step: pre-loading checkpoint into memory...")
+            self.pipe.load_checkpoint(str(cache_dir))
+            log.info("ACE-Step checkpoint loaded")
         log.info("ACE-Step music generation model loaded")
 
-    def generate(self, prompt: str, lyrics: str = "", duration_sec: float = 60.0,
+    def generate(self, prompt: str, lyrics: str = "", duration_sec: float = 30.0,
                  infer_steps: int = 60, guidance_scale: float = 15.0,
                  seed: int = -1, task_id: str = None) -> bytes:
         """Generate music with vocals from prompt + lyrics. Returns WAV bytes."""
@@ -1534,6 +1541,8 @@ class MusicGenService:
             # Use [inst] tag if no lyrics provided
             actual_lyrics = lyrics.strip() if lyrics.strip() else "[inst]"
 
+            out_dir = str(Path(__file__).parent / "output" / "musicgen")
+            os.makedirs(out_dir, exist_ok=True)
             result = self.pipe(
                 prompt=prompt,
                 lyrics=actual_lyrics,
@@ -1545,6 +1554,7 @@ class MusicGenService:
                 manual_seeds=manual_seeds,
                 batch_size=1,
                 format="wav",
+                save_path=out_dir,
             )
 
             if task_id:
@@ -1942,6 +1952,13 @@ async def llm_chat(request: Request):
             return JSONResponse(result)
     except HTTPException:
         raise
+    except torch.cuda.OutOfMemoryError:
+        gc.collect()
+        torch.cuda.empty_cache()
+        log.error("LLM: GPU out of memory during inference. Freed cache. "
+                   "Try shorter prompts, lower max_tokens, or enable quantization.")
+        raise HTTPException(503, "GPU out of memory — request too large. "
+                                 "Try shorter input or reduce max_tokens.")
     except Exception as e:
         log.error(f"LLM error: {traceback.format_exc()}")
         raise HTTPException(500, str(e))
@@ -2006,6 +2023,11 @@ async def vision_caption(image: UploadFile = File(...), prompt: str = Form(None)
             caption = await loop.run_in_executor(_INFERENCE_POOL, lambda: svc.caption(image_bytes, prompt=prompt or None))
             log.info(f"Vision ({svc.backend}): \"{caption}\"")
             return {"caption": caption}
+        except torch.cuda.OutOfMemoryError:
+            gc.collect()
+            torch.cuda.empty_cache()
+            log.error("Vision: GPU out of memory during captioning")
+            raise HTTPException(503, "GPU out of memory — try a smaller image or lighter vision model.")
         except Exception:
             log.error(f"Vision error: {traceback.format_exc()}")
     if "llm" in SERVICES and getattr(SERVICES["llm"], "supports_vision", False):
@@ -2013,6 +2035,11 @@ async def vision_caption(image: UploadFile = File(...), prompt: str = Form(None)
             caption = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["llm"].caption_image(image_bytes, prompt=prompt or None))
             log.info(f"Vision (VLM): \"{caption}\"")
             return {"caption": caption}
+        except torch.cuda.OutOfMemoryError:
+            gc.collect()
+            torch.cuda.empty_cache()
+            log.error("VLM: GPU out of memory during captioning")
+            raise HTTPException(503, "GPU out of memory — try a smaller image.")
         except Exception:
             log.error(f"VLM error: {traceback.format_exc()}")
     if "vision" not in SERVICES:
@@ -2044,6 +2071,11 @@ async def sdapi_txt2img(request: Request):
         image_bytes = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
         log.info(f"ImageGen: \"{prompt[:60]}\"")
         return {"images": [base64.b64encode(image_bytes).decode()], "parameters": body, "info": ""}
+    except torch.cuda.OutOfMemoryError:
+        gc.collect()
+        torch.cuda.empty_cache()
+        log.error("ImageGen: GPU out of memory. Try smaller resolution or fewer steps.")
+        raise HTTPException(503, "GPU out of memory — try smaller width/height or fewer steps.")
     except Exception as e:
         log.error(f"ImageGen error: {traceback.format_exc()}")
         raise HTTPException(500, str(e))
@@ -2095,6 +2127,11 @@ async def generate_image_simple(request: Request):
             json.dump(meta, f)
         return StreamingResponse(BytesIO(image_bytes), media_type="image/png",
                                  headers={"X-Image-Filename": fname})
+    except torch.cuda.OutOfMemoryError:
+        gc.collect()
+        torch.cuda.empty_cache()
+        log.error("ImageGen: GPU out of memory. Try smaller resolution or fewer steps.")
+        raise HTTPException(503, "GPU out of memory — try smaller width/height or fewer steps.")
     except Exception as e:
         log.error(f"ImageGen error: {traceback.format_exc()}")
         raise HTTPException(500, str(e))
@@ -2173,7 +2210,7 @@ async def generate_music(request: Request):
         gen_kwargs = dict(
             prompt=prompt,
             lyrics=lyrics,
-            duration_sec=float(body.get("duration", 60)),
+            duration_sec=float(body.get("duration", 30)),
             infer_steps=int(body.get("steps", 60)),
             guidance_scale=float(body.get("guidance_scale", 15.0)),
             seed=int(body.get("seed", -1)),
@@ -2202,6 +2239,11 @@ async def generate_music(request: Request):
             json.dump(meta, f)
         return StreamingResponse(BytesIO(audio_bytes), media_type="audio/wav",
                                  headers={"X-Audio-Filename": fname})
+    except torch.cuda.OutOfMemoryError:
+        gc.collect()
+        torch.cuda.empty_cache()
+        log.error("MusicGen: GPU out of memory. Try shorter duration or fewer steps.")
+        raise HTTPException(503, "GPU out of memory — try shorter duration or fewer steps.")
     except Exception as e:
         log.error(f"MusicGen error: {traceback.format_exc()}")
         raise HTTPException(500, str(e))
@@ -2656,7 +2698,11 @@ async def api_save_settings(request: Request):
                         loaded.append(svc.upper())
                         log.info(f"Settings: loaded {svc.upper()} (enabled by user)")
                     else:
-                        load_errors.append(svc.upper())
+                        load_errors.append(f"{svc.upper()} (not enough GPU memory?)")
+                except torch.cuda.OutOfMemoryError:
+                    _cleanup_failed_service(svc)
+                    load_errors.append(f"{svc.upper()} (GPU out of memory)")
+                    log.error(f"Settings: GPU OOM loading {svc.upper()}")
                 except Exception as e:
                     load_errors.append(svc.upper())
                     log.error(f"Settings: failed to load {svc.upper()}: {e}")
@@ -2834,8 +2880,23 @@ def _try_install_service_deps(name: str) -> bool:
     rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet"] + pkgs, env=env)
     return rc == 0
 
+def _cleanup_failed_service(name: str):
+    """Clean up GPU memory after a failed service load."""
+    if name in SERVICES:
+        try:
+            svc = SERVICES[name]
+            if hasattr(svc, "unload"):
+                svc.unload()
+        except Exception:
+            pass
+        del SERVICES[name]
+    gc.collect()
+    if DEVICE == "cuda":
+        torch.cuda.empty_cache()
+
+
 def _load_service_safe(name: str, args):
-    """Load a single service with error handling and auto-install retry."""
+    """Load a single service with error handling, OOM recovery, and auto-install retry."""
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             _load_single_service(name, args)
@@ -2846,10 +2907,16 @@ def _load_service_safe(name: str, args):
                     _load_single_service(name, args)
                 return
             except Exception:
-                pass
+                _cleanup_failed_service(name)
         log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
         log.warning(f"Continuing without {name.upper()}")
+    except torch.cuda.OutOfMemoryError:
+        _cleanup_failed_service(name)
+        log.error(f"GPU out of memory loading {name.upper()} — skipping. "
+                   f"Free VRAM by disabling other services or using quantization.")
+        log.warning(f"Continuing without {name.upper()}")
     except Exception:
+        _cleanup_failed_service(name)
         log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
         log.warning(f"Continuing without {name.upper()}")
 
