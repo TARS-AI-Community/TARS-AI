@@ -19,6 +19,7 @@ from modules.module_llm import process_completion, detect_emotion, detect_emotio
 from modules.module_tts import play_audio_chunks, SentenceTTSPipeline
 from modules.module_messageQue import queue_message
 from modules.module_servoctl import initialize_servos
+from modules.module_state import set_tars_state, TarsState
 
 CONFIG = load_config()
 CAPABILITIES = get_capabilities()
@@ -125,14 +126,13 @@ def wake_word_callback(wake_response):
         ui_manager.deactivate_screensaver()
         character_name = CONFIG['CHAR']['character_name']
         ui_manager.update_data(character_name, wake_response, character_name)
-        ui_manager.set_tars_status("TALKING")
+        set_tars_state(TarsState.TALKING)
 
     # Don't run barge-in on wake responses — they're too short and the mic
     # picks up TARS's own voice, causing false positives
     asyncio.run(play_audio_chunks(wake_response, CONFIG['TTS']['ttsoption'], True))
 
-    if ui_manager:
-        ui_manager.set_tars_status("LISTENING")
+    set_tars_state(TarsState.LISTENING)
 
 def utterance_callback(message):
     """
@@ -189,8 +189,7 @@ def utterance_callback(message):
             os.system('shutdown /s /t 0')
             return
 
-        if ui_manager:
-            ui_manager.set_tars_status("THINKING")
+        set_tars_state(TarsState.THINKING)
 
         # ── Sentence-pipeline TTS ─────────────────────────────────────────────
         _acc_raw    = ['']   # cumulative raw text from LLM (may include <think>)
@@ -203,7 +202,7 @@ def utterance_callback(message):
 
         def _on_first_play():
             if ui_manager:
-                ui_manager.set_tars_status("TALKING")
+                set_tars_state(TarsState.TALKING)
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text="")
 
@@ -299,8 +298,7 @@ def utterance_callback(message):
                     socketio.emit('bot_message', {'message': ''})
                 except Exception:
                     pass
-            if ui_manager:
-                ui_manager.set_tars_status("LISTENING")
+            set_tars_state(TarsState.LISTENING)
             return
 
         # Extract the final reply text for post-processing (emotion, display)
@@ -397,7 +395,7 @@ def utterance_callback(message):
         if preemptive is not None:
             reply_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
             if ui_manager:
-                ui_manager.set_tars_status("TALKING")
+                set_tars_state(TarsState.TALKING)
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=reply_clean)
             speed.start('tts')
@@ -420,7 +418,7 @@ def utterance_callback(message):
             # Update OpenGL UI with follow-up content
             if ui_manager:
                 ui_manager.update_streaming_data(_followup_reply)
-                ui_manager.set_tars_status("TALKING")
+                set_tars_state(TarsState.TALKING)
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=followup_clean)
             speed.start('followup_tts')
@@ -434,8 +432,7 @@ def utterance_callback(message):
         # Bot only goes to STANDBY after timeout in STT manager
         if was_interrupted:
             time.sleep(0.3)
-        if ui_manager:
-            ui_manager.set_tars_status("LISTENING")
+        set_tars_state(TarsState.LISTENING)
 
         # Push final reply to web UI (finalizes streaming bubble or creates one for preemptive)
         # Mark audio_streamed=True since audio was played on Pi speakers — prevents
@@ -520,8 +517,7 @@ def utterance_callback(message):
     except json.JSONDecodeError:
         queue_message("ERROR: Invalid JSON format. Could not process user message.")
     except Exception as e:
-        if ui_manager:
-            ui_manager.set_tars_status("LISTENING")
+        set_tars_state(TarsState.LISTENING)
         queue_message(f"ERROR: {e}")
 
 def post_utterance_callback():
