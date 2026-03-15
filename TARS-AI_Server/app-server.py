@@ -1578,10 +1578,27 @@ class MusicGenService:
                 os.unlink(audio_path)
             except Exception:
                 pass
-            return audio_bytes
+            # Encode to OGG Vorbis (~12x smaller than 48kHz stereo WAV, pure Python)
+            return self._wav_to_ogg(audio_bytes)
         finally:
             if task_id:
                 MusicGenService._progress.pop(task_id, None)
+
+    @staticmethod
+    def _wav_to_ogg(wav_bytes: bytes) -> bytes:
+        """Convert WAV bytes to OGG Vorbis using soundfile (no ffmpeg needed).
+        Writes in chunks to avoid stack overflow in libsndfile's OGG encoder on Windows."""
+        import soundfile as sf
+        buf_in = io.BytesIO(wav_bytes)
+        data, samplerate = sf.read(buf_in)
+        buf_out = io.BytesIO()
+        channels = data.shape[1] if data.ndim > 1 else 1
+        chunk_samples = samplerate * 10  # 10-second chunks
+        with sf.SoundFile(buf_out, mode="w", samplerate=samplerate,
+                          channels=channels, format="OGG", subtype="VORBIS") as f:
+            for i in range(0, len(data), chunk_samples):
+                f.write(data[i:i + chunk_samples])
+        return buf_out.getvalue()
 
     def unload(self):
         del self.pipe
@@ -2243,7 +2260,7 @@ async def generate_music(request: Request):
         out_dir = Path(__file__).parent / "output" / "musicgen"
         out_dir.mkdir(parents=True, exist_ok=True)
         ts = time.strftime("%Y%m%d_%H%M%S")
-        fname = f"{ts}_{uuid.uuid4().hex[:8]}.wav"
+        fname = f"{ts}_{uuid.uuid4().hex[:8]}.ogg"
         fpath = out_dir / fname
         with open(str(fpath), "wb") as f:
             f.write(audio_bytes)
@@ -2256,9 +2273,9 @@ async def generate_music(request: Request):
             "guidance_scale": gen_kwargs["guidance_scale"],
             "seed": gen_kwargs["seed"],
         }
-        with open(str(fpath).replace(".wav", ".json"), "w") as f:
+        with open(str(fpath).replace(".ogg", ".json"), "w") as f:
             json.dump(meta, f)
-        return StreamingResponse(BytesIO(audio_bytes), media_type="audio/wav",
+        return StreamingResponse(BytesIO(audio_bytes), media_type="audio/ogg",
                                  headers={"X-Audio-Filename": fname})
     except torch.cuda.OutOfMemoryError:
         gc.collect()
@@ -2275,11 +2292,13 @@ async def musicgen_gallery_list():
     out_dir = Path(__file__).parent / "output" / "musicgen"
     if not out_dir.exists():
         return {"tracks": []}
-    files = sorted(out_dir.glob("*.wav"), key=lambda f: f.stat().st_mtime, reverse=True)
+    files = sorted(
+        [f for f in out_dir.iterdir() if f.suffix in (".ogg", ".wav") and not f.name.startswith(".")],
+        key=lambda f: f.stat().st_mtime, reverse=True)
     results = []
     for f in files:
         meta = {}
-        json_path = str(f).replace(".wav", ".json")
+        json_path = str(f).rsplit(".", 1)[0] + ".json"
         if os.path.exists(json_path):
             try:
                 with open(json_path) as jf:
@@ -2292,18 +2311,19 @@ async def musicgen_gallery_list():
 
 @app.get("/musicgen_gallery/file/{filename}")
 async def musicgen_gallery_file(filename: str):
-    if not _RE_WAV_FILENAME.match(filename):
+    if not _RE_AUDIO_FILENAME.match(filename):
         raise HTTPException(400, "Invalid filename")
     fpath = Path(__file__).parent / "output" / "musicgen" / filename
     if not fpath.exists():
         raise HTTPException(404, "File not found")
     from starlette.responses import FileResponse
-    return FileResponse(str(fpath), media_type="audio/wav")
+    media = "audio/ogg" if fpath.suffix == ".ogg" else "audio/wav"
+    return FileResponse(str(fpath), media_type=media)
 
 
 @app.delete("/musicgen_gallery/{filename}")
 async def musicgen_gallery_delete(filename: str):
-    if not _RE_WAV_FILENAME.match(filename):
+    if not _RE_AUDIO_FILENAME.match(filename):
         raise HTTPException(400, "Invalid filename")
     fpath = Path(__file__).parent / "output" / "musicgen" / filename
     if not fpath.exists():
@@ -2318,7 +2338,7 @@ async def musicgen_gallery_delete(filename: str):
             if _attempt == 4:
                 raise HTTPException(423, "File is locked — try again in a moment")
             _time.sleep(0.3)
-    json_path = str(fpath).replace(".wav", ".json")
+    json_path = str(fpath).rsplit(".", 1)[0] + ".json"
     if os.path.exists(json_path):
         os.unlink(json_path)
     return {"ok": True}
@@ -2432,7 +2452,7 @@ import platform as _platform
 
 # Pre-compiled regex for gallery filename validation (used on every gallery request)
 _RE_PNG_FILENAME = _re.compile(r'^[\w\-]+\.png$')
-_RE_WAV_FILENAME = _re.compile(r'^[\w\-]+\.wav$')
+_RE_AUDIO_FILENAME = _re.compile(r'^[\w\-]+\.(ogg|wav)$')
 
 _tunnel_process = None
 _tunnel_url = None
