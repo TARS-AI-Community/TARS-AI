@@ -1770,7 +1770,11 @@ async def logout():
 class TrackingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start = time.time()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except RuntimeError:
+            # "No response returned" — inner middleware chain didn't produce a response
+            response = JSONResponse({"error": "Internal Server Error"}, status_code=500)
         latency_ms = (time.time() - start) * 1000
         path = request.url.path
         service = _endpoint_to_service(path)
@@ -3082,7 +3086,13 @@ def load_services(args):
 
 # -- Graceful shutdown -------------------------------------------------
 
+_shutting_down = False
+
 def _shutdown_handler(signum, frame):
+    global _shutting_down
+    if _shutting_down:
+        return
+    _shutting_down = True
     log.info("Shutdown signal received — cleaning up...")
     _stop_tunnel()
     for name, svc in list(SERVICES.items()):
@@ -3094,9 +3104,12 @@ def _shutdown_handler(signum, frame):
             pass
     gc.collect()
     if DEVICE == "cuda":
-        torch.cuda.empty_cache()
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
     log.info("Cleanup complete. Exiting.")
-    sys.exit(0)
+    os._exit(0)
 
 
 # ===================================================================
