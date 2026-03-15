@@ -235,6 +235,8 @@ document.getElementById('img-gallery').addEventListener('click',function(e){
 loadGallery();
 
 // Custom audio player
+var _activeMusAudio=null;
+function _stopActiveMusic(){if(_activeMusAudio){try{_activeMusAudio.pause();_activeMusAudio.src=''}catch(e){}}_activeMusAudio=null}
 function _fmt(s){if(!s||!isFinite(s))return '0:00';var m=Math.floor(s/60),sec=Math.floor(s%60);return m+':'+(sec<10?'0':'')+sec}
 function createPlayer(container,src,small,title,onDelete){
   container.innerHTML='';
@@ -325,6 +327,7 @@ async function generateMusic(){
   var taskId=_uid();
   var btn=document.getElementById('mus-gen-btn');
   btn.disabled=true;btn.style.opacity='0.5';
+  _stopActiveMusic();
   document.getElementById('mus-out').textContent='';
   document.getElementById('mus-player').style.display='none';
   var wrap=document.getElementById('mus-progress-wrap');
@@ -352,7 +355,9 @@ async function generateMusic(){
     var blob=await resp.blob();var url=URL.createObjectURL(blob);
     var playerDiv=document.getElementById('mus-player');
     playerDiv.style.display='block';
+    _stopActiveMusic();
     var audio=createPlayer(playerDiv,url,false);
+    _activeMusAudio=audio;
     audio.play();
     document.getElementById('mus-out').textContent='Done.';
     setTimeout(function(){wrap.style.display='none'},2000);
