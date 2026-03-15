@@ -876,12 +876,14 @@ retry_pip_install() {
             local failed=0
             local total=$(grep -v "^#" "$req_file" | grep -v "^$" | wc -l)
             local count=0
-            while IFS= read -r pkg; do
-                [[ -z "$pkg" || "$pkg" == \#* ]] && continue
+            while IFS= read -r line; do
+                # Strip inline comments and trim whitespace
+                local pkg=$(echo "$line" | sed 's/#.*//' | xargs)
+                [[ -z "$pkg" ]] && continue
                 count=$((count + 1))
-                echo -ne "\r|  [$count/$total] Installing: $pkg                    "
+                echo -ne "\r|  [$count/$total] Installing: $pkg                              "
                 if ! pip install --no-cache-dir "$pkg" >/dev/null 2>&1; then
-                    echo -e "\r|  [!] Failed: $pkg                                   "
+                    echo -e "\r|  [!] Failed: $pkg                                             "
                     failed=$((failed + 1))
                 fi
             done < "$req_file"
