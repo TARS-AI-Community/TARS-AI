@@ -203,13 +203,14 @@ def execute(parameters, context):
     """Generate a song via TARS-AI Server. Returns None (LLM already replied)."""
     from modules.module_messageQue import queue_message
 
-    prompt = parameters.get("prompt", "")
+    # Accept common parameter aliases the LLM might use
+    prompt = parameters.get("prompt", "") or parameters.get("description", "") or parameters.get("genre", "")
     if not prompt:
         return "No music description provided."
 
     lyrics = parameters.get("lyrics", "")
-    name = parameters.get("name", "")
-    duration = parameters.get("duration", None)
+    name = parameters.get("name", "") or parameters.get("title", "")
+    duration = parameters.get("duration", None) or parameters.get("length", None)
 
     skill_config = context.get("skill_config", {})
     source = context.get("source", "voice")
