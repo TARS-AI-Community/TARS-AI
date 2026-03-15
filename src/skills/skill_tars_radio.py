@@ -296,7 +296,7 @@ class MusicPlayer:
                     # Duck for TTS or active voice interaction
                     if self._should_duck():
                         stream.stop()
-                        self._wait_for_tts()
+                        self._wait_for_standby()
                         if self._should_stop():
                             break
                         stream.start()
@@ -391,29 +391,16 @@ class MusicPlayer:
     def get_now_playing(self):
         return self._now_playing
 
-    def _is_tts_active(self):
+    def _should_duck(self):
+        """Check if music should duck — TARS is not in STANDBY."""
         try:
-            from modules.module_tts import is_tts_playing
-            return is_tts_playing()
+            from modules.module_state import get_tars_state, TarsState
+            return get_tars_state() != TarsState.STANDBY
         except Exception:
             return False
 
-    def _is_stt_active(self):
-        """Check if STT is actively recording (wake word detected, not sleeping)."""
-        try:
-            from modules.module_stt import get_stt_manager
-            stt = get_stt_manager()
-            if stt is not None:
-                return not stt._last_status_was_sleeping
-        except Exception:
-            pass
-        return False
-
-    def _should_duck(self):
-        """Check if music should duck for TTS or active voice interaction."""
-        return self._is_tts_active() or self._is_stt_active()
-
-    def _wait_for_tts(self):
+    def _wait_for_standby(self):
+        """Block until TARS returns to STANDBY or playback is cancelled."""
         while self._should_duck() and not self._should_stop():
             time.sleep(0.1)
 
@@ -426,6 +413,8 @@ _library: MusicLibrary | None = None
 _player: MusicPlayer | None = None
 _radio_thread: threading.Thread | None = None
 _radio_cancel = threading.Event()
+_state_hook_registered = False
+_user_paused = False  # True when user explicitly said "pause"
 
 
 def _get_library() -> MusicLibrary:
@@ -440,6 +429,44 @@ def _get_player() -> MusicPlayer:
     if _player is None:
         _player = MusicPlayer()
     return _player
+
+
+# ===========================================================================
+# State hooks — music auto-pauses when leaving STANDBY, resumes on return
+# ===========================================================================
+
+def _on_state_change(old_state, new_state):
+    """React to TARS state transitions for music pause/resume."""
+    from modules.module_state import TarsState
+
+    player = _get_player()
+
+    if old_state == TarsState.STANDBY and new_state != TarsState.STANDBY:
+        # Leaving STANDBY (wake word detected) — pause music
+        if player.is_playing():
+            player.pause()
+            queue_message("[Radio] Music paused (left STANDBY)")
+
+    elif new_state == TarsState.STANDBY and old_state != TarsState.STANDBY:
+        # Returning to STANDBY — resume music if not user-paused
+        if _user_paused:
+            return
+        if _radio_thread is not None and _radio_thread.is_alive() and not _radio_cancel.is_set():
+            player.resume()
+            queue_message("[Radio] Music resumed (STANDBY)")
+
+
+def _register_state_hooks():
+    global _state_hook_registered
+    if _state_hook_registered:
+        return
+    try:
+        from modules.module_state import on_state_change
+        on_state_change(_on_state_change)
+        _state_hook_registered = True
+        queue_message("[Radio] Registered state hooks")
+    except Exception as e:
+        queue_message(f"[Radio] Failed to register state hooks: {e}")
 
 
 # ===========================================================================
@@ -508,17 +535,8 @@ def _speak_tts(text: str):
             except Exception:
                 pass
 
-        # Pause STT during playback so wake word detector doesn't hear our own voice
-        _stt = None
-        try:
-            from modules.module_stt import get_stt_manager
-            _stt = get_stt_manager()
-            if _stt:
-                _stt.pause()
-        except Exception:
-            pass
-
-        # Set core state to TALKING so UI reflects it
+        # Set core state to TALKING — STT auto-aborts recording when
+        # is_tts_playing() is True, no manual pause needed
         from modules.module_state import set_tars_state, TarsState
         set_tars_state(TarsState.TALKING)
 
@@ -530,12 +548,6 @@ def _speak_tts(text: str):
         finally:
             _tts_mod.generate_tts_audio = _orig_generate
             set_tars_state(TarsState.STANDBY)
-            # Resume STT after playback
-            if _stt:
-                try:
-                    _stt.resume()
-                except Exception:
-                    pass
     except Exception as e:
         queue_message(f"[Radio] TTS failed: {e}")
 
@@ -649,34 +661,11 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
         except Exception:
             pass
 
-        # DJ intro — pause STT so wake word detector doesn't hear our own voice
+        # DJ intro (_speak_tts sets TALKING state and STT auto-aborts recording)
         if dj_intros and not _radio_cancel.is_set():
-            from modules.module_state import set_tars_state, TarsState
-            set_tars_state(TarsState.TALKING)
-
-            _stt_paused = False
-            try:
-                from modules.module_stt import get_stt_manager
-                _stt = get_stt_manager()
-                if _stt:
-                    _stt.pause()
-                    _stt_paused = True
-            except Exception:
-                pass
-
             intro = _generate_dj_intro(track_name)
             queue_message(f"[Radio] DJ intro: {intro}")
             _speak_tts(intro)
-
-            # Brief settle time for mic to clear before resuming STT
-            if not _radio_cancel.is_set():
-                time.sleep(0.5)
-
-            if _stt_paused:
-                try:
-                    _stt.resume()
-                except Exception:
-                    pass
 
         if _radio_cancel.is_set():
             break
@@ -740,6 +729,8 @@ def _do_play(parameters, skill_config):
     player = _get_player()
     player._cancel.clear()  # Reset from any previous stop()
 
+    _register_state_hooks()
+
     _radio_thread = threading.Thread(
         target=_radio_loop,
         args=(tracks, skill_config),
@@ -769,6 +760,8 @@ def _do_skip():
 
 
 def _do_pause():
+    global _user_paused
+    _user_paused = True  # Prevent auto-resume on STANDBY
     player = _get_player()
     if player.is_playing():
         player.pause()
@@ -776,6 +769,8 @@ def _do_pause():
 
 
 def _do_resume():
+    global _user_paused
+    _user_paused = False
     player = _get_player()
     player.resume()
     return None
