@@ -70,6 +70,19 @@ Response: {{"question": "Stream the driveway camera", "reply": "Starting the dri
 }
 
 
+def _extract_reply(raw):
+    """Extract just the reply text from a raw LLM response (may be JSON)."""
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict) and "reply" in parsed:
+            return parsed["reply"]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return raw
+
+
 # ── Stream registry (module-level, no external dependencies) ─────────────────
 _stream_registry = {}  # {camera_key: {cam, skill_config}}
 _routes_registered = False
@@ -400,13 +413,14 @@ def _handle_analyze(cam, cam_name, context, skill_config):
         if description and not str(description).startswith("Error"):
             if vision_processor in ("blip", "server_hosted"):
                 try:
-                    from modules.module_llm import get_completion
+                    from modules.module_llm import raw_complete_llm
                     vision_prompt = (
                         f"*You checked the {cam_name} security camera and saw: {description}*"
                         f" The user asked: {user_input}" if user_input else
                         f"*You checked the {cam_name} security camera and saw: {description}*"
                     )
-                    reply = get_completion(vision_prompt)
+                    raw = raw_complete_llm(vision_prompt)
+                    reply = _extract_reply(raw)
                     return reply if reply else description
                 except Exception as e:
                     queue_message(f"[NetworkCam] LLM follow-up failed: {e}")

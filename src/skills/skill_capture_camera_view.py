@@ -2,6 +2,23 @@
 
 import threading
 
+_vision_lock = threading.Lock()
+_vision_active = False  # process-wide flag (not thread-local)
+
+
+def _extract_reply(raw):
+    """Extract just the reply text from a raw LLM response (may be JSON)."""
+    if not raw:
+        return None
+    try:
+        import json
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict) and "reply" in parsed:
+            return parsed["reply"]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return raw
+
 SKILL = {
     "name": "capture_camera_view",
     "followup": True,
@@ -31,11 +48,9 @@ User: "Look at this" -> capture_camera_view""",
     ],
 }
 
-_vision_in_progress = threading.local()
-
-
 def execute(parameters, context):
     """Capture and analyze camera view. Returns reply text."""
+    global _vision_active
     from modules.module_messageQue import queue_message
     from modules.module_config import load_config
 
@@ -44,7 +59,7 @@ def execute(parameters, context):
         queue_message("INFO: Skipping camera capture — user already provided an image")
         return None
 
-    if getattr(_vision_in_progress, 'active', False):
+    if _vision_active:
         queue_message("WARN: Skipping recursive capture_camera_view call")
         return None
 
@@ -67,7 +82,7 @@ def execute(parameters, context):
     except Exception:
         pass
 
-    _vision_in_progress.active = True
+    _vision_active = True
     try:
         # Single-pass for multimodal backends
         if vision_processor in ("llm", "openai"):
@@ -99,12 +114,13 @@ def execute(parameters, context):
                 if query:
                     vision_prompt += f" The user asked: {query}"
                 try:
-                    from modules.module_llm import get_completion
-                    reply = get_completion(vision_prompt)
+                    from modules.module_llm import raw_complete_llm
+                    raw = raw_complete_llm(vision_prompt)
+                    reply = _extract_reply(raw)
                     return reply if reply else description
                 except Exception as e:
                     queue_message(f"WARN: Vision follow-up LLM call failed: {e}")
                     return description
             return "I tried to look but couldn't process the image."
     finally:
-        _vision_in_progress.active = False
+        _vision_active = False
