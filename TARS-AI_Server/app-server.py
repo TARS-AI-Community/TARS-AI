@@ -2899,8 +2899,26 @@ _SERVICE_PACKAGES = {
     "embeddings": ["sentence-transformers>=2.2.0"],
 }
 
+def _cleanup_stale_pip_dirs():
+    """Remove ~* temp directories left by pip when it can't rename locked packages on Windows."""
+    if sys.platform != "win32":
+        return
+    import site, shutil
+    for sp in site.getsitepackages():
+        sp = Path(sp)
+        if not sp.is_dir():
+            continue
+        for entry in sp.iterdir():
+            if entry.name.startswith("~") and entry.is_dir():
+                try:
+                    shutil.rmtree(entry)
+                    log.info(f"Cleaned up stale pip temp dir: {entry.name}")
+                except Exception:
+                    pass
+
 def _try_install_service_deps(name: str) -> bool:
-    """Auto-install missing packages for a service. Returns True if something was installed."""
+    """Auto-install missing packages for a service. Returns True if something was installed.
+    On Windows, retries with --force-reinstall if the first attempt leaves stale temp dirs."""
     import subprocess as _sp
     pkgs = _SERVICE_PACKAGES.get(name)
     if not pkgs:
@@ -2908,6 +2926,20 @@ def _try_install_service_deps(name: str) -> bool:
     log.info(f"Installing missing packages for {name.upper()}: {', '.join(pkgs)}")
     env = {**os.environ, "PYTHONUTF8": "1"}
     rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet"] + pkgs, env=env)
+    if rc == 0:
+        # Clean up any ~* leftovers and verify the module is actually importable
+        _cleanup_stale_pip_dirs()
+        # Invalidate import caches so Python sees newly installed packages
+        import importlib
+        importlib.invalidate_caches()
+        return True
+    # First attempt failed — clean up stale dirs and force reinstall
+    _cleanup_stale_pip_dirs()
+    log.info(f"Retrying install for {name.upper()} with --force-reinstall...")
+    rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet", "--force-reinstall"] + pkgs, env=env)
+    _cleanup_stale_pip_dirs()
+    import importlib
+    importlib.invalidate_caches()
     return rc == 0
 
 def _cleanup_failed_service(name: str):
@@ -2936,6 +2968,26 @@ def _load_service_safe(name: str, args):
                 with contextlib.redirect_stdout(io.StringIO()):
                     _load_single_service(name, args)
                 return
+            except (ImportError, ModuleNotFoundError):
+                # Package installed but still not importable — stale DLL locks on Windows
+                # Force reinstall with clean state
+                _cleanup_stale_pip_dirs()
+                log.warning(f"{name.upper()}: module still not importable after install, forcing reinstall...")
+                import subprocess as _sp
+                pkgs = _SERVICE_PACKAGES.get(name, [])
+                if pkgs:
+                    env = {**os.environ, "PYTHONUTF8": "1"}
+                    _sp.call([sys.executable, "-m", "pip", "install", "--quiet", "--force-reinstall", "--no-deps"] + pkgs, env=env)
+                    _cleanup_stale_pip_dirs()
+                    import importlib
+                    importlib.invalidate_caches()
+                    try:
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            _load_single_service(name, args)
+                        return
+                    except Exception:
+                        pass
+                _cleanup_failed_service(name)
             except Exception:
                 _cleanup_failed_service(name)
         log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
