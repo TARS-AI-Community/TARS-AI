@@ -195,9 +195,17 @@ class TarsConfigManager:
         
         for section_name, template_section in template_sections.items():
             if section_name not in existing_sections:
+                # Skip new SKILL sections that only set disabled=true — the skill
+                # was already implicitly enabled (no section = enabled). Adding
+                # disabled=true would retroactively disable it for existing users.
+                if (section_name.startswith("SKILL:")
+                    and "disabled" in template_section.fields
+                    and template_section.fields["disabled"].value.lower() in ("true", "1", "yes")):
+                    continue
+
                 actions.append(ConfigAction(
-                    ActionType.ADD_SECTION, 
-                    section_name, 
+                    ActionType.ADD_SECTION,
+                    section_name,
                     comment=template_section.inline_comment
                 ))
                 
