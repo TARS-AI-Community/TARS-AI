@@ -226,3 +226,5 @@ ui_settings.json
 TARS-AI_Server/models/*
 TARS-AI_Server/tts/*
 TARS-AI_Server/bin/*
+TARS-AI_Server/output/*
+TARS-AI_Server/outputs/*
