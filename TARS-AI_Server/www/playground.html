@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html><head><title>TARS-AI Playground</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/www/css/playground.css">
+</head><body>
+<div class="nebula-layer" aria-hidden="true"><div class="nebula-blob nb-1"></div><div class="nebula-blob nb-2"></div><div class="nebula-blob nb-3"></div></div>
+<div class="wrap">
+<div class="top-bar">
+  <h1>PLAYGROUND</h1>
+  <a href="/">Dashboard</a>
+</div>
+<div class="tabs">
+  <div class="tab active" data-svc="llm" onclick="switchTab('chat')">Chat</div>
+  <div class="tab" data-svc="stt" onclick="switchTab('stt')">STT</div>
+  <div class="tab" data-svc="tts" onclick="switchTab('tts')">TTS</div>
+  <div class="tab" data-svc="vision" onclick="switchTab('vis')">Vision</div>
+  <div class="tab" data-svc="imagegen" onclick="switchTab('img')">Image Gen</div>
+  <div class="tab" data-svc="musicgen" onclick="switchTab('mus')">Music Gen</div>
+</div>
+<div id="p-chat" class="panel active"><div class="glass" style="display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border)">
+    <span style="font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim)">Chat</span>
+    <button class="hud-btn danger" style="padding:4px 12px;font-size:9px;margin:0" onclick="document.getElementById('chat-out').innerHTML=''">Clear</button>
+  </div>
+  <div class="output" id="chat-out" style="flex:1;min-height:300px;max-height:460px;border:none;border-radius:0;margin:0;padding:14px 16px"></div>
+  <div style="display:flex;gap:8px;align-items:flex-end;padding:10px 14px;border-top:1px solid var(--border);background:rgba(0,0,0,0.15)">
+    <textarea id="chat-input" placeholder="Type a message..." style="flex:1;height:44px;min-height:44px;max-height:120px;resize:vertical;margin:0;padding:10px 14px;font-size:15px"></textarea>
+    <button class="hud-btn" style="margin:0;height:44px;padding:0 20px;flex-shrink:0" onclick="sendChat()">Send</button>
+  </div>
+</div></div>
+<div id="p-stt" class="panel"><div class="glass">
+  <input type="file" id="stt-file" accept="audio/*">
+  <div style="margin-top:10px">
+    <button class="hud-btn" onclick="transcribeFile()">Transcribe File</button>
+    <button class="hud-btn" id="rec-btn" onclick="toggleRecord()">Record</button>
+  </div>
+  <div class="output" id="stt-out">Upload an audio file or click Record.</div>
+</div></div>
+<div id="p-tts" class="panel"><div class="glass" style="display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border)">
+    <span style="font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim)">Text to Speech</span>
+    <span id="tts-status" style="font-family:var(--font-hud);font-size:10px;letter-spacing:.1em;color:var(--text-dim)"></span>
+  </div>
+  <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+    <textarea id="tts-input" placeholder="Type something to hear it spoken..." style="height:90px;margin:0"></textarea>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div style="min-width:140px"><label>Voice</label><select id="tts-voice" style="margin-top:4px"></select></div>
+      <button class="hud-btn" style="margin:0;height:42px;padding:0 24px;flex-shrink:0" id="tts-btn" onclick="synthesize()">Speak</button>
+    </div>
+    <div id="tts-player" style="display:none;gap:10px;align-items:center;background:rgba(0,120,255,0.12);border:1px solid rgba(0,150,255,0.35);border-radius:var(--radius-sm);padding:8px 12px">
+      <audio id="tts-audio" controls style="flex:1;outline:none;height:40px"></audio>
+      <button class="hud-btn" style="margin:0;padding:6px 14px;font-size:9px;height:36px;flex-shrink:0" onclick="const a=document.getElementById('tts-audio');if(a.src){const l=document.createElement('a');l.href=a.src;l.download='tts_output.wav';l.click()}">Save</button>
+    </div>
+  </div>
+</div></div>
+<div id="p-vis" class="panel"><div class="glass">
+  <label>Image</label>
+  <input type="file" id="vis-file" accept="image/*">
+  <div id="vis-drop" style="margin:8px 0;padding:28px;text-align:center;border:2px dashed var(--border);border-radius:var(--radius-sm);color:var(--text-dim);font-size:12px;cursor:pointer;transition:border-color .2s,background .2s">Drop image here or click browse above</div>
+  <img class="preview" id="vis-preview" style="display:none;max-height:260px;margin-bottom:8px">
+  <label>Prompt <span style="opacity:.5;font-weight:400;text-transform:none;letter-spacing:0">(optional &#8211; guide the caption)</span></label>
+  <input type="text" id="vis-prompt" placeholder='e.g. "a photo of" or "describe the objects in"'>
+  <button class="hud-btn" onclick="captionImg()">Caption</button>
+  <div class="output" id="vis-out">Upload an image and click Caption.</div>
+</div></div>
+<div id="p-img" class="panel"><div class="glass">
+  <textarea id="img-prompt" placeholder="Image prompt..."></textarea>
+  <label>Negative prompt</label><input type="text" id="img-neg" placeholder="optional">
+  <div class="img-params">
+    <div><label>Width</label><input type="number" id="img-width" value="1024" min="64" step="64"></div>
+    <div><label>Height</label><input type="number" id="img-height" value="1024" min="64" step="64"></div>
+    <div><label>Steps</label><input type="number" id="img-steps" value="20" min="1" max="150"></div>
+    <div><label>CFG</label><input type="number" id="img-cfg" value="7.0" min="1" max="30" step="0.5"></div>
+    <div><label>Seed</label><input type="number" id="img-seed" value="-1" min="-1" placeholder="-1"></div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:stretch;margin:6px 0">
+    <button class="hud-btn" id="img-gen-btn" onclick="generateImg()" style="margin:0;white-space:nowrap">Generate</button>
+    <div id="img-out" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(0,229,255,0.1);border-radius:var(--radius-sm);padding:0 12px;display:flex;align-items:center;font-size:12px;color:var(--text-dim);min-height:0">Enter a prompt and click Generate.</div>
+  </div>
+  <div id="img-progress-wrap" style="display:none;margin:8px 0">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px"><span id="img-progress-label">Starting...</span><span id="img-progress-pct">0%</span></div>
+    <div style="height:6px;background:rgba(0,229,255,0.1);border-radius:3px;overflow:hidden"><div id="img-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#00e5ff,#7c4dff);border-radius:3px;transition:width .3s ease"></div></div>
+  </div>
+  <div id="img-preview-wrap" style="display:none;text-align:center;margin-top:12px"><img id="img-preview" style="max-width:100%;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
+  <div id="img-gallery" style="margin-top:12px"></div>
+</div></div>
+<div id="p-mus" class="panel"><div class="glass">
+  <label>Style / Genre prompt</label>
+  <textarea id="mus-prompt" placeholder="Describe the music style... e.g. 'upbeat electronic dance music with a catchy melody'" style="height:60px"></textarea>
+  <label>Lyrics <span style="opacity:.5;font-weight:400;text-transform:none;letter-spacing:0">(leave empty for instrumental, use [verse] [chorus] [bridge] tags)</span></label>
+  <textarea id="mus-lyrics" placeholder="[verse]&#10;Your lyrics here...&#10;&#10;[chorus]&#10;Chorus lyrics here..." style="height:120px"></textarea>
+  <div class="img-params" style="grid-template-columns:repeat(4,1fr)">
+    <div><label>Duration (sec)</label><input type="number" id="mus-duration" value="60" min="10" max="600" step="5"></div>
+    <div><label>Steps</label><input type="number" id="mus-steps" value="60" min="10" max="150" step="1"></div>
+    <div><label>CFG</label><input type="number" id="mus-cfg" value="15.0" min="1" max="30" step="0.5"></div>
+    <div><label>Seed</label><input type="number" id="mus-seed" value="-1" min="-1" placeholder="-1"></div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:stretch;margin:6px 0">
+    <button class="hud-btn" id="mus-gen-btn" onclick="generateMusic()" style="margin:0;white-space:nowrap">Generate</button>
+    <div id="mus-out" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(0,229,255,0.1);border-radius:var(--radius-sm);padding:0 12px;display:flex;align-items:center;font-size:12px;color:var(--text-dim);min-height:0">Enter a prompt and click Generate.</div>
+  </div>
+  <div id="mus-progress-wrap" style="display:none;margin:8px 0">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px"><span id="mus-progress-label">Starting...</span><span id="mus-progress-pct">0%</span></div>
+    <div style="height:6px;background:rgba(0,229,255,0.1);border-radius:3px;overflow:hidden"><div id="mus-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#00e5ff,#7c4dff);border-radius:3px;transition:width .3s ease"></div></div>
+  </div>
+  <div id="mus-player" style="display:none;margin-top:10px"></div>
+  <div id="mus-gallery" style="margin-top:12px"></div>
+</div></div>
+<div style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+  <a href="/" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Dashboard</a>
+  <a href="/ui" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Settings</a>
+  <a href="/docs" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">API Docs</a>
+  <a href="/logout" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(255,68,68,0.06);border:1px solid rgba(255,68,68,0.3);border-radius:8px;color:#ff6666;text-decoration:none">Logout</a>
+</div>
+</div>
+<script src="/www/js/playground.js"></script>
+</body></html>

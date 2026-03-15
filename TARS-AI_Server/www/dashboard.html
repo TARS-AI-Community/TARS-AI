@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html><head><title>TARS-AI Server</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/www/css/dashboard.css">
+</head><body>
+<div class="nebula-layer" aria-hidden="true"><div class="nebula-blob nb-1"></div><div class="nebula-blob nb-2"></div><div class="nebula-blob nb-3"></div></div>
+<div class="wrap">
+<div class="top-bar">
+  <h1>TARS SERVER</h1>
+  <div class="meta"><span class="live-dot" id="connDot"></span><span>{{GPU_NAME}}</span><span id="uptime">--</span></div>
+</div>
+<div id="stats-section" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"></div>
+<div class="grid-2">
+  <div class="glass">
+    <h2>Active Services</h2>
+    <table><thead><tr><th>Service</th><th>Status</th><th>Model</th><th>Avg Latency</th></tr></thead>
+    <tbody id="svc-table"><tr><td colspan="4" style="color:var(--text-dim)">Connecting...</td></tr></tbody></table>
+  </div>
+  <div class="glass">
+    <h2>Remote Access</h2>
+    <div id="tunnel-panel">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span id="tunnel-status" style="font-size:13px;color:var(--text-dim)">Checking...</span>
+        <button class="hud-btn-sm" id="tunnel-btn" onclick="toggleTunnel()">Open Tunnel</button>
+      </div>
+      <div id="tunnel-url" style="display:none;margin-top:14px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <a id="tunnel-link" href="#" target="_blank" style="font-family:var(--font-mono);font-size:13px;color:var(--cyan);word-break:break-all"></a>
+          <button class="hud-btn-sm" onclick="copyTunnelUrl()">Copy</button>
+        </div>
+        <div style="margin-top:12px;text-align:center"><img id="tunnel-qr" style="max-width:200px;border-radius:var(--radius-sm);border:1px solid var(--border);display:none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="glass">
+  <h2>Request Log</h2>
+  <div class="log-area" id="log-area"></div>
+</div>
+<div class="nav-links">
+  <a href="/playground">Playground</a>
+  <a href="/docs">API Docs</a>
+  <a href="/ui">Settings</a>
+  <a href="/logout" style="border-color:rgba(255,68,68,0.3);color:#ff6666">Logout</a>
+</div>
+</div>
+<script src="/www/js/dashboard.js"></script>
+</body></html>
