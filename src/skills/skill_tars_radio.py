@@ -350,7 +350,7 @@ class MusicPlayer:
 
                 if self._should_duck():
                     stream.stop()
-                    self._wait_for_tts()
+                    self._wait_for_standby()
                     if self._should_stop():
                         break
                     stream.start()
