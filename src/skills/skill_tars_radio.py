@@ -350,7 +350,7 @@ class MusicPlayer:
 
                 if self._should_duck():
                     stream.stop()
-                    self._wait_for_tts()
+                    self._wait_for_standby()
                     if self._should_stop():
                         break
                     stream.start()
@@ -696,10 +696,11 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
 # ===========================================================================
 
 def _do_play(parameters, skill_config):
-    global _radio_thread
+    global _radio_thread, _user_paused
 
     # Stop any existing radio
     _do_stop()
+    _user_paused = False
 
     library = _get_library()
     library.scan()  # Refresh in case new files were added
