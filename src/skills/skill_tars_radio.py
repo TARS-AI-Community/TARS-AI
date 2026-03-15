@@ -498,6 +498,16 @@ def _speak_tts(text: str):
             except Exception:
                 pass
 
+        # Pause STT during playback so wake word detector doesn't hear our own voice
+        _stt = None
+        try:
+            from modules.module_stt import get_stt_manager
+            _stt = get_stt_manager()
+            if _stt:
+                _stt.pause()
+        except Exception:
+            pass
+
         # Monkey-patch generate_tts_audio temporarily so play_audio_chunks streams to browser too
         import modules.module_tts as _tts_mod
         _tts_mod.generate_tts_audio = _tee_generate
@@ -505,6 +515,12 @@ def _speak_tts(text: str):
             asyncio.run(play_audio_chunks(text, tts_option))
         finally:
             _tts_mod.generate_tts_audio = _orig_generate
+            # Resume STT after playback
+            if _stt:
+                try:
+                    _stt.resume()
+                except Exception:
+                    pass
     except Exception as e:
         queue_message(f"[Radio] TTS failed: {e}")
 
@@ -618,16 +634,36 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
         except Exception:
             pass
 
-        # DJ intro
+        # DJ intro — pause STT so wake word detector doesn't hear our own voice
         if dj_intros and not _radio_cancel.is_set():
+            _stt_paused = False
+            try:
+                from modules.module_stt import get_stt_manager
+                _stt = get_stt_manager()
+                if _stt:
+                    _stt.pause()
+                    _stt_paused = True
+            except Exception:
+                pass
+
             intro = _generate_dj_intro(track_name)
             queue_message(f"[Radio] DJ intro: {intro}")
             _speak_tts(intro)
 
+            # Brief settle time for mic to clear before resuming STT
+            if not _radio_cancel.is_set():
+                time.sleep(0.5)
+
+            if _stt_paused:
+                try:
+                    _stt.resume()
+                except Exception:
+                    pass
+
         if _radio_cancel.is_set():
             break
 
-        # Play the track
+        # Play the track — music ducking for STT/TTS is handled inside play_file
         player.play_file(track_path, gain=gain, track_meta=track)
 
         # Small gap between tracks
