@@ -457,6 +457,16 @@ def _speak_tts(text: str):
     except Exception:
         pass
 
+    # Show text in terminal UI
+    try:
+        from modules.module_main import ui_manager
+        from modules.module_config import load_config
+        if ui_manager:
+            character_name = load_config()['CHAR']['character_name']
+            ui_manager.update_data(character_name, text, character_name)
+    except Exception:
+        pass
+
     # Generate TTS, play on Pi speaker, and stream to browser simultaneously
     try:
         from modules.module_tts import play_audio_chunks, generate_tts_audio
@@ -508,6 +518,10 @@ def _speak_tts(text: str):
         except Exception:
             pass
 
+        # Set core state to TALKING so UI reflects it
+        from modules.module_state import set_tars_state, TarsState
+        set_tars_state(TarsState.TALKING)
+
         # Monkey-patch generate_tts_audio temporarily so play_audio_chunks streams to browser too
         import modules.module_tts as _tts_mod
         _tts_mod.generate_tts_audio = _tee_generate
@@ -515,6 +529,7 @@ def _speak_tts(text: str):
             asyncio.run(play_audio_chunks(text, tts_option))
         finally:
             _tts_mod.generate_tts_audio = _orig_generate
+            set_tars_state(TarsState.STANDBY)
             # Resume STT after playback
             if _stt:
                 try:
@@ -636,6 +651,9 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
 
         # DJ intro — pause STT so wake word detector doesn't hear our own voice
         if dj_intros and not _radio_cancel.is_set():
+            from modules.module_state import set_tars_state, TarsState
+            set_tars_state(TarsState.TALKING)
+
             _stt_paused = False
             try:
                 from modules.module_stt import get_stt_manager
