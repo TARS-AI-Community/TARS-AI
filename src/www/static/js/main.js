@@ -2406,9 +2406,24 @@ function executeAction() {
     overlay.querySelector('#rebootYes').onclick = function() {
       const card = overlay.querySelector('.reboot-card');
 
+      // Check if tunnel is active — warn user they'll lose connection
+      const isTunnel = window.location.hostname.includes('trycloudflare.com');
+
       // Get current boot ID before rebooting
       fetch('/boot_id').then(r => r.json()).then(data => {
         const oldBootId = data.boot_id;
+
+        if (isTunnel) {
+          // Tunnel active — show warning instead of polling (polling won't work)
+          card.innerHTML = `
+            <div class="reboot-icon"><i class="bi bi-arrow-repeat spin"></i></div>
+            <div class="reboot-title">REBOOTING</div>
+            <p class="reboot-subtitle">TARS is rebooting. This tunnel URL will no longer work after restart.</p>
+            <p class="reboot-subtitle" style="opacity:0.7;font-size:0.85em;margin-top:8px">Reconnect via your local network or start a new tunnel from the remote App.</p>
+          `;
+          fetch('/reboot_program', { method: 'POST' }).catch(() => {});
+          return;
+        }
 
         // Replace the confirm card with a rebooting status screen
         card.innerHTML = `
