@@ -228,6 +228,17 @@ def execute(parameters, context):
             socketio.emit("bot_message", {"message": full_msg})
         except Exception:
             pass
+
+        # Pause STT so wake word detector doesn't hear our own voice
+        _stt = None
+        try:
+            from modules.module_stt import get_stt_manager
+            _stt = get_stt_manager()
+            if _stt:
+                _stt.pause()
+        except Exception:
+            pass
+
         try:
             from modules.module_tts import play_audio_chunks
             from modules.module_config import load_config
@@ -236,6 +247,14 @@ def execute(parameters, context):
             asyncio.run(play_audio_chunks(msg, cfg["TTS"]["ttsoption"]))
         except Exception as e:
             queue_message(f"[MusicGen] TTS notification failed: {e}")
+        finally:
+            if _stt:
+                try:
+                    import time
+                    time.sleep(0.5)
+                    _stt.resume()
+                except Exception:
+                    pass
 
     def _generate_bg():
         import requests as req
