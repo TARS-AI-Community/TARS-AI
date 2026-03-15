@@ -1526,7 +1526,7 @@ class MusicGenService:
             log.info("ACE-Step checkpoint loaded")
         log.info("ACE-Step music generation model loaded")
 
-    def generate(self, prompt: str, lyrics: str = "", duration_sec: float = 60.0,
+    def generate(self, prompt: str, lyrics: str = "", duration_sec: float = 30.0,
                  infer_steps: int = 60, guidance_scale: float = 15.0,
                  seed: int = -1, task_id: str = None) -> bytes:
         """Generate music with vocals from prompt + lyrics. Returns WAV bytes."""
@@ -1541,6 +1541,8 @@ class MusicGenService:
             # Use [inst] tag if no lyrics provided
             actual_lyrics = lyrics.strip() if lyrics.strip() else "[inst]"
 
+            out_dir = str(Path(__file__).parent / "output" / "musicgen")
+            os.makedirs(out_dir, exist_ok=True)
             result = self.pipe(
                 prompt=prompt,
                 lyrics=actual_lyrics,
@@ -1552,6 +1554,7 @@ class MusicGenService:
                 manual_seeds=manual_seeds,
                 batch_size=1,
                 format="wav",
+                save_path=out_dir,
             )
 
             if task_id:
@@ -2207,7 +2210,7 @@ async def generate_music(request: Request):
         gen_kwargs = dict(
             prompt=prompt,
             lyrics=lyrics,
-            duration_sec=float(body.get("duration", 60)),
+            duration_sec=float(body.get("duration", 30)),
             infer_steps=int(body.get("steps", 60)),
             guidance_scale=float(body.get("guidance_scale", 15.0)),
             seed=int(body.get("seed", -1)),
