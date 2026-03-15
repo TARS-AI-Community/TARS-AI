@@ -186,6 +186,15 @@ warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+# Silence ACE-Step loguru INFO spam (save_path, GPU memory, model loaded, etc.)
+try:
+    from loguru import logger as _loguru_logger
+    _loguru_logger.remove()
+    _loguru_logger.add(sys.stderr, level="WARNING")
+except ImportError:
+    pass
+
+
 # ---------------------------------------------------------------------------
 # GPU / Device helpers
 # ---------------------------------------------------------------------------
@@ -1589,6 +1598,18 @@ app = FastAPI(
     swagger_ui_parameters={"persistAuthorization": True},
     openapi_tags=[],
 )
+
+# Install Windows ConnectionResetError suppressor on uvicorn's event loop
+if sys.platform == "win32":
+    @app.on_event("startup")
+    async def _install_win_exception_handler():
+        loop = asyncio.get_running_loop()
+        def _handler(loop, context):
+            exc = context.get("exception")
+            if isinstance(exc, ConnectionResetError):
+                return
+            loop.default_exception_handler(context)
+        loop.set_exception_handler(_handler)
 
 # Inject Bearer security scheme into OpenAPI spec so /docs shows the Authorize button
 from fastapi.openapi.utils import get_openapi as _get_openapi
