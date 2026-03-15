@@ -127,7 +127,8 @@ def stop_playback():
 
 
 def _play_file_simple(path: str, name: str):
-    """Play audio in a background thread with TTS/STT ducking and cancel support."""
+    """Play audio in a background thread. Ducks when TARS is not in STANDBY.
+    Registers on_state_change hook so wake word pauses playback automatically."""
     global _playback_thread
     import sounddevice as sd
     import soundfile as sf
@@ -137,24 +138,26 @@ def _play_file_simple(path: str, name: str):
     # Stop any currently playing song first
     stop_playback()
 
-    def _should_duck():
-        try:
-            from modules.module_tts import is_tts_playing
-            if is_tts_playing():
-                return True
-        except Exception:
-            pass
-        try:
-            from modules.module_stt import get_stt_manager
-            stt = get_stt_manager()
-            if stt is not None and not stt._last_status_was_sleeping:
-                return True
-        except Exception:
-            pass
-        return False
+    _pause_event = threading.Event()
+
+    def _on_state_change(old_state, new_state):
+        from modules.module_state import TarsState
+        if old_state == TarsState.STANDBY and new_state != TarsState.STANDBY:
+            _pause_event.set()  # Leaving STANDBY — pause music
+        elif new_state == TarsState.STANDBY and old_state != TarsState.STANDBY:
+            _pause_event.clear()  # Returning to STANDBY — resume music
 
     def _play():
         _playback_cancel.clear()
+        _pause_event.clear()
+
+        # Register state hook
+        try:
+            from modules.module_state import on_state_change
+            on_state_change(_on_state_change)
+        except Exception:
+            pass
+
         try:
             from modules.module_messageQue import queue_message as qm
             qm(f"[MusicGen] Auto-playing: {name}")
@@ -169,9 +172,10 @@ def _play_file_simple(path: str, name: str):
                 stream.start()
                 try:
                     while not _playback_cancel.is_set():
-                        if _should_duck():
+                        # Duck when TARS is not in STANDBY
+                        if _pause_event.is_set():
                             stream.stop()
-                            while _should_duck() and not _playback_cancel.is_set():
+                            while _pause_event.is_set() and not _playback_cancel.is_set():
                                 time.sleep(0.1)
                             if _playback_cancel.is_set():
                                 break
@@ -234,7 +238,9 @@ def execute(parameters, context):
     queue_message(f"[MusicGen] Generating: '{prompt}' name='{name}' duration={gen_duration}s")
 
     def _notify_user(msg, audio_html=None):
-        """Send notification via SocketIO and TTS."""
+        """Send notification via SocketIO and TTS.
+        STT auto-aborts recording when is_tts_playing() is True — no manual pause needed.
+        """
         try:
             from modules.module_chatui import socketio
             full_msg = msg
@@ -243,17 +249,6 @@ def execute(parameters, context):
             socketio.emit("bot_message", {"message": full_msg})
         except Exception:
             pass
-
-        # Pause STT so wake word detector doesn't hear our own voice
-        _stt = None
-        try:
-            from modules.module_stt import get_stt_manager
-            _stt = get_stt_manager()
-            if _stt:
-                _stt.pause()
-        except Exception:
-            pass
-
         try:
             from modules.module_tts import play_audio_chunks
             from modules.module_config import load_config
@@ -262,14 +257,6 @@ def execute(parameters, context):
             asyncio.run(play_audio_chunks(msg, cfg["TTS"]["ttsoption"]))
         except Exception as e:
             queue_message(f"[MusicGen] TTS notification failed: {e}")
-        finally:
-            if _stt:
-                try:
-                    import time
-                    time.sleep(0.5)
-                    _stt.resume()
-                except Exception:
-                    pass
 
     def _generate_bg():
         import requests as req
