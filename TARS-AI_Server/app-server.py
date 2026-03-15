@@ -478,10 +478,14 @@ _ENDPOINT_SERVICE = {
 
 
 def _endpoint_to_service(path: str) -> Optional[str]:
+    # Fast path: check first path segment (covers most cases without full scan)
     for prefix, svc in _ENDPOINT_SERVICE.items():
         if path.startswith(prefix):
             return svc
     return None
+
+# Pre-compute the sorted prefix list once (longest first for correct matching)
+_ENDPOINT_SERVICE_SORTED = sorted(_ENDPOINT_SERVICE.items(), key=lambda x: len(x[0]), reverse=True)
 
 
 # ---------------------------------------------------------------------------
@@ -491,6 +495,10 @@ SERVICES: dict = {}
 START_TIME = time.time()
 _LAUNCH_ARGS = None
 _LLM_SEMAPHORE: asyncio.Semaphore = None  # initialized at startup
+
+# Dedicated thread pool for ML inference — default pool is too small (min(32, os.cpu_count()+4))
+from concurrent.futures import ThreadPoolExecutor
+_INFERENCE_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tars-inference")
 
 # ===================================================================
 # STT Service (faster-whisper + Silero VAD)
@@ -642,6 +650,7 @@ class TTSService:
         self.voices_dir = Path(voices_dir) if voices_dir else Path(__file__).parent / "tts"
         self.voices_dir.mkdir(parents=True, exist_ok=True)
         self._voices: dict = {}
+        self._loaded_voices: dict = {}  # name -> PiperVoice (kept in memory)
         self._cache: collections.OrderedDict = collections.OrderedDict()
         self._cache_max = cache_size
         self._ensure_default_voice()
@@ -692,13 +701,22 @@ class TTSService:
 
         return wav_bytes
 
-    def _do_synthesize(self, text: str, voice: str, speed: float) -> bytes:
-        import wave as wave_mod
-
+    def _get_piper_voice(self, voice: str):
+        """Get or load a PiperVoice model — cached in memory after first load."""
+        if voice in self._loaded_voices:
+            return self._loaded_voices[voice]
         try:
             from piper.voice import PiperVoice
         except ImportError:
             raise RuntimeError("piper-tts not installed. Install with: pip install piper-tts")
+        voice_info = self._voices[voice]
+        log.info(f"Loading Piper voice into memory: {voice}")
+        piper_voice = PiperVoice.load(voice_info["model"])
+        self._loaded_voices[voice] = piper_voice
+        return piper_voice
+
+    def _do_synthesize(self, text: str, voice: str, speed: float) -> bytes:
+        import wave as wave_mod
 
         if not voice and self._voices:
             voice = list(self._voices.keys())[0]
@@ -706,8 +724,7 @@ class TTSService:
             available = ", ".join(self._voices.keys()) if self._voices else "none"
             raise ValueError(f"Voice '{voice}' not found. Available: {available}")
 
-        voice_info = self._voices[voice]
-        piper_voice = PiperVoice.load(voice_info["model"])
+        piper_voice = self._get_piper_voice(voice)
         wav_buf = BytesIO()
         with wave_mod.open(wav_buf, "wb") as wav_file:
             wav_file.setnchannels(1)
@@ -731,6 +748,7 @@ class TTSService:
 
     def unload(self):
         self._cache.clear()
+        self._loaded_voices.clear()
 
 
 # ===================================================================
@@ -1393,6 +1411,21 @@ class ImageGenService:
         )
         if device == "cuda":
             self.pipe.to("cuda")
+            # Free speedups for SDXL / any diffusers pipeline on GPU
+            self.pipe.enable_vae_slicing()        # Process VAE in slices (saves VRAM, same speed)
+            self.pipe.enable_vae_tiling()          # Tile large images (prevents OOM on high-res)
+            try:
+                self.pipe.enable_xformers_memory_efficient_attention()
+                log.info("ImageGen: xformers memory-efficient attention enabled")
+            except Exception:
+                pass  # xformers not installed — PyTorch SDPA is used automatically
+            # Compile UNet for ~20-30% faster inference (first run is slow, subsequent are fast)
+            if sys.platform != "win32":
+                try:
+                    self.pipe.unet = torch.compile(self.pipe.unet, mode="reduce-overhead", fullgraph=True)
+                    log.info("ImageGen: UNet torch.compile enabled")
+                except Exception as e:
+                    log.debug(f"ImageGen torch.compile skipped: {e}")
         self._default_scheduler_config = self.pipe.scheduler.config
         log.info(f"Image generation model loaded: {model_name}")
 
@@ -1567,6 +1600,10 @@ def _custom_openapi():
 app.openapi = _custom_openapi
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# GZip compression — huge win for embeddings vectors, base64 images, gallery JSON
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # compress responses >1KB
+
 # Serve static www files (CSS, JS)
 from starlette.staticfiles import StaticFiles as _StaticFiles
 _www_dir = Path(__file__).parent / "www"
@@ -1609,6 +1646,17 @@ def _is_web_authed(request: Request, api_key: str) -> bool:
     return request.cookies.get("tars_session") == expected
 
 
+def _path_matches(path: str, path_set: set) -> bool:
+    """Fast path matching — exact match or starts with prefix/."""
+    if path in path_set:
+        return True
+    # Check if any prefix matches (e.g., /www/css/style.css matches /www)
+    for p in path_set:
+        if path.startswith(p + "/"):
+            return True
+    return False
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         api_key = _active_config.get("server", "api_key", fallback="") if _active_config else ""
@@ -1618,17 +1666,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # Always allowed
-        if any(path == ex or path.startswith(ex + "/") for ex in _AUTH_EXEMPT):
+        if _path_matches(path, _AUTH_EXEMPT):
             return await call_next(request)
 
         # Web UI pages — require session cookie, redirect to /login if missing
-        if any(path == p or path.startswith(p + "/") for p in _WEB_PAGES):
+        if _path_matches(path, _WEB_PAGES):
             if not _is_web_authed(request, api_key):
                 return RedirectResponse(url=f"/login?next={path}", status_code=302)
             return await call_next(request)
 
         # Web-facing API paths — accept session cookie OR Bearer token
-        if any(path == p or path.startswith(p + "/") for p in _WEB_API_PATHS):
+        if _path_matches(path, _WEB_API_PATHS):
             if _is_web_authed(request, api_key) or request.headers.get("authorization", "") == f"Bearer {api_key}":
                 return await call_next(request)
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
@@ -1769,12 +1817,12 @@ async def stt_transcribe(audio: UploadFile = File(...)):
     audio_bytes = BytesIO(await audio.read())
     loop = asyncio.get_event_loop()
     try:
-        has_speech = await loop.run_in_executor(None, SERVICES["stt"].has_speech, audio_bytes)
+        has_speech = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"].has_speech, audio_bytes)
         if not has_speech:
             log.info("STT: VAD filtered (no speech detected)")
             return {"transcription": []}
         audio_bytes.seek(0)
-        transcription, info = await loop.run_in_executor(None, SERVICES["stt"].transcribe, audio_bytes)
+        transcription, info = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"].transcribe, audio_bytes)
         full_text = " ".join(t["text"] for t in transcription).strip()
         log.info(f"STT: \"{full_text}\" (lang={info.language}, prob={info.language_probability:.2f})")
         return {"transcription": transcription}
@@ -1790,7 +1838,7 @@ async def stt_transcribe_v2(audio: UploadFile = File(...), language: Optional[st
     audio_bytes = BytesIO(await audio.read())
     loop = asyncio.get_event_loop()
     try:
-        has_speech = await loop.run_in_executor(None, SERVICES["stt"].has_speech, audio_bytes)
+        has_speech = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"].has_speech, audio_bytes)
         if not has_speech:
             return {"text": "", "segments": [], "language": None, "language_probability": 0}
         audio_bytes.seek(0)
@@ -1926,7 +1974,7 @@ async def tts_generate(request: Request):
     speed = float(body.get("speed", 1.0))
     try:
         loop = asyncio.get_event_loop()
-        wav_bytes = await loop.run_in_executor(None, lambda: SERVICES["tts"].synthesize(text, voice=voice, speed=speed))
+        wav_bytes = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["tts"].synthesize(text, voice=voice, speed=speed))
         log.info(f"TTS: \"{text[:60]}\" voice={voice}")
         return StreamingResponse(BytesIO(wav_bytes), media_type="audio/wav",
                                  headers={"Content-Disposition": "attachment; filename=speech.wav"})
@@ -1955,14 +2003,14 @@ async def vision_caption(image: UploadFile = File(...), prompt: str = Form(None)
     if "vision" in SERVICES:
         try:
             svc = SERVICES["vision"]
-            caption = await loop.run_in_executor(None, lambda: svc.caption(image_bytes, prompt=prompt or None))
+            caption = await loop.run_in_executor(_INFERENCE_POOL, lambda: svc.caption(image_bytes, prompt=prompt or None))
             log.info(f"Vision ({svc.backend}): \"{caption}\"")
             return {"caption": caption}
         except Exception:
             log.error(f"Vision error: {traceback.format_exc()}")
     if "llm" in SERVICES and getattr(SERVICES["llm"], "supports_vision", False):
         try:
-            caption = await loop.run_in_executor(None, lambda: SERVICES["llm"].caption_image(image_bytes, prompt=prompt or None))
+            caption = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["llm"].caption_image(image_bytes, prompt=prompt or None))
             log.info(f"Vision (VLM): \"{caption}\"")
             return {"caption": caption}
         except Exception:
@@ -1993,7 +2041,7 @@ async def sdapi_txt2img(request: Request):
             width=int(body.get("width", 1024)), height=int(body.get("height", 1024)),
             seed=int(body.get("seed", -1)), sampler_name=body.get("sampler_name"),
         )
-        image_bytes = await loop.run_in_executor(None, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
+        image_bytes = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
         log.info(f"ImageGen: \"{prompt[:60]}\"")
         return {"images": [base64.b64encode(image_bytes).decode()], "parameters": body, "info": ""}
     except Exception as e:
@@ -2022,7 +2070,7 @@ async def generate_image_simple(request: Request):
             seed=int(body.get("seed", -1)), sampler_name=body.get("sampler_name"),
             task_id=task_id,
         )
-        image_bytes = await loop.run_in_executor(None, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
+        image_bytes = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
         log.info(f"ImageGen: \"{prompt[:60]}\"")
         # Save to output folder with timestamp metadata
         out_dir = Path(__file__).parent / "output" / "imagegen"
@@ -2030,18 +2078,21 @@ async def generate_image_simple(request: Request):
         ts = time.strftime("%Y%m%d_%H%M%S")
         fname = f"{ts}_{uuid.uuid4().hex[:8]}.png"
         fpath = out_dir / fname
-        from PIL import Image as PILImage, PngImagePlugin
-        img_obj = PILImage.open(BytesIO(image_bytes))
-        meta = PngImagePlugin.PngInfo()
-        meta.add_text("timestamp", time.strftime("%Y-%m-%d %H:%M:%S"))
-        meta.add_text("prompt", prompt)
-        meta.add_text("negative_prompt", body.get("negative_prompt", ""))
-        meta.add_text("steps", str(gen_kwargs["steps"]))
-        meta.add_text("cfg_scale", str(gen_kwargs["cfg_scale"]))
-        meta.add_text("width", str(gen_kwargs["width"]))
-        meta.add_text("height", str(gen_kwargs["height"]))
-        meta.add_text("seed", str(gen_kwargs["seed"]))
-        img_obj.save(str(fpath), pnginfo=meta)
+        with open(str(fpath), "wb") as f:
+            f.write(image_bytes)
+        # Save JSON sidecar for fast gallery listing (no need to re-open every PNG)
+        meta = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "prompt": prompt,
+            "negative_prompt": body.get("negative_prompt", ""),
+            "steps": str(gen_kwargs["steps"]),
+            "cfg_scale": str(gen_kwargs["cfg_scale"]),
+            "width": str(gen_kwargs["width"]),
+            "height": str(gen_kwargs["height"]),
+            "seed": str(gen_kwargs["seed"]),
+        }
+        with open(str(fpath).replace(".png", ".json"), "w") as f:
+            json.dump(meta, f)
         return StreamingResponse(BytesIO(image_bytes), media_type="image/png",
                                  headers={"X-Image-Filename": fname})
     except Exception as e:
@@ -2058,21 +2109,20 @@ async def imagegen_gallery_list():
     results = []
     for f in files:
         meta = {}
-        try:
-            from PIL import Image as PILImage
-            img = PILImage.open(str(f))
-            meta = dict(img.info) if img.info else {}
-            img.close()
-        except Exception:
-            pass
+        json_path = str(f).replace(".png", ".json")
+        if os.path.exists(json_path):
+            try:
+                with open(json_path) as jf:
+                    meta = json.load(jf)
+            except Exception:
+                pass
         results.append({"filename": f.name, "meta": meta})
     return {"images": results}
 
 
 @app.get("/imagegen_gallery/file/{filename}")
 async def imagegen_gallery_file(filename: str):
-    import re
-    if not re.match(r'^[\w\-]+\.png$', filename):
+    if not _RE_PNG_FILENAME.match(filename):
         raise HTTPException(400, "Invalid filename")
     fpath = Path(__file__).parent / "output" / "imagegen" / filename
     if not fpath.exists():
@@ -2083,13 +2133,15 @@ async def imagegen_gallery_file(filename: str):
 
 @app.delete("/imagegen_gallery/{filename}")
 async def imagegen_gallery_delete(filename: str):
-    import re
-    if not re.match(r'^[\w\-]+\.png$', filename):
+    if not _RE_PNG_FILENAME.match(filename):
         raise HTTPException(400, "Invalid filename")
     fpath = Path(__file__).parent / "output" / "imagegen" / filename
     if not fpath.exists():
         raise HTTPException(404, "File not found")
     fpath.unlink()
+    json_path = str(fpath).replace(".png", ".json")
+    if os.path.exists(json_path):
+        os.unlink(json_path)
     return {"ok": True}
 
 
@@ -2127,7 +2179,7 @@ async def generate_music(request: Request):
             seed=int(body.get("seed", -1)),
             task_id=task_id,
         )
-        audio_bytes = await loop.run_in_executor(None, lambda: SERVICES["musicgen"].generate(**gen_kwargs))
+        audio_bytes = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["musicgen"].generate(**gen_kwargs))
         log.info(f"MusicGen: \"{prompt[:60]}\"")
         # Save to output folder with JSON sidecar metadata
         out_dir = Path(__file__).parent / "output" / "musicgen"
@@ -2177,8 +2229,7 @@ async def musicgen_gallery_list():
 
 @app.get("/musicgen_gallery/file/{filename}")
 async def musicgen_gallery_file(filename: str):
-    import re
-    if not re.match(r'^[\w\-]+\.wav$', filename):
+    if not _RE_WAV_FILENAME.match(filename):
         raise HTTPException(400, "Invalid filename")
     fpath = Path(__file__).parent / "output" / "musicgen" / filename
     if not fpath.exists():
@@ -2189,8 +2240,7 @@ async def musicgen_gallery_file(filename: str):
 
 @app.delete("/musicgen_gallery/{filename}")
 async def musicgen_gallery_delete(filename: str):
-    import re
-    if not re.match(r'^[\w\-]+\.wav$', filename):
+    if not _RE_WAV_FILENAME.match(filename):
         raise HTTPException(400, "Invalid filename")
     fpath = Path(__file__).parent / "output" / "musicgen" / filename
     if not fpath.exists():
@@ -2227,7 +2277,7 @@ async def embeddings(request: Request):
         raise HTTPException(400, "input is required")
     try:
         loop = asyncio.get_event_loop()
-        vectors = await loop.run_in_executor(None, SERVICES["embeddings"].embed, inp)
+        vectors = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["embeddings"].embed, inp)
         data = [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(vectors)]
         return {"object": "list", "data": data, "model": SERVICES["embeddings"].model_name,
                 "usage": {"prompt_tokens": sum(len(t.split()) for t in inp), "total_tokens": sum(len(t.split()) for t in inp)}}
@@ -2307,6 +2357,10 @@ import subprocess as _sp
 import shutil
 import re as _re
 import platform as _platform
+
+# Pre-compiled regex for gallery filename validation (used on every gallery request)
+_RE_PNG_FILENAME = _re.compile(r'^[\w\-]+\.png$')
+_RE_WAV_FILENAME = _re.compile(r'^[\w\-]+\.wav$')
 
 _tunnel_process = None
 _tunnel_url = None
@@ -2550,6 +2604,13 @@ async def api_get_settings():
 @app.post("/api/settings")
 async def api_save_settings(request: Request):
     body = await request.json()
+
+    # Snapshot current service states BEFORE saving
+    old_cfg = _active_config or load_config()
+    _ALL_SERVICES = ["stt", "tts", "llm", "vision", "imagegen", "musicgen", "embeddings"]
+    old_enabled = {s: old_cfg.getboolean("services", s, fallback=False) for s in _ALL_SERVICES}
+
+    # Save new config
     cfg = configparser.ConfigParser()
     for section in _CONFIG_DEFAULTS:
         if section in body:
@@ -2558,7 +2619,67 @@ async def api_save_settings(request: Request):
             cfg[section] = dict(_CONFIG_DEFAULTS[section])
     save_config(cfg)
     load_config()
-    return {"status": "saved", "message": "Settings saved. Restart server for model changes to take effect."}
+
+    # Detect which services changed enabled/disabled
+    new_enabled = {s: cfg.getboolean("services", s, fallback=False) for s in _ALL_SERVICES}
+    unloaded = []
+    loaded = []
+    load_errors = []
+    needs_restart = []
+
+    for svc in _ALL_SERVICES:
+        was_on = old_enabled[svc]
+        now_on = new_enabled[svc]
+
+        if was_on and not now_on:
+            # Service was disabled — unload it immediately
+            if svc in SERVICES:
+                try:
+                    s = SERVICES[svc]
+                    if hasattr(s, "unload"):
+                        s.unload()
+                    del SERVICES[svc]
+                    gc.collect()
+                    if DEVICE == "cuda":
+                        torch.cuda.empty_cache()
+                    unloaded.append(svc.upper())
+                    log.info(f"Settings: unloaded {svc.upper()} (disabled by user)")
+                except Exception as e:
+                    log.error(f"Settings: failed to unload {svc.upper()}: {e}")
+
+        elif not was_on and now_on:
+            # Service was enabled — load it now
+            if svc not in SERVICES and _LAUNCH_ARGS:
+                try:
+                    _load_service_safe(svc, _LAUNCH_ARGS)
+                    if svc in SERVICES:
+                        loaded.append(svc.upper())
+                        log.info(f"Settings: loaded {svc.upper()} (enabled by user)")
+                    else:
+                        load_errors.append(svc.upper())
+                except Exception as e:
+                    load_errors.append(svc.upper())
+                    log.error(f"Settings: failed to load {svc.upper()}: {e}")
+            elif not _LAUNCH_ARGS:
+                needs_restart.append(svc.upper())
+
+    # Build response message
+    parts = []
+    if unloaded:
+        parts.append(f"Unloaded: {', '.join(unloaded)}")
+    if loaded:
+        parts.append(f"Loaded: {', '.join(loaded)}")
+    if load_errors:
+        parts.append(f"Failed to load: {', '.join(load_errors)}")
+    if needs_restart:
+        parts.append(f"Restart needed for: {', '.join(needs_restart)}")
+    if not parts:
+        parts.append("Settings saved")
+
+    # Check if any model config changed (not just enable/disable) for loaded services
+    msg = ". ".join(parts) + "."
+    return {"status": "saved", "message": msg, "unloaded": unloaded, "loaded": loaded,
+            "errors": load_errors, "gpu": get_gpu_stats()}
 
 
 @app.get("/ui", response_class=HTMLResponse)
@@ -2713,29 +2834,50 @@ def _try_install_service_deps(name: str) -> bool:
     rc = _sp.call([sys.executable, "-m", "pip", "install", "--quiet"] + pkgs, env=env)
     return rc == 0
 
+def _load_service_safe(name: str, args):
+    """Load a single service with error handling and auto-install retry."""
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            _load_single_service(name, args)
+    except (ImportError, ModuleNotFoundError):
+        if _try_install_service_deps(name):
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    _load_single_service(name, args)
+                return
+            except Exception:
+                pass
+        log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
+        log.warning(f"Continuing without {name.upper()}")
+    except Exception:
+        log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
+        log.warning(f"Continuing without {name.upper()}")
+
+
 def load_services(args):
     to_load = resolve_services(args)
     log.info(f"Services to load: {', '.join(s.upper() for s in to_load)}")
-    for name in to_load:
-        try:
-            # Redirect stdout to suppress safetensors LOAD REPORT print() noise.
-            # Our logs (stderr) and tqdm progress bars (stderr) are unaffected.
-            with contextlib.redirect_stdout(io.StringIO()):
-                _load_single_service(name, args)
-        except (ImportError, ModuleNotFoundError):
-            # Missing package — try to auto-install and retry once
-            if _try_install_service_deps(name):
-                try:
-                    with contextlib.redirect_stdout(io.StringIO()):
-                        _load_single_service(name, args)
-                    continue
-                except Exception:
-                    pass
-            log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
-            log.warning(f"Continuing without {name.upper()}")
-        except Exception:
-            log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
-            log.warning(f"Continuing without {name.upper()}")
+
+    # CPU-only services can load in parallel with GPU services
+    _CPU_SERVICES = {"tts"}  # Piper uses ONNX on CPU, no GPU contention
+    cpu_services = [s for s in to_load if s in _CPU_SERVICES]
+    gpu_services = [s for s in to_load if s not in _CPU_SERVICES]
+
+    # Load CPU services in background threads while GPU services load sequentially
+    cpu_threads = []
+    for name in cpu_services:
+        t = Thread(target=_load_service_safe, args=(name, args), name=f"load-{name}")
+        t.start()
+        cpu_threads.append(t)
+
+    # GPU services must load sequentially (VRAM allocation)
+    for name in gpu_services:
+        _load_service_safe(name, args)
+
+    # Wait for CPU services to finish
+    for t in cpu_threads:
+        t.join()
+
     if not SERVICES:
         log.error("No services loaded!")
         sys.exit(1)

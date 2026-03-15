@@ -59,7 +59,9 @@ function toggleLlmBackend(){
 
 async function saveSettings(){
   const st=document.getElementById('save-status');
-  st.textContent='Saving...';st.className='save-status';
+  const btn=document.querySelector('.save-bar .hud-btn');
+  st.textContent='Saving & applying...';st.className='save-status';
+  if(btn)btn.disabled=true;
   const body={
     server:{port:document.getElementById('s-port').value,api_key:document.getElementById('s-apikey').value},
     services:{stt:document.getElementById('svc-stt').checked?'true':'false',tts:document.getElementById('svc-tts').checked?'true':'false',llm:document.getElementById('svc-llm').checked?'true':'false',vision:document.getElementById('svc-vision').checked?'true':'false',imagegen:document.getElementById('svc-imagegen').checked?'true':'false',musicgen:document.getElementById('svc-musicgen').checked?'true':'false',embeddings:document.getElementById('svc-embeddings').checked?'true':'false'},
@@ -74,8 +76,24 @@ async function saveSettings(){
   try{
     const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
-    st.textContent=d.message||'Saved!';st.className='save-status ok';
-  }catch(e){st.textContent='Error: '+e;st.className='save-status err'}
+    // Show detailed result with color coding
+    const hasErrors=d.errors&&d.errors.length>0;
+    const hasUnloaded=d.unloaded&&d.unloaded.length>0;
+    const hasLoaded=d.loaded&&d.loaded.length>0;
+    let msg=d.message||'Saved!';
+    // Show GPU info if services were unloaded
+    if(hasUnloaded&&d.gpu&&d.gpu.vram_free_gb!==undefined){
+      msg+=` VRAM free: ${d.gpu.vram_free_gb} GB`;
+    }
+    st.textContent=msg;
+    st.className=hasErrors?'save-status err':'save-status ok';
+    // Auto-clear after a few seconds
+    setTimeout(()=>{st.textContent='';st.className='save-status'},8000);
+  }catch(e){
+    st.textContent='Error: '+e;st.className='save-status err';
+  }finally{
+    if(btn)btn.disabled=false;
+  }
 }
 
 loadSettings();
