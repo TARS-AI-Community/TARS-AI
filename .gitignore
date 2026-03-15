@@ -221,3 +221,8 @@ terminal_log.json
 emotional_state.json
 ui_settings.json
 *interaction_log.json
+
+# TARS-AI Server
+TARS-AI_Server/models/*
+TARS-AI_Server/tts/*
+TARS-AI_Server/bin/*
