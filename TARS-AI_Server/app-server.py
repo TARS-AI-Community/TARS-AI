@@ -1517,20 +1517,13 @@ class MusicGenService:
             dtype="bfloat16" if device == "cuda" else "float32",
             cpu_offload=(device != "cuda"),
         )
-        # Force checkpoint load NOW so it doesn't re-download/re-scan on every first request.
-        # ACEStepPipeline.__init__ only configures — it lazy-loads weights in __call__.
-        if hasattr(self.pipe, 'load_checkpoint'):
-            self.pipe.load_checkpoint()
-            log.info("ACE-Step checkpoint pre-loaded into memory")
-        elif hasattr(self.pipe, 'checkpoint_loaded') and not self.pipe.checkpoint_loaded:
-            # Trigger loading by calling the internal method the pipeline uses
-            try:
-                ckpt_path = self.pipe.get_checkpoint_path(self.pipe.checkpoint_dir)
-                self.pipe.load_checkpoint_from_path(ckpt_path)
-                self.pipe.checkpoint_loaded = True
-                log.info("ACE-Step checkpoint pre-loaded into memory")
-            except AttributeError:
-                log.info("ACE-Step will load checkpoint on first request (lazy init)")
+        # ACEStepPipeline.__init__ only configures — weights are lazy-loaded on first
+        # __call__ which re-scans HuggingFace cache every time. Pre-load them now so
+        # the first request is fast and subsequent restarts don't re-fetch file listings.
+        if not self.pipe.loaded:
+            log.info("ACE-Step: pre-loading checkpoint into memory...")
+            self.pipe.load_checkpoint(str(cache_dir))
+            log.info("ACE-Step checkpoint loaded")
         log.info("ACE-Step music generation model loaded")
 
     def generate(self, prompt: str, lyrics: str = "", duration_sec: float = 60.0,
