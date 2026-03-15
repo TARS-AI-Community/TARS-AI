@@ -158,6 +158,13 @@ def _play_file_simple(path: str, name: str):
         except Exception:
             pass
 
+        # Signal STT that speaker is active so recording loops abort
+        try:
+            from modules.module_tts import set_speaker_active, clear_speaker_active
+        except ImportError:
+            set_speaker_active = clear_speaker_active = lambda: None
+
+        set_speaker_active()
         try:
             from modules.module_messageQue import queue_message as qm
             qm(f"[MusicGen] Auto-playing: {name}")
@@ -194,6 +201,14 @@ def _play_file_simple(path: str, name: str):
         except Exception as e:
             from modules.module_messageQue import queue_message as qm
             qm(f"[MusicGen] Auto-play error: {e}")
+        finally:
+            clear_speaker_active()
+            # Unregister state hook to prevent listener leak
+            try:
+                from modules.module_state import remove_state_change
+                remove_state_change(_on_state_change)
+            except Exception:
+                pass
 
     _playback_thread = threading.Thread(target=_play, daemon=True)
     _playback_thread.start()

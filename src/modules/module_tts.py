@@ -31,6 +31,10 @@ _tts_cancel_event = threading.Event()
 _tts_playing = threading.Event()  # Set while sd.play() is actively outputting audio
 _tts_needs_flush = threading.Event()  # Set after TTS finishes; cleared by STT after flushing
 
+# Speaker output flag — set by skills playing audio (music, sound effects, etc.)
+# Checked by STT recording loops to abort when the speaker is active.
+_speaker_active = threading.Event()
+
 
 def stop_tts_playback():
     """Signal TTS to stop immediately. Safe to call from any thread."""
@@ -43,6 +47,19 @@ def stop_tts_playback():
 def is_tts_playing():
     """Check if TTS audio is currently being output. Used by barge-in monitor."""
     return _tts_playing.is_set()
+
+def set_speaker_active():
+    """Signal that a skill is outputting audio through the speaker (music, etc.).
+    STT recording loops check is_speaker_active() and abort when True."""
+    _speaker_active.set()
+
+def clear_speaker_active():
+    """Signal that skill audio output has stopped."""
+    _speaker_active.clear()
+
+def is_speaker_active():
+    """Check if any audio is being output (TTS or skill audio like music)."""
+    return _tts_playing.is_set() or _speaker_active.is_set()
 
 def needs_mic_flush():
     """Check and clear the flush flag. Returns True once after each TTS playback."""

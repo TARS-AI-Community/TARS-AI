@@ -126,7 +126,8 @@ def wake_word_callback(wake_response):
         ui_manager.deactivate_screensaver()
         character_name = CONFIG['CHAR']['character_name']
         ui_manager.update_data(character_name, wake_response, character_name)
-        set_tars_state(TarsState.TALKING)
+
+    set_tars_state(TarsState.TALKING)
 
     # Don't run barge-in on wake responses — they're too short and the mic
     # picks up TARS's own voice, causing false positives
@@ -201,8 +202,7 @@ def utterance_callback(message):
             return text.strip()
 
         def _on_first_play():
-            if ui_manager:
-                set_tars_state(TarsState.TALKING)
+            set_tars_state(TarsState.TALKING)
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text="")
 
@@ -394,8 +394,7 @@ def utterance_callback(message):
         # For preemptive results, TTS hasn't started yet — play full reply normally
         if preemptive is not None:
             reply_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
-            if ui_manager:
-                set_tars_state(TarsState.TALKING)
+            set_tars_state(TarsState.TALKING)
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=reply_clean)
             speed.start('tts')
@@ -416,9 +415,9 @@ def utterance_callback(message):
         if _followup_reply and not was_interrupted:
             followup_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', _followup_reply)
             # Update OpenGL UI with follow-up content
+            set_tars_state(TarsState.TALKING)
             if ui_manager:
                 ui_manager.update_streaming_data(_followup_reply)
-                set_tars_state(TarsState.TALKING)
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=followup_clean)
             speed.start('followup_tts')
