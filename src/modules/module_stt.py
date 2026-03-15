@@ -30,6 +30,8 @@ import requests
 
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config, get_capabilities
+from modules.module_tts import is_tts_playing
+from modules.module_state import set_tars_state, get_tars_state, TarsState
 
 CONFIG = load_config()
 CAPABILITIES = get_capabilities()
@@ -603,6 +605,12 @@ class STTManager:
 
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
+
+                # Abort recording if TTS just started — don't pick up TARS's own voice
+                if is_tts_playing():
+                    set_tars_state(TarsState.STANDBY)
+                    return None, 0
+
                 is_silence, detected_speech, silent_frames = vad_func(data, detected_speech, silent_frames)
 
                 # Pre-speech timeout: if no speech detected and silence exceeds threshold, exit early
@@ -1032,6 +1040,12 @@ class STTManager:
 
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
+
+                # Abort recording if TTS just started — don't pick up TARS's own voice
+                if is_tts_playing():
+                    set_tars_state(TarsState.STANDBY)
+                    return None, 0
+
                 is_silence, detected_speech, silent_frames = vad_func(data, detected_speech, silent_frames)
 
                 # Pre-speech timeout: if no speech detected and silence exceeds threshold, exit early
@@ -1167,8 +1181,7 @@ class STTManager:
             queue_message(f"{self._character_name}: Sleeping...")
             print()
             STTManager._last_status_was_sleeping = True
-            if self.ui_manager:
-                self.ui_manager.set_tars_status("STANDBY")
+            set_tars_state(TarsState.STANDBY)
 
         processors = {
             "fastrtc": self._detect_wake_word_fastrtc,
@@ -1219,6 +1232,10 @@ class STTManager:
                 if not self.running or self.shutdown_event.is_set():
                     break
 
+                # Abort wake word detection if TTS started
+                if is_tts_playing():
+                    break
+
                 data, _ = stream.read(frames_per_chunk)
                 data = self.amplify_audio(data)
 
@@ -1250,6 +1267,9 @@ class STTManager:
         threshold = round(max(0.2, min(0.2 + curve * 0.5, 0.7)), 2)
         detector = WakeWordSystem(self.WAKE_WORD, 16000, threshold)
         detector.createModel()
+        # Wait for TTS to finish before entering blocking wake word listener
+        while is_tts_playing():
+            time.sleep(0.05)
         if detector.listenForWakeWord():
             self._handle_wake_detected()
             return True
@@ -1291,6 +1311,10 @@ class STTManager:
             audio_buffer[:] = data.flatten()
 
             while self.running and not self.shutdown_event.is_set():
+                # Abort wake word detection if TTS started
+                if is_tts_playing():
+                    break
+
                 # Simple RMS silence gate — skip transcription when quiet to save CPU
                 if self._is_quiet(audio_buffer):
                     audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]

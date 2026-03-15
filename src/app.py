@@ -50,6 +50,7 @@ from modules.module_tts import update_tts_settings
 from modules.module_llm import initialize_manager_llm
 from modules.module_skills import initialize_skills
 from modules.module_stt import STTManager
+from modules.module_state import set_tars_state, on_state_change, TarsState, register_stt_manager
 from modules.module_main import (
     initialize_managers,
     wake_word_callback,
@@ -195,6 +196,15 @@ module_servoctl.set_movement_callbacks(
     on_start=pause_ui_and_stt,
     on_end=resume_ui_and_stt
 )
+
+
+# === Core State → UI Bridge ===
+def _sync_state_to_ui(old_state, new_state):
+    """Update UI whenever core application state changes."""
+    if ui_manager:
+        ui_manager.set_tars_status(new_state.value)
+
+on_state_change(_sync_state_to_ui)
 
 
 # === Logging Configuration ===
@@ -410,8 +420,9 @@ if __name__ == "__main__":
         queue_message(f"LOAD: TARS-AI v{VERSION} running on {RASPBERRY_VERSION.upper()}")
         ui_manager.update_data("System", f"TARS-AI v{VERSION} running", "SYSTEM")
 
+        register_stt_manager(stt_manager)
         stt_manager.start()
-        ui_manager.set_tars_status("STANDBY")
+        set_tars_state(TarsState.STANDBY)
 
         while not shutdown_event.is_set():
             time.sleep(0.1)
