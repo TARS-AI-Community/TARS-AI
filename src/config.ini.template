@@ -291,3 +291,12 @@ disabled = true
 
 [SKILL:generate_image]
 disabled = true
+
+[SKILL:generate_music]
+disabled = true
+
+[SKILL:network_camera]
+disabled = true
+
+[SKILL:launch_retropie]
+disabled = true
