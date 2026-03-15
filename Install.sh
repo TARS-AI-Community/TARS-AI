@@ -6,6 +6,7 @@ set -e
 
 if [ -n "$SUDO_USER" ]; then
     ACTUAL_USER="$SUDO_USER"
+    ACTUAL_HOME="/home/$SUDO_USER"
     echo ""
     echo "+================================================================+"
     echo "| NOTICE: Script run with sudo - will set ownership to: $SUDO_USER"
@@ -14,6 +15,7 @@ if [ -n "$SUDO_USER" ]; then
     sleep 2
 else
     ACTUAL_USER="$(whoami)"
+    ACTUAL_HOME="$HOME"
 fi
 
 DELAY=0.02
@@ -1081,6 +1083,89 @@ main() {
     git lfs install 2>&1 | tail -5
     git lfs pull 2>&1 | tail -5
     tars_say "Git LFS setup complete." "success"
+
+    # === Echo Cancellation (AEC) Setup ===
+    # Configures PipeWire WebRTC echo cancellation so the mic
+    # won't pick up TARS's own voice or music from the speaker.
+    tars_say "Configuring audio echo cancellation (AEC)..." "info"
+
+    if ! command -v pipewire >/dev/null 2>&1; then
+        tars_say "PipeWire not found — skipping AEC setup." "warning"
+    else
+        # Check/install AEC module
+        AEC_FOUND=false
+        for aec_path in /usr/lib/*/pipewire-*/libpipewire-module-echo-cancel.so; do
+            if [ -f "$aec_path" ]; then
+                AEC_FOUND=true
+                break
+            fi
+        done
+
+        if [ "$AEC_FOUND" = false ]; then
+            tars_say "Echo-cancel module not found. Installing dependencies..." "info"
+            sudo apt-get install -y pipewire libspa-0.2-modules libwebrtc-audio-processing1 2>&1 | tail -5
+            for aec_path in /usr/lib/*/pipewire-*/libpipewire-module-echo-cancel.so; do
+                if [ -f "$aec_path" ]; then
+                    AEC_FOUND=true
+                    break
+                fi
+            done
+        fi
+
+        if [ "$AEC_FOUND" = false ]; then
+            tars_say "AEC module not available on this system — skipping." "warning"
+        else
+            # Create PipeWire echo cancellation config
+            sudo mkdir -p /etc/pipewire/pipewire.conf.d
+            sudo tee /etc/pipewire/pipewire.conf.d/echo-cancel.conf > /dev/null << 'AECEOF'
+# TARS-AI Echo Cancellation — removes speaker output from mic input
+context.modules = [
+    {
+        name = libpipewire-module-echo-cancel
+        args = {
+            aec.method = webrtc
+            aec.args = {
+                webrtc.gain_control = true
+                webrtc.extended_filter = true
+            }
+            capture.props = {
+                node.name = "echo_cancel_capture"
+                audio.rate = 48000
+                audio.channels = 1
+            }
+            source.props = {
+                node.name = "echo_cancel_source"
+                node.description = "TARS Mic (Echo Cancelled)"
+                media.class = "Audio/Source"
+                priority.driver = 1000
+                priority.session = 1000
+            }
+            sink.props = {
+                node.name = "echo_cancel_sink"
+                node.description = "TARS Speaker (Echo Cancel)"
+                media.class = "Audio/Sink"
+                priority.driver = 1000
+                priority.session = 1000
+            }
+        }
+    }
+]
+AECEOF
+
+            # Set echo-cancelled devices as defaults
+            local PULSE_DIR="$ACTUAL_HOME/.config/pipewire/pipewire-pulse.conf.d"
+            mkdir -p "$PULSE_DIR"
+            cat > "$PULSE_DIR/default-devices.conf" << 'AECEOF'
+pulse.cmd = [
+    { cmd = "set-default-source" args = "echo_cancel_source" }
+    { cmd = "set-default-sink" args = "echo_cancel_sink" }
+]
+AECEOF
+            chown -R "$ACTUAL_USER:$ACTUAL_USER" "$ACTUAL_HOME/.config/pipewire"
+
+            tars_say "Echo cancellation configured. Will be active after reboot." "success"
+        fi
+    fi
 
     if [[ "$PI_VERSION" == "pi5" ]]; then
         local multiarch_lib="/usr/lib/aarch64-linux-gnu"
