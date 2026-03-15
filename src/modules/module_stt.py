@@ -30,7 +30,7 @@ import requests
 
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config, get_capabilities
-from modules.module_tts import is_tts_playing, is_speaker_active
+from modules.module_tts import is_tts_playing
 from modules.module_state import set_tars_state, get_tars_state, TarsState
 
 CONFIG = load_config()
@@ -606,9 +606,8 @@ class STTManager:
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
 
-                # Abort recording if speaker is active (TTS or music) — don't
-                # pick up TARS's own voice or music from the speaker
-                if is_speaker_active():
+                # Abort recording if TTS just started — don't pick up TARS's own voice
+                if is_tts_playing():
                     set_tars_state(TarsState.STANDBY)
                     return None, 0
 
@@ -1042,9 +1041,8 @@ class STTManager:
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = stream.read(4000)
 
-                # Abort recording if speaker is active (TTS or music) — don't
-                # pick up TARS's own voice or music from the speaker
-                if is_speaker_active():
+                # Abort recording if TTS just started — don't pick up TARS's own voice
+                if is_tts_playing():
                     set_tars_state(TarsState.STANDBY)
                     return None, 0
 
@@ -1234,8 +1232,8 @@ class STTManager:
                 if not self.running or self.shutdown_event.is_set():
                     break
 
-                # Abort wake word detection if speaker is active (TTS or music)
-                if is_speaker_active():
+                # Abort wake word detection if TTS started
+                if is_tts_playing():
                     break
 
                 data, _ = stream.read(frames_per_chunk)
@@ -1269,8 +1267,8 @@ class STTManager:
         threshold = round(max(0.2, min(0.2 + curve * 0.5, 0.7)), 2)
         detector = WakeWordSystem(self.WAKE_WORD, 16000, threshold)
         detector.createModel()
-        # Wait for speaker to finish before entering blocking wake word listener
-        while is_speaker_active():
+        # Wait for TTS to finish before entering blocking wake word listener
+        while is_tts_playing():
             time.sleep(0.05)
         if detector.listenForWakeWord():
             self._handle_wake_detected()
@@ -1313,8 +1311,8 @@ class STTManager:
             audio_buffer[:] = data.flatten()
 
             while self.running and not self.shutdown_event.is_set():
-                # Abort wake word detection if speaker is active (TTS or music)
-                if is_speaker_active():
+                # Abort wake word detection if TTS started
+                if is_tts_playing():
                     break
 
                 # Simple RMS silence gate — skip transcription when quiet to save CPU
