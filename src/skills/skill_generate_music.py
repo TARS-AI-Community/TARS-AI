@@ -203,6 +203,12 @@ def _play_file_simple(path: str, name: str):
             qm(f"[MusicGen] Auto-play error: {e}")
         finally:
             clear_speaker_active()
+            # Unregister state hook to prevent listener leak
+            try:
+                from modules.module_state import remove_state_change
+                remove_state_change(_on_state_change)
+            except Exception:
+                pass
 
     _playback_thread = threading.Thread(target=_play, daemon=True)
     _playback_thread.start()

@@ -65,6 +65,15 @@ def on_state_change(callback: Callable[[TarsState, TarsState], None]) -> None:
         _listeners.append(callback)
 
 
+def remove_state_change(callback: Callable[[TarsState, TarsState], None]) -> None:
+    """Unregister a previously registered state change listener."""
+    with _lock:
+        try:
+            _listeners.remove(callback)
+        except ValueError:
+            pass
+
+
 # Reference to STT manager, set by app.py at startup
 _stt_manager = None
 
