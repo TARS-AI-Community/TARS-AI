@@ -3518,8 +3518,15 @@ function $(id) { return document.getElementById(id); }
 
     // Zoom + pan
     var g = svg.append('g');
+    var currentZoomScale = 1;
     svg.call(d3.zoom().scaleExtent([0.2, 5]).on('zoom', function (e) {
       g.attr('transform', e.transform);
+      var newScale = e.transform.k;
+      if ((currentZoomScale < 2.2 && newScale >= 2.2) || (currentZoomScale >= 2.2 && newScale < 2.2)) {
+        currentZoomScale = newScale;
+        detailLabels.attr('display', newScale >= 2.2 ? null : 'none');
+      }
+      currentZoomScale = newScale;
     }));
 
     // ── Build parallel-link index so overlapping links curve apart ──
@@ -3697,12 +3704,34 @@ function $(id) { return document.getElementById(id); }
         return n.length > 20 ? n.substring(0, 18) + '..' : n;
       });
 
+    // Detail labels for memory/topic nodes — only visible when zoomed in
+    var detailNodes = nodes.filter(function (d) {
+      return d.group === 'memory' || d.group === 'topic';
+    });
+    var detailLabels = g.append('g').selectAll('text')
+      .data(detailNodes).enter().append('text')
+      .attr('class', 'dash-node-label')
+      .attr('dy', function (d) { return (d.size || 6) + 10; })
+      .attr('font-size', '5px')
+      .attr('fill', function (d) { return d.color ? d.color.replace(')', ',0.8)').replace('rgb(', 'rgba(') : 'rgba(226,234,242,0.55)'; })
+      .attr('display', 'none')
+      .text(function (d) {
+        var t = '';
+        if (d.details) {
+          t = d.details.user_input || d.details.context || d.details.bot_response || '';
+        }
+        if (!t) t = d.name || '';
+        return t.length > 40 ? t.substring(0, 38) + '..' : t;
+      });
+
     simulation.on('tick', function () {
       link.attr('d', linkPath);
       node.attr('cx', function (d) { return d.x; })
           .attr('cy', function (d) { return d.y; });
       labels.attr('x', function (d) { return d.x; })
             .attr('y', function (d) { return d.y; });
+      detailLabels.attr('x', function (d) { return d.x; })
+                  .attr('y', function (d) { return d.y; });
     });
 
     graphSim = simulation;
