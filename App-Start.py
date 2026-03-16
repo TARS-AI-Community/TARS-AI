@@ -986,7 +986,40 @@ def create_touch_menu():
         pygame.display.flip()
         clock.tick(60)
 
+def check_aec_setup():
+    """Run AEC auto-setup on first boot if not already configured.
+
+    Flags:
+        aec=true   — force a full AEC re-tune
+        aec=remove — remove AEC config and restore backup
+    """
+    args_lower = [a.lower() for a in sys.argv[1:]]
+    force = "aec=true" in args_lower
+    remove = "aec=remove" in args_lower
+    try:
+        from aec import is_aec_tuned, is_aec_configured, aec_module_installed, setup_aec, remove_aec
+        if remove:
+            print("[AEC] aec=remove — removing AEC configuration...")
+            remove_aec()
+            return
+        if not force and is_aec_tuned() and is_aec_configured():
+            return  # Already tuned — nothing to do
+        if not aec_module_installed():
+            print("[AEC] AEC module not available — skipping auto-tune")
+            return
+        if force:
+            print("[AEC] aec=true — forcing AEC re-tune...")
+        else:
+            print("[AEC] AEC not tuned — running auto-setup...")
+        print("[AEC] This tests 14 configs and takes ~4 minutes.")
+        setup_aec(force=force)
+    except ImportError:
+        print("[AEC] aec.py not found — skipping")
+    except Exception as e:
+        print(f"[AEC] Auto-setup failed (non-fatal): {e}")
+
 if __name__ == "__main__":
+    check_aec_setup()
     if not check_required_file():
         print("[FILE.CHECK] hey_tars_templates.pkl not found — launching terminal mode.")
         run_tars_ai_normal()
