@@ -28,6 +28,8 @@ import sounddevice as sd
 import soundfile as sf
 import requests
 
+from modules.module_mic import ResamplingInputStream, get_native_rate
+
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config, get_capabilities
 from modules.module_tts import is_tts_playing
@@ -130,6 +132,8 @@ def _stt_dir():
 class STTManager:
     """Manages Speech-to-Text processing for TARS-AI."""
 
+    MODEL_RATE = 16000  # Sample rate required by all ML models (VAD, STT, speaker ID)
+
     WAKE_WORD_RESPONSES = [
         "Oh! You called?",
         "Took you long enough. Yes?",
@@ -159,15 +163,12 @@ class STTManager:
         self.cancelled = False
         self.pause_lock = threading.Lock()
 
-        # Audio settings - Set sample rate based on VAD configuration
+        # Audio settings — always open mic at its native rate, resample to MODEL_RATE
         self.DEFAULT_SAMPLE_RATE = 16000
-        if self.config["STT"].get("vad_enabled", False):
-            # If VAD is enabled, force 16000 Hz sample rate
-            self.SAMPLE_RATE = 16000
-            queue_message("INFO: Using 16000 Hz sample rate for VAD compatibility")
-        else:
-            # If VAD is disabled, use system default
-            self.SAMPLE_RATE = self._find_default_mic_sample_rate()
+        self.DEVICE_SAMPLE_RATE = get_native_rate()
+        self.SAMPLE_RATE = self.DEVICE_SAMPLE_RATE  # backward compat alias
+        if self.DEVICE_SAMPLE_RATE != self.MODEL_RATE:
+            queue_message(f"INFO: Mic native rate {self.DEVICE_SAMPLE_RATE} Hz — will resample to {self.MODEL_RATE} Hz")
 
         self.amp_gain = CONFIG['STT'].get('mic_amp_gain', 10.0)
         self.silence_margin = CONFIG['STT'].get('silence_margin', 3.0)
@@ -534,16 +535,6 @@ class STTManager:
             return None
         return np.sqrt(np.mean(np.square(flat)))
 
-    def _find_default_mic_sample_rate(self):
-        try:
-            idx = sd.default.device[0]
-            if idx is None:
-                raise ValueError("No default microphone detected.")
-            return int(sd.query_devices(idx, kind="input").get("default_samplerate", 16000))
-        except Exception as e:
-            queue_message(f"ERROR: {e}")
-            return self.DEFAULT_SAMPLE_RATE
-
     def play_wav(self, filename):
         try:
             data, sr = sf.read(filename)
@@ -562,7 +553,7 @@ class STTManager:
 
     # === Shared Recording ===
 
-    def _record_audio_chunks(self, sample_rate=16000, use_pre_roll=True, min_speech_frames=5,
+    def _record_audio_chunks(self, use_pre_roll=True, min_speech_frames=5,
                              pre_roll_frames=10, vad_method=None):
         """Record audio until end-of-speech detected.
 
@@ -591,20 +582,19 @@ class STTManager:
         self.smart_turn_audio_buffer.clear()
         self._smart_turn_future = None
 
-        with sd.InputStream(samplerate=sample_rate, channels=1, dtype="int16") as stream:
+        with ResamplingInputStream(dtype="int16") as mic:
             # Flush stale mic audio that may contain the robot's own TTS voice.
             try:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(4):
-                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
+                    mic.flush()
                     clear_mic_flush()
             except Exception:
                 pass
 
             for _ in range(self.MAX_RECORDING_FRAMES):
-                data, _ = stream.read(4000)
+                data, _ = mic.read(4000)
 
                 # Abort recording if TTS just started — don't pick up TARS's own voice
                 if is_tts_playing():
@@ -790,7 +780,7 @@ class STTManager:
     def _transcribe_with_fastrtc(self):
         """Transcribe audio using FastRTC STT."""
         RATE = 16000  # FastRTC/Moonshine expects 16 kHz audio
-        chunks, speech_frames = self._record_audio_chunks(sample_rate=RATE)
+        chunks, speech_frames = self._record_audio_chunks()
         if chunks is None:
             return None
 
@@ -811,11 +801,11 @@ class STTManager:
 
     def _transcribe_silero(self):
         """Transcribe audio using Silero STT."""
-        chunks, _ = self._record_audio_chunks(sample_rate=self.SAMPLE_RATE)
+        chunks, _ = self._record_audio_chunks()
         if chunks is None:
             return None
 
-        wav_buf = self._chunks_to_wav_buffer(chunks, self.SAMPLE_RATE)
+        wav_buf = self._chunks_to_wav_buffer(chunks, self.MODEL_RATE)
         audio_data, sr = sf.read(wav_buf, dtype="float32")
         if sr != self.DEFAULT_SAMPLE_RATE and librosa is not None:
             audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=self.DEFAULT_SAMPLE_RATE)
@@ -828,7 +818,7 @@ class STTManager:
     def _transcribe_with_server(self):
         """Transcribe audio by sending it to an external server."""
         try:
-            chunks, _ = self._record_audio_chunks(sample_rate=self.SAMPLE_RATE)
+            chunks, _ = self._record_audio_chunks()
             if chunks is None:
                 if self.DEBUG:
                     queue_message("DEBUG STT: No speech recorded (silence timeout)")
@@ -839,7 +829,7 @@ class STTManager:
                 total_samples = sum(len(c) for c in chunks)
                 queue_message(f"DEBUG STT: Sending {total_samples} samples to {external_url}/save_audio")
 
-            wav_buf = self._chunks_to_wav_buffer(chunks, self.SAMPLE_RATE)
+            wav_buf = self._chunks_to_wav_buffer(chunks, self.MODEL_RATE)
             files = {"audio": ("audio.wav", wav_buf, "audio/wav")}
             headers = {}
             api_key = os.environ.get('EXTERNAL_API_KEY', '')
@@ -880,7 +870,7 @@ class STTManager:
         client = OpenAI(api_key=CONFIG["TTS"]["openai_api_key"])
 
         RATE = 16000
-        chunks, speech_frames = self._record_audio_chunks(sample_rate=RATE)
+        chunks, speech_frames = self._record_audio_chunks()
         if chunks is None:
             return None
 
@@ -1024,7 +1014,7 @@ class STTManager:
         if had_stale_future or had_stale_buffer:
             queue_message(f"DEBUG: Reset stale Smart Turn state (future={had_stale_future}, buf_chunks={had_stale_buffer})")
 
-        with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
+        with ResamplingInputStream(dtype="int16") as mic:
             # Flush stale mic audio that may contain the robot's own TTS voice.
             # Uses a persistent flag (not a time window) so it works even if
             # the LLM+TTS pipeline took many seconds before we get here.
@@ -1032,14 +1022,13 @@ class STTManager:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(4):
-                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
+                    mic.flush()
                     clear_mic_flush()
             except Exception:
                 pass
 
             for _ in range(self.MAX_RECORDING_FRAMES):
-                data, _ = stream.read(4000)
+                data, _ = mic.read(4000)
 
                 # Abort recording if TTS just started — don't pick up TARS's own voice
                 if is_tts_playing():
@@ -1211,19 +1200,18 @@ class STTManager:
         except Exception:
             pass
 
-        RATE = 16000
+        RATE = self.MODEL_RATE
         frames_per_chunk = int(RATE * 2.0)
         self.smart_turn_audio_buffer.clear()
         self._smart_turn_future = None
 
-        with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
+        with ResamplingInputStream(dtype="int16") as mic:
             # Flush stale mic audio after TTS playback
             try:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(4):
-                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
+                    mic.flush()
                     clear_mic_flush()
             except Exception:
                 pass
@@ -1236,7 +1224,7 @@ class STTManager:
                 if is_tts_playing():
                     break
 
-                data, _ = stream.read(frames_per_chunk)
+                data, _ = mic.read(frames_per_chunk)
                 data = self.amplify_audio(data)
 
                 # Simple RMS silence gate — skip transcription when quiet to save CPU
@@ -1265,7 +1253,7 @@ class STTManager:
         norm = (sensitivity - 1) / 9
         curve = norm ** 1.6
         threshold = round(max(0.2, min(0.2 + curve * 0.5, 0.7)), 2)
-        detector = WakeWordSystem(self.WAKE_WORD, 16000, threshold)
+        detector = WakeWordSystem(self.WAKE_WORD, self.MODEL_RATE, threshold)
         detector.createModel()
         # Wait for TTS to finish before entering blocking wake word listener
         while is_tts_playing():
@@ -1283,32 +1271,31 @@ class STTManager:
 
         self._fire_and_forget_get(f"http://127.0.0.1:{self._webui_port}/stop_talking")
 
-        RATE = 16000
+        RATE = self.MODEL_RATE
         frames_per_chunk = int(RATE * 2.0)
         overlap_frames = int(RATE * 0.5)
         read_frames = frames_per_chunk - overlap_frames
         wake_detected = False
 
-        # Pre-allocate circular buffer to avoid np.concatenate memory fragmentation
+        # Pre-allocate circular buffer in MODEL_RATE space
         audio_buffer = np.zeros(frames_per_chunk, dtype=np.int16)
 
         try:
-          with sd.InputStream(samplerate=RATE, channels=1, dtype="int16") as stream:
+          with ResamplingInputStream(dtype="int16") as mic:
             # Flush stale mic audio after TTS playback to avoid detecting
             # the robot's own voice as a wake word.
             try:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    for _ in range(4):
-                        stream.read(2000)  # 4 × 2000 @ 16kHz = 0.5s
+                    mic.flush()
                     clear_mic_flush()
             except Exception:
                 pass
 
             # Prime buffer with first full chunk
-            data, _ = stream.read(frames_per_chunk)
-            audio_buffer[:] = data.flatten()
+            buf, _ = mic.read_exact(frames_per_chunk)
+            audio_buffer[:] = buf.flatten()
 
             while self.running and not self.shutdown_event.is_set():
                 # Abort wake word detection if TTS started
@@ -1318,8 +1305,8 @@ class STTManager:
                 # Simple RMS silence gate — skip transcription when quiet to save CPU
                 if self._is_quiet(audio_buffer):
                     audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
-                    new_data, _ = stream.read(read_frames)
-                    audio_buffer[overlap_frames:] = new_data.flatten()
+                    buf, _ = mic.read_exact(read_frames)
+                    audio_buffer[overlap_frames:] = buf.flatten()
                     continue
 
                 # Amplify and convert for transcription (skip denoising — not needed for wake word matching)
@@ -1333,8 +1320,8 @@ class STTManager:
                     queue_message(f"ERROR: sherpa-onnx STT failed: {e}")
                     # Roll buffer forward and continue
                     audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
-                    new_data, _ = stream.read(read_frames)
-                    audio_buffer[overlap_frames:] = new_data.flatten()
+                    buf, _ = mic.read_exact(read_frames)
+                    audio_buffer[overlap_frames:] = buf.flatten()
                     continue
                 finally:
                     del s  # Free native stream to prevent heap corruption
@@ -1345,14 +1332,14 @@ class STTManager:
                 if self.WAKE_WORD in transcript or self._fuzzy_wake_word_match(transcript, self.WAKE_WORD):
                     # Break out of the loop first — the wake response callback
                     # plays TTS audio (sd.play + sd.wait) which deadlocks if
-                    # the sd.InputStream is still open.
+                    # the ResamplingInputStream is still open.
                     wake_detected = True
                     break
 
                 # Roll buffer: shift overlap to front, read new frames into remainder
                 audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
-                new_data, _ = stream.read(read_frames)
-                audio_buffer[overlap_frames:] = new_data.flatten()
+                buf, _ = mic.read_exact(read_frames)
+                audio_buffer[overlap_frames:] = buf.flatten()
         except sd.PortAudioError as e:
             queue_message(f"WARNING: Audio device error in wake word detection, retrying in 2s: {e}")
             time.sleep(2)
@@ -1420,7 +1407,7 @@ class STTManager:
 
             speech_ts = self.get_speech_timestamps(
                 audio_tensor, self.silero_vad_model,
-                sampling_rate=self.SAMPLE_RATE, threshold=0.3,
+                sampling_rate=self.MODEL_RATE, threshold=0.3,
                 min_speech_duration_ms=100, return_seconds=True
             ) or []
 
@@ -1599,9 +1586,9 @@ class STTManager:
         queue_message("INFO: Measuring background noise...")
         rms_values = []
 
-        with sd.InputStream(samplerate=self.SAMPLE_RATE, channels=1, dtype="int16") as stream:
+        with ResamplingInputStream(dtype="int16") as mic:
             for _ in range(20):
-                data, _ = stream.read(4000)
+                data, _ = mic.read(4000)
                 rms = self._compute_rms_fast(data)
                 if rms is not None:
                     rms_values.append(rms)
@@ -1712,13 +1699,12 @@ class STTManager:
             grace_remaining = 0     # Countdown frames after TTS stops playing
 
             try:
-                with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
+                with ResamplingInputStream(dtype="int16") as mic:
                     # Flush stale audio from OS buffer (discard first ~0.5s)
-                    for _ in range(4):
-                        stream.read(2000)
+                    mic.flush()
 
                     while self._bargein_active:
-                        data, _ = stream.read(2000)  # ~125ms frame
+                        data, _ = mic.read(2000)  # ~125ms frame
                         frame_count += 1
 
                         # Skip audio collection while TTS is playing to avoid
@@ -1795,13 +1781,12 @@ class STTManager:
             grace_remaining = 0     # Countdown frames after TTS stops playing
 
             try:
-                with sd.InputStream(samplerate=16000, channels=1, dtype="int16") as stream:
+                with ResamplingInputStream(dtype="int16") as mic:
                     # Flush stale audio from OS buffer (discard first ~0.5s)
-                    for _ in range(4):
-                        stream.read(2000)
+                    mic.flush()
 
                     while self._bargein_active:
-                        data, _ = stream.read(2000)  # ~125ms frame
+                        data, _ = mic.read(2000)  # ~125ms frame
                         frame_count += 1
 
                         # Skip audio while TTS is playing to avoid self-hearing

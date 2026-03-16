@@ -17,13 +17,14 @@ requires a separate written license from Charles-Olivier Dion (AtomikSpace).
 This license applies only to this file and does not override licenses of other files in the repository.
 """
 import numpy as np
-import sounddevice as sd
 from collections import deque
 import pickle
 import os
 import time
 import sys
 from scipy.fftpack import dct
+
+from modules.module_mic import open_native_stream, make_resampling_callback
 
 class VoiceActivityDetector:
     def __init__(self, sample_rate=16000, energy_threshold=0.008, silence_duration=0.5):
@@ -112,10 +113,11 @@ class MFCCExtractor:
         mfcc = dct(filter_banks, type=2, axis=1, norm='ortho')[:, :self.n_mfcc]
         return (mfcc - np.mean(mfcc, axis=0)) / (np.std(mfcc, axis=0) + 1e-8)
 
+
 class WakeWordSystem:
     def __init__(self, wake_word="hey tars", sample_rate=16000, threshold=0.6, augment_data=True):
         self.wake_word = wake_word
-        self.sample_rate = sample_rate
+        self.sample_rate = sample_rate  # model rate (16kHz)
         self.threshold = threshold
         self.augment_data = augment_data
         self.mfcc_extractor = MFCCExtractor(sample_rate=sample_rate)
@@ -168,16 +170,16 @@ class WakeWordSystem:
     def listenForWakeWord(self):
         detected_flag = False
 
-        def audio_callback(indata, frames, time_info, status):
+        def audio_callback(audio_np, frames, time_info, status):
             nonlocal detected_flag
-            audio_np = indata[:, 0]
             self.buffer.extend(audio_np)
 
             detected, confidence = self.detect()
             if detected:
                 detected_flag = True
 
-        with sd.InputStream(samplerate=self.sample_rate, channels=1, callback=audio_callback, blocksize=512):
+        with open_native_stream(callback=make_resampling_callback(audio_callback),
+                                blocksize=512):
             while not detected_flag:
                 time.sleep(0.05)
         return True
@@ -218,9 +220,8 @@ class WakeWordSystem:
         silence_count = 0
         max_silence_frames = 15
 
-        def callback(indata, frames, time_info, status):
+        def callback(audio_chunk, frames, time_info, status):
             nonlocal speech_started, silence_count
-            audio_chunk = indata[:, 0]
 
             if not speech_started:
                 if self.vad.is_speech(audio_chunk):
@@ -236,8 +237,8 @@ class WakeWordSystem:
                     silence_count += 1
                     print(".", end="", flush=True)
 
-        with sd.InputStream(samplerate=self.sample_rate, channels=1,
-                            callback=callback, blocksize=512):
+        with open_native_stream(callback=make_resampling_callback(callback),
+                                blocksize=512):
             while not speech_started or silence_count < max_silence_frames:
                 time.sleep(0.01)
 
@@ -271,7 +272,7 @@ class WakeWordSystem:
 
         if self.augment_data:
             augmented_audios = self.augment_audio(audio_array)
-            for aug_audio in augmented_audios[1:]:  
+            for aug_audio in augmented_audios[1:]:
                 aug_mfcc = self.mfcc_extractor.extract_mfcc(aug_audio)
                 if aug_mfcc is not None:
                     self.templates.append(aug_mfcc)
@@ -331,7 +332,7 @@ class WakeWordSystem:
                 self.templates = pickle.load(f)
             return True
         return False
-    
+
     def delete_templates(self, filename=None):
         data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tts")
         filename = filename or f"{self.wake_word.replace(' ', '_')}_templates.pkl"
@@ -340,4 +341,3 @@ class WakeWordSystem:
             os.remove(filepath)
             return True
         return False
-        

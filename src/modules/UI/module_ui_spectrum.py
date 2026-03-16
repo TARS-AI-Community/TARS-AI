@@ -21,7 +21,7 @@ import math
 import numpy as np
 from collections import deque
 import time
-import sounddevice as sd
+from modules.module_mic import open_native_stream
 import threading
 
 class SpectrumSystem:
@@ -120,11 +120,8 @@ class SpectrumSystem:
 
     def start_audio_stream(self):
         try:
-            self.stream = sd.InputStream(
-                callback=self.audio_callback,
-                channels=1,
-                samplerate=self.sample_rate,
-                blocksize=self.chunk_size
+            self.stream = open_native_stream(
+                callback=self.audio_callback, blocksize=self.chunk_size
             )
             self.stream.start()
             self.audio_running = True
