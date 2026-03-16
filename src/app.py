@@ -310,6 +310,7 @@ if __name__ == "__main__":
         )
         ui_manager.start()
         queue_message(f"LOAD: {'Lite' if _use_lite_ui else 'Full'} UI manager started")
+        set_tars_state(TarsState.BOOTING)
 
     # === ChatUI Thread (starts early so webui is available during model loading) ===
     if CONFIG['ACCESS']['webui_enabled'] and CHATUI_AVAILABLE:
@@ -408,9 +409,9 @@ if __name__ == "__main__":
         )
         bt_controller_thread.start()
 
-    # === Vision Initialization ===
+    # === Vision Initialization (non-blocking) ===
     if VISION_AVAILABLE and CONFIG['VISION'].get('vision_processor', 'blip') == 'blip':
-        initialize_blip()
+        threading.Thread(target=initialize_blip, name="BlipInitThread", daemon=True).start()
 
     # === Servo Initialization ===
     startup_initialization()

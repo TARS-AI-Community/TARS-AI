@@ -157,7 +157,7 @@ class TerminalSystem:
         self.scan_line = 0
         self.status_blink = 0
 
-        self.tars_status = "STANDBY"
+        self.tars_status = "BOOTING"
 
         self.show_power_menu = False
         self.power_menu_buttons = []
@@ -484,6 +484,7 @@ class TerminalSystem:
         self._draw_tech_button(surface, self.back_button_rect, "<-", "BCK-01", active=True)
 
         status_colors = {
+            "BOOTING": (255, 100, 0),
             "STANDBY": self.dim_text_color,
             "LISTENING": (0, 200, 255),
             "THINKING": (255, 180, 0),
@@ -1402,6 +1403,7 @@ class TerminalSystem:
 
         # Draw status badge (STANDBY/LISTENING/THINKING/TALKING)
         status_colors = {
+            "BOOTING": (255, 100, 0),
             "STANDBY": self.dim_text_color,
             "LISTENING": (0, 200, 255),
             "THINKING": (255, 180, 0),
