@@ -990,17 +990,40 @@ def check_aec_setup():
     """Run AEC auto-setup on first boot if not already configured.
 
     Flags:
-        aec=true   — force a full AEC re-tune
-        aec=remove — remove AEC config and restore backup
+        aec=true          — force a full AEC re-tune
+        aec=false         — skip AEC entirely (run app without echo cancellation)
+        aec=remove        — remove AEC config and restore backup
+        aec=<config-name> — apply a specific config by name (e.g. aec=raw-max-all)
     """
-    args_lower = [a.lower() for a in sys.argv[1:]]
-    force = "aec=true" in args_lower
-    remove = "aec=remove" in args_lower
+    # Extract the aec= value from argv
+    aec_val = None
+    for a in sys.argv[1:]:
+        if a.lower().startswith("aec="):
+            aec_val = a.split("=", 1)[1].strip()
+            break
+    if aec_val is None:
+        aec_val = ""
+
+    force = aec_val.lower() == "true"
+    remove = aec_val.lower() == "remove"
+    skip = aec_val.lower() == "false"
+    # Any other non-empty value is treated as a config name
+    config_name = aec_val if aec_val and not force and not remove and not skip else None
+
+    if skip:
+        print("[AEC] aec=false — skipping AEC setup")
+        return
+
     try:
-        from aec import is_aec_tuned, is_aec_configured, aec_module_installed, setup_aec, remove_aec
+        from aec import (is_aec_tuned, is_aec_configured, aec_module_installed,
+                         setup_aec, remove_aec, apply_named_config)
         if remove:
             print("[AEC] aec=remove — removing AEC configuration...")
             remove_aec()
+            return
+        if config_name:
+            print(f"[AEC] aec={config_name} — applying config directly...")
+            apply_named_config(config_name)
             return
         if not force and is_aec_tuned() and is_aec_configured():
             return  # Already tuned — nothing to do

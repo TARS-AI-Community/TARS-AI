@@ -31,8 +31,8 @@ import time
 # Add the project venv's site-packages so we can import piper, soundfile, numpy
 # (same packages the real app uses).  This is needed because App-Start.py calls
 # check_aec_setup() from the system Python, outside the venv.
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_venv_sp = glob_mod.glob(os.path.join(_SCRIPT_DIR, "src", ".venv", "lib", "python*", "site-packages"))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_venv_sp = glob_mod.glob(os.path.join(SCRIPT_DIR, "src", ".venv", "lib", "python*", "site-packages"))
 for sp in _venv_sp:
     if sp not in sys.path:
         sys.path.insert(0, sp)
@@ -43,7 +43,6 @@ logging.basicConfig(
 )
 log = logging.getLogger("aec")
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 AEC_CONF = "/etc/pipewire/pipewire.conf.d/echo-cancel.conf"
 TTS_GAIN = 1.5
 MARKER_COMMENT = "# TARS-AI AEC Config (auto-tuned)"
@@ -292,14 +291,18 @@ def restart_pipewire(timeout=15):
     return False
 
 
-def write_aec_config(supp, noise, gain_control, extended, hpf, delay_agnostic):
+def write_aec_config(supp, noise, gain_control, extended, hpf, delay_agnostic, label=""):
     """Write AEC config to /etc/pipewire/pipewire.conf.d/echo-cancel.conf"""
     gc = "true" if gain_control else "false"
     ext = "true" if extended else "false"
     hp = "true" if hpf else "false"
     da = "true" if delay_agnostic else "false"
 
-    config_text = f"""{MARKER_COMMENT}
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    label_line = f"\n# Winner: {label}  (tuned {ts})" if label else ""
+
+    config_text = f"""{MARKER_COMMENT}{label_line}
 context.modules = [
     {{
         name = libpipewire-module-echo-cancel
@@ -339,6 +342,10 @@ context.modules = [
     }}
 ]
 """
+    # Ensure config directory exists
+    conf_dir = os.path.dirname(AEC_CONF)
+    run_sudo(f"mkdir -p {conf_dir}")
+
     # Write via sudo tee
     p = subprocess.Popen(
         ["sudo", "tee", AEC_CONF],
@@ -517,9 +524,10 @@ def generate_tts_wav(phrase, outfile, tmpdir):
         return False
 
     # Apply gain chain via sox, output at 16kHz (matching app playback rate)
-    r = run_cmd(
-        f'sox {raw_file} {outfile} norm 0 vol {TTS_GAIN} rate {APP_PLAYBACK_RATE} channels 1',
-        timeout=15,
+    r = subprocess.run(
+        ["sox", raw_file, outfile, "norm", "0", "vol", str(TTS_GAIN),
+         "rate", str(APP_PLAYBACK_RATE), "channels", "1"],
+        capture_output=True, text=True, timeout=15,
     )
     if r.returncode != 0:
         log.error("sox processing failed: %s", r.stderr)
@@ -683,6 +691,22 @@ def run_tuning():
             log.error("No test phrases generated — cannot tune AEC")
             return None
 
+        # Sanity check: verify mic can hear the speaker (no point testing if not)
+        log.info("Verifying speaker-to-mic path...")
+        check_rec = os.path.join(tmpdir, "sanity_check.wav")
+        recorder.start(check_rec)
+        time.sleep(0.3)
+        play_through_aec_sink(phrase_files[0])
+        time.sleep(0.5)
+        recorder.stop()
+        check_rms = measure_rms(check_rec)
+        if check_rms < 0.00005:
+            print(_red("  WARNING: Mic cannot hear the speaker (RMS too low)."))
+            print(_red("  Check that your speaker and mic are connected and working."))
+            print(_dim(f"  Measured RMS: {check_rms:.8f}"))
+            log.error("Speaker-to-mic sanity check failed — aborting")
+            return None
+
         # Record silence baseline
         log.info("Recording 3s of ambient silence...")
         silence_file = os.path.join(tmpdir, "silence.wav")
@@ -733,7 +757,6 @@ def run_tuning():
                     rec_file = os.path.join(tmpdir, f"rec_{name}_p{pi}.wav")
                     rms = measure_echo_bleed(pfile, rec_file, recorder)
                     rms_values.append(rms)
-                    log.info("    phrase %d: raw=%.6f  amplified=%.6f", pi + 1, rms, rms * mic_amp_gain)
 
                 avg_rms = sum(rms_values) / len(rms_values)
                 print(_dim(f"    => bleed: {avg_rms:.6f}  (amplified: {avg_rms * mic_amp_gain:.6f})"))
@@ -889,7 +912,7 @@ def setup_aec(force=False):
     name, avg_rms, supp, noise, gc, ext, hpf, da = best
     print()
     print(_cyan("  TARS: ") + f"Applying optimal config -> {_green(_bold(name))}")
-    write_aec_config(supp, noise, gc, ext, hpf, da)
+    write_aec_config(supp, noise, gc, ext, hpf, da, label=name)
     ensure_pulse_defaults()
 
     if restart_pipewire():
@@ -906,6 +929,47 @@ def setup_aec(force=False):
         return True
     else:
         log.error("Failed to restart PipeWire with best config")
+        return False
+
+
+def apply_named_config(config_name):
+    """Apply a specific AEC config by name (e.g. 'raw-max-all', 'agc-medium').
+
+    Skips the full tuning process — just writes the named config directly.
+    Use this when you already know which config works best.
+    """
+    # Find the config by name
+    match = None
+    for cfg in CONFIGS:
+        if cfg[6] == config_name:
+            match = cfg
+            break
+
+    if match is None:
+        valid = [c[6] for c in CONFIGS]
+        print(_red(f"  Unknown AEC config: '{config_name}'"))
+        print(_dim(f"  Valid configs: {', '.join(valid)}"))
+        return False
+
+    supp, noise, gc, ext, hpf, da, name = match
+
+    print()
+    print(_cyan("╔═══════════════════════════════════════════════════════════════╗"))
+    print(_cyan("║") + _bold(_white(f"  Applying AEC config: {name:<20s}")) + "                       " + _cyan("║"))
+    print(_cyan("╚═══════════════════════════════════════════════════════════════╝"))
+    print()
+    print(_dim(f"  supp={supp} noise={noise} agc={gc} ext={ext} hpf={hpf} delay={da}"))
+
+    write_aec_config(supp, noise, gc, ext, hpf, da, label=f"{name} (manual)")
+    ensure_pulse_defaults()
+
+    if restart_pipewire():
+        print()
+        print(_green(f"  TARS: AEC config '{name}' applied and active."))
+        print()
+        return True
+    else:
+        log.error("Failed to restart PipeWire with config: %s", name)
         return False
 
 
@@ -962,6 +1026,23 @@ if __name__ == "__main__":
         except Exception as e:
             log.error("Remove failed: %s", e)
             sys.exit(1)
+
+    # --apply <config-name>  (e.g. --apply raw-max-all)
+    if "--apply" in sys.argv:
+        idx = sys.argv.index("--apply")
+        if idx + 1 < len(sys.argv):
+            name = sys.argv[idx + 1]
+            try:
+                sys.exit(0 if apply_named_config(name) else 1)
+            except Exception as e:
+                log.error("Apply failed: %s", e)
+                sys.exit(1)
+        else:
+            valid = [c[6] for c in CONFIGS]
+            print(f"Usage: python3 aec.py --apply <config-name>")
+            print(f"Available: {', '.join(valid)}")
+            sys.exit(1)
+
     force = "--force" in sys.argv
     try:
         success = setup_aec(force=force)
