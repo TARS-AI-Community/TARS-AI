@@ -256,6 +256,7 @@ class SentenceTTSPipeline:
         self._first_queued = False
         self._interrupted = False
         self._duration = 0.0
+        self._play_time = 0.0   # Actual TTS synthesis+playback time (excludes queue waits)
         self._thread = None
 
     def start(self):
@@ -298,6 +299,11 @@ class SentenceTTSPipeline:
     def duration(self):
         return self._duration
 
+    @property
+    def play_time(self):
+        """Actual TTS synthesis+playback time (excludes queue wait time)."""
+        return self._play_time
+
     def _extract_sentences(self, text):
         """Split text at boundaries, queue complete chunks, return remainder.
 
@@ -336,6 +342,7 @@ class SentenceTTSPipeline:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         t_start = time.perf_counter()
+        play_total = 0.0
         first = True
         try:
             while not self._interrupted:
@@ -352,6 +359,7 @@ class SentenceTTSPipeline:
                     except Exception:
                         pass
                 queue_message(f"DEBUG: TTS speaking: {sentence}")
+                t_play = time.perf_counter()
                 try:
                     if self._play_func:
                         was_int = loop.run_until_complete(
@@ -364,6 +372,7 @@ class SentenceTTSPipeline:
                 except Exception as e:
                     queue_message(f"ERROR: TTS pipeline failed: {e}")
                     was_int = False
+                play_total += time.perf_counter() - t_play
                 if was_int:
                     self._interrupted = True
                     while not self._queue.empty():
@@ -373,6 +382,7 @@ class SentenceTTSPipeline:
                             break
         finally:
             self._duration = time.perf_counter() - t_start
+            self._play_time = play_total
             loop.close()
 
 
@@ -408,12 +418,16 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 pass
             synthesis_done.set()
 
+    def _notify_talking_state(endpoint):
+        """Fire-and-forget HTTP notification to webui (non-blocking)."""
+        try:
+            requests.get(f"http://127.0.0.1:{CONFIG['ACCESS'].get('webui_port', 80)}/{endpoint}", timeout=1)
+        except Exception:
+            pass
+
     async def play_chunks():
         nonlocal was_interrupted
-        try:
-            requests.get(f"http://127.0.0.1:{CONFIG['ACCESS'].get('webui_port', 80)}/start_talking", timeout=1)
-        except:
-            pass
+        threading.Thread(target=_notify_talking_state, args=("start_talking",), daemon=True).start()
 
         while True:
             if _tts_cancel_event.is_set():
@@ -496,10 +510,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
                 if synthesis_done.is_set() and audio_queue.empty():
                     break
 
-        try:
-            requests.get(f"http://127.0.0.1:{CONFIG['ACCESS'].get('webui_port', 80)}/stop_talking", timeout=1)
-        except:
-            pass
+        threading.Thread(target=_notify_talking_state, args=("stop_talking",), daemon=True).start()
 
     await asyncio.gather(
         synthesize_chunks(),

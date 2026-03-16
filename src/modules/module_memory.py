@@ -132,15 +132,33 @@ class MemoryManager:
         """Mark in-memory state as needing a flush to disk."""
         self._dirty = True
 
-    def flush(self):
-        """Write in-memory state to disk if dirty. Called by heartbeat + shutdown."""
+    def flush(self, blocking=False):
+        """Write in-memory state to disk if dirty. Called by heartbeat + shutdown.
+
+        Args:
+            blocking: If True, flush synchronously (used for shutdown).
+                      If False, flush in a background thread to avoid blocking the bot.
+        """
         if not self._dirty:
             return
-        try:
-            self.hyper_db.save(self.memory_db_path)
-            self._dirty = False
-        except Exception as e:
-            queue_message(f"ERROR: Failed to flush memory to disk: {e}")
+        if hasattr(self, '_flush_lock') and self._flush_lock.locked():
+            return  # A flush is already in progress
+
+        if not hasattr(self, '_flush_lock'):
+            self._flush_lock = threading.Lock()
+
+        def _do_flush():
+            with self._flush_lock:
+                try:
+                    self.hyper_db.save(self.memory_db_path)
+                    self._dirty = False
+                except Exception as e:
+                    queue_message(f"ERROR: Failed to flush memory to disk: {e}")
+
+        if blocking:
+            _do_flush()
+        else:
+            threading.Thread(target=_do_flush, daemon=True).start()
 
     def _start_periodic_flush(self):
         """Register a recurring heartbeat task to flush memory periodically."""
@@ -611,11 +629,31 @@ class MemoryManager:
 
             os.rename(json_file_path, os.path.splitext(json_file_path)[0] + ".loaded")
 
+    def _get_tiktoken_encoder(self):
+        """Return a cached tiktoken encoder, creating it once on first call."""
+        if hasattr(self, '_tiktoken_enc'):
+            return self._tiktoken_enc
+
+        import tiktoken
+        llm_backend = self.config['LLM']['llm_backend']
+        override_encoding_model = self.config['LLM'].get('override_encoding_model', "cl100k_base")
+
+        if llm_backend == "deepinfra":
+            self._tiktoken_enc = tiktoken.get_encoding(override_encoding_model)
+        else:
+            if llm_backend == "other":
+                model_name = self.config['LLM'].get('other_model', None) or self.config['LLM'].get('openai_model', None)
+            else:
+                model_name = self.config['LLM'].get('openai_model', None)
+            try:
+                self._tiktoken_enc = tiktoken.encoding_for_model(model_name)
+            except KeyError:
+                self._tiktoken_enc = tiktoken.get_encoding(override_encoding_model)
+
+        return self._tiktoken_enc
+
     def token_count(self, text: str) -> dict:
         llm_backend = self.config['LLM']['llm_backend']
-
-        if not hasattr(self, '_fallback_warning_logged'):
-            self._fallback_warning_logged = False
 
         if llm_backend == "grok":
             word_count = len(text.split())
@@ -624,24 +662,8 @@ class MemoryManager:
 
         elif llm_backend in ["openai", "deepinfra", "other"]:
             try:
-                import tiktoken
-                override_encoding_model = self.config['LLM'].get('override_encoding_model', "cl100k_base")
-
-                if llm_backend == "deepinfra":
-                    enc = tiktoken.get_encoding(override_encoding_model)
-                else:
-                    if llm_backend == "other":
-                        model_name = self.config['LLM'].get('other_model', None) or self.config['LLM'].get('openai_model', None)
-                    else:
-                        model_name = self.config['LLM'].get('openai_model', None)
-                    try:
-                        enc = tiktoken.encoding_for_model(model_name)
-                    except KeyError:
-                        enc = tiktoken.get_encoding(override_encoding_model)
-
-                length = {"length": len(enc.encode(text))}
-                return length
-
+                enc = self._get_tiktoken_encoder()
+                return {"length": len(enc.encode(text))}
             except Exception as e:
                 if not hasattr(self, '_token_error_logged'):
                     queue_message(f"ERROR: Failed to calculate tokens using tiktoken: {e}")

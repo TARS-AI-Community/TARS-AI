@@ -699,6 +699,7 @@ def _process_chat_message(msg, img_b64):
         # (works for both text and image uploads — image is passed to process_completion)
         import modules.module_speed as speed
         speed.mark_utterance_start()
+        speed.start('webui_total')
 
         begin_bot_stream()
 
@@ -765,11 +766,6 @@ def _process_chat_message(msg, img_b64):
 
         if isinstance(parsed, dict):
             reply = parsed.get("reply", "") or ""
-            if speed.enabled:
-                timings = parsed.get('_timings', {})
-                if timings:
-                    ttft = timings.get('prompt_build', 0) + timings.get('llm_first_byte', 0)
-                    speed.log(f"webui: ttft({speed.fmt(ttft)}), llm_stream({speed.fmt(timings.get('llm_stream', 0))}), parse({speed.fmt(timings.get('parse', 0))})")
             # Run side effects — may update parsed["reply"] (e.g. web search)
             from modules.module_llm import llm_execute_side_effects
             llm_execute_side_effects(parsed, msg, source="webui", has_image=img_b64 is not None)
@@ -788,6 +784,7 @@ def _process_chat_message(msg, img_b64):
         latest_text_to_read = reply
         socketio.emit('bot_message', {'message': reply or '', 'audio_streamed': True})
 
+        speed.start('emotion')
         detected = None
         detected_raw = None
         axis_scores = {}
@@ -801,6 +798,7 @@ def _process_chat_message(msg, img_b64):
                 detected, detected_raw, axis_scores = detect_emotion(msg)
             if detected:
                 update_emotion(detected)
+        emo_dur = speed.stop('emotion')
 
         # Log interaction for dashboard analytics
         try:
@@ -830,6 +828,38 @@ def _process_chat_message(msg, img_b64):
         socketio.emit('bot_audio_done', {})
         socketio.emit('talking_state', {'talking': False})
         _notify_avatar_talking(False)
+
+        # Speed profiling summary
+        total_dur = speed.stop('webui_total')
+        if speed.enabled:
+            sp = []
+            llm_timings = parsed.get('_timings', {}) if isinstance(parsed, dict) else {}
+            if llm_timings:
+                id_t = llm_timings.get('prompt_identity', 0)
+                mem_t = llm_timings.get('prompt_memory', 0)
+                prompt_t = llm_timings.get('prompt_build', 0)
+                prompt_other = prompt_t - id_t - mem_t
+                llm_first_byte = llm_timings.get('llm_first_byte', 0)
+                ttft = prompt_t + llm_first_byte
+                llm_stream_dur = llm_timings.get('llm_stream', 0)
+                token_count = llm_timings.get('token_count', 0)
+                parse_dur = llm_timings.get('parse', 0)
+                sp.append(f"llm_ttft({speed.fmt(ttft)})")
+                ttft_parts = [f"identity={speed.fmt(id_t)}", f"memory={speed.fmt(mem_t)}"]
+                if prompt_other > 0.001:
+                    ttft_parts.append(f"prompt_other={speed.fmt(prompt_other)}")
+                ttft_parts.append(f"llm_wait={speed.fmt(llm_first_byte)}")
+                sp.append(f"  [{', '.join(ttft_parts)}]")
+                if token_count and llm_stream_dur > 0:
+                    tps = token_count / llm_stream_dur
+                    sp.append(f"llm_stream({speed.fmt(llm_stream_dur)}, {token_count}tok, {tps:.1f} t/s)")
+                else:
+                    sp.append(f"llm_stream({speed.fmt(llm_stream_dur)})")
+                sp.append(f"llm_parse({speed.fmt(parse_dur)})")
+            sp.append(f"emotion({speed.fmt(emo_dur)})")
+            sp.append(f"tts_play({speed.fmt(pipeline.play_time)})")
+            sp.append(f"total({speed.fmt(total_dur)})")
+            queue_message(f"SPEED: webui: {', '.join(sp)}")
 
     except Exception as e:
         queue_message(f"ERROR: process_llm failed: {e}")
@@ -966,6 +996,9 @@ def get_next_audio_chunk():
             return Response(status=204)  # End of stream
 
         current_chunk_index += 1
+        # Clean up consumed chunks to prevent unbounded memory growth
+        for old_key in [k for k in audio_chunks_dict if k < idx]:
+            audio_chunks_dict.pop(old_key, None)
 
     return Response(next_chunk, mimetype="audio/mp3", headers={
         'Content-Type': 'audio/mp3',
@@ -2129,12 +2162,12 @@ def dashboard_memory_delete():
         if is_full:
             mm.hyper_db.remove_document(index)
             mm._mark_dirty()
-            mm.flush()
+            mm.flush(blocking=True)
             remaining = len(mm.hyper_db.documents)
         else:
             docs.pop(index)
             mm._mark_dirty()
-            mm.flush()
+            mm.flush(blocking=True)
             remaining = len(docs)
 
         queue_message(f"DASHBOARD: Deleted memory #{index}: {preview}")
@@ -2195,7 +2228,7 @@ def dashboard_memory_edit():
             # the rollback using the original doc still in documents[index].
             mm.hyper_db.update_document(index, new_doc)
             mm._mark_dirty()
-            mm.flush()
+            mm.flush(blocking=True)
         else:
             # Lite mode: update keywords and flush
             if hasattr(mm, '_extract_keywords'):
@@ -2204,7 +2237,7 @@ def dashboard_memory_edit():
                 ))
             docs[index] = new_doc
             mm._mark_dirty()
-            mm.flush()
+            mm.flush(blocking=True)
 
         queue_message(f"DASHBOARD: Edited memory #{index}: {', '.join(updated)}")
         return jsonify({"success": True, "updated_fields": updated})
@@ -2254,7 +2287,7 @@ def dashboard_topic_edit():
             return jsonify({"error": "No valid fields to update"}), 400
 
         mm.save_topic_index()
-        mm.flush()
+        mm.flush(blocking=True)
         queue_message(f"DASHBOARD: Edited topic #{index}: {', '.join(updated)}")
         return jsonify({"success": True, "updated_fields": updated})
     except Exception as e:
@@ -2283,7 +2316,7 @@ def dashboard_topic_delete():
         removed = topics.pop(index)
         name = removed.get('topic', '') if isinstance(removed, dict) else str(removed)
         mm.save_topic_index()
-        mm.flush()
+        mm.flush(blocking=True)
         queue_message(f"DASHBOARD: Deleted topic #{index}: {name}")
         return jsonify({"success": True, "deleted_topic": name, "remaining": len(topics)})
     except Exception as e:
@@ -2453,7 +2486,7 @@ def dashboard_person_delete():
                         mm.hyper_db.remove_document(idx)
                     if to_remove:
                         mm._mark_dirty()
-                        mm.flush()
+                        mm.flush(blocking=True)
                     results["memories_deleted"] = len(to_remove)
                 elif hasattr(mm, 'documents'):
                     before = len(mm.documents)
@@ -2461,7 +2494,7 @@ def dashboard_person_delete():
                     removed = before - len(mm.documents)
                     if removed:
                         mm._mark_dirty()
-                        mm.flush()
+                        mm.flush(blocking=True)
                     results["memories_deleted"] = removed
         except Exception as e:
             queue_message(f"WARNING: Person delete memories error: {e}")

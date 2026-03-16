@@ -459,8 +459,8 @@ def load_config():
     return ui_enabled, font_size
 
 def stop_tars_ai():
-    subprocess.Popen("killall xterm", shell=True)
-    subprocess.Popen("pkill -f 'python app.py'", shell=True)
+    subprocess.run(["killall", "xterm"], check=False)
+    subprocess.run(["pkill", "-f", "python app.py"], check=False)
 
 def _extra_args():
     """Collect extra key=value CLI args (e.g. speed=true debug=true) to forward to app.py."""
