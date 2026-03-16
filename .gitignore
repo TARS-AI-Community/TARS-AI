@@ -1,3 +1,6 @@
+# AEC disabled marker (created by aec=remove)
+.aec_disabled
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

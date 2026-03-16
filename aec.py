@@ -44,6 +44,7 @@ logging.basicConfig(
 log = logging.getLogger("aec")
 
 AEC_CONF = "/etc/pipewire/pipewire.conf.d/echo-cancel.conf"
+AEC_DISABLED_MARKER = os.path.join(SCRIPT_DIR, ".aec_disabled")
 TTS_GAIN = 1.5
 MARKER_COMMENT = "# TARS-AI AEC Config (auto-tuned)"
 
@@ -857,18 +858,20 @@ def setup_aec(force=False):
             log.error("Could not install AEC module — AEC not available on this system")
             return False
 
-    # Check if already configured and tuned
-    if not force and is_aec_tuned() and is_aec_configured():
-        log.info("AEC is already configured and tuned — nothing to do")
-        log.info("  (use --force to re-tune)")
+    # Check if already configured
+    if not force and is_aec_configured():
+        log.info("AEC is already configured — nothing to do")
+        log.info("  (use --force or aec=tune to re-tune)")
         return True
 
-    # If config exists but not tuned, it's the default from Install.sh
-    if not force and is_aec_configured():
-        log.info("AEC has default config from Install.sh — running auto-tune for best settings")
+    if not force:
+        # No flag and not configured — just install raw-max default
+        log.info("AEC not configured — installing default config (raw-max-all)")
+        apply_named_config("raw-max-all")
+        return True
 
-    if not is_aec_configured():
-        log.info("AEC not configured — setting up and tuning")
+    log.info("Starting AEC auto-tune...")
+    _clear_disabled_marker()
 
     # Prompt user before starting the noisy test
     if not _prompt_user_ready():
@@ -932,12 +935,24 @@ def setup_aec(force=False):
         return False
 
 
+def _clear_disabled_marker():
+    """Remove the .aec_disabled marker if it exists (user is re-enabling AEC)."""
+    if os.path.isfile(AEC_DISABLED_MARKER):
+        os.remove(AEC_DISABLED_MARKER)
+
+
+def is_aec_disabled():
+    """Check if user explicitly disabled AEC via aec=remove."""
+    return os.path.isfile(AEC_DISABLED_MARKER)
+
+
 def apply_named_config(config_name):
     """Apply a specific AEC config by name (e.g. 'raw-max-all', 'agc-medium').
 
     Skips the full tuning process — just writes the named config directly.
     Use this when you already know which config works best.
     """
+    _clear_disabled_marker()
     # Find the config by name
     match = None
     for cfg in CONFIGS:
@@ -1005,6 +1020,11 @@ def remove_aec():
     if os.path.isfile(pulse_conf):
         os.remove(pulse_conf)
         log.info("Removed pulse defaults override: %s", pulse_conf)
+
+    # Drop marker so auto-setup doesn't re-install on next boot
+    with open(AEC_DISABLED_MARKER, "w") as f:
+        f.write("AEC explicitly removed by user. Delete this file to re-enable auto-setup.\n")
+    log.info("Created %s — AEC won't auto-install on next boot", AEC_DISABLED_MARKER)
 
     # Restart PipeWire to apply
     run_cmd("systemctl --user restart pipewire pipewire-pulse", timeout=10, as_user=True)

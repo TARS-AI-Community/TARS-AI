@@ -990,8 +990,8 @@ def check_aec_setup():
     """Run AEC auto-setup on first boot if not already configured.
 
     Flags:
-        aec=true          — force a full AEC re-tune
-        aec=false         — skip AEC entirely (run app without echo cancellation)
+        aec=tune          — force a full AEC re-tune
+        aec=skip          — skip AEC entirely (run app without echo cancellation)
         aec=remove        — remove AEC config and restore backup
         aec=<config-name> — apply a specific config by name (e.g. aec=raw-max-all)
     """
@@ -1004,19 +1004,19 @@ def check_aec_setup():
     if aec_val is None:
         aec_val = ""
 
-    force = aec_val.lower() == "true"
+    force = aec_val.lower() == "tune"
     remove = aec_val.lower() == "remove"
-    skip = aec_val.lower() == "false"
+    skip = aec_val.lower() == "skip"
     # Any other non-empty value is treated as a config name
     config_name = aec_val if aec_val and not force and not remove and not skip else None
 
     if skip:
-        print("[AEC] aec=false — skipping AEC setup")
+        print("[AEC] aec=skip — skipping AEC setup")
         return
 
     try:
-        from aec import (is_aec_tuned, is_aec_configured, aec_module_installed,
-                         setup_aec, remove_aec, apply_named_config)
+        from aec import (is_aec_tuned, is_aec_configured, is_aec_disabled,
+                         aec_module_installed, setup_aec, remove_aec, apply_named_config)
         if remove:
             print("[AEC] aec=remove — removing AEC configuration...")
             remove_aec()
@@ -1025,16 +1025,21 @@ def check_aec_setup():
             print(f"[AEC] aec={config_name} — applying config directly...")
             apply_named_config(config_name)
             return
-        if not force and is_aec_tuned() and is_aec_configured():
-            return  # Already tuned — nothing to do
-        if not aec_module_installed():
-            print("[AEC] AEC module not available — skipping auto-tune")
-            return
         if force:
-            print("[AEC] aec=true — forcing AEC re-tune...")
-        else:
-            print("[AEC] AEC not tuned — running auto-setup...")
-        setup_aec(force=force)
+            print("[AEC] aec=tune — forcing AEC re-tune...")
+            setup_aec(force=True)
+            return
+        if is_aec_configured():
+            return  # Already configured (tuned or default) — nothing to do
+        if is_aec_disabled():
+            return  # User explicitly removed AEC — don't re-install
+        # AEC not configured and not disabled — first boot, install default
+        if not aec_module_installed():
+            print("[AEC] AEC module not available — skipping")
+            return
+        print("[AEC] First boot — installing default AEC config (raw-max-all)...")
+        print("[AEC]   Run with aec=tune to auto-tune for your specific hardware.")
+        apply_named_config("raw-max-all")
     except ImportError:
         print("[AEC] aec.py not found — skipping")
     except Exception as e:
