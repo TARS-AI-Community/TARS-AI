@@ -63,8 +63,11 @@ class MemoryManager:
 
         self.ui_manager = ui_manager
         self._dirty = False  # True when in-memory state has unflushed changes
+        self._flush_lock = threading.Lock()
         self._prefetch_future = None  # Background embedding prefetch
         self._prefetch_query = None
+        self._identity_manager = None  # cached identity manager (False = tried and unavailable)
+        self._speaker_id_manager = None
 
         self.init_dynamic_memory()
         self.load_initial_memory(self.initial_memory_path)
@@ -141,11 +144,8 @@ class MemoryManager:
         """
         if not self._dirty:
             return
-        if hasattr(self, '_flush_lock') and self._flush_lock.locked():
+        if self._flush_lock.locked():
             return  # A flush is already in progress
-
-        if not hasattr(self, '_flush_lock'):
-            self._flush_lock = threading.Lock()
 
         def _do_flush():
             with self._flush_lock:
@@ -306,9 +306,14 @@ class MemoryManager:
         }
         # Tag memory with current speaker and present people via identity coordinator
         try:
-            from modules.module_identity import get_identity_manager
-            im = get_identity_manager()
-            if im is not None:
+            if self._identity_manager is None:
+                try:
+                    from modules.module_identity import get_identity_manager
+                    self._identity_manager = get_identity_manager() or False
+                except Exception:
+                    self._identity_manager = False
+            im = self._identity_manager
+            if im and im is not False:
                 speaker = im.get_current_speaker()
                 if speaker is not None:
                     document["speaker"] = speaker
@@ -316,9 +321,14 @@ class MemoryManager:
                 if present:
                     document["present"] = [p["name"] for p in present]
             else:
-                from modules.module_speaker_id import get_speaker_id_manager
-                sid = get_speaker_id_manager()
-                if sid is not None:
+                if self._speaker_id_manager is None:
+                    try:
+                        from modules.module_speaker_id import get_speaker_id_manager
+                        self._speaker_id_manager = get_speaker_id_manager() or False
+                    except Exception:
+                        self._speaker_id_manager = False
+                sid = self._speaker_id_manager
+                if sid and sid is not False:
                     speaker = sid.get_current_speaker()
                     if speaker is not None:
                         document["speaker"] = speaker
@@ -328,10 +338,15 @@ class MemoryManager:
         self._mark_dirty()
 
     def _parse_timestamp(self, memory: Dict[str, Any]) -> Optional[datetime]:
+        cached = memory.get('_parsed_ts')
+        if cached is not None:
+            return cached
         try:
             timestamp_str = memory.get('timestamp', '')
             if timestamp_str:
-                return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                memory['_parsed_ts'] = dt
+                return dt
         except Exception:
             pass
         return None
@@ -385,7 +400,6 @@ class MemoryManager:
         self.ui_manager.think()
 
         try:
-            # Use prefetched embedding if available, skip the slow embedding call
             query_vector = self._get_query_vector(query)
             from modules.module_hyperdb import hyper_SVM_ranking_algorithm_sort
             ranked_results, similarities = hyper_SVM_ranking_algorithm_sort(
@@ -394,43 +408,25 @@ class MemoryManager:
             )
             if not ranked_results.size:
                 return []
-            results = list(zip(
-                [self.hyper_db.documents[idx] for idx in ranked_results],
-                similarities
-            ))
 
-            if not results:
-                return []
-
-            memory_list = self.hyper_db.dict()
+            documents = self.hyper_db.documents
+            num_docs = len(documents)
             expanded_memories = []
             seen_indices = set()
 
-            # Build an id-based index for O(1) lookup instead of O(n) linear scan per result
-            doc_id_to_idx = {id(d['document']): idx for idx, d in enumerate(memory_list)}
-
-            num_to_process = min(self.max_memories_to_use, len(results))
+            num_to_process = min(self.max_memories_to_use, len(ranked_results))
 
             for i in range(num_to_process):
-                if isinstance(results[i], tuple):
-                    memory = results[i][0]
-                    similarity = results[i][1] if len(results[i]) > 1 else 0.0
-                else:
-                    memory = results[i]['document']
-                    similarity = results[i].get('similarity', 0.0)
-
-                start_index = doc_id_to_idx.get(id(memory))
-
-                if start_index is None:
-                    continue
+                start_index = int(ranked_results[i])
+                similarity = float(similarities[i])
 
                 if include_context:
                     context_start = max(start_index - self.context_window_size, 0)
-                    context_end = min(start_index + self.context_window_size + 1, len(memory_list))
+                    context_end = min(start_index + self.context_window_size + 1, num_docs)
 
                     for idx in range(context_start, context_end):
                         if idx not in seen_indices:
-                            mem_doc = memory_list[idx]['document']
+                            mem_doc = documents[idx]
                             recency_score = self._calculate_recency_score(mem_doc)
 
                             if idx == start_index:
@@ -448,11 +444,12 @@ class MemoryManager:
                             })
                             seen_indices.add(idx)
                 else:
-                    recency_score = self._calculate_recency_score(memory)
+                    mem_doc = documents[start_index]
+                    recency_score = self._calculate_recency_score(mem_doc)
                     combined_score = 0.7 * similarity + 0.3 * recency_score
 
                     expanded_memories.append({
-                        'document': memory,
+                        'document': mem_doc,
                         'index': start_index,
                         'similarity': similarity,
                         'recency_score': recency_score,
@@ -550,12 +547,11 @@ class MemoryManager:
 
     def get_conversation_summary(self, lookback_hours: int = 24) -> str:
         try:
-            memory_list = self.hyper_db.dict()
+            documents = self.hyper_db.documents
             cutoff_time = datetime.now() - timedelta(hours=lookback_hours)
 
             recent_topics = []
-            for entry in reversed(memory_list):
-                doc = entry['document']
+            for doc in reversed(documents):
                 timestamp = self._parse_timestamp(doc)
 
                 if timestamp and timestamp > cutoff_time:
@@ -571,18 +567,17 @@ class MemoryManager:
             return ""
 
     def get_shortterm_memories_recent(self, max_entries: int) -> List[str]:
-        memory_dict = self.hyper_db.dict()
-        return [entry['document'] for entry in memory_dict[-max_entries:]]
+        return self.hyper_db.documents[-max_entries:]
 
     def get_shortterm_memories_tokenlimit(self, token_limit: int) -> str:
         accumulated_documents = []
         accumulated_length = 0
 
-        for entry in reversed(self.hyper_db.dict()):
-            user_input = entry['document'].get('user_input', "")
-            bot_response = entry['document'].get('bot_response', "")
-            timestamp = entry['document'].get('timestamp', "")
-            speaker = entry['document'].get('speaker', "")
+        for doc in reversed(self.hyper_db.documents):
+            user_input = doc.get('user_input', "")
+            bot_response = doc.get('bot_response', "")
+            timestamp = doc.get('timestamp', "")
+            speaker = doc.get('speaker', "")
 
             if not user_input or not bot_response:
                 continue
@@ -593,7 +588,13 @@ class MemoryManager:
             # Use stored speaker name if available, otherwise fall back to {user} placeholder
             speaker_tag = speaker if (speaker and not speaker.startswith("Unknown")) else "{user}"
             text_str = f"{time_prefix}{speaker_tag}: {user_input}\n{{char}}: {bot_response}"
-            text_length = self.token_count(text_str)['length']
+            # Fast approximation (~4 chars per token) to avoid expensive encoding per entry
+            approx_tokens = len(text_str) // 4
+            # Only do exact count when we're close to the limit (within 20%)
+            if accumulated_length + approx_tokens > token_limit * 0.8:
+                text_length = self.token_count(text_str)['length']
+            else:
+                text_length = approx_tokens
 
             if accumulated_length + text_length > token_limit:
                 break
