@@ -389,9 +389,21 @@ class MusicPlayer:
 
     def pause(self):
         self._pause.set()
+        # Clear speaker flag so STT can transcribe while music is paused
+        try:
+            from modules.module_tts import clear_speaker_active
+            clear_speaker_active()
+        except Exception:
+            pass
 
     def resume(self):
         self._pause.clear()
+        # Re-signal speaker active so STT aborts during playback
+        try:
+            from modules.module_tts import set_speaker_active
+            set_speaker_active()
+        except Exception:
+            pass
 
     def is_playing(self):
         return self._playing.is_set()
@@ -632,6 +644,7 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
 
     player = _get_player()
     dj_intros = str(skill_config.get("dj_intros", "true")).lower() in ("true", "1", "yes")
+    shuffle = str(skill_config.get("shuffle", "true")).lower() in ("true", "1", "yes")
     gain = float(skill_config.get("music_gain", 0.8))
 
     queue_message(f"[Radio] Starting radio loop with {len(playlist)} track(s)")
@@ -643,18 +656,19 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
     except Exception:
         pass
 
-    for i, track in enumerate(playlist):
-        if _radio_cancel.is_set():
-            break
-
+    # Loop the playlist endlessly until stopped — reshuffle each cycle
+    track_index = 0
+    while not _radio_cancel.is_set():
+        track = playlist[track_index]
         track_name = track.get("name", track.get("_slug", "Unknown"))
         track_path = track.get("_path", "")
 
         if not track_path or not Path(track_path).exists():
             queue_message(f"[Radio] Skipping missing track: {track_name}")
+            track_index = (track_index + 1) % len(playlist)
             continue
 
-        queue_message(f"[Radio] Now playing ({i + 1}/{len(playlist)}): {track_name}")
+        queue_message(f"[Radio] Now playing ({track_index + 1}/{len(playlist)}): {track_name}")
 
         # Emit now playing to WebUI
         try:
@@ -662,13 +676,13 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
             socketio.emit("music_now_playing", {
                 "name": track_name,
                 "filename": track.get("filename", ""),
-                "index": i + 1,
+                "index": track_index + 1,
                 "total": len(playlist),
             })
         except Exception:
             pass
 
-        # DJ intro (_speak_tts sets TALKING state and STT auto-aborts recording)
+        # DJ intro (_speak_tts uses TTS which auto-aborts STT recording)
         if dj_intros and not _radio_cancel.is_set():
             intro = _generate_dj_intro(track_name)
             queue_message(f"[Radio] DJ intro: {intro}")
@@ -677,8 +691,16 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
         if _radio_cancel.is_set():
             break
 
-        # Play the track — music ducking for STT/TTS is handled inside play_file
+        # Play the track — ducking for state changes handled inside play_file
         player.play_file(track_path, gain=gain, track_meta=track)
+
+        # Advance to next track (reshuffle when wrapping around)
+        track_index += 1
+        if track_index >= len(playlist):
+            track_index = 0
+            if shuffle and len(playlist) > 1:
+                random.shuffle(playlist)
+                queue_message("[Radio] Reshuffled playlist")
 
         # Small gap between tracks
         if not _radio_cancel.is_set():

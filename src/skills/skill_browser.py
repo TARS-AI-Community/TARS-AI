@@ -29,7 +29,9 @@ SKILL = {
     "name": "browser",
     "description": "Open websites and play videos on the display",
     "prompt": """browser
-   Triggers: "open [website]", "go to [site]", "visit [url]", "play [video]", "show me [video]", "watch [video]"
+   Triggers: "open [website]", "go to [site]", "visit [url]", "play [video] on youtube", "show me [video]", "watch [video]"
+   Do NOT use for "play music", "start the radio", "play my songs" — use tars_radio instead.
+   Only use for opening websites or playing specific YouTube videos/searches.
    Parameters: {{"action": "open_url|play_youtube", "url": "https://... (for open_url)", "query": "search terms (for play_youtube)", "description": "optional"}}
    Example: {{"function": "browser", "parameters": {{"action": "open_url", "url": "https://google.com", "description": "Google"}}}}
    Example: {{"function": "browser", "parameters": {{"action": "play_youtube", "query": "funny cats"}}}}""",
