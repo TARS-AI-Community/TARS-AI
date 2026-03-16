@@ -48,6 +48,23 @@ AEC_CONF = "/etc/pipewire/pipewire.conf.d/echo-cancel.conf"
 TTS_GAIN = 1.5
 MARKER_COMMENT = "# TARS-AI AEC Config (auto-tuned)"
 
+# ── ANSI color codes (matching App-Start.py cyan/orange theme) ─────
+_USE_COLOR = sys.stdout.isatty()
+
+def _c(code, text):
+    """Wrap text in ANSI color if stdout is a terminal."""
+    if _USE_COLOR:
+        return f"\033[{code}m{text}\033[0m"
+    return text
+
+def _cyan(text):    return _c("38;2;0;200;255", text)
+def _orange(text):  return _c("38;2;255;150;0", text)
+def _dim(text):     return _c("2", text)
+def _bold(text):    return _c("1", text)
+def _green(text):   return _c("38;2;0;255;100", text)
+def _red(text):     return _c("38;2;255;60;60", text)
+def _white(text):   return _c("97", text)
+
 
 VALID_PCM_RATES = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 96000, 192000}
 APP_PLAYBACK_RATE = 16000  # what sd.play() sends — the rate PipeWire sees from the app
@@ -91,7 +108,6 @@ def detect_graph_rate():
                         raw = int(line.split("=")[-1].strip().strip('"'))
                         validated = _validate_rate(raw)
                         if validated:
-                            log.info("Detected PipeWire graph rate: %dHz", validated)
                             _graph_rate = validated
                             return validated
                     except (ValueError, IndexError):
@@ -116,7 +132,6 @@ def detect_graph_rate():
                     raw = int(line.split("Rates:")[-1].strip().split()[0])
                     validated = _validate_rate(raw)
                     if validated:
-                        log.info("Detected ALSA capture rate: %dHz", validated)
                         _graph_rate = validated
                         return validated
                 except (ValueError, IndexError):
@@ -692,7 +707,10 @@ def run_tuning():
                 else:
                     eta = ""
 
-                log.info("[%d/%d] Testing: %s%s", idx + 1, total, name, eta)
+                # Progress bar
+                filled = int((idx / total) * 20)
+                bar = _cyan("█" * filled) + _dim("░" * (20 - filled))
+                print(f"  [{bar}] {_white(f'{idx+1}/{total}')} {_orange(name)}{_dim(eta)}")
                 log.info("  supp=%d noise=%d agc=%s ext=%s hpf=%s delay=%s",
                          supp, noise, gc, ext, hpf, da)
 
@@ -718,7 +736,7 @@ def run_tuning():
                     log.info("    phrase %d: raw=%.6f  amplified=%.6f", pi + 1, rms, rms * mic_amp_gain)
 
                 avg_rms = sum(rms_values) / len(rms_values)
-                log.info("  => AVG raw: %.6f | AVG amplified: %.6f", avg_rms, avg_rms * mic_amp_gain)
+                print(_dim(f"    => bleed: {avg_rms:.6f}  (amplified: {avg_rms * mic_amp_gain:.6f})"))
                 results.append((name, avg_rms, supp, noise, gc, ext, hpf, da))
         finally:
             # Always clean up recorder even if an exception occurs
@@ -731,53 +749,72 @@ def run_tuning():
         # Sort by avg RMS (lower = better)
         results.sort(key=lambda x: x[1])
 
-        log.info("")
-        log.info("=" * 60)
-        log.info("  RESULTS (ranked by avg RMS, lower = better)")
-        log.info("=" * 60)
-        log.info("%-4s %-20s %-12s %-14s", "Rank", "Config", "Avg RMS", "Amplified")
-        log.info("-" * 54)
+        print()
+        print(_cyan("╔════╦══════════════════════╦════════════╦══════════════════════╗"))
+        print(_cyan("║") + _bold(_white(" ##")) + " " + _cyan("║") + _bold(_white(" Config              ")) + " " + _cyan("║") + _bold(_white(" Avg RMS   ")) + " " + _cyan("║") + _bold(_white(" Amplified (app)    ")) + " " + _cyan("║"))
+        print(_cyan("╠════╬══════════════════════╬════════════╬══════════════════════╣"))
         for rank, (name, avg, *_) in enumerate(results, 1):
             if avg == float("inf"):
-                log.info("%-4d %-20s FAILED", rank, name)
+                print(_cyan("║") + f" {rank:2d} " + _cyan("║") + f" {_red(name):<20s} " + _cyan("║") + f"  {_red('FAILED')}    " + _cyan("║") + "  ---                 " + _cyan("║"))
             else:
-                log.info("%-4d %-20s %-12.6f %-14.6f", rank, name, avg, avg * mic_amp_gain)
+                if rank == 1:
+                    n = _green(f"{name:<20s}")
+                    v = _green(f"{avg:10.6f}")
+                    a = _green(f"{avg * mic_amp_gain:10.6f}")
+                    tag = _orange(" <<")
+                elif rank <= 3:
+                    n = _white(f"{name:<20s}")
+                    v = _white(f"{avg:10.6f}")
+                    a = _white(f"{avg * mic_amp_gain:10.6f}")
+                    tag = "   "
+                else:
+                    n = _dim(f"{name:<20s}")
+                    v = _dim(f"{avg:10.6f}")
+                    a = _dim(f"{avg * mic_amp_gain:10.6f}")
+                    tag = "   "
+                print(_cyan("║") + f" {rank:2d} " + _cyan("║") + f" {n} " + _cyan("║") + f" {v} " + _cyan("║") + f" {a}{tag}         " + _cyan("║"))
+        print(_cyan("╚════╩══════════════════════╩════════════╩══════════════════════╝"))
 
         best = results[0]
-        log.info("")
-        log.info("BEST: %s (avg RMS: %.6f)", best[0], best[1])
+        print()
+        print(_cyan("  TARS: ") + "Optimal config identified -> " + _green(_bold(best[0])))
+        print(_dim(f"        Echo bleed RMS: {best[1]:.6f}"))
 
         return best  # (name, avg_rms, supp, noise, gc, ext, hpf, da)
 
 
 def _prompt_user_ready():
     """Explain the tuning process and wait for the user to confirm."""
-    print()
-    print("+============================================================+")
-    print("|            TARS-AI Echo Cancellation Tuning                 |")
-    print("+============================================================+")
-    print("|                                                            |")
     rate = get_graph_rate()
-    print(f"|  Hardware audio rate: {rate}Hz (auto-detected)              |")
-    print("|                                                            |")
-    print("|  This will test 14 different echo cancellation configs     |")
-    print("|  to find the best one for your hardware.                   |")
-    print("|                                                            |")
-    print("|  HOW IT WORKS:                                             |")
-    print("|  TARS will speak test phrases through the speaker while    |")
-    print("|  recording from the microphone. It measures how much       |")
-    print("|  speaker audio bleeds into the mic for each config.        |")
-    print("|                                                            |")
-    print("|  IMPORTANT: Please be QUIET during the test!               |")
-    print("|  Any talking, music, or noise near the mic will corrupt    |")
-    print("|  the measurements and pick a bad config.                   |")
-    print("|                                                            |")
-    print("|  The test takes about 4-5 minutes. TARS will apply the    |")
-    print("|  best config automatically when done. No reboot needed.    |")
-    print("+============================================================+")
+    print()
+    print(_cyan("╔═══════════════════════════════════════════════════════════════╗"))
+    print(_cyan("║") + "                                                               " + _cyan("║"))
+    print(_cyan("║") + _orange("           ░█▀▀░█▀▀░█░█░█▀█░░░█▀▀░█▀█░█▀█░█▀▀░█▀▀░█░░          ") + _cyan("║"))
+    print(_cyan("║") + _orange("           ░█▀▀░█░░░█▀█░█░█░░░█░░░█▀█░█░█░█░░░█▀▀░█░░          ") + _cyan("║"))
+    print(_cyan("║") + _orange("           ░▀▀▀░▀▀▀░▀░▀░▀▀▀░░░▀▀▀░▀░▀░▀░▀░▀▀▀░▀▀▀░▀▀▀          ") + _cyan("║"))
+    print(_cyan("║") + _bold(_white("               [ TARS-AI  AEC  TUNING  MODULE ]                ")) + _cyan("║"))
+    print(_cyan("║") + "                                                               " + _cyan("║"))
+    print(_cyan("╠═══════════════════════════════════════════════════════════════╣"))
+    print(_cyan("║") + "                                                               " + _cyan("║"))
+    print(_cyan("║") + f"   {_dim('Graph rate ....')} {_white(f'{rate}Hz')} {_dim('(auto-detected)')}" + "                     " + _cyan("║"))
+    print(_cyan("║") + f"   {_dim('Duration .....')} {_white('~4-5 minutes')}" + "                                 " + _cyan("║"))
+    print(_cyan("║") + f"   {_dim('Reboot .......')} {_green('not required')}" + "                                 " + _cyan("║"))
+    print(_cyan("║") + "                                                               " + _cyan("║"))
+    print(_cyan("╠═══════════════════════════════════════════════════════════════╣"))
+    print(_cyan("║") + "                                                               " + _cyan("║"))
+    print(_cyan("║") + _dim("   TARS will speak test phrases through the speaker while      ") + _cyan("║"))
+    print(_cyan("║") + _dim("   recording from the mic. Each AEC config is scored by how    ") + _cyan("║"))
+    print(_cyan("║") + _dim("   much speaker audio bleeds into the microphone.              ") + _cyan("║"))
+    print(_cyan("║") + _dim("   The config with the lowest bleed wins.                      ") + _cyan("║"))
+    print(_cyan("║") + "                                                               " + _cyan("║"))
+    print(_cyan("║") + _orange("   Any talking, music, or ambient noise near the mic will      ") + _cyan("║"))
+    print(_cyan("║") + _orange("   corrupt the measurements and select a bad config.           ") + _cyan("║"))
+    print(_cyan("║") + _orange("   Please keep the room quiet until tuning completes.          ") + _cyan("║"))
+    print(_cyan("║") + "                                                               " + _cyan("║"))
+    print(_cyan("╚═══════════════════════════════════════════════════════════════╝"))
     print()
     try:
-        resp = input("Ready to begin? Make sure the room is quiet. [Y/n]: ")
+        resp = input(_cyan("  TARS: ") + "Ready to begin calibration? [Y/n]: ")
         if resp.strip().lower() in ("n", "no"):
             return False
     except (EOFError, KeyboardInterrupt):
@@ -789,9 +826,6 @@ def _prompt_user_ready():
 def setup_aec(force=False):
     """Main entry point: check if AEC needs setup, and configure it."""
 
-    log.info("=" * 60)
-    log.info("  TARS-AI AEC Auto-Setup")
-    log.info("=" * 60)
 
     # Check if AEC module is available
     if not aec_module_installed():
@@ -835,12 +869,12 @@ def setup_aec(force=False):
 
     # Detect graph rate now that PipeWire is confirmed running
     graph_rate = detect_graph_rate()
-    log.info("AEC module loaded — starting auto-tune...")
-    log.info("PipeWire graph rate: %dHz (AEC will run at this rate)", graph_rate)
-    log.info("Testing %d parameter combinations with %d phrases each",
-             len(CONFIGS), len(TEST_PHRASES))
-    log.info("Please stay quiet until tuning is complete!")
-    log.info("")
+    print()
+    print(_cyan("╠═══════════════════════════════════════════════════════════════╣"))
+    print(_cyan("  TARS: ") + f"AEC module loaded. Graph rate: {_white(f'{graph_rate}Hz')}")
+    print(_cyan("  TARS: ") + f"Testing {_white(f'{len(CONFIGS)}')} configs x {_white(f'{len(TEST_PHRASES)}')} phrases. " + _orange("Stay quiet..."))
+    print(_cyan("╠═══════════════════════════════════════════════════════════════╣"))
+    print()
 
     best = run_tuning()
 
@@ -853,14 +887,22 @@ def setup_aec(force=False):
 
     # Apply the best config
     name, avg_rms, supp, noise, gc, ext, hpf, da = best
-    log.info("")
-    log.info("Applying best config: %s", name)
+    print()
+    print(_cyan("  TARS: ") + f"Applying optimal config -> {_green(_bold(name))}")
     write_aec_config(supp, noise, gc, ext, hpf, da)
     ensure_pulse_defaults()
 
     if restart_pipewire():
-        log.info("AEC configured and active!")
-        log.info("  Config: %s", AEC_CONF)
+        print()
+        print(_green("╔═══════════════════════════════════════════════════════════════╗"))
+        print(_green("║") + "                                                               " + _green("║"))
+        print(_green("║") + _bold(_white(f"   AEC ACTIVE: {name:<20s}")) + "                            " + _green("║"))
+        print(_green("║") + _dim(f"   Echo bleed: {avg_rms:<10.6f}  Config: echo-cancel.conf") + "      " + _green("║"))
+        print(_green("║") + "                                                               " + _green("║"))
+        print(_green("║") + _cyan("   TARS: Echo cancellation calibrated and operational.") + "         " + _green("║"))
+        print(_green("║") + "                                                               " + _green("║"))
+        print(_green("╚═══════════════════════════════════════════════════════════════╝"))
+        print()
         return True
     else:
         log.error("Failed to restart PipeWire with best config")
@@ -874,9 +916,11 @@ def remove_aec():
     - Removes the pulse default-devices override
     - Restarts PipeWire to apply changes
     """
-    log.info("=" * 60)
-    log.info("  TARS-AI AEC Removal")
-    log.info("=" * 60)
+    print()
+    print(_orange("╔═══════════════════════════════════════════════════════════════╗"))
+    print(_orange("║") + _bold(_white("              TARS-AI  AEC  Removal                            ")) + _orange("║"))
+    print(_orange("╚═══════════════════════════════════════════════════════════════╝"))
+    print()
 
     backup = AEC_CONF + ".backup"
 

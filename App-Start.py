@@ -1011,7 +1011,6 @@ def check_aec_setup():
             print("[AEC] aec=true — forcing AEC re-tune...")
         else:
             print("[AEC] AEC not tuned — running auto-setup...")
-        print("[AEC] This tests 14 configs and takes ~4 minutes.")
         setup_aec(force=force)
     except ImportError:
         print("[AEC] aec.py not found — skipping")
