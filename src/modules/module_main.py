@@ -160,6 +160,10 @@ def utterance_callback(message):
 
         user_text = message_dict['text'].strip()
 
+        # Kick off memory embedding in background so it's ready by prompt-build time
+        if memory_manager and memory_manager.long_mem_use:
+            memory_manager.prefetch_embedding(user_text)
+
         # Resolve speaker name for display (voice mode)
         # Wait for background speaker ID — returns immediately if already done
         _speaker_display = CONFIG['CHAR'].get('user_name', 'User')
