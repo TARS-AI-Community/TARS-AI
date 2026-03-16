@@ -26,6 +26,7 @@ import threading
 
 class SpectrumSystem:
     def __init__(self, width, height, style='wave', bg_alpha=0, sample_rate=16000, chunk_size=1024):
+        from modules.module_mic import get_native_rate
         self.stream = None
         self.audio_running = False
 
@@ -37,10 +38,17 @@ class SpectrumSystem:
         self.spectrum_height = int(height * 0.3)
         self.spectrum_y = height - self.spectrum_height + 20
 
-        self.sample_rate = sample_rate
-        self.chunk_size = chunk_size
-        self.audio_buffer = np.zeros(chunk_size)
+        # Use the actual native mic rate for correct FFT frequency mapping
+        self.sample_rate = get_native_rate()
+        # Scale chunk size proportionally so we capture the same time window
+        self.chunk_size = int(chunk_size * self.sample_rate / 16000)
+        # Ring buffer: accumulates audio from variable-size hub callbacks
+        # into a fixed-size buffer so FFT and waveform always have enough data
+        self.audio_buffer = np.zeros(self.chunk_size)
+        self._ring_pos = 0
         self.audio_lock = threading.Lock()
+        # Max frequency to display (Hz) — limits FFT bins to audible range
+        self._max_display_freq = 8000
 
         self.spectrum = np.zeros(64)
         self.spectrum_smoothed = np.zeros(64)
@@ -59,7 +67,7 @@ class SpectrumSystem:
         self.sinewave_history = deque(maxlen=8)  
 
         self.spectrogram_history = deque(maxlen=100)  
-        self.spectrogram_height = int(self.spectrum_height * 0.9)  
+        self.spectrogram_height = self.spectrum_height  
         self.spectrogram_freq_resolution = 4  
 
         for _ in range(100):
@@ -116,7 +124,23 @@ class SpectrumSystem:
 
     def audio_callback(self, indata, frames, time_info, status):
         with self.audio_lock:
-            self.audio_buffer = indata[:, 0].copy()
+            chunk = indata[:, 0]
+            n = len(chunk)
+            buf_len = len(self.audio_buffer)
+            if n >= buf_len:
+                # Chunk larger than buffer — take the last buf_len samples
+                self.audio_buffer[:] = chunk[-buf_len:]
+                self._ring_pos = 0
+            else:
+                # Append chunk into ring buffer
+                space = buf_len - self._ring_pos
+                if n <= space:
+                    self.audio_buffer[self._ring_pos:self._ring_pos + n] = chunk
+                    self._ring_pos += n
+                else:
+                    self.audio_buffer[self._ring_pos:] = chunk[:space]
+                    self.audio_buffer[:n - space] = chunk[space:]
+                    self._ring_pos = n - space
 
     def start_audio_stream(self):
         try:
@@ -137,7 +161,15 @@ class SpectrumSystem:
 
     def process_audio(self):
         with self.audio_lock:
-            audio_data = self.audio_buffer.copy()
+            # Read ring buffer in chronological order
+            pos = self._ring_pos
+            audio_data = np.concatenate([
+                self.audio_buffer[pos:],
+                self.audio_buffer[:pos]
+            ]) if pos > 0 else self.audio_buffer.copy()
+
+        if len(audio_data) < 4:
+            return np.zeros(self.num_bars)
 
         window = np.hanning(len(audio_data))
         windowed_data = audio_data * window
@@ -154,7 +186,11 @@ class SpectrumSystem:
         # Power curve to exaggerate differences between quiet and loud
         magnitude_normalized = magnitude_normalized ** 1.3
 
-        useful_bins = len(magnitude_normalized) // 2
+        # Limit to audible range — at high sample rates (48kHz) the upper FFT
+        # bins are above hearing range and always empty, making half the display dark
+        freq_per_bin = self.sample_rate / len(audio_data)
+        max_bin = int(self._max_display_freq / freq_per_bin) if freq_per_bin > 0 else len(magnitude_normalized)
+        useful_bins = max(1, min(max_bin, len(magnitude_normalized)))
         spectrum_data = magnitude_normalized[:useful_bins]
 
         num_output_bins = self.num_bars
@@ -162,11 +198,15 @@ class SpectrumSystem:
 
         for i in range(num_output_bins):
 
-            start_bin = int((i / num_output_bins) ** 2 * len(spectrum_data))
-            end_bin = int(((i + 1) / num_output_bins) ** 2 * len(spectrum_data))
-            end_bin = max(start_bin + 1, end_bin)
+            start_bin = int((i / num_output_bins) ** 1.4 * len(spectrum_data))
+            end_bin = int(((i + 1) / num_output_bins) ** 1.4 * len(spectrum_data))
+            end_bin = max(start_bin + 1, min(end_bin, len(spectrum_data)))
 
-            output_spectrum[i] = np.mean(spectrum_data[start_bin:end_bin])
+            if start_bin < len(spectrum_data):
+                output_spectrum[i] = np.mean(spectrum_data[start_bin:end_bin])
+
+        # Replace any NaN/inf with 0
+        np.nan_to_num(output_spectrum, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
 
         return output_spectrum
 
@@ -205,6 +245,8 @@ class SpectrumSystem:
         self.spectrum_smoothed = (self.spectrum_smoothed * (1 - self.smoothing_factor) +
                                  spectrum_data * self.smoothing_factor)
 
+        # Safety: ensure no NaN/inf leaks into the spectrum
+        np.nan_to_num(self.spectrum_smoothed, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
         self.spectrum = self.spectrum_smoothed
 
     def silence(self, progress, max_value=20):
@@ -258,12 +300,13 @@ class SpectrumSystem:
 
     def draw_bars(self, surface):
         for i, value in enumerate(self.spectrum):
+            value = max(0.0, min(1.0, float(value))) if np.isfinite(value) else 0.0
 
             bar_height = int(value * self.spectrum_height * 0.85)
             x = i * (self.bar_width + self.bar_spacing)
             y = self.spectrum_height - bar_height
 
-            color_pos = value  
+            color_pos = value
             color = self.get_gradient_color(color_pos)
             alpha = int(200 * value)  
 
@@ -290,7 +333,9 @@ class SpectrumSystem:
             bin_idx = int(i * len(self.spectrum) / num_points)
             bin_idx = min(bin_idx, len(self.spectrum) - 1)
 
-            amplitude = self.spectrum[bin_idx] * self.max_amplitude
+            val = self.spectrum[bin_idx]
+            val = max(0.0, min(1.0, float(val))) if np.isfinite(val) else 0.0
+            amplitude = val * self.max_amplitude
 
             y_upper = center_y - amplitude
             y_lower = center_y + amplitude
@@ -372,7 +417,11 @@ class SpectrumSystem:
                                    (x, y1), (x, y2), 1)
 
         with self.audio_lock:
-            audio_data = self.audio_buffer.copy()
+            pos = self._ring_pos
+            audio_data = np.concatenate([
+                self.audio_buffer[pos:],
+                self.audio_buffer[:pos]
+            ]) if pos > 0 else self.audio_buffer.copy()
 
         num_points = self.width - 2 * padding
         step = max(1, len(audio_data) // num_points)
@@ -383,6 +432,8 @@ class SpectrumSystem:
 
             sample_idx = min(i * step, len(audio_data) - 1)
             amplitude = audio_data[sample_idx]
+            if not np.isfinite(amplitude):
+                amplitude = 0.0
 
             y = center_y + int(amplitude * osc_height * 0.45)
 
@@ -424,7 +475,8 @@ class SpectrumSystem:
         angle_step = 2 * math.pi / num_points
 
         for i, value in enumerate(self.spectrum):
-            angle = i * angle_step - math.pi / 2  
+            value = max(0.0, min(1.0, float(value))) if np.isfinite(value) else 0.0
+            angle = i * angle_step - math.pi / 2
 
             bar_length = value * (radius_outer - radius_inner)
             x1 = center_x + math.cos(angle) * radius_inner
@@ -442,44 +494,43 @@ class SpectrumSystem:
         if len(self.spectrum) > 0:
             self.spectrogram_history.append(self.spectrum.copy())
 
-        if len(self.spectrogram_history) == 0:
+        n_slices = len(self.spectrogram_history)
+        if n_slices == 0:
             return
 
-        num_time_slices = len(self.spectrogram_history)
-        slice_width = max(2, self.width // num_time_slices)  
+        n_bins = len(self.spectrum)
+        # Build a numpy image: rows = freq bins (top=high freq), cols = time slices
+        # Each cell is an amplitude 0..1
+        img = np.zeros((n_bins, n_slices), dtype=np.float32)
+        for t, s in enumerate(self.spectrogram_history):
+            img[:, t] = s[::-1]  # flip so low freq at bottom
 
-        num_freq_bins = len(self.spectrum) // self.spectrogram_freq_resolution
-        bin_height = self.spectrogram_height / num_freq_bins
+        np.nan_to_num(img, copy=False, nan=0.0, posinf=1.0, neginf=0.0)
+        np.clip(img, 0.0, 1.0, out=img)
 
-        temp_surface = pygame.Surface((self.width, self.spectrum_height), pygame.SRCALPHA)
-        temp_surface.fill((0, 0, 0, 0))
+        # Map amplitude to colormap index and build RGB array
+        cmap = np.array(self.spectrogram_colormap, dtype=np.uint8)  # (N, 3)
+        n_colors = len(cmap)
+        indices = img * (n_colors - 1)
+        idx0 = np.clip(indices.astype(np.int32), 0, n_colors - 2)
+        frac = (indices - idx0)[..., np.newaxis]  # (bins, slices, 1)
+        rgb_raw = cmap[idx0] * (1 - frac) + cmap[idx0 + 1] * frac
+        # Darken by amplitude — low values fade to black
+        brightness = img[..., np.newaxis]
+        rgb = (rgb_raw * brightness).astype(np.uint8)
 
-        for time_idx, spectrum_slice in enumerate(self.spectrogram_history):
-            x = time_idx * slice_width
+        # Make dark/quiet pixels transparent using colorkey
+        # Clamp very dark pixels to exact black so colorkey catches them
+        mask = (rgb.max(axis=-1) < 15)  # pixels where all RGB < 15
+        rgb[mask] = 0
 
-            for display_idx in range(num_freq_bins):
-
-                freq_idx = display_idx * self.spectrogram_freq_resolution
-                if freq_idx >= len(spectrum_slice):
-                    continue
-
-                amplitude = spectrum_slice[freq_idx]
-
-                y = self.spectrogram_height - (display_idx + 1) * bin_height
-
-                color = self.get_spectrogram_color(amplitude)
-
-                fade_factor = (self.spectrum_height - y) / self.spectrum_height
-                fade_factor = fade_factor ** 2.5  
-                alpha = int(255 * fade_factor * 0.85)  
-
-                if amplitude > 0.05 and alpha > 10:  
-                    rect = pygame.Rect(x, int(y), slice_width + 1, max(2, int(bin_height) + 1))
-                    pygame.draw.rect(temp_surface, (*color, alpha), rect)
-
-        rotated_surface = pygame.transform.rotate(temp_surface, 180)
-
-        surface.blit(rotated_surface, (0, 0))
+        px_surface = pygame.surfarray.make_surface(
+            np.ascontiguousarray(np.transpose(rgb, (1, 0, 2)))
+        )
+        px_surface.set_colorkey((0, 0, 0))
+        scaled = pygame.transform.scale(px_surface, (self.width, self.spectrum_height))
+        scaled.set_colorkey((0, 0, 0))
+        surface.blit(scaled, (0, 0))
 
     def get_spectrogram_color(self, amplitude):
         amplitude = max(0, min(1, amplitude))
