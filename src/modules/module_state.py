@@ -17,13 +17,14 @@ from modules.module_config import load_config
 
 
 class TarsState(str, Enum):
+    BOOTING = "BOOTING"
     STANDBY = "STANDBY"
     LISTENING = "LISTENING"
     THINKING = "THINKING"
     TALKING = "TALKING"
 
 
-_state: TarsState = TarsState.STANDBY
+_state: TarsState = TarsState.BOOTING
 _lock = threading.Lock()
 _listeners: List[Callable[[TarsState, TarsState], None]] = []
 
