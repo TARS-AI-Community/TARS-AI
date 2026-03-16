@@ -4395,6 +4395,15 @@ function $(id) { return document.getElementById(id); }
       html += '</div>';
     });
 
+    // Raw Prompt accordion at the bottom — shows the full unprocessed prompt
+    html += '<div class="dash-prompt-section">';
+    html += '<div class="dash-prompt-section-title collapsed" data-collapse="prompt-sec-raw">';
+    html += '<i class="bi bi-chevron-down"></i> Raw Prompt';
+    html += '<span class="prompt-sec-lines">' + promptText.length.toLocaleString() + ' chars</span>';
+    html += '</div>';
+    html += '<pre class="dash-prompt-pre collapsed" id="prompt-sec-raw" style="white-space:pre-wrap;word-break:break-word">' + escapeHtml(promptText) + '</pre>';
+    html += '</div>';
+
     sections.innerHTML = html;
   }
 
