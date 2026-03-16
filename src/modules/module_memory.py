@@ -19,6 +19,8 @@ This license applies only to this file and does not override licenses of other f
 import os
 import json
 import requests
+import threading
+from concurrent.futures import Future
 from typing import List, Dict, Any, Optional, Set
 from datetime import datetime, timedelta
 from hyperdb import HyperDB
@@ -61,6 +63,8 @@ class MemoryManager:
 
         self.ui_manager = ui_manager
         self._dirty = False  # True when in-memory state has unflushed changes
+        self._prefetch_future = None  # Background embedding prefetch
+        self._prefetch_query = None
 
         self.init_dynamic_memory()
         self.load_initial_memory(self.initial_memory_path)
@@ -326,15 +330,56 @@ class MemoryManager:
         else:
             return max(0.1, 0.5 * np.exp(-(days_old - self.recency_boost_days) / 30))
 
+    def prefetch_embedding(self, query: str):
+        """Start computing the query embedding in a background thread.
+
+        Call this as early as possible (e.g. right after STT returns) so the
+        embedding is ready by the time get_longterm_memory() needs it.
+        """
+        self._prefetch_query = query
+        future = Future()
+
+        def _compute():
+            try:
+                vec = self.hyper_db.embedding_function([query])[0]
+                future.set_result(vec)
+            except Exception as e:
+                future.set_exception(e)
+
+        self._prefetch_future = future
+        threading.Thread(target=_compute, daemon=True).start()
+
+    def _get_query_vector(self, query: str):
+        """Return query embedding, using prefetched result if available."""
+        if (self._prefetch_future is not None
+                and self._prefetch_query == query):
+            try:
+                vec = self._prefetch_future.result(timeout=10)
+                self._prefetch_future = None
+                self._prefetch_query = None
+                return vec
+            except Exception:
+                pass
+        # Fallback: compute synchronously
+        return self.hyper_db.embedding_function([query])[0]
+
     def get_related_memories(self, query: str, include_context: bool = True) -> List[Dict[str, Any]]:
         self.ui_manager.think()
 
         try:
-            results = self.hyper_db.query(
-                query,
-                top_k=self.top_k,
-                return_similarities=True
+            # Use prefetched embedding if available, skip the slow embedding call
+            query_vector = self._get_query_vector(query)
+            from modules.module_hyperdb import hyper_SVM_ranking_algorithm_sort
+            ranked_results, similarities = hyper_SVM_ranking_algorithm_sort(
+                self.hyper_db.vectors, query_vector,
+                top_k=self.top_k, metric=self.hyper_db.similarity_metric
             )
+            if not ranked_results.size:
+                return []
+            results = list(zip(
+                [self.hyper_db.documents[idx] for idx in ranked_results],
+                similarities
+            ))
 
             if not results:
                 return []
@@ -342,6 +387,9 @@ class MemoryManager:
             memory_list = self.hyper_db.dict()
             expanded_memories = []
             seen_indices = set()
+
+            # Build an id-based index for O(1) lookup instead of O(n) linear scan per result
+            doc_id_to_idx = {id(d['document']): idx for idx, d in enumerate(memory_list)}
 
             num_to_process = min(self.max_memories_to_use, len(results))
 
@@ -353,7 +401,7 @@ class MemoryManager:
                     memory = results[i]['document']
                     similarity = results[i].get('similarity', 0.0)
 
-                start_index = next((idx for idx, d in enumerate(memory_list) if d['document'] == memory), None)
+                start_index = doc_id_to_idx.get(id(memory))
 
                 if start_index is None:
                     continue
