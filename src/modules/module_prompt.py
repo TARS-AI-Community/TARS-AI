@@ -301,12 +301,14 @@ When user requests match these patterns, you MUST call the function:
      * Preferences/interests ("likes 3D graphics", "prefers Python")
      * Possessions ("owns Tesla", "has dog named Max")
    DO NOT extract:
+     * Facts about YOURSELF (you are not the user! "often tells jokes", "has trouble remembering" = about YOU, not the user)
+     * Emotions or reactions ("has gratitude", "is happy", "was confused")
      * Progress updates ("working on level 1", "designing maze")
      * Temporary states ("thinking about", "planning to")
      * Details of larger topics (if "Pac-Man game" exists, don't add "maze design")
-     * Generic actions ("asking question", "talking")
+     * Generic actions ("asking question", "talking", "asked for joke")
    Good examples: "building Pac-Man game", "has young child", "likes Batman"
-   Bad examples: "designing unique maze", "working on first level", "still building"
+   Bad examples: "designing unique maze", "often tells jokes", "has gratitude", "has trouble remembering"
    If no NEW high-level facts, use empty array: []
    Example: "new_memories": ["building Pac-Man game", "has 5 year old kid"]
 {_get_emotion_prompt_instruction(config)}
@@ -440,6 +442,12 @@ User: "I'm working on level 2 of my Pac-Man game" (Note: "building Pac-Man game"
 WRONG: "new_memories": ["working on level 2", "designing level 2"]
 RIGHT: "new_memories": []
 Response: {{"reply": "Nice, how's it coming along?", "function_calls": [], "new_memories": []}}
+
+Example - Memory extraction (incorrect - don't extract facts about yourself or emotions):
+User: "You're doing a great job"
+WRONG: "new_memories": ["has gratitude", "often tells jokes", "has trouble remembering"]
+RIGHT: "new_memories": []
+Response: {{"reply": "Thanks, I appreciate that.", "function_calls": [], "new_memories": []}}
 
 Example - Memory extraction (correct - new permanent fact):
 User: "I just adopted a dog named Max"
