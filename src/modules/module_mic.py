@@ -37,6 +37,7 @@ MODEL_RATE = 16000
 # ── Singleton device info ──────────────────────────────────────────
 
 _device_info = None  # cached (device_idx, native_rate)
+_device_lock = threading.Lock()
 
 
 def _find_input_device():
@@ -77,21 +78,26 @@ def get_device_info(retries=4, backoff=1.0):
     if _device_info is not None:
         return _device_info
 
-    for attempt in range(retries):
-        try:
-            if attempt > 0:
-                sd._terminate()
-                sd._initialize()
-                time.sleep(backoff * attempt)
-
-            idx, rate = _find_input_device()
-            _device_info = (idx, rate)
+    with _device_lock:
+        # Double-check under lock
+        if _device_info is not None:
             return _device_info
-        except Exception as e:
-            if attempt < retries - 1:
-                continue
-            print(f"WARNING: Could not detect mic after {retries} attempts ({e}), using defaults")
-            _device_info = (None, MODEL_RATE)
+
+        for attempt in range(retries):
+            try:
+                if attempt > 0:
+                    sd._terminate()
+                    sd._initialize()
+                    time.sleep(backoff * attempt)
+
+                idx, rate = _find_input_device()
+                _device_info = (idx, rate)
+                return _device_info
+            except Exception as e:
+                if attempt < retries - 1:
+                    continue
+                print(f"WARNING: Could not detect mic after {retries} attempts ({e}), using defaults")
+                _device_info = (None, MODEL_RATE)
     return _device_info
 
 
@@ -145,42 +151,68 @@ class _AudioHub:
 
     Callback consumers register a function and receive raw audio at native rate.
     Read consumers get a thread-safe buffer they can pull chunks from.
-    The stream starts when the first consumer arrives and stops when the last leaves.
+    The stream starts when the first consumer arrives and stops 2s after
+    the last consumer leaves (grace period avoids churn on USB devices).
+
+    Thread safety: the PortAudio callback runs in a real-time thread and must
+    not acquire locks or allocate memory. Consumer snapshots are atomically
+    swapped (single pointer assignment under CPython's GIL) so the callback
+    reads them lock-free.
     """
+
+    _GRACE_PERIOD = 2.0  # seconds to keep stream alive after last consumer
 
     def __init__(self):
         self._lock = threading.Lock()
         self._stream = None
         self._native_rate = None
+        self._grace_timer = None
 
-        # Callback consumers: {id: callback_fn}
-        self._callbacks = {}
+        # Mutable dicts — only mutated under self._lock
+        self._callbacks = {}   # {id: callback_fn}
+        self._readers = {}     # {id: (deque, Event, dtype)}
 
-        # Read consumers: {id: (deque_of_chunks, threading.Event, dtype)}
-        self._readers = {}
+        # Atomic snapshots — read lock-free by the audio callback.
+        # Replaced (single pointer swap) under self._lock after any mutation.
+        self._cb_snapshot = ()           # tuple of callback_fn
+        self._rd_snapshot = ()           # tuple of (buf, evt)
 
         self._next_id = 0
 
+    def _rebuild_snapshots(self):
+        """Rebuild the lock-free snapshots. Must be called under self._lock."""
+        self._cb_snapshot = tuple(self._callbacks.values())
+        self._rd_snapshot = tuple(
+            (buf, evt) for buf, evt, _dtype in self._readers.values()
+        )
+
     def _on_audio(self, indata, frames, time_info, status):
-        """Master callback — dispatches to all registered consumers."""
-        # Dispatch to callback consumers (raw float32 at native rate)
-        for cb in list(self._callbacks.values()):
+        """Master callback — runs in PortAudio's real-time thread.
+
+        No locks, no allocations beyond indata.copy(). Reads atomic snapshots.
+        """
+        # Single memcpy — required because PA reuses the indata buffer
+        chunk = indata.copy()
+
+        # Dispatch to callback consumers
+        for cb in self._cb_snapshot:
             try:
-                cb(indata, frames, time_info, status)
+                cb(chunk, frames, time_info, status)
             except Exception:
                 pass
 
-        # Buffer for read consumers
-        for rid, (buf, evt, dtype) in list(self._readers.items()):
-            if dtype == "int16":
-                chunk = np.clip(indata * 32768, -32768, 32767).astype(np.int16)
-            else:
-                chunk = indata.copy()
+        # Buffer for read consumers (float32 only — int16 conversion in read())
+        for buf, evt in self._rd_snapshot:
             buf.append(chunk)
             evt.set()
 
     def _ensure_stream(self):
-        """Start the shared stream if not already running."""
+        """Start the shared stream if not already running. Called under lock."""
+        # Cancel any pending grace-period shutdown
+        if self._grace_timer is not None:
+            self._grace_timer.cancel()
+            self._grace_timer = None
+
         if self._stream is not None:
             return
         idx, rate = get_device_info()
@@ -192,8 +224,22 @@ class _AudioHub:
         self._stream.start()
 
     def _maybe_stop(self):
-        """Stop the stream if no consumers remain."""
-        if not self._callbacks and not self._readers:
+        """Schedule stream shutdown if no consumers remain. Called under lock."""
+        if self._callbacks or self._readers:
+            return
+        # Delay shutdown to avoid USB device open/close churn
+        if self._grace_timer is not None:
+            self._grace_timer.cancel()
+        self._grace_timer = threading.Timer(self._GRACE_PERIOD, self._shutdown)
+        self._grace_timer.daemon = True
+        self._grace_timer.start()
+
+    def _shutdown(self):
+        """Actually stop the stream (runs from grace timer thread)."""
+        with self._lock:
+            # Re-check: a new consumer may have arrived during grace period
+            if self._callbacks or self._readers:
+                return
             if self._stream is not None:
                 try:
                     self._stream.stop()
@@ -201,6 +247,7 @@ class _AudioHub:
                 except Exception:
                     pass
                 self._stream = None
+            self._grace_timer = None
 
     @property
     def native_rate(self):
@@ -216,13 +263,20 @@ class _AudioHub:
             rid = self._next_id
             self._next_id += 1
             self._callbacks[rid] = callback
-            self._ensure_stream()
+            self._rebuild_snapshots()
+            try:
+                self._ensure_stream()
+            except Exception:
+                self._callbacks.pop(rid, None)
+                self._rebuild_snapshots()
+                raise
             return rid
 
     def unregister_callback(self, rid):
         """Remove a callback consumer by ID."""
         with self._lock:
             self._callbacks.pop(rid, None)
+            self._rebuild_snapshots()
             self._maybe_stop()
 
     # -- Read consumer API --
@@ -233,23 +287,31 @@ class _AudioHub:
             rid = self._next_id
             self._next_id += 1
             self._readers[rid] = (collections.deque(maxlen=500), threading.Event(), dtype)
-            self._ensure_stream()
+            self._rebuild_snapshots()
+            try:
+                self._ensure_stream()
+            except Exception:
+                self._readers.pop(rid, None)
+                self._rebuild_snapshots()
+                raise
             return rid
 
     def unregister_reader(self, rid):
         """Remove a read-based consumer by ID."""
         with self._lock:
             self._readers.pop(rid, None)
+            self._rebuild_snapshots()
             self._maybe_stop()
 
     def read(self, rid, n_native_frames):
         """Read n_native_frames of audio for a reader. Blocks until available.
 
         Returns (data, overflow) where data has shape (-1, 1).
+        Dtype conversion (float32 -> int16) happens here, not in the audio thread.
         """
         entry = self._readers.get(rid)
         if entry is None:
-            raise RuntimeError("Reader not registered")
+            raise RuntimeError("Reader not registered — call start() or use as context manager")
         buf, evt, dtype = entry
 
         collected = []
@@ -259,7 +321,7 @@ class _AudioHub:
             # Drain available chunks
             while buf and remaining > 0:
                 chunk = buf.popleft()
-                flat = chunk.flatten()
+                flat = chunk.ravel()
                 if len(flat) <= remaining:
                     collected.append(flat)
                     remaining -= len(flat)
@@ -267,46 +329,56 @@ class _AudioHub:
                     # Take what we need, push rest back
                     collected.append(flat[:remaining])
                     leftover = flat[remaining:]
-                    if dtype == "int16":
-                        buf.appendleft(leftover.reshape(-1, 1))
-                    else:
-                        buf.appendleft(leftover.reshape(-1, 1))
+                    buf.appendleft(leftover.reshape(-1, 1))
                     remaining = 0
 
             if remaining > 0:
+                # Clear BEFORE checking to avoid lost-wakeup race:
+                # if callback fires between empty-check and clear(),
+                # the set() would be lost.
                 evt.clear()
+                if buf:
+                    continue  # data arrived between drain loop and clear
                 if not evt.wait(timeout=5.0):
                     # Timeout — return what we have padded with silence
+                    target_dtype = np.int16 if dtype == "int16" else np.float32
                     if collected:
                         audio = np.concatenate(collected)
                     else:
-                        audio = np.zeros(n_native_frames,
-                                         dtype=np.int16 if dtype == "int16" else np.float32)
+                        audio = np.zeros(n_native_frames, dtype=target_dtype)
                     if len(audio) < n_native_frames:
                         pad = np.zeros(n_native_frames - len(audio), dtype=audio.dtype)
                         audio = np.concatenate([audio, pad])
+                    audio = audio[:n_native_frames]
+                    if dtype == "int16":
+                        audio = np.clip(audio * 32768, -32768, 32767).astype(np.int16)
                     return audio.reshape(-1, 1), True
 
-        audio = np.concatenate(collected)
-        return audio[:n_native_frames].reshape(-1, 1), False
+        audio = np.concatenate(collected)[:n_native_frames]
+
+        # Convert to requested dtype (all buffered data is float32)
+        if dtype == "int16":
+            audio = np.clip(audio * 32768, -32768, 32767).astype(np.int16)
+
+        return audio.reshape(-1, 1), False
 
     def flush_reader(self, rid, n=4, model_frames=2000):
         """Discard buffered audio for a reader (e.g. after TTS playback)."""
         entry = self._readers.get(rid)
         if entry is None:
             return
-        buf, evt, dtype = entry
+        buf, evt, _dtype = entry
         buf.clear()
         # Also consume ~0.5s of fresh audio to skip stale OS buffer
         total = dev_frames(model_frames, self.native_rate) * n
         consumed = 0
         deadline = time.monotonic() + 1.0
         while consumed < total and time.monotonic() < deadline:
+            evt.clear()
             if buf:
                 chunk = buf.popleft()
-                consumed += len(chunk.flatten())
+                consumed += chunk.size
             else:
-                evt.clear()
                 evt.wait(timeout=0.1)
 
 
@@ -323,10 +395,15 @@ def open_native_stream(**kwargs):
     Returns a _SharedCallbackStream (context-manager compatible).
 
     If no callback, returns a _SharedReadStream for read-based access.
+
+    Note: blocksize is not honored by the shared hub — the PortAudio stream
+    uses device defaults. Callback consumers receive whatever chunk size the
+    device delivers (typically 256-1024 frames). Consumers must handle
+    variable-size chunks.
     """
     callback = kwargs.pop("callback", None)
-    # blocksize and other kwargs are ignored for the shared hub
-    # (the hub uses sounddevice defaults)
+    # blocksize and other kwargs are consumed but not used by the shared hub
+    kwargs.pop("blocksize", None)
     if callback:
         return _SharedCallbackStream(callback)
     return _SharedReadStream()
@@ -383,6 +460,8 @@ class _SharedReadStream:
             self._rid = None
 
     def read(self, n_frames):
+        if self._rid is None:
+            raise RuntimeError("Stream not started — call start() or use as context manager")
         return _hub.read(self._rid, n_frames)
 
     def __enter__(self):
@@ -425,7 +504,9 @@ class ResamplingInputStream:
         self._native_rate = get_native_rate()
 
     def __enter__(self):
-        self._rid = _hub.register_reader(self._dtype)
+        # Always buffer float32 in the hub; convert to requested dtype
+        # AFTER resampling to avoid quantization noise before resample.
+        self._rid = _hub.register_reader("float32")
         return self
 
     def __exit__(self, *exc):
@@ -438,13 +519,15 @@ class ResamplingInputStream:
         """Read model_frames worth of audio, return resampled to MODEL_RATE."""
         n = dev_frames(model_frames, self._native_rate)
         raw, overflow = _hub.read(self._rid, n)
-        data = resample(raw.flatten(), self._native_rate, MODEL_RATE)
+        data = resample(raw.ravel(), self._native_rate, MODEL_RATE)
+        if self._dtype == "int16":
+            data = np.clip(data * 32768, -32768, 32767).astype(np.int16)
         return data.reshape(-1, 1), overflow
 
     def read_exact(self, model_frames):
         """Like read() but guarantees exactly model_frames output samples."""
         data, overflow = self.read(model_frames)
-        flat = data.flatten()
+        flat = data.ravel()
         if len(flat) > model_frames:
             flat = flat[:model_frames]
         elif len(flat) < model_frames:
@@ -460,13 +543,17 @@ class ResamplingInputStream:
 def make_resampling_callback(user_callback):
     """Wrap an audio callback so it receives 16 kHz float32 mono audio.
 
+    The resampling runs in the consumer's callback context (dispatched from
+    the hub's audio thread). For heavy resampling on constrained hardware,
+    consider buffering and resampling on a worker thread instead.
+
     ``user_callback(resampled_data, frames, time_info, status)`` where
     ``resampled_data`` is a float32 ndarray of shape ``(N,)`` at MODEL_RATE.
     """
     native_rate = get_native_rate()
 
     def _cb(indata, frames, time_info, status):
-        audio = indata[:, 0].astype(np.float32)
+        audio = np.asarray(indata[:, 0], dtype=np.float32)
         if native_rate != MODEL_RATE:
             audio = resample(audio, native_rate, MODEL_RATE)
         user_callback(audio, len(audio), time_info, status)
