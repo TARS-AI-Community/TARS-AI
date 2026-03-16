@@ -986,7 +986,62 @@ def create_touch_menu():
         pygame.display.flip()
         clock.tick(60)
 
+def check_aec_setup():
+    """Run AEC auto-setup on first boot if not already configured.
+
+    Flags:
+        aec=true          — force a full AEC re-tune
+        aec=false         — skip AEC entirely (run app without echo cancellation)
+        aec=remove        — remove AEC config and restore backup
+        aec=<config-name> — apply a specific config by name (e.g. aec=raw-max-all)
+    """
+    # Extract the aec= value from argv
+    aec_val = None
+    for a in sys.argv[1:]:
+        if a.lower().startswith("aec="):
+            aec_val = a.split("=", 1)[1].strip()
+            break
+    if aec_val is None:
+        aec_val = ""
+
+    force = aec_val.lower() == "true"
+    remove = aec_val.lower() == "remove"
+    skip = aec_val.lower() == "false"
+    # Any other non-empty value is treated as a config name
+    config_name = aec_val if aec_val and not force and not remove and not skip else None
+
+    if skip:
+        print("[AEC] aec=false — skipping AEC setup")
+        return
+
+    try:
+        from aec import (is_aec_tuned, is_aec_configured, aec_module_installed,
+                         setup_aec, remove_aec, apply_named_config)
+        if remove:
+            print("[AEC] aec=remove — removing AEC configuration...")
+            remove_aec()
+            return
+        if config_name:
+            print(f"[AEC] aec={config_name} — applying config directly...")
+            apply_named_config(config_name)
+            return
+        if not force and is_aec_tuned() and is_aec_configured():
+            return  # Already tuned — nothing to do
+        if not aec_module_installed():
+            print("[AEC] AEC module not available — skipping auto-tune")
+            return
+        if force:
+            print("[AEC] aec=true — forcing AEC re-tune...")
+        else:
+            print("[AEC] AEC not tuned — running auto-setup...")
+        setup_aec(force=force)
+    except ImportError:
+        print("[AEC] aec.py not found — skipping")
+    except Exception as e:
+        print(f"[AEC] Auto-setup failed (non-fatal): {e}")
+
 if __name__ == "__main__":
+    check_aec_setup()
     if not check_required_file():
         print("[FILE.CHECK] hey_tars_templates.pkl not found — launching terminal mode.")
         run_tars_ai_normal()
