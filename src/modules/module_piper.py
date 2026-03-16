@@ -55,6 +55,18 @@ if CONFIG['TTS']['ttsoption'] == 'piper':
     else:
         try:
             voice = PiperVoice.load(model_path)
+            # Warmup: run a dummy synthesis to trigger ONNX runtime JIT
+            # so the first real call doesn't pay the compilation cost.
+            _warmup_buf = BytesIO()
+            with wave.open(_warmup_buf, 'wb') as _wf:
+                _wf.setnchannels(1)
+                _wf.setsampwidth(2)
+                _wf.setframerate(voice.config.sample_rate)
+                if hasattr(voice, "synthesize_wav"):
+                    voice.synthesize_wav("warm", _wf)
+                elif hasattr(voice, "synthesize"):
+                    voice.synthesize("warm", _wf)
+            del _warmup_buf
         except Exception as e:
             queue_message(f"[Piper] Failed to load voice model: {e}")
             queue_message(f"[Piper] The file may be corrupt: {model_path}")

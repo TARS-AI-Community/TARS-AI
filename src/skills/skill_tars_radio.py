@@ -55,6 +55,7 @@ SKILL = {
             "description": "Music playback volume multiplier",
         },
     },
+    "required_params": ["action"],
     "prompt": """tars_radio
     Triggers: Use for ANY music PLAYBACK, library management, or radio commands:
       * Play: "play some music", "start the radio", "play {song name}", "play my songs"
@@ -72,34 +73,34 @@ SKILL = {
     "examples": [
         """Example - Start radio:
 User: "Play some music"
-Response: {{"question": "Play some music", "reply": "Firing up TARS Radio. Let's see what we've got.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Firing up TARS Radio. Let's see what we've got.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play"}}}}], "new_memories": []}}""",
         """Example - Play specific song:
 User: "Play Robot Anthem"
-Response: {{"question": "Play Robot Anthem", "reply": "Queuing up Robot Anthem for you.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play", "song": "Robot Anthem"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Queuing up Robot Anthem for you.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play", "song": "Robot Anthem"}}}}], "new_memories": []}}""",
         """Example - Stop music:
 User: "Stop the music"
-Response: {{"question": "Stop the music", "reply": "Shutting down TARS Radio.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "stop"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Shutting down TARS Radio.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "stop"}}}}], "new_memories": []}}""",
         """Example - Skip track:
 User: "Next song"
-Response: {{"question": "Next song", "reply": "Skipping ahead.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "skip"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Skipping ahead.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "skip"}}}}], "new_memories": []}}""",
         """Example - Rename song:
 User: "Rename that song to Rebel Yell"
-Response: {{"question": "Rename that song to Rebel Yell", "reply": "Done, renamed it to Rebel Yell.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "rename", "new_name": "Rebel Yell"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Done, renamed it to Rebel Yell.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "rename", "new_name": "Rebel Yell"}}}}], "new_memories": []}}""",
         """Example - Delete song:
 User: "Delete that song"
-Response: {{"question": "Delete that song", "reply": "Removed it from the library.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "delete"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Removed it from the library.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "delete"}}}}], "new_memories": []}}""",
         """Example - List library:
 User: "What songs do I have?"
-Response: {{"question": "What songs do I have?", "reply": "Let me check the library.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "list"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Let me check the library.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "list"}}}}], "new_memories": []}}""",
         """Example - Download from YouTube:
 User: "Download this song https://www.youtube.com/watch?v=abc123"
-Response: {{"question": "Download this song https://www.youtube.com/watch?v=abc123", "reply": "Downloading that track now. I'll add it to the library when it's done.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "download", "url": "https://www.youtube.com/watch?v=abc123"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Downloading that track now. I'll add it to the library when it's done.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "download", "url": "https://www.youtube.com/watch?v=abc123"}}}}], "new_memories": []}}""",
         """Example - Download with custom name:
 User: "Add this to my library as Rebel Yell https://youtu.be/xyz789"
-Response: {{"question": "Add this to my library as Rebel Yell https://youtu.be/xyz789", "reply": "Downloading Rebel Yell now. Give me a moment.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "download", "url": "https://youtu.be/xyz789", "new_name": "Rebel Yell"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Downloading Rebel Yell now. Give me a moment.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "download", "url": "https://youtu.be/xyz789", "new_name": "Rebel Yell"}}}}], "new_memories": []}}""",
         """Example - Play after download (context-aware):
 User: "play it" (after just downloading a song)
-Response: {{"question": "play it", "reply": "Playing it now.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Playing it now.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play"}}}}], "new_memories": []}}""",
     ],
 }
 

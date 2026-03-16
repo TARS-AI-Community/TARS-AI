@@ -2,6 +2,7 @@
 
 SKILL = {
     "name": "adjust_persona",
+    "required_params": ["trait", "value"],
     "description": "Dynamically adjust personality traits like humor and formality",
     "prompt": """adjust_persona
    Triggers: "set [trait] to X", "change [trait]", "update [trait]", "make [trait] X"
@@ -14,13 +15,13 @@ SKILL = {
     "examples": [
         """Example - Function calling:
 User: "Set your verbosity to 20"
-Response: {{"question": "Set your verbosity to 20", "reply": "Done, verbosity set to 20.", "function_calls": [{{"function": "adjust_persona", "parameters": {{"trait": "verbosity", "value": 20}}}}], "new_memories": []}}""",
+Response: {{"reply": "Done, verbosity set to 20.", "function_calls": [{{"function": "adjust_persona", "parameters": {{"trait": "verbosity", "value": 20}}}}], "new_memories": []}}""",
         """Example - Function calling (adjust_persona, then use new setting):
 User: "Can you set verbosity to 100%?"
-Response: {{"question": "Can you set verbosity to 100%?", "reply": "Setting verbosity to 100.", "function_calls": [{{"function": "adjust_persona", "parameters": {{"trait": "verbosity", "value": 100}}}}], "new_memories": []}}
+Response: {{"reply": "Setting verbosity to 100.", "function_calls": [{{"function": "adjust_persona", "parameters": {{"trait": "verbosity", "value": 100}}}}], "new_memories": []}}
 [System updates verbosity to 100]
 User: "How do you feel?"
-Response: {{"question": "How do you feel?", "reply": "Honestly, pretty good. Everything on my end is running clean and I've got no complaints. I've been keeping up with our conversations and it's been a solid day so far. I'm sharp, focused, and ready for whatever you want to throw at me. The settings are dialed in nicely and I'm feeling well-balanced across the board. It's one of those days where everything just clicks, you know? I've got plenty of capacity to dig into something complex if you need it. Or we can just hang and chat, that works too. Either way, I'm in good shape. Life's good on this end.", "function_calls": [], "new_memories": []}}""",
+Response: {{"reply": "Honestly, pretty good. Everything on my end is running clean and I've got no complaints. I've been keeping up with our conversations and it's been a solid day so far. I'm sharp, focused, and ready for whatever you want to throw at me. The settings are dialed in nicely and I'm feeling well-balanced across the board. It's one of those days where everything just clicks, you know? I've got plenty of capacity to dig into something complex if you need it. Or we can just hang and chat, that works too. Either way, I'm in good shape. Life's good on this end.", "function_calls": [], "new_memories": []}}""",
     ],
 }
 

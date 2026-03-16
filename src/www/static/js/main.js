@@ -4483,7 +4483,7 @@ function $(id) { return document.getElementById(id); }
         var val = parsed[key];
         var display = typeof val === 'string' ? val : JSON.stringify(val, null, 2);
         var secId = 'llm-field-' + key;
-        var collapsed = key !== 'reply' && key !== 'question';
+        var collapsed = key !== 'reply';
         html += '<div class="dash-prompt-section">';
         html += '<div class="dash-prompt-section-title' + (collapsed ? ' collapsed' : '') + '" data-collapse="' + secId + '">';
         html += '<i class="bi bi-chevron-down"></i> ' + escapeHtml(key);

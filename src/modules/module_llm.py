@@ -22,7 +22,6 @@ import threading
 import json
 import re
 import time
-import concurrent.futures
 import random
 import asyncio
 from modules.module_config import load_config, get_capabilities
@@ -41,7 +40,6 @@ try:
 except ImportError:
     pass
 
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 # Callback invoked with (text_chunk, is_first) as reply text streams from LLM.
 # Set by module_main.py before calling process_completion(); cleared afterward.
@@ -160,7 +158,6 @@ def _maybe_play_thinking_response():
                 queue_message(f"ERROR: Failed to play thinking response: {e}")
 
         threading.Thread(target=_play, daemon=True).start()
-        time.sleep(0.1)
     except Exception:
         pass
 
@@ -381,8 +378,7 @@ def process_completion(prompt, image_b64=None):
             }
         return result
 
-    future = executor.submit(_get_parsed, prompt)
-    return future.result()
+    return _get_parsed(prompt)
 
 _emotion_cache = {}
 _EMOTION_CACHE_MAX = 128
@@ -587,7 +583,6 @@ def llm_parse_response(bot_response):
         else:
             return ""
 
-    bot_response["question"] = normalize_field(bot_response.get("question", ""))
     bot_response["reply"] = normalize_field(bot_response.get("reply", ""))
     bot_response["function_calls"] = bot_response.get("function_calls") or []
     bot_response["new_memories"] = bot_response.get("new_memories") or []
@@ -718,6 +713,14 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
         skills = get_skill_manager()
 
         if skills and skills.has_skill(function_name):
+            # Guard against hallucinated calls: skip if params are empty
+            # but the skill declares required parameters.
+            skill_meta = skills._skill_meta.get(function_name, {})
+            req = skill_meta.get("required_params")
+            if req and not parameters:
+                queue_message(f"DEBUG: Skipping {function_name} — empty params but requires {req}")
+                speed.log_tool(function_name, speed.stop('tool'))
+                return
             # Build context dict for the skill
             context = {
                 "bot_response": bot_response,

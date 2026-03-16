@@ -5,6 +5,7 @@ import re
 
 SKILL = {
     "name": "volume",
+    "required_params": ["action"],
     "description": "Adjust speaker volume",
     "prompt": """volume
    Triggers: "raise volume", "lower volume", "set volume to X", "mute", "what's the volume", "check volume"
@@ -14,10 +15,10 @@ SKILL = {
     "examples": [
         """Example - Volume control:
 User: "Turn the volume up"
-Response: {{"question": "Turn the volume up", "reply": "Raising the volume.", "function_calls": [{{"function": "volume", "parameters": {{"action": "increase", "value": 10}}}}], "new_memories": []}}""",
+Response: {{"reply": "Raising the volume.", "function_calls": [{{"function": "volume", "parameters": {{"action": "increase", "value": 10}}}}], "new_memories": []}}""",
         """Example - Check volume:
 User: "What's the volume at?"
-Response: {{"question": "What's the volume at?", "reply": "Let me check.", "function_calls": [{{"function": "volume", "parameters": {{"action": "get"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Let me check.", "function_calls": [{{"function": "volume", "parameters": {{"action": "get"}}}}], "new_memories": []}}""",
     ],
 }
 

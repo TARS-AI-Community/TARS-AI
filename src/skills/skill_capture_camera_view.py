@@ -21,6 +21,7 @@ def _extract_reply(raw):
 
 SKILL = {
     "name": "capture_camera_view",
+    "required_params": ["query"],
     "followup": True,
     "description": "Capture and analyze what the camera sees",
     "prompt": """capture_camera_view
@@ -36,10 +37,10 @@ SKILL = {
     "examples": [
         """Example - Camera function:
 User: "What do you see?"
-Response: {{"question": "What do you see?", "reply": "Let me take a look.", "function_calls": [{{"function": "capture_camera_view", "parameters": {{"query": "describe what you see"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Let me take a look.", "function_calls": [{{"function": "capture_camera_view", "parameters": {{"query": "describe what you see"}}}}], "new_memories": []}}""",
         """Example - Camera function (implicit):
 User: "What's in front of you?"
-Response: {{"question": "What's in front of you?", "reply": "Checking now.", "function_calls": [{{"function": "capture_camera_view", "parameters": {{"query": "describe what is in front"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Checking now.", "function_calls": [{{"function": "capture_camera_view", "parameters": {{"query": "describe what is in front"}}}}], "new_memories": []}}""",
         """Example - capture_camera_view vs take_photo (KNOW THE DIFFERENCE):
 User: "Take a picture" -> take_photo (saves a file)
 User: "What do you see?" -> capture_camera_view (analyzes the view)

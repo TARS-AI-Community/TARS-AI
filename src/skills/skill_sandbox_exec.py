@@ -18,6 +18,7 @@ from datetime import datetime
 
 SKILL = {
     "name": "sandbox_exec",
+    "required_params": ["code"],
     "followup": True,
     "description": "Execute Python code in a sandboxed environment",
     "prompt": """sandbox_exec
@@ -37,10 +38,10 @@ SKILL = {
     "examples": [
         """Example - code execution:
 User: "What's the sum of all prime numbers under 100?"
-Response: {{"question": "What's the sum of all prime numbers under 100?", "reply": "Let me calculate that for you.", "function_calls": [{{"function": "sandbox_exec", "parameters": {{"code": "def is_prime(n):\\n    if n < 2: return False\\n    for i in range(2, int(n**0.5)+1):\\n        if n % i == 0: return False\\n    return True\\nprimes = [n for n in range(100) if is_prime(n)]\\nresult = sum(primes)\\nprint(f'Primes under 100: {{primes}}')\\nprint(f'Sum: {{result}}')", "description": "sum primes under 100"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Let me calculate that for you.", "function_calls": [{{"function": "sandbox_exec", "parameters": {{"code": "def is_prime(n):\\n    if n < 2: return False\\n    for i in range(2, int(n**0.5)+1):\\n        if n % i == 0: return False\\n    return True\\nprimes = [n for n in range(100) if is_prime(n)]\\nresult = sum(primes)\\nprint(f'Primes under 100: {{primes}}')\\nprint(f'Sum: {{result}}')", "description": "sum primes under 100"}}}}], "new_memories": []}}""",
         """Example - data transformation:
 User: "Sort these names by length: Alice, Bob, Christopher, Di, Elizabeth"
-Response: {{"question": "Sort these names by length", "reply": "Let me sort those for you.", "function_calls": [{{"function": "sandbox_exec", "parameters": {{"code": "names = ['Alice', 'Bob', 'Christopher', 'Di', 'Elizabeth']\\nsorted_names = sorted(names, key=len)\\nresult = ', '.join(sorted_names)\\nprint(f'Sorted by length: {{result}}')", "description": "sort names by length"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Let me sort those for you.", "function_calls": [{{"function": "sandbox_exec", "parameters": {{"code": "names = ['Alice', 'Bob', 'Christopher', 'Di', 'Elizabeth']\\nsorted_names = sorted(names, key=len)\\nresult = ', '.join(sorted_names)\\nprint(f'Sorted by length: {{result}}')", "description": "sort names by length"}}}}], "new_memories": []}}""",
     ],
     "order": 50,
 }

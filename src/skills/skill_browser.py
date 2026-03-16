@@ -27,6 +27,7 @@ import os
 
 SKILL = {
     "name": "browser",
+    "required_params": ["action"],
     "description": "Open websites and play videos on the display",
     "prompt": """browser
    Triggers: "open [website]", "go to [site]", "visit [url]", "play [video] on youtube", "show me [video]", "watch [video]"
@@ -38,10 +39,10 @@ SKILL = {
     "examples": [
         """Example - Play a video:
 User: "Play some lofi hip hop"
-Response: {{"question": "Play some lofi hip hop", "reply": "Searching for that now.", "function_calls": [{{"function": "browser", "parameters": {{"action": "play_youtube", "query": "lofi hip hop"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Searching for that now.", "function_calls": [{{"function": "browser", "parameters": {{"action": "play_youtube", "query": "lofi hip hop"}}}}], "new_memories": []}}""",
         """Example - Open a website:
 User: "Open Reddit"
-Response: {{"question": "Open Reddit", "reply": "Opening Reddit for you.", "function_calls": [{{"function": "browser", "parameters": {{"action": "open_url", "url": "https://www.reddit.com", "description": "Reddit"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Opening Reddit for you.", "function_calls": [{{"function": "browser", "parameters": {{"action": "open_url", "url": "https://www.reddit.com", "description": "Reddit"}}}}], "new_memories": []}}""",
     ],
 }
 

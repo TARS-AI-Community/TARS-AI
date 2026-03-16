@@ -4,6 +4,7 @@ import threading
 
 SKILL = {
     "name": "system_control",
+    "required_params": ["action"],
     "description": "Shut down, restart, or exit the program",
     "prompt": """system_control
    Triggers: Use ONLY when the user explicitly asks to exit/quit the program OR shut down/power off the device.
@@ -17,10 +18,10 @@ SKILL = {
     "examples": [
         """Example - Exit program:
 User: "Exit the program"
-Response: {{"question": "Exit the program", "reply": "Shutting down the program. See you later!", "function_calls": [{{"function": "system_control", "parameters": {{"action": "exit"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Shutting down the program. See you later!", "function_calls": [{{"function": "system_control", "parameters": {{"action": "exit"}}}}], "new_memories": []}}""",
         """Example - Shutdown device:
 User: "Shut down the raspberry pi"
-Response: {{"question": "Shut down the raspberry pi", "reply": "Powering off now. Goodbye!", "function_calls": [{{"function": "system_control", "parameters": {{"action": "shutdown"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Powering off now. Goodbye!", "function_calls": [{{"function": "system_control", "parameters": {{"action": "shutdown"}}}}], "new_memories": []}}""",
     ],
 }
 

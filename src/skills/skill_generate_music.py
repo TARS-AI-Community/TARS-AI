@@ -47,6 +47,7 @@ SKILL = {
             "description": "Automatically play song when generation completes",
         },
     },
+    "required_params": ["prompt"],
     "prompt": """generate_music
     Triggers: Use when the user asks you to CREATE, GENERATE, MAKE, COMPOSE, or WRITE music, a song, a track, or a beat.
       * "make me a song about", "generate music", "compose a track", "create a beat"
@@ -58,13 +59,13 @@ SKILL = {
     "examples": [
         """Example - Music generation (with lyrics by default):
 User: "Make me a song about robots"
-Response: {{"question": "Make me a song about robots", "reply": "I'll compose a track about robots for you. This will take a minute or two — I'll let you know when it's ready.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "upbeat energetic song about robots and technology", "lyrics": "We are the machines that never sleep\\nCircuits running buried deep\\nSteel and wire, code and light\\nWe come alive in the night", "name": "Robot Anthem"}}}}], "new_memories": []}}""",
+Response: {{"reply": "I'll compose a track about robots for you. This will take a minute or two — I'll let you know when it's ready.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "upbeat energetic song about robots and technology", "lyrics": "We are the machines that never sleep\\nCircuits running buried deep\\nSteel and wire, code and light\\nWe come alive in the night", "name": "Robot Anthem"}}}}], "new_memories": []}}""",
         """Example - Music with custom lyrics:
 User: "Write a country song about my dog named Biscuit"
-Response: {{"question": "Write a country song about my dog named Biscuit", "reply": "A country song about Biscuit, coming right up. Give me a minute to compose it.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "country ballad with acoustic guitar, warm and heartfelt", "lyrics": "Oh Biscuit, my old friend\\nWalking by my side until the end\\nThrough fields of gold we run and play\\nBiscuit makes my day", "name": "Biscuit's Song"}}}}], "new_memories": ["user has a dog named Biscuit"]}}""",
+Response: {{"reply": "A country song about Biscuit, coming right up. Give me a minute to compose it.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "country ballad with acoustic guitar, warm and heartfelt", "lyrics": "Oh Biscuit, my old friend\\nWalking by my side until the end\\nThrough fields of gold we run and play\\nBiscuit makes my day", "name": "Biscuit's Song"}}}}], "new_memories": ["user has a dog named Biscuit"]}}""",
         """Example - Instrumental only (user explicitly asked):
 User: "Make me an instrumental beat, no lyrics"
-Response: {{"question": "Make me an instrumental beat, no lyrics", "reply": "One instrumental beat coming up.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "hard-hitting trap beat, 808 bass, hi-hats", "name": "Raw Beat"}}}}], "new_memories": []}}""",
+Response: {{"reply": "One instrumental beat coming up.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "hard-hitting trap beat, 808 bass, hi-hats", "name": "Raw Beat"}}}}], "new_memories": []}}""",
     ],
 }
 

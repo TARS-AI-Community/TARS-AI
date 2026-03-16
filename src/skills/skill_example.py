@@ -62,7 +62,7 @@ SKILL = {
     "examples": [
         """Example - Skill example:
 User: "skill example"
-Response: {{"question": "skill example", "reply": "One sec.", "function_calls": [{{"function": "example", "parameters": {{"category": ""}}}}], "new_memories": []}}""",
+Response: {{"reply": "One sec.", "function_calls": [{{"function": "example", "parameters": {{"category": ""}}}}], "new_memories": []}}""",
     ],
 }
 
