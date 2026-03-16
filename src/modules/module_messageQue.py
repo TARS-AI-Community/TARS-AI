@@ -1,5 +1,8 @@
 import sys
+import os
 import time
+import logging
+import logging.handlers
 import threading
 import queue
 from collections import deque
@@ -13,6 +16,30 @@ _log_buffer = deque(maxlen=200)
 _log_lock = threading.Lock()
 _log_counter = 0
 
+# File-based logging with rotation
+_file_logger = None
+
+def _init_file_logger():
+    global _file_logger
+    if _file_logger is not None:
+        return
+    try:
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, 'tars-ai.log')
+        _file_logger = logging.getLogger('tars_file')
+        _file_logger.setLevel(logging.INFO)
+        handler = logging.handlers.RotatingFileHandler(
+            log_path, maxBytes=5_000_000, backupCount=3, encoding='utf-8'
+        )
+        handler.setFormatter(logging.Formatter('%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+        _file_logger.addHandler(handler)
+        _file_logger.propagate = False
+    except Exception:
+        _file_logger = None
+
+_init_file_logger()
+
 def get_recent_logs(since=0):
     """Return log lines newer than since and the current counter."""
     with _log_lock:
@@ -25,6 +52,11 @@ def _buffer_log(message):
     with _log_lock:
         _log_counter += 1
         _log_buffer.append((_log_counter, message))
+    if _file_logger is not None:
+        try:
+            _file_logger.info(message)
+        except Exception:
+            pass
 
 def process_message_queue():
     """ Continuously process the message queue in order. """
