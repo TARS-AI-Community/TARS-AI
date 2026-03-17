@@ -40,7 +40,7 @@ other_model = meta-llama/Meta-Llama-3.1-8B-Instruct
 # System instructions prepended to every conversation (keep general; personality goes in character card)
 systemprompt = You are to responding naturally and helpfully within the scenario. Be informative and conversational while maintaining your personality.
 # Max conversation history in tokens (2000–8000, check model docs)
-contextsize = 4000
+contextsize = 16000
 # Max tokens per LLM response (200–300 conversational, 500–1000 for detailed)
 max_tokens = 1000
 # Random seed (-1 = unique each time, fixed number = reproducible)

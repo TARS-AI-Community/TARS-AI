@@ -44,6 +44,7 @@ SKILL = {
             "description": "Width to resize snapshots to (keeps aspect ratio)",
         },
     },
+    "required_params": ["camera", "action"],
     "prompt": """network_camera
    Triggers: Use when the user asks to see, view, check, or show a network/security/IP camera feed:
      * "show me the garage camera", "check the front door cam", "pull up the driveway feed"
@@ -59,13 +60,13 @@ SKILL = {
     "examples": [
         """Example - View network camera snapshot:
 User: "Show me the garage camera"
-Response: {{"question": "Show me the garage camera", "reply": "Pulling up the garage camera now.", "function_calls": [{{"function": "network_camera", "parameters": {{"camera": "garage", "action": "snapshot"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Pulling up the garage camera now.", "function_calls": [{{"function": "network_camera", "parameters": {{"camera": "garage", "action": "snapshot"}}}}], "new_memories": []}}""",
         """Example - Analyze network camera:
 User: "What's happening on the front door camera?"
-Response: {{"question": "What's happening on the front door camera?", "reply": "Let me check the front door camera.", "function_calls": [{{"function": "network_camera", "parameters": {{"camera": "front door", "action": "analyze"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Let me check the front door camera.", "function_calls": [{{"function": "network_camera", "parameters": {{"camera": "front door", "action": "analyze"}}}}], "new_memories": []}}""",
         """Example - Stream network camera:
 User: "Stream the driveway camera"
-Response: {{"question": "Stream the driveway camera", "reply": "Starting the driveway camera stream.", "function_calls": [{{"function": "network_camera", "parameters": {{"camera": "driveway", "action": "stream"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Starting the driveway camera stream.", "function_calls": [{{"function": "network_camera", "parameters": {{"camera": "driveway", "action": "stream"}}}}], "new_memories": []}}""",
     ],
 }
 

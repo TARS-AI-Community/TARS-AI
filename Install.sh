@@ -6,6 +6,7 @@ set -e
 
 if [ -n "$SUDO_USER" ]; then
     ACTUAL_USER="$SUDO_USER"
+    ACTUAL_HOME="/home/$SUDO_USER"
     echo ""
     echo "+================================================================+"
     echo "| NOTICE: Script run with sudo - will set ownership to: $SUDO_USER"
@@ -14,6 +15,7 @@ if [ -n "$SUDO_USER" ]; then
     sleep 2
 else
     ACTUAL_USER="$(whoami)"
+    ACTUAL_HOME="$HOME"
 fi
 
 DELAY=0.02

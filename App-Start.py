@@ -459,8 +459,8 @@ def load_config():
     return ui_enabled, font_size
 
 def stop_tars_ai():
-    subprocess.Popen("killall xterm", shell=True)
-    subprocess.Popen("pkill -f 'python app.py'", shell=True)
+    subprocess.run(["killall", "xterm"], check=False)
+    subprocess.run(["pkill", "-f", "python app.py"], check=False)
 
 def _extra_args():
     """Collect extra key=value CLI args (e.g. speed=true debug=true) to forward to app.py."""
@@ -986,7 +986,67 @@ def create_touch_menu():
         pygame.display.flip()
         clock.tick(60)
 
+def check_aec_setup():
+    """Run AEC auto-setup on first boot if not already configured.
+
+    Flags:
+        aec=tune          — force a full AEC re-tune
+        aec=skip          — skip AEC entirely (run app without echo cancellation)
+        aec=remove        — remove AEC config and restore backup
+        aec=<config-name> — apply a specific config by name (e.g. aec=raw-max-all)
+    """
+    # Extract the aec= value from argv
+    aec_val = None
+    for a in sys.argv[1:]:
+        if a.lower().startswith("aec="):
+            aec_val = a.split("=", 1)[1].strip()
+            break
+    if aec_val is None:
+        aec_val = ""
+
+    force = aec_val.lower() == "tune"
+    remove = aec_val.lower() == "remove"
+    skip = aec_val.lower() == "skip"
+    # Any other non-empty value is treated as a config name
+    config_name = aec_val if aec_val and not force and not remove and not skip else None
+
+    if skip:
+        print("[AEC] aec=skip — skipping AEC setup")
+        return
+
+    try:
+        from aec import (is_aec_tuned, is_aec_configured, is_aec_disabled,
+                         aec_module_installed, setup_aec, remove_aec, apply_named_config)
+        if remove:
+            print("[AEC] aec=remove — removing AEC configuration...")
+            remove_aec()
+            return
+        if config_name:
+            print(f"[AEC] aec={config_name} — applying config directly...")
+            apply_named_config(config_name)
+            return
+        if force:
+            print("[AEC] aec=tune — forcing AEC re-tune...")
+            setup_aec(force=True)
+            return
+        if is_aec_configured():
+            return  # Already configured (tuned or default) — nothing to do
+        if is_aec_disabled():
+            return  # User explicitly removed AEC — don't re-install
+        # AEC not configured and not disabled — first boot, install default
+        if not aec_module_installed():
+            print("[AEC] AEC module not available — skipping")
+            return
+        print("[AEC] First boot — installing default AEC config (raw-max-all)...")
+        print("[AEC]   Run with aec=tune to auto-tune for your specific hardware.")
+        apply_named_config("raw-max-all")
+    except ImportError:
+        print("[AEC] aec.py not found — skipping")
+    except Exception as e:
+        print(f"[AEC] Auto-setup failed (non-fatal): {e}")
+
 if __name__ == "__main__":
+    check_aec_setup()
     if not check_required_file():
         print("[FILE.CHECK] hey_tars_templates.pkl not found — launching terminal mode.")
         run_tars_ai_normal()

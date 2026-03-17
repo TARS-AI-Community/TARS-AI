@@ -22,7 +22,6 @@ import threading
 import json
 import re
 import time
-import concurrent.futures
 import random
 import asyncio
 from modules.module_config import load_config, get_capabilities
@@ -41,7 +40,6 @@ try:
 except ImportError:
     pass
 
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
 # Callback invoked with (text_chunk, is_first) as reply text streams from LLM.
 # Set by module_main.py before calling process_completion(); cleared afterward.
@@ -54,6 +52,8 @@ class _ReplyExtractor:
     As tokens arrive one by one, feeds them in and returns the visible reply
     text extracted so far. Handles JSON escape sequences correctly.
     """
+    _REPLY_RE = re.compile(r'"reply"\s*:\s*"')
+
     def __init__(self):
         self._state = 0   # 0=searching for "reply":", 1=inside value, 2=done
         self._buf = ''
@@ -68,7 +68,7 @@ class _ReplyExtractor:
         extracted = ''
 
         if self._state == 0:
-            m = re.search(r'"reply"\s*:\s*"', self._buf)
+            m = self._REPLY_RE.search(self._buf)
             if m:
                 self._state = 1
                 self._buf = self._buf[m.end():]
@@ -158,7 +158,6 @@ def _maybe_play_thinking_response():
                 queue_message(f"ERROR: Failed to play thinking response: {e}")
 
         threading.Thread(target=_play, daemon=True).start()
-        time.sleep(0.1)
     except Exception:
         pass
 
@@ -183,7 +182,7 @@ def get_completion(user_prompt, istext=True, image_b64=None, source="voice"):
         response.raise_for_status()
 
         # Stream tokens from SSE response
-        full_content = ""
+        _content_parts = []
         try:
             for line in response.iter_lines():
                 if not line:
@@ -197,11 +196,13 @@ def get_completion(user_prompt, istext=True, image_b64=None, source="voice"):
                 try:
                     chunk = json.loads(data_str)
                     token = chunk['choices'][0]['delta'].get('content', '')
-                    full_content += token
+                    if token:
+                        _content_parts.append(token)
                 except (json.JSONDecodeError, KeyError, IndexError):
                     continue
         except Exception:
             pass
+        full_content = ''.join(_content_parts)
 
         # Fallback: if streaming yielded nothing, try non-streaming parse
         if not full_content.strip():
@@ -306,7 +307,7 @@ def process_completion(prompt, image_b64=None):
         response.raise_for_status()
         _t_first_byte = None
 
-        full_content = ""
+        _content_parts = []
         _token_count = 0
         _extractor = _ReplyExtractor()
         try:
@@ -326,7 +327,7 @@ def process_completion(prompt, image_b64=None):
                         continue
                     if _t_first_byte is None:
                         _t_first_byte = time.perf_counter()
-                    full_content += token
+                    _content_parts.append(token)
                     _token_count += 1
                     # Extract visible reply text and invoke callback if set
                     cb = _reply_chunk_callback
@@ -343,6 +344,7 @@ def process_completion(prompt, image_b64=None):
                     continue
         except Exception:
             pass
+        full_content = ''.join(_content_parts)
         _t_llm_done = time.perf_counter()
         if _t_first_byte is None:
             _t_first_byte = _t_prompt  # no tokens received
@@ -376,8 +378,10 @@ def process_completion(prompt, image_b64=None):
             }
         return result
 
-    future = executor.submit(_get_parsed, prompt)
-    return future.result()
+    return _get_parsed(prompt)
+
+_emotion_cache = {}
+_EMOTION_CACHE_MAX = 128
 
 def detect_emotion(text):
     """Detect emotion and return (top_axis, raw_label, axis_scores_dict).
@@ -388,6 +392,10 @@ def detect_emotion(text):
     """
     if classifier is None or not text or not text.strip():
         return None, None, {}
+    # Check cache to avoid redundant inference
+    cache_key = text.strip().lower()[:200]
+    if cache_key in _emotion_cache:
+        return _emotion_cache[cache_key]
     try:
         from modules.module_dashboard_data import _EMOTION_TO_AXIS, _RADAR_AXES
         model_outputs = classifier(text)
@@ -411,7 +419,12 @@ def detect_emotion(text):
             raw_label = max(raw_non_neutral, key=lambda x: x['score'])['label']
         else:
             raw_label = max(raw_scores, key=lambda x: x['score'])['label']
-        return top_axis, raw_label, axis_scores
+        result = (top_axis, raw_label, axis_scores)
+        # Cache result (evict oldest if full)
+        if len(_emotion_cache) >= _EMOTION_CACHE_MAX:
+            _emotion_cache.pop(next(iter(_emotion_cache)))
+        _emotion_cache[cache_key] = result
+        return result
     except Exception:
         return None, None, {}
 
@@ -570,7 +583,6 @@ def llm_parse_response(bot_response):
         else:
             return ""
 
-    bot_response["question"] = normalize_field(bot_response.get("question", ""))
     bot_response["reply"] = normalize_field(bot_response.get("reply", ""))
     bot_response["function_calls"] = bot_response.get("function_calls") or []
     bot_response["new_memories"] = bot_response.get("new_memories") or []
@@ -701,6 +713,14 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
         skills = get_skill_manager()
 
         if skills and skills.has_skill(function_name):
+            # Guard against hallucinated calls: skip if params are empty
+            # but the skill declares required parameters.
+            skill_meta = skills._skill_meta.get(function_name, {})
+            req = skill_meta.get("required_params")
+            if req and not parameters:
+                queue_message(f"DEBUG: Skipping {function_name} — empty params but requires {req}")
+                speed.log_tool(function_name, speed.stop('tool'))
+                return
             # Build context dict for the skill
             context = {
                 "bot_response": bot_response,

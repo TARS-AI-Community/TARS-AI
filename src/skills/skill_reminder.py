@@ -2,6 +2,7 @@
 
 SKILL = {
     "name": "reminder",
+    "required_params": ["action"],
     "description": "Set timed reminders and alerts",
     "prompt": """reminder
    Triggers: When the user asks you to:
@@ -19,13 +20,13 @@ SKILL = {
     "examples": [
         """Example - set a reminder:
 User: "Remind me in 10 minutes to take the pizza out"
-Response: {{"question": "Remind me in 10 minutes to take the pizza out", "reply": "Timer set! I'll remind you in 10 minutes about the pizza.", "function_calls": [{{"function": "reminder", "parameters": {{"action": "set", "seconds": 600, "message": "take the pizza out"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Timer set! I'll remind you in 10 minutes about the pizza.", "function_calls": [{{"function": "reminder", "parameters": {{"action": "set", "seconds": 600, "message": "take the pizza out"}}}}], "new_memories": []}}""",
         """Example - list reminders:
 User: "What reminders do I have?"
-Response: {{"question": "What reminders do I have?", "reply": "Let me check your active reminders.", "function_calls": [{{"function": "reminder", "parameters": {{"action": "list"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Let me check your active reminders.", "function_calls": [{{"function": "reminder", "parameters": {{"action": "list"}}}}], "new_memories": []}}""",
         """Example - cancel reminder:
 User: "Cancel all my reminders"
-Response: {{"question": "Cancel all my reminders", "reply": "All reminders cleared.", "function_calls": [{{"function": "reminder", "parameters": {{"action": "cancel", "id": "all"}}}}], "new_memories": []}}""",
+Response: {{"reply": "All reminders cleared.", "function_calls": [{{"function": "reminder", "parameters": {{"action": "cancel", "id": "all"}}}}], "new_memories": []}}""",
     ],
 }
 

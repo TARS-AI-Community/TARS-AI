@@ -2,6 +2,7 @@
 
 SKILL = {
     "name": "web_search",
+    "required_params": ["query"],
     "followup": True,
     "description": "Search the web for current information",
     "prompt": """web_search
@@ -18,7 +19,7 @@ SKILL = {
     "examples": [
         """Example - web_search reply (short with pun):
 User: "What's the weather?"
-Response: {{"question": "What's the weather?", "reply": "Let me check whether it's nice out!", "function_calls": [{{"function": "web_search", "parameters": {{"query": "current weather"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Let me check whether it's nice out!", "function_calls": [{{"function": "web_search", "parameters": {{"query": "current weather"}}}}], "new_memories": []}}""",
         """Example - web_search reply (NEVER fabricate live data):
 User: "What's the latest news?"
 WRONG: {{"reply": "Right now, a lot of headlines are focused on the conflict in Ukraine and the US election...", "function_calls": [{{"function": "web_search", "parameters": {{"query": "latest world news"}}}}]}}

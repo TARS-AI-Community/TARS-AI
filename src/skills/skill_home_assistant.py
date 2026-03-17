@@ -5,6 +5,7 @@ import requests
 
 SKILL = {
     "name": "home_assistant",
+    "required_params": ["prompt"],
     "description": "Control smart home devices via Home Assistant",
     "config": {
         "url": {
@@ -22,7 +23,7 @@ SKILL = {
     "examples": [
         """Example - Smart home control:
 User: "Turn off the living room lights"
-Response: {{"question": "Turn off the living room lights", "reply": "On it.", "function_calls": [{{"function": "home_assistant", "parameters": {{"prompt": "turn off the living room lights"}}}}], "new_memories": []}}""",
+Response: {{"reply": "On it.", "function_calls": [{{"function": "home_assistant", "parameters": {{"prompt": "turn off the living room lights"}}}}], "new_memories": []}}""",
     ],
 }
 

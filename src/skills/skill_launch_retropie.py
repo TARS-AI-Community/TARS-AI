@@ -17,7 +17,7 @@ SKILL = {
     "examples": [
         """Example - Launch RetroPie:
 User: "I want to play a retro game"
-Response: {{"question": "I want to play a retro game", "reply": "Firing up RetroPie for you. Have fun!", "function_calls": [{{"function": "launch_retropie", "parameters": {{}}}}], "new_memories": []}}""",
+Response: {{"reply": "Firing up RetroPie for you. Have fun!", "function_calls": [{{"function": "launch_retropie", "parameters": {{}}}}], "new_memories": []}}""",
     ],
 }
 

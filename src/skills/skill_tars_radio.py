@@ -55,6 +55,7 @@ SKILL = {
             "description": "Music playback volume multiplier",
         },
     },
+    "required_params": ["action"],
     "prompt": """tars_radio
     Triggers: Use for ANY music PLAYBACK, library management, or radio commands:
       * Play: "play some music", "start the radio", "play {song name}", "play my songs"
@@ -72,34 +73,34 @@ SKILL = {
     "examples": [
         """Example - Start radio:
 User: "Play some music"
-Response: {{"question": "Play some music", "reply": "Firing up TARS Radio. Let's see what we've got.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Firing up TARS Radio. Let's see what we've got.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play"}}}}], "new_memories": []}}""",
         """Example - Play specific song:
 User: "Play Robot Anthem"
-Response: {{"question": "Play Robot Anthem", "reply": "Queuing up Robot Anthem for you.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play", "song": "Robot Anthem"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Queuing up Robot Anthem for you.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play", "song": "Robot Anthem"}}}}], "new_memories": []}}""",
         """Example - Stop music:
 User: "Stop the music"
-Response: {{"question": "Stop the music", "reply": "Shutting down TARS Radio.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "stop"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Shutting down TARS Radio.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "stop"}}}}], "new_memories": []}}""",
         """Example - Skip track:
 User: "Next song"
-Response: {{"question": "Next song", "reply": "Skipping ahead.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "skip"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Skipping ahead.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "skip"}}}}], "new_memories": []}}""",
         """Example - Rename song:
 User: "Rename that song to Rebel Yell"
-Response: {{"question": "Rename that song to Rebel Yell", "reply": "Done, renamed it to Rebel Yell.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "rename", "new_name": "Rebel Yell"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Done, renamed it to Rebel Yell.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "rename", "new_name": "Rebel Yell"}}}}], "new_memories": []}}""",
         """Example - Delete song:
 User: "Delete that song"
-Response: {{"question": "Delete that song", "reply": "Removed it from the library.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "delete"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Removed it from the library.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "delete"}}}}], "new_memories": []}}""",
         """Example - List library:
 User: "What songs do I have?"
-Response: {{"question": "What songs do I have?", "reply": "Let me check the library.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "list"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Let me check the library.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "list"}}}}], "new_memories": []}}""",
         """Example - Download from YouTube:
 User: "Download this song https://www.youtube.com/watch?v=abc123"
-Response: {{"question": "Download this song https://www.youtube.com/watch?v=abc123", "reply": "Downloading that track now. I'll add it to the library when it's done.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "download", "url": "https://www.youtube.com/watch?v=abc123"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Downloading that track now. I'll add it to the library when it's done.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "download", "url": "https://www.youtube.com/watch?v=abc123"}}}}], "new_memories": []}}""",
         """Example - Download with custom name:
 User: "Add this to my library as Rebel Yell https://youtu.be/xyz789"
-Response: {{"question": "Add this to my library as Rebel Yell https://youtu.be/xyz789", "reply": "Downloading Rebel Yell now. Give me a moment.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "download", "url": "https://youtu.be/xyz789", "new_name": "Rebel Yell"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Downloading Rebel Yell now. Give me a moment.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "download", "url": "https://youtu.be/xyz789", "new_name": "Rebel Yell"}}}}], "new_memories": []}}""",
         """Example - Play after download (context-aware):
 User: "play it" (after just downloading a song)
-Response: {{"question": "play it", "reply": "Playing it now.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Playing it now.", "function_calls": [{{"function": "tars_radio", "parameters": {{"action": "play"}}}}], "new_memories": []}}""",
     ],
 }
 
@@ -256,6 +257,13 @@ class MusicPlayer:
         self._now_playing = track_meta or {"name": Path(track_path).stem, "_path": track_path}
         self._playing.set()
 
+        # Signal STT that speaker is active so recording loops abort
+        try:
+            from modules.module_tts import set_speaker_active, clear_speaker_active
+        except ImportError:
+            set_speaker_active = clear_speaker_active = lambda: None
+
+        set_speaker_active()
         try:
             self._play_with_soundfile(track_path, gain)
         except Exception as e:
@@ -265,6 +273,7 @@ class MusicPlayer:
             except Exception as e2:
                 queue_message(f"[Radio] ffmpeg also failed: {e2}")
         finally:
+            clear_speaker_active()
             self._playing.clear()
             self._now_playing = None
 
@@ -296,7 +305,7 @@ class MusicPlayer:
                     # Duck for TTS or active voice interaction
                     if self._should_duck():
                         stream.stop()
-                        self._wait_for_tts()
+                        self._wait_for_standby()
                         if self._should_stop():
                             break
                         stream.start()
@@ -350,7 +359,7 @@ class MusicPlayer:
 
                 if self._should_duck():
                     stream.stop()
-                    self._wait_for_tts()
+                    self._wait_for_standby()
                     if self._should_stop():
                         break
                     stream.start()
@@ -381,9 +390,21 @@ class MusicPlayer:
 
     def pause(self):
         self._pause.set()
+        # Clear speaker flag so STT can transcribe while music is paused
+        try:
+            from modules.module_tts import clear_speaker_active
+            clear_speaker_active()
+        except Exception:
+            pass
 
     def resume(self):
         self._pause.clear()
+        # Re-signal speaker active so STT aborts during playback
+        try:
+            from modules.module_tts import set_speaker_active
+            set_speaker_active()
+        except Exception:
+            pass
 
     def is_playing(self):
         return self._playing.is_set()
@@ -391,29 +412,16 @@ class MusicPlayer:
     def get_now_playing(self):
         return self._now_playing
 
-    def _is_tts_active(self):
+    def _should_duck(self):
+        """Check if music should duck — TARS is not in STANDBY."""
         try:
-            from modules.module_tts import is_tts_playing
-            return is_tts_playing()
+            from modules.module_state import get_tars_state, TarsState
+            return get_tars_state() != TarsState.STANDBY
         except Exception:
             return False
 
-    def _is_stt_active(self):
-        """Check if STT is actively recording (wake word detected, not sleeping)."""
-        try:
-            from modules.module_stt import get_stt_manager
-            stt = get_stt_manager()
-            if stt is not None:
-                return not stt._last_status_was_sleeping
-        except Exception:
-            pass
-        return False
-
-    def _should_duck(self):
-        """Check if music should duck for TTS or active voice interaction."""
-        return self._is_tts_active() or self._is_stt_active()
-
-    def _wait_for_tts(self):
+    def _wait_for_standby(self):
+        """Block until TARS returns to STANDBY or playback is cancelled."""
         while self._should_duck() and not self._should_stop():
             time.sleep(0.1)
 
@@ -426,6 +434,8 @@ _library: MusicLibrary | None = None
 _player: MusicPlayer | None = None
 _radio_thread: threading.Thread | None = None
 _radio_cancel = threading.Event()
+_state_hook_registered = False
+_user_paused = False  # True when user explicitly said "pause"
 
 
 def _get_library() -> MusicLibrary:
@@ -443,6 +453,44 @@ def _get_player() -> MusicPlayer:
 
 
 # ===========================================================================
+# State hooks — music auto-pauses when leaving STANDBY, resumes on return
+# ===========================================================================
+
+def _on_state_change(old_state, new_state):
+    """React to TARS state transitions for music pause/resume."""
+    from modules.module_state import TarsState
+
+    player = _get_player()
+
+    if old_state == TarsState.STANDBY and new_state != TarsState.STANDBY:
+        # Leaving STANDBY (wake word detected) — pause music
+        if player.is_playing():
+            player.pause()
+            queue_message("[Radio] Music paused (left STANDBY)")
+
+    elif new_state == TarsState.STANDBY and old_state != TarsState.STANDBY:
+        # Returning to STANDBY — resume music if not user-paused
+        if _user_paused:
+            return
+        if _radio_thread is not None and _radio_thread.is_alive() and not _radio_cancel.is_set():
+            player.resume()
+            queue_message("[Radio] Music resumed (STANDBY)")
+
+
+def _register_state_hooks():
+    global _state_hook_registered
+    if _state_hook_registered:
+        return
+    try:
+        from modules.module_state import on_state_change
+        on_state_change(_on_state_change)
+        _state_hook_registered = True
+        queue_message("[Radio] Registered state hooks")
+    except Exception as e:
+        queue_message(f"[Radio] Failed to register state hooks: {e}")
+
+
+# ===========================================================================
 # Radio DJ loop
 # ===========================================================================
 
@@ -454,6 +502,16 @@ def _speak_tts(text: str):
     try:
         from modules.module_chatui import socketio
         socketio.emit("bot_message", {"message": text})
+    except Exception:
+        pass
+
+    # Show text in terminal UI
+    try:
+        from modules.module_main import ui_manager
+        from modules.module_config import load_config
+        if ui_manager:
+            character_name = load_config()['CHAR']['character_name']
+            ui_manager.update_data(character_name, text, character_name)
     except Exception:
         pass
 
@@ -498,15 +556,10 @@ def _speak_tts(text: str):
             except Exception:
                 pass
 
-        # Pause STT during playback so wake word detector doesn't hear our own voice
-        _stt = None
-        try:
-            from modules.module_stt import get_stt_manager
-            _stt = get_stt_manager()
-            if _stt:
-                _stt.pause()
-        except Exception:
-            pass
+        # Don't set TarsState here — this runs in the radio background thread
+        # and would interfere with the main voice pipeline's state machine.
+        # play_audio_chunks sets _tts_playing which causes STT recording to
+        # abort automatically.
 
         # Monkey-patch generate_tts_audio temporarily so play_audio_chunks streams to browser too
         import modules.module_tts as _tts_mod
@@ -515,12 +568,6 @@ def _speak_tts(text: str):
             asyncio.run(play_audio_chunks(text, tts_option))
         finally:
             _tts_mod.generate_tts_audio = _orig_generate
-            # Resume STT after playback
-            if _stt:
-                try:
-                    _stt.resume()
-                except Exception:
-                    pass
     except Exception as e:
         queue_message(f"[Radio] TTS failed: {e}")
 
@@ -598,6 +645,7 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
 
     player = _get_player()
     dj_intros = str(skill_config.get("dj_intros", "true")).lower() in ("true", "1", "yes")
+    shuffle = str(skill_config.get("shuffle", "true")).lower() in ("true", "1", "yes")
     gain = float(skill_config.get("music_gain", 0.8))
 
     queue_message(f"[Radio] Starting radio loop with {len(playlist)} track(s)")
@@ -609,18 +657,19 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
     except Exception:
         pass
 
-    for i, track in enumerate(playlist):
-        if _radio_cancel.is_set():
-            break
-
+    # Loop the playlist endlessly until stopped — reshuffle each cycle
+    track_index = 0
+    while not _radio_cancel.is_set():
+        track = playlist[track_index]
         track_name = track.get("name", track.get("_slug", "Unknown"))
         track_path = track.get("_path", "")
 
         if not track_path or not Path(track_path).exists():
             queue_message(f"[Radio] Skipping missing track: {track_name}")
+            track_index = (track_index + 1) % len(playlist)
             continue
 
-        queue_message(f"[Radio] Now playing ({i + 1}/{len(playlist)}): {track_name}")
+        queue_message(f"[Radio] Now playing ({track_index + 1}/{len(playlist)}): {track_name}")
 
         # Emit now playing to WebUI
         try:
@@ -628,43 +677,31 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
             socketio.emit("music_now_playing", {
                 "name": track_name,
                 "filename": track.get("filename", ""),
-                "index": i + 1,
+                "index": track_index + 1,
                 "total": len(playlist),
             })
         except Exception:
             pass
 
-        # DJ intro — pause STT so wake word detector doesn't hear our own voice
+        # DJ intro (_speak_tts uses TTS which auto-aborts STT recording)
         if dj_intros and not _radio_cancel.is_set():
-            _stt_paused = False
-            try:
-                from modules.module_stt import get_stt_manager
-                _stt = get_stt_manager()
-                if _stt:
-                    _stt.pause()
-                    _stt_paused = True
-            except Exception:
-                pass
-
             intro = _generate_dj_intro(track_name)
             queue_message(f"[Radio] DJ intro: {intro}")
             _speak_tts(intro)
 
-            # Brief settle time for mic to clear before resuming STT
-            if not _radio_cancel.is_set():
-                time.sleep(0.5)
-
-            if _stt_paused:
-                try:
-                    _stt.resume()
-                except Exception:
-                    pass
-
         if _radio_cancel.is_set():
             break
 
-        # Play the track — music ducking for STT/TTS is handled inside play_file
+        # Play the track — ducking for state changes handled inside play_file
         player.play_file(track_path, gain=gain, track_meta=track)
+
+        # Advance to next track (reshuffle when wrapping around)
+        track_index += 1
+        if track_index >= len(playlist):
+            track_index = 0
+            if shuffle and len(playlist) > 1:
+                random.shuffle(playlist)
+                queue_message("[Radio] Reshuffled playlist")
 
         # Small gap between tracks
         if not _radio_cancel.is_set():
@@ -689,10 +726,11 @@ def _radio_loop(playlist: list[dict], skill_config: dict):
 # ===========================================================================
 
 def _do_play(parameters, skill_config):
-    global _radio_thread
+    global _radio_thread, _user_paused
 
     # Stop any existing radio
     _do_stop()
+    _user_paused = False
 
     library = _get_library()
     library.scan()  # Refresh in case new files were added
@@ -721,6 +759,8 @@ def _do_play(parameters, skill_config):
     _radio_cancel.clear()
     player = _get_player()
     player._cancel.clear()  # Reset from any previous stop()
+
+    _register_state_hooks()
 
     _radio_thread = threading.Thread(
         target=_radio_loop,
@@ -751,6 +791,8 @@ def _do_skip():
 
 
 def _do_pause():
+    global _user_paused
+    _user_paused = True  # Prevent auto-resume on STANDBY
     player = _get_player()
     if player.is_playing():
         player.pause()
@@ -758,6 +800,8 @@ def _do_pause():
 
 
 def _do_resume():
+    global _user_paused
+    _user_paused = False
     player = _get_player()
     player.resume()
     return None

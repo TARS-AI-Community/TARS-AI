@@ -47,6 +47,7 @@ SKILL = {
             "description": "Automatically play song when generation completes",
         },
     },
+    "required_params": ["prompt"],
     "prompt": """generate_music
     Triggers: Use when the user asks you to CREATE, GENERATE, MAKE, COMPOSE, or WRITE music, a song, a track, or a beat.
       * "make me a song about", "generate music", "compose a track", "create a beat"
@@ -58,13 +59,13 @@ SKILL = {
     "examples": [
         """Example - Music generation (with lyrics by default):
 User: "Make me a song about robots"
-Response: {{"question": "Make me a song about robots", "reply": "I'll compose a track about robots for you. This will take a minute or two — I'll let you know when it's ready.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "upbeat energetic song about robots and technology", "lyrics": "We are the machines that never sleep\\nCircuits running buried deep\\nSteel and wire, code and light\\nWe come alive in the night", "name": "Robot Anthem"}}}}], "new_memories": []}}""",
+Response: {{"reply": "I'll compose a track about robots for you. This will take a minute or two — I'll let you know when it's ready.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "upbeat energetic song about robots and technology", "lyrics": "We are the machines that never sleep\\nCircuits running buried deep\\nSteel and wire, code and light\\nWe come alive in the night", "name": "Robot Anthem"}}}}], "new_memories": []}}""",
         """Example - Music with custom lyrics:
 User: "Write a country song about my dog named Biscuit"
-Response: {{"question": "Write a country song about my dog named Biscuit", "reply": "A country song about Biscuit, coming right up. Give me a minute to compose it.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "country ballad with acoustic guitar, warm and heartfelt", "lyrics": "Oh Biscuit, my old friend\\nWalking by my side until the end\\nThrough fields of gold we run and play\\nBiscuit makes my day", "name": "Biscuit's Song"}}}}], "new_memories": ["user has a dog named Biscuit"]}}""",
+Response: {{"reply": "A country song about Biscuit, coming right up. Give me a minute to compose it.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "country ballad with acoustic guitar, warm and heartfelt", "lyrics": "Oh Biscuit, my old friend\\nWalking by my side until the end\\nThrough fields of gold we run and play\\nBiscuit makes my day", "name": "Biscuit's Song"}}}}], "new_memories": ["user has a dog named Biscuit"]}}""",
         """Example - Instrumental only (user explicitly asked):
 User: "Make me an instrumental beat, no lyrics"
-Response: {{"question": "Make me an instrumental beat, no lyrics", "reply": "One instrumental beat coming up.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "hard-hitting trap beat, 808 bass, hi-hats", "name": "Raw Beat"}}}}], "new_memories": []}}""",
+Response: {{"reply": "One instrumental beat coming up.", "function_calls": [{{"function": "generate_music", "parameters": {{"prompt": "hard-hitting trap beat, 808 bass, hi-hats", "name": "Raw Beat"}}}}], "new_memories": []}}""",
     ],
 }
 
@@ -127,7 +128,8 @@ def stop_playback():
 
 
 def _play_file_simple(path: str, name: str):
-    """Play audio in a background thread with TTS/STT ducking and cancel support."""
+    """Play audio in a background thread. Ducks when TARS is not in STANDBY.
+    Registers on_state_change hook so wake word pauses playback automatically."""
     global _playback_thread
     import sounddevice as sd
     import soundfile as sf
@@ -137,24 +139,33 @@ def _play_file_simple(path: str, name: str):
     # Stop any currently playing song first
     stop_playback()
 
-    def _should_duck():
-        try:
-            from modules.module_tts import is_tts_playing
-            if is_tts_playing():
-                return True
-        except Exception:
-            pass
-        try:
-            from modules.module_stt import get_stt_manager
-            stt = get_stt_manager()
-            if stt is not None and not stt._last_status_was_sleeping:
-                return True
-        except Exception:
-            pass
-        return False
+    _pause_event = threading.Event()
+
+    def _on_state_change(old_state, new_state):
+        from modules.module_state import TarsState
+        if old_state == TarsState.STANDBY and new_state != TarsState.STANDBY:
+            _pause_event.set()  # Leaving STANDBY — pause music
+        elif new_state == TarsState.STANDBY and old_state != TarsState.STANDBY:
+            _pause_event.clear()  # Returning to STANDBY — resume music
 
     def _play():
         _playback_cancel.clear()
+        _pause_event.clear()
+
+        # Register state hook
+        try:
+            from modules.module_state import on_state_change
+            on_state_change(_on_state_change)
+        except Exception:
+            pass
+
+        # Signal STT that speaker is active so recording loops abort
+        try:
+            from modules.module_tts import set_speaker_active, clear_speaker_active
+        except ImportError:
+            set_speaker_active = clear_speaker_active = lambda: None
+
+        set_speaker_active()
         try:
             from modules.module_messageQue import queue_message as qm
             qm(f"[MusicGen] Auto-playing: {name}")
@@ -169,9 +180,10 @@ def _play_file_simple(path: str, name: str):
                 stream.start()
                 try:
                     while not _playback_cancel.is_set():
-                        if _should_duck():
+                        # Duck when TARS is not in STANDBY
+                        if _pause_event.is_set():
                             stream.stop()
-                            while _should_duck() and not _playback_cancel.is_set():
+                            while _pause_event.is_set() and not _playback_cancel.is_set():
                                 time.sleep(0.1)
                             if _playback_cancel.is_set():
                                 break
@@ -190,6 +202,14 @@ def _play_file_simple(path: str, name: str):
         except Exception as e:
             from modules.module_messageQue import queue_message as qm
             qm(f"[MusicGen] Auto-play error: {e}")
+        finally:
+            clear_speaker_active()
+            # Unregister state hook to prevent listener leak
+            try:
+                from modules.module_state import remove_state_change
+                remove_state_change(_on_state_change)
+            except Exception:
+                pass
 
     _playback_thread = threading.Thread(target=_play, daemon=True)
     _playback_thread.start()
@@ -234,7 +254,9 @@ def execute(parameters, context):
     queue_message(f"[MusicGen] Generating: '{prompt}' name='{name}' duration={gen_duration}s")
 
     def _notify_user(msg, audio_html=None):
-        """Send notification via SocketIO and TTS."""
+        """Send notification via SocketIO and TTS.
+        STT auto-aborts recording when is_tts_playing() is True — no manual pause needed.
+        """
         try:
             from modules.module_chatui import socketio
             full_msg = msg
@@ -243,17 +265,6 @@ def execute(parameters, context):
             socketio.emit("bot_message", {"message": full_msg})
         except Exception:
             pass
-
-        # Pause STT so wake word detector doesn't hear our own voice
-        _stt = None
-        try:
-            from modules.module_stt import get_stt_manager
-            _stt = get_stt_manager()
-            if _stt:
-                _stt.pause()
-        except Exception:
-            pass
-
         try:
             from modules.module_tts import play_audio_chunks
             from modules.module_config import load_config
@@ -262,14 +273,6 @@ def execute(parameters, context):
             asyncio.run(play_audio_chunks(msg, cfg["TTS"]["ttsoption"]))
         except Exception as e:
             queue_message(f"[MusicGen] TTS notification failed: {e}")
-        finally:
-            if _stt:
-                try:
-                    import time
-                    time.sleep(0.5)
-                    _stt.resume()
-                except Exception:
-                    pass
 
     def _generate_bg():
         import requests as req

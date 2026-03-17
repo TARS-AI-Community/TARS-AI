@@ -17,13 +17,14 @@ from modules.module_config import load_config
 
 
 class TarsState(str, Enum):
+    BOOTING = "BOOTING"
     STANDBY = "STANDBY"
     LISTENING = "LISTENING"
     THINKING = "THINKING"
     TALKING = "TALKING"
 
 
-_state: TarsState = TarsState.STANDBY
+_state: TarsState = TarsState.BOOTING
 _lock = threading.Lock()
 _listeners: List[Callable[[TarsState, TarsState], None]] = []
 
@@ -63,6 +64,15 @@ def on_state_change(callback: Callable[[TarsState, TarsState], None]) -> None:
     """Register a listener called on state changes: callback(old_state, new_state)."""
     with _lock:
         _listeners.append(callback)
+
+
+def remove_state_change(callback: Callable[[TarsState, TarsState], None]) -> None:
+    """Unregister a previously registered state change listener."""
+    with _lock:
+        try:
+            _listeners.remove(callback)
+        except ValueError:
+            pass
 
 
 # Reference to STT manager, set by app.py at startup

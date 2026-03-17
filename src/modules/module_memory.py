@@ -19,6 +19,8 @@ This license applies only to this file and does not override licenses of other f
 import os
 import json
 import requests
+import threading
+from concurrent.futures import Future
 from typing import List, Dict, Any, Optional, Set
 from datetime import datetime, timedelta
 from hyperdb import HyperDB
@@ -61,6 +63,11 @@ class MemoryManager:
 
         self.ui_manager = ui_manager
         self._dirty = False  # True when in-memory state has unflushed changes
+        self._flush_lock = threading.Lock()
+        self._prefetch_future = None  # Background embedding prefetch
+        self._prefetch_query = None
+        self._identity_manager = None  # cached identity manager (False = tried and unavailable)
+        self._speaker_id_manager = None
 
         self.init_dynamic_memory()
         self.load_initial_memory(self.initial_memory_path)
@@ -128,15 +135,30 @@ class MemoryManager:
         """Mark in-memory state as needing a flush to disk."""
         self._dirty = True
 
-    def flush(self):
-        """Write in-memory state to disk if dirty. Called by heartbeat + shutdown."""
+    def flush(self, blocking=False):
+        """Write in-memory state to disk if dirty. Called by heartbeat + shutdown.
+
+        Args:
+            blocking: If True, flush synchronously (used for shutdown).
+                      If False, flush in a background thread to avoid blocking the bot.
+        """
         if not self._dirty:
             return
-        try:
-            self.hyper_db.save(self.memory_db_path)
-            self._dirty = False
-        except Exception as e:
-            queue_message(f"ERROR: Failed to flush memory to disk: {e}")
+        if self._flush_lock.locked():
+            return  # A flush is already in progress
+
+        def _do_flush():
+            with self._flush_lock:
+                try:
+                    self.hyper_db.save(self.memory_db_path)
+                    self._dirty = False
+                except Exception as e:
+                    queue_message(f"ERROR: Failed to flush memory to disk: {e}")
+
+        if blocking:
+            _do_flush()
+        else:
+            threading.Thread(target=_do_flush, daemon=True).start()
 
     def _start_periodic_flush(self):
         """Register a recurring heartbeat task to flush memory periodically."""
@@ -284,9 +306,14 @@ class MemoryManager:
         }
         # Tag memory with current speaker and present people via identity coordinator
         try:
-            from modules.module_identity import get_identity_manager
-            im = get_identity_manager()
-            if im is not None:
+            if self._identity_manager is None:
+                try:
+                    from modules.module_identity import get_identity_manager
+                    self._identity_manager = get_identity_manager() or False
+                except Exception:
+                    self._identity_manager = False
+            im = self._identity_manager
+            if im and im is not False:
                 speaker = im.get_current_speaker()
                 if speaker is not None:
                     document["speaker"] = speaker
@@ -294,9 +321,14 @@ class MemoryManager:
                 if present:
                     document["present"] = [p["name"] for p in present]
             else:
-                from modules.module_speaker_id import get_speaker_id_manager
-                sid = get_speaker_id_manager()
-                if sid is not None:
+                if self._speaker_id_manager is None:
+                    try:
+                        from modules.module_speaker_id import get_speaker_id_manager
+                        self._speaker_id_manager = get_speaker_id_manager() or False
+                    except Exception:
+                        self._speaker_id_manager = False
+                sid = self._speaker_id_manager
+                if sid and sid is not False:
                     speaker = sid.get_current_speaker()
                     if speaker is not None:
                         document["speaker"] = speaker
@@ -306,10 +338,15 @@ class MemoryManager:
         self._mark_dirty()
 
     def _parse_timestamp(self, memory: Dict[str, Any]) -> Optional[datetime]:
+        cached = memory.get('_parsed_ts')
+        if cached is not None:
+            return cached
         try:
             timestamp_str = memory.get('timestamp', '')
             if timestamp_str:
-                return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                memory['_parsed_ts'] = dt
+                return dt
         except Exception:
             pass
         return None
@@ -326,45 +363,70 @@ class MemoryManager:
         else:
             return max(0.1, 0.5 * np.exp(-(days_old - self.recency_boost_days) / 30))
 
+    def prefetch_embedding(self, query: str):
+        """Start computing the query embedding in a background thread.
+
+        Call this as early as possible (e.g. right after STT returns) so the
+        embedding is ready by the time get_longterm_memory() needs it.
+        """
+        self._prefetch_query = query
+        future = Future()
+
+        def _compute():
+            try:
+                vec = self.hyper_db.embedding_function([query])[0]
+                future.set_result(vec)
+            except Exception as e:
+                future.set_exception(e)
+
+        self._prefetch_future = future
+        threading.Thread(target=_compute, daemon=True).start()
+
+    def _get_query_vector(self, query: str):
+        """Return query embedding, using prefetched result if available."""
+        if (self._prefetch_future is not None
+                and self._prefetch_query == query):
+            try:
+                vec = self._prefetch_future.result(timeout=10)
+                self._prefetch_future = None
+                self._prefetch_query = None
+                return vec
+            except Exception:
+                pass
+        # Fallback: compute synchronously
+        return self.hyper_db.embedding_function([query])[0]
+
     def get_related_memories(self, query: str, include_context: bool = True) -> List[Dict[str, Any]]:
         self.ui_manager.think()
 
         try:
-            results = self.hyper_db.query(
-                query,
-                top_k=self.top_k,
-                return_similarities=True
+            query_vector = self._get_query_vector(query)
+            from modules.module_hyperdb import hyper_SVM_ranking_algorithm_sort
+            ranked_results, similarities = hyper_SVM_ranking_algorithm_sort(
+                self.hyper_db.vectors, query_vector,
+                top_k=self.top_k, metric=self.hyper_db.similarity_metric
             )
-
-            if not results:
+            if not ranked_results.size:
                 return []
 
-            memory_list = self.hyper_db.dict()
+            documents = self.hyper_db.documents
+            num_docs = len(documents)
             expanded_memories = []
             seen_indices = set()
 
-            num_to_process = min(self.max_memories_to_use, len(results))
+            num_to_process = min(self.max_memories_to_use, len(ranked_results))
 
             for i in range(num_to_process):
-                if isinstance(results[i], tuple):
-                    memory = results[i][0]
-                    similarity = results[i][1] if len(results[i]) > 1 else 0.0
-                else:
-                    memory = results[i]['document']
-                    similarity = results[i].get('similarity', 0.0)
-
-                start_index = next((idx for idx, d in enumerate(memory_list) if d['document'] == memory), None)
-
-                if start_index is None:
-                    continue
+                start_index = int(ranked_results[i])
+                similarity = float(similarities[i])
 
                 if include_context:
                     context_start = max(start_index - self.context_window_size, 0)
-                    context_end = min(start_index + self.context_window_size + 1, len(memory_list))
+                    context_end = min(start_index + self.context_window_size + 1, num_docs)
 
                     for idx in range(context_start, context_end):
                         if idx not in seen_indices:
-                            mem_doc = memory_list[idx]['document']
+                            mem_doc = documents[idx]
                             recency_score = self._calculate_recency_score(mem_doc)
 
                             if idx == start_index:
@@ -382,11 +444,12 @@ class MemoryManager:
                             })
                             seen_indices.add(idx)
                 else:
-                    recency_score = self._calculate_recency_score(memory)
+                    mem_doc = documents[start_index]
+                    recency_score = self._calculate_recency_score(mem_doc)
                     combined_score = 0.7 * similarity + 0.3 * recency_score
 
                     expanded_memories.append({
-                        'document': memory,
+                        'document': mem_doc,
                         'index': start_index,
                         'similarity': similarity,
                         'recency_score': recency_score,
@@ -484,12 +547,11 @@ class MemoryManager:
 
     def get_conversation_summary(self, lookback_hours: int = 24) -> str:
         try:
-            memory_list = self.hyper_db.dict()
+            documents = self.hyper_db.documents
             cutoff_time = datetime.now() - timedelta(hours=lookback_hours)
 
             recent_topics = []
-            for entry in reversed(memory_list):
-                doc = entry['document']
+            for doc in reversed(documents):
                 timestamp = self._parse_timestamp(doc)
 
                 if timestamp and timestamp > cutoff_time:
@@ -505,18 +567,17 @@ class MemoryManager:
             return ""
 
     def get_shortterm_memories_recent(self, max_entries: int) -> List[str]:
-        memory_dict = self.hyper_db.dict()
-        return [entry['document'] for entry in memory_dict[-max_entries:]]
+        return self.hyper_db.documents[-max_entries:]
 
     def get_shortterm_memories_tokenlimit(self, token_limit: int) -> str:
         accumulated_documents = []
         accumulated_length = 0
 
-        for entry in reversed(self.hyper_db.dict()):
-            user_input = entry['document'].get('user_input', "")
-            bot_response = entry['document'].get('bot_response', "")
-            timestamp = entry['document'].get('timestamp', "")
-            speaker = entry['document'].get('speaker', "")
+        for doc in reversed(self.hyper_db.documents):
+            user_input = doc.get('user_input', "")
+            bot_response = doc.get('bot_response', "")
+            timestamp = doc.get('timestamp', "")
+            speaker = doc.get('speaker', "")
 
             if not user_input or not bot_response:
                 continue
@@ -527,7 +588,13 @@ class MemoryManager:
             # Use stored speaker name if available, otherwise fall back to {user} placeholder
             speaker_tag = speaker if (speaker and not speaker.startswith("Unknown")) else "{user}"
             text_str = f"{time_prefix}{speaker_tag}: {user_input}\n{{char}}: {bot_response}"
-            text_length = self.token_count(text_str)['length']
+            # Fast approximation (~4 chars per token) to avoid expensive encoding per entry
+            approx_tokens = len(text_str) // 4
+            # Only do exact count when we're close to the limit (within 20%)
+            if accumulated_length + approx_tokens > token_limit * 0.8:
+                text_length = self.token_count(text_str)['length']
+            else:
+                text_length = approx_tokens
 
             if accumulated_length + text_length > token_limit:
                 break
@@ -563,11 +630,31 @@ class MemoryManager:
 
             os.rename(json_file_path, os.path.splitext(json_file_path)[0] + ".loaded")
 
+    def _get_tiktoken_encoder(self):
+        """Return a cached tiktoken encoder, creating it once on first call."""
+        if hasattr(self, '_tiktoken_enc'):
+            return self._tiktoken_enc
+
+        import tiktoken
+        llm_backend = self.config['LLM']['llm_backend']
+        override_encoding_model = self.config['LLM'].get('override_encoding_model', "cl100k_base")
+
+        if llm_backend == "deepinfra":
+            self._tiktoken_enc = tiktoken.get_encoding(override_encoding_model)
+        else:
+            if llm_backend == "other":
+                model_name = self.config['LLM'].get('other_model', None) or self.config['LLM'].get('openai_model', None)
+            else:
+                model_name = self.config['LLM'].get('openai_model', None)
+            try:
+                self._tiktoken_enc = tiktoken.encoding_for_model(model_name)
+            except KeyError:
+                self._tiktoken_enc = tiktoken.get_encoding(override_encoding_model)
+
+        return self._tiktoken_enc
+
     def token_count(self, text: str) -> dict:
         llm_backend = self.config['LLM']['llm_backend']
-
-        if not hasattr(self, '_fallback_warning_logged'):
-            self._fallback_warning_logged = False
 
         if llm_backend == "grok":
             word_count = len(text.split())
@@ -576,24 +663,8 @@ class MemoryManager:
 
         elif llm_backend in ["openai", "deepinfra", "other"]:
             try:
-                import tiktoken
-                override_encoding_model = self.config['LLM'].get('override_encoding_model', "cl100k_base")
-
-                if llm_backend == "deepinfra":
-                    enc = tiktoken.get_encoding(override_encoding_model)
-                else:
-                    if llm_backend == "other":
-                        model_name = self.config['LLM'].get('other_model', None) or self.config['LLM'].get('openai_model', None)
-                    else:
-                        model_name = self.config['LLM'].get('openai_model', None)
-                    try:
-                        enc = tiktoken.encoding_for_model(model_name)
-                    except KeyError:
-                        enc = tiktoken.get_encoding(override_encoding_model)
-
-                length = {"length": len(enc.encode(text))}
-                return length
-
+                enc = self._get_tiktoken_encoder()
+                return {"length": len(enc.encode(text))}
             except Exception as e:
                 if not hasattr(self, '_token_error_logged'):
                     queue_message(f"ERROR: Failed to calculate tokens using tiktoken: {e}")

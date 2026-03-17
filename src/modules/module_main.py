@@ -79,37 +79,23 @@ def start_bt_controller_thread():
         queue_message(f"ERROR: {e}")
 
 # === Callback Functions ===
-def process_discord_message_callback(user_message):
+def process_discord_message_callback(user_message, image_b64=None):
     """
     Processes the user's message and generates a response.
 
     Parameters:
     - user_message (str): The message content sent by the user.
+    - image_b64 (str|None): Base64-encoded image data, if an image was attached.
 
     Returns:
-    - str: The bot's response.
+    - str|dict: The bot's response (dict with 'reply', 'function_calls', 'new_memories'
+                or a plain string on error).
     """
     try:
-        # Parse the user message
-        #queue_message(user_message)
-
-        match = re.match(r"<@(\d+)> ?(.*)", user_message)
-
-        if match:
-            mentioned_user_id = match.group(1)  # Extracted user ID
-            message_content = match.group(2).strip()  # Extracted message content (trim leading/trailing spaces)
-
-        #stream_text_nonblocking(f"{mentioned_user_id}: {message_content}")
-        #queue_message(message_content)
-
-        # Process the message using process_completion
-        reply = process_completion(message_content)  # Process the message
-
-        #queue_message(f"TARS: {reply}")
-        #stream_text_nonblocking(f"TARS: {reply}")
-        
+        reply = process_completion(user_message, image_b64=image_b64)
     except Exception as e:
-        queue_message(f"ERROR: {e}")
+        queue_message(f"ERROR: Discord callback: {e}")
+        reply = "Sorry, I encountered an error processing your message."
 
     return reply
 
@@ -126,7 +112,8 @@ def wake_word_callback(wake_response):
         ui_manager.deactivate_screensaver()
         character_name = CONFIG['CHAR']['character_name']
         ui_manager.update_data(character_name, wake_response, character_name)
-        set_tars_state(TarsState.TALKING)
+
+    set_tars_state(TarsState.TALKING)
 
     # Don't run barge-in on wake responses — they're too short and the mic
     # picks up TARS's own voice, causing false positives
@@ -159,6 +146,10 @@ def utterance_callback(message):
 
         user_text = message_dict['text'].strip()
 
+        # Kick off memory embedding in background so it's ready by prompt-build time
+        if memory_manager and memory_manager.long_mem_use:
+            memory_manager.prefetch_embedding(user_text)
+
         # Resolve speaker name for display (voice mode)
         # Wait for background speaker ID — returns immediately if already done
         _speaker_display = CONFIG['CHAR'].get('user_name', 'User')
@@ -166,9 +157,9 @@ def utterance_callback(message):
             from modules.module_speaker_id import get_speaker_id_manager
             sid = get_speaker_id_manager()
             if sid and sid.enabled:
-                identified = sid.wait_for_identification(timeout=1.5)
+                identified = sid.wait_for_identification(timeout=0.5)
                 if not identified:
-                    queue_message("DEBUG: Speaker ID timed out (1.5s) — using default name")
+                    queue_message("DEBUG: Speaker ID timed out (0.5s) — using default name")
             from modules.module_prompt import _get_active_user_name
             _speaker_display = _get_active_user_name(_speaker_display)
         except Exception:
@@ -186,7 +177,8 @@ def utterance_callback(message):
 
         if "shutdown pc" in user_text.lower():
             queue_message(f"SHUTDOWN: Shutting down the PC...")
-            os.system('shutdown /s /t 0')
+            import subprocess
+            subprocess.run(['shutdown', '/s', '/t', '0'], check=False)
             return
 
         set_tars_state(TarsState.THINKING)
@@ -201,8 +193,7 @@ def utterance_callback(message):
             return text.strip()
 
         def _on_first_play():
-            if ui_manager:
-                set_tars_state(TarsState.TALKING)
+            set_tars_state(TarsState.TALKING)
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text="")
 
@@ -394,8 +385,7 @@ def utterance_callback(message):
         # For preemptive results, TTS hasn't started yet — play full reply normally
         if preemptive is not None:
             reply_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', reply)
-            if ui_manager:
-                set_tars_state(TarsState.TALKING)
+            set_tars_state(TarsState.TALKING)
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=reply_clean)
             speed.start('tts')
@@ -416,9 +406,9 @@ def utterance_callback(message):
         if _followup_reply and not was_interrupted:
             followup_clean = re.sub(r'[^a-zA-Z0-9\s.,?!;:"\'-<>]', '', _followup_reply)
             # Update OpenGL UI with follow-up content
+            set_tars_state(TarsState.TALKING)
             if ui_manager:
                 ui_manager.update_streaming_data(_followup_reply)
-                set_tars_state(TarsState.TALKING)
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=followup_clean)
             speed.start('followup_tts')
@@ -452,7 +442,7 @@ def utterance_callback(message):
             from modules.module_speaker_id import get_speaker_id_manager
             sid = get_speaker_id_manager()
             if sid:
-                sid.wait_for_identification(timeout=8.0)
+                sid.wait_for_identification(timeout=2.0)
                 spk = sid.get_current_speaker()
                 if spk:
                     speaker = spk
@@ -488,25 +478,34 @@ def utterance_callback(message):
                 mem_t = llm_timings.get('prompt_memory', 0)
                 prompt_t = llm_timings.get('prompt_build', 0)
                 prompt_other = prompt_t - id_t - mem_t
-                ttft = prompt_t + llm_timings.get('llm_first_byte', 0)
-                sp.append(f"ttft({speed.fmt(ttft)})")
-                sp.append(f"identity({speed.fmt(id_t)})")
-                sp.append(f"memory({speed.fmt(mem_t)})")
-                if prompt_other > 0.001:
-                    sp.append(f"prompt_other({speed.fmt(prompt_other)})")
-                sp.append(f"llm_wait({speed.fmt(llm_timings.get('llm_first_byte', 0))})")
+                llm_first_byte = llm_timings.get('llm_first_byte', 0)
+                ttft = prompt_t + llm_first_byte
                 llm_stream_dur = llm_timings.get('llm_stream', 0)
                 token_count = llm_timings.get('token_count', 0)
+                parse_dur = llm_timings.get('parse', 0)
+                # Top-level: llm_ttft (prompt build→first LLM byte)
+                sp.append(f"llm_ttft({speed.fmt(ttft)})")
+                # Breakdown: identity, memory, other prompt, network wait
+                ttft_parts = [f"identity={speed.fmt(id_t)}", f"memory={speed.fmt(mem_t)}"]
+                if prompt_other > 0.001:
+                    ttft_parts.append(f"prompt_other={speed.fmt(prompt_other)}")
+                ttft_parts.append(f"llm_wait={speed.fmt(llm_first_byte)}")
+                sp.append(f"  [{', '.join(ttft_parts)}]")
+                # LLM streaming + parse
                 if token_count and llm_stream_dur > 0:
                     tps = token_count / llm_stream_dur
                     sp.append(f"llm_stream({speed.fmt(llm_stream_dur)}, {token_count}tok, {tps:.1f} t/s)")
                 else:
                     sp.append(f"llm_stream({speed.fmt(llm_stream_dur)})")
-                sp.append(f"llm_parse({speed.fmt(llm_timings.get('parse', 0))})")
+                sp.append(f"llm_parse({speed.fmt(parse_dur)})")
             else:
                 sp.append(f"llm_total({speed.fmt(llm_total_dur)})")
             sp.append(f"emotion({speed.fmt(emo_dur)})")
-            sp.append(f"tts({speed.fmt(pipeline.duration)})")
+            # TTS: show actual playback time; for streaming mode also show wall time
+            if preemptive is not None:
+                sp.append(f"tts({speed.fmt(pipeline.duration)})")
+            else:
+                sp.append(f"tts_play({speed.fmt(pipeline.play_time)})")
             if tools_dur:
                 sp.append(f"tools({speed.fmt(tools_dur)})")
             if followup_tts_dur:
