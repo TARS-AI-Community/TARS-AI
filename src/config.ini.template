@@ -119,9 +119,20 @@ elevenlabs_voice_id = JBFqnCBsd6RMkjVDRZzb
 elevenlabs_model = eleven_multilingual_v2
 # OpenAI TTS voice: alloy | echo | fable | onyx | nova | shimmer
 openai_voice = onyx
+# Enable multi-speaker Piper model — maps detected emotion to a speaker ID (True/False)
+piper_multispeaker = True
+# Speaker ID for each emotion (only used when piper_multispeaker = True)
+piper_speaker_joy = 0
+piper_speaker_neutral = 1
+piper_speaker_fear = 2
+piper_speaker_curiosity = 3
+piper_speaker_love = 4
+piper_speaker_sadness = 5
+piper_speaker_surprise = 6
+piper_speaker_anger = 7
 
 [EMOTION]
-# Enable emotion detection for facial expressions on display
+# Enable emotion detection
 enabled = True
 # Emotion detection method: classifier | llm
 # classifier = local HuggingFace model (~500MB RAM, 28 fine-grained emotions)
