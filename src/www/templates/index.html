@@ -40,6 +40,7 @@
       <button class="custom-tab"        id="config-tab"   data-bs-toggle="tab" data-bs-target="#config"   role="tab" aria-label="Config"><i class="bi bi-gear-fill"></i></button>
       <button class="custom-tab"        id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" role="tab" aria-label="Dashboard"><i class="bi bi-graph-up"></i></button>
       <button class="custom-tab"        id="nexus-tab"    data-bs-toggle="tab" data-bs-target="#nexus"    role="tab" aria-label="SYS"><i class="bi bi-cpu"></i></button>
+      <button class="custom-tab"        id="builder-tab"  data-bs-toggle="tab" data-bs-target="#builder"  role="tab" aria-label="Builder"><i class="bi bi-layers-fill"></i></button>
     </div>
     <div class="tab-bar-right">
       <div class="connection-indicator" id="connIndicator">
@@ -63,6 +64,7 @@
       {% include 'tabs/config.html' %}
       {% include 'tabs/dashboard.html' %}
       {% include 'tabs/sys.html' %}
+      {% include 'tabs/builder.html' %}
     </div>
   </div>
 
@@ -77,6 +79,7 @@
       <button class="mobile-nav-btn" data-tab-index="5" aria-label="Config"><i class="bi bi-gear-fill"></i><span>Config</span></button>
       <button class="mobile-nav-btn" data-tab-index="6" aria-label="Dashboard"><i class="bi bi-graph-up"></i><span>Dash</span></button>
       <button class="mobile-nav-btn" data-tab-index="7" aria-label="SYS"><i class="bi bi-cpu"></i><span>SYS</span></button>
+      <button class="mobile-nav-btn" data-tab-index="8" aria-label="Builder"><i class="bi bi-layers-fill"></i><span>Build</span></button>
     </div>
   </nav>
 
@@ -95,7 +98,7 @@
   </script>
 
   <script src="{{ url_for('static', filename='js/d3.v7.min.js') }}?v=7.4"></script>
-  <script src="{{ url_for('static', filename='js/main.js') }}?v=7.4"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=7.5"></script>
   <script src="{{ url_for('static', filename='js/particles.js') }}?v=7.4"></script>
 </body>
 </html>

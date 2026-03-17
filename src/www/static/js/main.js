@@ -2619,8 +2619,8 @@ window.showToast = function (message, type, duration) {
 
 // ── MOBILE SWIPE NAV ─────────────────────────────────────────────────────────
 (function () {
-  const TAB_IDS = ['chat', 'motion', 'body', 'emotions', 'wifi', 'config', 'dashboard', 'nexus'];
-  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'body-tab', 'emotions-tab', 'wifi-tab', 'config-tab', 'dashboard-tab', 'nexus-tab'];
+  const TAB_IDS = ['chat', 'motion', 'body', 'emotions', 'wifi', 'config', 'dashboard', 'nexus', 'builder'];
+  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'body-tab', 'emotions-tab', 'wifi-tab', 'config-tab', 'dashboard-tab', 'nexus-tab', 'builder-tab'];
   let currentIndex = 0;
   let isMobile = false;
 
@@ -4591,4 +4591,521 @@ function $(id) { return document.getElementById(id); }
       else refreshStats();  // always refresh stats strip on tab visit
     });
   }
+})();
+
+// ── Movement Builder ──────────────────────────────────────────────────────────
+(function () {
+  var DEFAULT_STEP = function () {
+    return {
+      movement: null,
+      left_height: 50, right_height: 50, left_leg: 50, right_leg: 50,
+      left_main: null, left_forearm: null, left_hand: null,
+      right_main: null, right_forearm: null, right_hand: null,
+      speed: 0.85, hold_time: 0.0
+    };
+  };
+
+  var steps = [DEFAULT_STEP()];
+  var savedSequences = {};
+  var movements = [];
+  var livePreview = false;
+  var armsPresent = false;
+  var sequencePlaying = false;
+  var confirmOverwrite = false;
+  var dragFromIndex = null;
+  var dragOverIndex = null;
+
+  function el(id) { return document.getElementById(id); }
+
+  function setFeedback(msg, isError) {
+    var fb = el('bldFeedback');
+    if (!fb) return;
+    fb.textContent = msg;
+    fb.style.color = isError ? 'var(--bs-danger)' : '';
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  function init() {
+    fetch('/get_arms_status').then(function (r) { return r.json(); }).then(function (d) {
+      armsPresent = !!d.arms_present;
+      renderSteps();
+    }).catch(function () { renderSteps(); });
+
+    fetch('/get_movements').then(function (r) { return r.json(); }).then(function (d) {
+      movements = (d.movements || [])
+        .filter(function (m) { return m.id !== 'reset_positions'; })
+        .map(function (m) { return m.id; });
+      var sel = el('bldMovementSelect');
+      if (sel) {
+        sel.innerHTML = '';
+        movements.forEach(function (id) {
+          var opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = id;
+          sel.appendChild(opt);
+        });
+      }
+    }).catch(function () {});
+
+    loadSavedSequences();
+
+    var liveBtn = el('bldLiveToggle');
+    if (liveBtn) {
+      liveBtn.addEventListener('click', function () {
+        livePreview = !livePreview;
+        liveBtn.textContent = livePreview ? 'Live: ON' : 'Live: OFF';
+        liveBtn.classList.toggle('active', livePreview);
+      });
+    }
+    if (el('bldAddPosition')) el('bldAddPosition').addEventListener('click', addPositionStep);
+    if (el('bldAddMovement')) el('bldAddMovement').addEventListener('click', addMovementStep);
+    if (el('bldImportMovement')) el('bldImportMovement').addEventListener('click', importMovement);
+    if (el('bldPlay')) el('bldPlay').addEventListener('click', playSequence);
+    if (el('bldNeutral')) el('bldNeutral').addEventListener('click', resetToNeutral);
+    if (el('bldSave')) el('bldSave').addEventListener('click', saveSequence);
+    if (el('bldClear')) el('bldClear').addEventListener('click', clearSteps);
+  }
+
+  // ── Step management ───────────────────────────────────────────────────────
+
+  function addPositionStep() {
+    steps.push(DEFAULT_STEP());
+    renderSteps();
+  }
+
+  function addMovementStep() {
+    var sel = el('bldMovementSelect');
+    var name = sel ? sel.value : '';
+    if (!name) return;
+    steps.push({ movement: name, hold_time: 0.0 });
+    renderSteps();
+  }
+
+  function deleteStep(i) {
+    steps.splice(i, 1);
+    renderSteps();
+  }
+
+  function clearSteps() {
+    steps = [DEFAULT_STEP()];
+    var nameEl = el('bldSeqName');
+    if (nameEl) nameEl.value = '';
+    confirmOverwrite = false;
+    el('bldOverwriteConfirm') && (el('bldOverwriteConfirm').style.display = 'none');
+    setFeedback('');
+    renderSteps();
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  function renderSteps() {
+    var container = el('bldStepList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    steps.forEach(function (step, i) {
+      var wrapper = document.createElement('div');
+      wrapper.className = 'bld-step';
+      wrapper.draggable = true;
+      wrapper.dataset.index = i;
+
+      wrapper.addEventListener('dragstart', function (e) {
+        if (dragFromIndex === null) { e.preventDefault(); return; }
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      wrapper.addEventListener('dragend', function () { dragFromIndex = null; renderSteps(); });
+      wrapper.addEventListener('dragover', function (e) { e.preventDefault(); dragOverIndex = i; });
+      wrapper.addEventListener('drop', function () {
+        if (dragFromIndex !== null && dragFromIndex !== i) {
+          var moved = steps.splice(dragFromIndex, 1)[0];
+          steps.splice(i, 0, moved);
+          renderSteps();
+        }
+        dragFromIndex = null;
+      });
+
+      var label = document.createElement('div');
+      label.className = 'bld-step-label';
+      label.textContent = 'Step ' + (i + 1);
+      wrapper.appendChild(label);
+
+      if (step.movement) {
+        wrapper.appendChild(buildMovementRow(step, i));
+      } else {
+        wrapper.appendChild(buildPositionRow(step, i));
+      }
+
+      container.appendChild(wrapper);
+    });
+  }
+
+  function buildMovementRow(step, i) {
+    var row = document.createElement('div');
+    row.className = 'bld-row bld-movement-row';
+
+    var grip = document.createElement('span');
+    grip.className = 'bld-grip';
+    grip.textContent = '⠿';
+    grip.addEventListener('pointerdown', function () { dragFromIndex = i; });
+    row.appendChild(grip);
+
+    var icon = document.createElement('span');
+    icon.className = 'bld-zap';
+    icon.textContent = '⚡';
+    row.appendChild(icon);
+
+    var name = document.createElement('span');
+    name.className = 'bld-movement-name';
+    name.textContent = step.movement;
+    row.appendChild(name);
+
+    var del = document.createElement('button');
+    del.className = 'bld-del';
+    del.textContent = '×';
+    del.addEventListener('click', function () { deleteStep(i); });
+    row.appendChild(del);
+
+    return row;
+  }
+
+  function buildPositionRow(step, i) {
+    var row = document.createElement('div');
+    row.className = 'bld-row bld-position-row';
+
+    var grip = document.createElement('span');
+    grip.className = 'bld-grip';
+    grip.textContent = '⠿';
+    grip.addEventListener('pointerdown', function () { dragFromIndex = i; });
+    row.appendChild(grip);
+
+    var sliders = document.createElement('div');
+    sliders.className = 'bld-sliders';
+
+    var legFields = [
+      { field: 'left_height', label: 'LH', min: 1, max: 100, step: 1 },
+      { field: 'right_height', label: 'RH', min: 1, max: 100, step: 1 },
+      { field: 'left_leg', label: 'LL', min: 1, max: 100, step: 1 },
+      { field: 'right_leg', label: 'RL', min: 1, max: 100, step: 1 },
+      { field: 'speed', label: 'Spd', min: 0.1, max: 1.0, step: 0.05 },
+      { field: 'hold_time', label: 'Hold', min: 0, max: 5, step: 0.1 }
+    ];
+
+    legFields.forEach(function (cfg) {
+      sliders.appendChild(buildSlider(step, i, cfg, true));
+    });
+
+    if (armsPresent) {
+      var armToggle = document.createElement('button');
+      armToggle.className = 'bld-arm-toggle';
+      armToggle.textContent = 'Arms ▾';
+      var armSection = document.createElement('div');
+      armSection.className = 'bld-arm-section';
+      armSection.style.display = 'none';
+      armToggle.addEventListener('click', function () {
+        var open = armSection.style.display !== 'none';
+        armSection.style.display = open ? 'none' : '';
+        armToggle.textContent = open ? 'Arms ▾' : 'Arms ▴';
+      });
+
+      var armFields = [
+        { field: 'left_main', label: 'LM', min: 1, max: 100, step: 1 },
+        { field: 'left_forearm', label: 'LF', min: 1, max: 100, step: 1 },
+        { field: 'left_hand', label: 'LH2', min: 1, max: 100, step: 1 },
+        { field: 'right_main', label: 'RM', min: 1, max: 100, step: 1 },
+        { field: 'right_forearm', label: 'RF', min: 1, max: 100, step: 1 },
+        { field: 'right_hand', label: 'RH2', min: 1, max: 100, step: 1 }
+      ];
+      armFields.forEach(function (cfg) {
+        armSection.appendChild(buildSlider(step, i, cfg, false));
+      });
+
+      sliders.appendChild(armToggle);
+      sliders.appendChild(armSection);
+    }
+
+    row.appendChild(sliders);
+
+    var del = document.createElement('button');
+    del.className = 'bld-del';
+    del.textContent = '×';
+    del.addEventListener('click', function () { deleteStep(i); });
+    row.appendChild(del);
+
+    return row;
+  }
+
+  function buildSlider(step, stepIndex, cfg, liveEnabled) {
+    var wrap = document.createElement('div');
+    wrap.className = 'bld-slider-wrap';
+
+    var header = document.createElement('div');
+    header.className = 'bld-slider-header';
+
+    var labelEl = document.createElement('span');
+    labelEl.textContent = cfg.label;
+
+    var valEl = document.createElement('span');
+    valEl.className = 'bld-slider-val';
+    var rawVal = step[cfg.field];
+    if (rawVal === null || rawVal === undefined) rawVal = 1;
+    valEl.textContent = cfg.field === 'speed' ? rawVal.toFixed(2)
+      : cfg.field === 'hold_time' ? rawVal.toFixed(1)
+      : rawVal;
+
+    header.appendChild(labelEl);
+    header.appendChild(valEl);
+
+    var input = document.createElement('input');
+    input.type = 'range';
+    input.min = cfg.min;
+    input.max = cfg.max;
+    input.step = cfg.step;
+    input.value = rawVal;
+    input.className = 'bld-slider';
+
+    input.addEventListener('input', function () {
+      var v = cfg.field === 'speed' || cfg.field === 'hold_time'
+        ? parseFloat(this.value)
+        : parseInt(this.value);
+      steps[stepIndex][cfg.field] = v;
+      valEl.textContent = cfg.field === 'speed' ? v.toFixed(2)
+        : cfg.field === 'hold_time' ? v.toFixed(1)
+        : v;
+    });
+
+    if (liveEnabled && cfg.field !== 'hold_time') {
+      var sendLive = function () {
+        if (!livePreview) return;
+        var s = steps[stepIndex];
+        if (s.movement) return;
+        fetch('/move_legs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            left_height: s.left_height, right_height: s.right_height,
+            left_leg: s.left_leg, right_leg: s.right_leg, speed: s.speed
+          })
+        }).catch(function () {});
+      };
+      input.addEventListener('mouseup', sendLive);
+      input.addEventListener('touchend', sendLive);
+    }
+
+    wrap.appendChild(header);
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  // ── Playback ──────────────────────────────────────────────────────────────
+
+  function playSequence() {
+    if (sequencePlaying) return;
+    sequencePlaying = true;
+    setFeedback('Playing...');
+    var playBtn = el('bldPlay');
+    if (playBtn) playBtn.disabled = true;
+
+    fetch('/play_sequence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ steps: steps })
+    }).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+    }).then(function (res) {
+      setFeedback(res.ok ? 'Sequence complete.' : ('Error: ' + (res.d.error || 'failed')), !res.ok);
+    }).catch(function (err) {
+      setFeedback('Error: ' + err.message, true);
+    }).finally(function () {
+      sequencePlaying = false;
+      if (playBtn) playBtn.disabled = false;
+    });
+  }
+
+  function resetToNeutral() {
+    fetch('/move_legs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ left_height: 50, right_height: 50, left_leg: 50, right_leg: 50, speed: 0.8 })
+    }).catch(function () {});
+  }
+
+  // ── Save / Load ───────────────────────────────────────────────────────────
+
+  function loadSavedSequences() {
+    fetch('/get_saved_sequences').then(function (r) { return r.json(); }).then(function (d) {
+      savedSequences = d;
+      renderSaved();
+    }).catch(function () {});
+  }
+
+  function saveSequence() {
+    var nameEl = el('bldSeqName');
+    var name = nameEl ? nameEl.value.trim() : '';
+    if (!name) { setFeedback('Enter a name before saving.', true); return; }
+
+    if (savedSequences[name] && !confirmOverwrite) {
+      confirmOverwrite = true;
+      var conf = el('bldOverwriteConfirm');
+      if (conf) {
+        conf.style.display = '';
+        var confMsg = conf.querySelector('.bld-confirm-msg');
+        if (confMsg) confMsg.textContent = '"' + name + '" already exists. Replace?';
+      }
+      return;
+    }
+    confirmOverwrite = false;
+    var conf2 = el('bldOverwriteConfirm');
+    if (conf2) conf2.style.display = 'none';
+
+    var typeEl = el('bldSeqType');
+    var quickEl = el('bldSeqQuick');
+    var seqType = typeEl ? typeEl.value : 'movement';
+    var quick = quickEl ? quickEl.checked : false;
+
+    fetch('/save_sequence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, steps: steps, type: seqType, quick: quick })
+    }).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+    }).then(function (res) {
+      if (res.ok) {
+        setFeedback('Saved "' + name + '"');
+        if (nameEl) nameEl.value = '';
+        loadSavedSequences();
+      } else {
+        setFeedback('Save failed.', true);
+      }
+    }).catch(function (err) {
+      setFeedback('Error: ' + err.message, true);
+    });
+  }
+
+  function playSaved(name) {
+    if (sequencePlaying) return;
+    sequencePlaying = true;
+    setFeedback('Playing "' + name + '"...');
+    fetch('/play_saved_sequence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name })
+    }).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+    }).then(function (res) {
+      setFeedback(res.ok ? '"' + name + '" complete.' : ('Error: ' + (res.d.error || 'failed')), !res.ok);
+    }).catch(function (err) {
+      setFeedback('Error: ' + err.message, true);
+    }).finally(function () { sequencePlaying = false; });
+  }
+
+  function loadIntoEditor(name) {
+    var entry = savedSequences[name];
+    if (!entry) return;
+    var raw = Array.isArray(entry) ? entry : (entry.steps || []);
+    steps = raw.map(function (s) {
+      if (s.movement) return { movement: s.movement, hold_time: s.hold_time || 0 };
+      return {
+        movement: null,
+        left_height: s.left_height || 50, right_height: s.right_height || 50,
+        left_leg: s.left_leg || 50, right_leg: s.right_leg || 50,
+        left_main: s.left_main || null, left_forearm: s.left_forearm || null,
+        left_hand: s.left_hand || null, right_main: s.right_main || null,
+        right_forearm: s.right_forearm || null, right_hand: s.right_hand || null,
+        speed: s.speed || 0.85, hold_time: s.hold_time || 0
+      };
+    });
+    var nameEl = el('bldSeqName');
+    if (nameEl) nameEl.value = name;
+    var typeEl = el('bldSeqType');
+    if (typeEl && entry.type) typeEl.value = entry.type;
+    setFeedback('Loaded "' + name + '"');
+    renderSteps();
+  }
+
+  function deleteSaved(name) {
+    fetch('/delete_saved_sequence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name })
+    }).then(function () { loadSavedSequences(); }).catch(function () {});
+  }
+
+  function importMovement() {
+    var sel = el('bldMovementSelect');
+    var name = sel ? sel.value : '';
+    if (!name) return;
+    setFeedback('Importing "' + name + '"...');
+    fetch('/get_movement_steps/' + encodeURIComponent(name))
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          steps = res.d.steps;
+          var nameEl = el('bldSeqName');
+          if (nameEl) nameEl.value = '';
+          setFeedback('Imported "' + name + '" — edit then save under a new name');
+          renderSteps();
+        } else {
+          setFeedback('Import failed: ' + (res.d.error || 'unknown'), true);
+        }
+      }).catch(function (err) {
+        setFeedback('Error: ' + err.message, true);
+      });
+  }
+
+  function renderSaved() {
+    var container = el('bldSavedList');
+    if (!container) return;
+    var names = Object.keys(savedSequences);
+    if (names.length === 0) {
+      container.innerHTML = '<span class="bld-empty">No saved sequences.</span>';
+      return;
+    }
+    container.innerHTML = '';
+    names.forEach(function (name) {
+      var chip = document.createElement('div');
+      chip.className = 'bld-chip';
+
+      var playBtn = document.createElement('button');
+      playBtn.className = 'bld-chip-play';
+      playBtn.textContent = name;
+      playBtn.title = 'Play';
+      playBtn.addEventListener('click', function () { playSaved(name); });
+
+      var editBtn = document.createElement('button');
+      editBtn.className = 'bld-chip-edit';
+      editBtn.textContent = '✎';
+      editBtn.title = 'Load into editor';
+      editBtn.addEventListener('click', function () { loadIntoEditor(name); });
+
+      var delBtn = document.createElement('button');
+      delBtn.className = 'bld-chip-del';
+      delBtn.textContent = '×';
+      delBtn.title = 'Delete';
+      delBtn.addEventListener('click', function () { deleteSaved(name); });
+
+      chip.appendChild(playBtn);
+      chip.appendChild(editBtn);
+      chip.appendChild(delBtn);
+      container.appendChild(chip);
+    });
+  }
+
+  // ── Overwrite confirm cancel ───────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', function () {
+    var cancelBtn = el('bldOverwriteCancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', function () {
+      confirmOverwrite = false;
+      var conf = el('bldOverwriteConfirm');
+      if (conf) conf.style.display = 'none';
+    });
+    var replaceBtn = el('bldOverwriteReplace');
+    if (replaceBtn) replaceBtn.addEventListener('click', function () {
+      confirmOverwrite = true;
+      saveSequence();
+    });
+  });
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', init);
 })();
