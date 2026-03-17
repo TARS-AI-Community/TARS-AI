@@ -1,8 +1,8 @@
 {
-    "dataset": "training",
+    "dataset": "TARS_TrainingData",
     "audio": {
         "sample_rate": 22050,
-        "quality": "train-me"
+        "quality": "dataprep_train"
     },
     "espeak": {
         "voice": "en"
@@ -491,7 +491,16 @@
         ]
     },
     "num_symbols": 256,
-    "num_speakers": 1,
-    "speaker_id_map": {},
+    "num_speakers": 8,
+    "speaker_id_map": {
+        "fear": 0,
+        "joy": 1,
+        "love": 2,
+        "neutral": 3,
+        "sadness": 4,
+        "surprise": 5,
+        "curiosity": 6,
+        "anger": 7
+    },
     "piper_version": "1.0.0"
 }
