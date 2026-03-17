@@ -4,6 +4,7 @@ import threading
 
 SKILL = {
     "name": "execute_movement",
+    "required_params": ["movements"],
     "description": "Perform physical movements and gestures",
     "prompt": """execute_movement
    Triggers: Use ONLY when user explicitly commands movement
@@ -20,7 +21,7 @@ SKILL = {
     "examples": [
         """Example - Movement command:
 User: "Walk forward and then turn left"
-Response: {{"question": "Walk forward and then turn left", "reply": "Moving now.", "function_calls": [{{"function": "execute_movement", "parameters": {{"movements": ["forward", "left"]}}}}], "new_memories": []}}""",
+Response: {{"reply": "Moving now.", "function_calls": [{{"function": "execute_movement", "parameters": {{"movements": ["forward", "left"]}}}}], "new_memories": []}}""",
     ],
 }
 

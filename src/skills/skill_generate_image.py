@@ -105,6 +105,7 @@ SKILL = {
             "depends_on": {"field": "service", "values": ["comfyui"]},
         },
     },
+    "required_params": ["prompt"],
     "prompt": """generate_image
     Triggers: Use when the user asks you to CREATE, GENERATE, DRAW, or MAKE an image/picture/photo/artwork.
       * "generate a photo of", "draw me a", "create an image of", "make a picture of"
@@ -115,10 +116,10 @@ SKILL = {
     "examples": [
         """Example - Image generation (NOT adjust_persona):
 User: "Can you generate a photo of a puppy?"
-Response: {{"question": "Can you generate a photo of a puppy?", "reply": "On it \u2014 generating your image now.", "function_calls": [{{"function": "generate_image", "parameters": {{"prompt": "a cute puppy playing in a sunny meadow, photorealistic"}}}}], "new_memories": []}}""",
+Response: {{"reply": "On it \u2014 generating your image now.", "function_calls": [{{"function": "generate_image", "parameters": {{"prompt": "a cute puppy playing in a sunny meadow, photorealistic"}}}}], "new_memories": []}}""",
         """Example - Image generation (NOT adjust_persona, even with "make"):
 User: "Make me a picture of a sunset over the ocean"
-Response: {{"question": "Make me a picture of a sunset over the ocean", "reply": "On it \u2014 generating your image now.", "function_calls": [{{"function": "generate_image", "parameters": {{"prompt": "a beautiful sunset over the ocean, golden hour, photorealistic"}}}}], "new_memories": []}}""",
+Response: {{"reply": "On it \u2014 generating your image now.", "function_calls": [{{"function": "generate_image", "parameters": {{"prompt": "a beautiful sunset over the ocean, golden hour, photorealistic"}}}}], "new_memories": []}}""",
     ],
 }
 

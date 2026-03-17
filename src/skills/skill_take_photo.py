@@ -19,7 +19,7 @@ SKILL = {
     "examples": [
         """Example - Take photo (single turn - call function immediately):
 User: "Take a photo of me"
-Response: {{"question": "Take a photo of me", "reply": "Say cheese! 3, 2, 1!", "function_calls": [{{"function": "take_photo", "parameters": {{}}}}], "new_memories": []}}""",
+Response: {{"reply": "Say cheese! 3, 2, 1!", "function_calls": [{{"function": "take_photo", "parameters": {{}}}}], "new_memories": []}}""",
     ],
 }
 

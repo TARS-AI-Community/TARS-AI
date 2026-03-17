@@ -2,6 +2,7 @@
 
 SKILL = {
     "name": "identify_speaker_name",
+    "required_params": ["name"],
     "description": "Identify and remember who is speaking",
     "prompt": """identify_speaker_name
     Triggers: ONLY when someone explicitly tells you their name AND either:
@@ -16,7 +17,7 @@ SKILL = {
     "examples": [
         """Example - Speaker introduction:
 User: "My name is Joe"
-Response: {{"question": "My name is Joe", "reply": "Nice to meet you, Joe! I'll remember your voice.", "function_calls": [{{"function": "identify_speaker_name", "parameters": {{"name": "Joe"}}}}], "new_memories": []}}""",
+Response: {{"reply": "Nice to meet you, Joe! I'll remember your voice.", "function_calls": [{{"function": "identify_speaker_name", "parameters": {{"name": "Joe"}}}}], "new_memories": []}}""",
     ],
 }
 
