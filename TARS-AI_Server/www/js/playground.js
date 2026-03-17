@@ -190,6 +190,11 @@ fetch(base+'/api/settings').then(function(r){return r.json()}).then(function(d){
     if(d.musicgen.default_duration)document.getElementById('mus-duration').value=d.musicgen.default_duration;
     if(d.musicgen.default_steps)document.getElementById('mus-steps').value=d.musicgen.default_steps;
     if(d.musicgen.default_cfg)document.getElementById('mus-cfg').value=d.musicgen.default_cfg;
+    if(d.musicgen.default_scheduler)document.getElementById('mus-scheduler').value=d.musicgen.default_scheduler;
+    if(d.musicgen.default_cfg_type)document.getElementById('mus-cfg-type').value=d.musicgen.default_cfg_type;
+    if(d.musicgen.default_omega_scale)document.getElementById('mus-omega').value=d.musicgen.default_omega_scale;
+    if(d.musicgen.default_guidance_interval)document.getElementById('mus-guid-interval').value=d.musicgen.default_guidance_interval;
+    if(d.musicgen.default_min_guidance)document.getElementById('mus-min-guid').value=d.musicgen.default_min_guidance;
   }
 }).catch(function(){});
 (function(){
@@ -350,6 +355,13 @@ async function generateMusic(){
   var steps=parseInt(document.getElementById('mus-steps').value)||60;
   var cfg=parseFloat(document.getElementById('mus-cfg').value)||15.0;
   var seed=parseInt(document.getElementById('mus-seed').value);
+  var schedulerType=document.getElementById('mus-scheduler').value;
+  var cfgType=document.getElementById('mus-cfg-type').value;
+  var omegaScale=parseFloat(document.getElementById('mus-omega').value)||10.0;
+  var guidInterval=parseFloat(document.getElementById('mus-guid-interval').value);
+  if(isNaN(guidInterval))guidInterval=0.5;
+  var minGuid=parseFloat(document.getElementById('mus-min-guid').value)||3.0;
+  var batchSize=parseInt(document.getElementById('mus-batch').value)||1;
   var taskId=_uid();
   var btn=document.getElementById('mus-gen-btn');
   btn.disabled=true;btn.style.opacity='0.5';
@@ -374,18 +386,33 @@ async function generateMusic(){
   },500);
   try{
     var resp=await fetch(base+'/generate_music',{method:'POST',headers:hdr(),
-      body:JSON.stringify({prompt:prompt,lyrics:lyrics,duration:duration,steps:steps,guidance_scale:cfg,seed:isNaN(seed)?-1:seed,task_id:taskId})});
+      body:JSON.stringify({prompt:prompt,lyrics:lyrics,duration:duration,steps:steps,guidance_scale:cfg,seed:isNaN(seed)?-1:seed,task_id:taskId,scheduler_type:schedulerType,cfg_type:cfgType,omega_scale:omegaScale,guidance_interval:guidInterval,min_guidance_scale:minGuid,batch_size:batchSize})});
     done=true;clearInterval(poll);
     bar.style.width='100%';pctEl.textContent='100%';lbl.textContent='Complete';
     if(!resp.ok){document.getElementById('mus-out').textContent='Error: '+resp.status+' '+resp.statusText;setTimeout(function(){wrap.style.display='none'},2000);return}
-    var blob=await resp.blob();var url=URL.createObjectURL(blob);
     var playerDiv=document.getElementById('mus-player');
     playerDiv.style.display='block';
     _stopActiveMusic();
-    var audio=createPlayer(playerDiv,url,false);
-    _activeMusAudio=audio;
-    audio.play();
-    document.getElementById('mus-out').textContent='Done.';
+    var ct=resp.headers.get('content-type')||'';
+    if(ct.indexOf('json')!==-1){
+      // Batch response — files saved to gallery
+      var data=await resp.json();
+      document.getElementById('mus-out').textContent='Done — '+data.count+' tracks generated.';
+      playerDiv.innerHTML='';
+      // Play first track from gallery
+      if(data.filenames&&data.filenames.length>0){
+        var audio=createPlayer(playerDiv,base+'/musicgen_gallery/file/'+data.filenames[0],false);
+        _activeMusAudio=audio;
+        audio.play();
+      }
+    }else{
+      // Single audio stream (batch=1)
+      var blob=await resp.blob();var url=URL.createObjectURL(blob);
+      var audio=createPlayer(playerDiv,url,false);
+      _activeMusAudio=audio;
+      audio.play();
+      document.getElementById('mus-out').textContent='Done.';
+    }
     setTimeout(function(){wrap.style.display='none'},2000);
     loadMusicGallery();
   }catch(e){done=true;clearInterval(poll);wrap.style.display='none';document.getElementById('mus-out').textContent='Error: '+e}

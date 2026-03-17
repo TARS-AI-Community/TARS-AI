@@ -85,27 +85,50 @@
   <div id="img-preview-wrap" style="display:none;text-align:center;margin-top:12px"><img id="img-preview" style="max-width:100%;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
   <div id="img-gallery" style="margin-top:12px"></div>
 </div></div>
-<div id="p-mus" class="panel"><div class="glass">
-  <label>Style / Genre prompt</label>
-  <textarea id="mus-prompt" placeholder="Describe the music style... e.g. 'upbeat electronic dance music with a catchy melody'" style="height:60px"></textarea>
-  <label>Lyrics <span style="opacity:.5;font-weight:400;text-transform:none;letter-spacing:0">(leave empty for instrumental, use [verse] [chorus] [bridge] tags)</span></label>
-  <textarea id="mus-lyrics" placeholder="[verse]&#10;Your lyrics here...&#10;&#10;[chorus]&#10;Chorus lyrics here..." style="height:120px"></textarea>
-  <div class="img-params" style="grid-template-columns:repeat(4,1fr)">
-    <div><label>Duration (sec)</label><input type="number" id="mus-duration" value="60" min="10" max="600" step="5"></div>
-    <div><label>Steps</label><input type="number" id="mus-steps" value="60" min="10" max="150" step="1"></div>
-    <div><label>CFG</label><input type="number" id="mus-cfg" value="15.0" min="1" max="30" step="0.5"></div>
-    <div><label>Seed</label><input type="number" id="mus-seed" value="-1" min="-1" placeholder="-1"></div>
+<div id="p-mus" class="panel"><div class="glass" style="display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border)">
+    <span style="font-family:var(--font-hud);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim)">Music Generation</span>
+    <span id="mus-status" style="font-family:var(--font-hud);font-size:10px;letter-spacing:.1em;color:var(--text-dim)"></span>
   </div>
-  <div style="display:flex;gap:8px;align-items:stretch;margin:6px 0">
-    <button class="hud-btn" id="mus-gen-btn" onclick="generateMusic()" style="margin:0;white-space:nowrap">Generate</button>
-    <div id="mus-out" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(0,229,255,0.1);border-radius:var(--radius-sm);padding:0 12px;display:flex;align-items:center;font-size:12px;color:var(--text-dim);min-height:0">Enter a prompt and click Generate.</div>
+  <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+    <div>
+      <label style="margin-top:0">Style / Genre</label>
+      <textarea id="mus-prompt" placeholder="Describe the music style... e.g. 'upbeat electronic dance music with a catchy melody'" style="height:60px;margin-bottom:0"></textarea>
+    </div>
+    <div>
+      <label style="margin-top:0">Lyrics <span style="opacity:.5;font-weight:400;text-transform:none;letter-spacing:0">(leave empty for instrumental, use [verse] [chorus] [bridge] tags)</span></label>
+      <textarea id="mus-lyrics" placeholder="[verse]&#10;Your lyrics here...&#10;&#10;[chorus]&#10;Chorus lyrics here..." style="height:100px;margin-bottom:0"></textarea>
+    </div>
+    <div class="mus-params-section">
+      <div class="mus-params-row">
+        <div><label style="margin-top:0">Duration (sec)</label><input type="number" id="mus-duration" value="60" min="10" max="600" step="5"></div>
+        <div><label style="margin-top:0">Steps</label><input type="number" id="mus-steps" value="60" min="10" max="150" step="1"></div>
+        <div><label style="margin-top:0">CFG</label><input type="number" id="mus-cfg" value="15.0" min="1" max="30" step="0.5"></div>
+        <div><label style="margin-top:0">Seed</label><input type="number" id="mus-seed" value="-1" min="-1" placeholder="-1"></div>
+        <div><label style="margin-top:0">Batch Size</label><input type="number" id="mus-batch" value="1" min="1" max="16" step="1"></div>
+      </div>
+      <details class="mus-advanced">
+        <summary>Advanced Settings</summary>
+        <div class="mus-params-row" style="margin-top:10px">
+          <div><label style="margin-top:0">Scheduler</label><select id="mus-scheduler"><option value="euler" selected>Euler</option><option value="heun">Heun</option><option value="pingpong">PingPong</option></select></div>
+          <div><label style="margin-top:0">CFG Type</label><select id="mus-cfg-type"><option value="apg" selected>APG</option><option value="cfg">CFG</option><option value="cfg_star">CFG Star</option></select></div>
+          <div><label style="margin-top:0">Omega Scale</label><input type="number" id="mus-omega" value="10.0" min="0" max="100" step="0.5"></div>
+          <div><label style="margin-top:0">Guidance Interval</label><input type="number" id="mus-guid-interval" value="0.5" min="0" max="1" step="0.05"></div>
+          <div><label style="margin-top:0">Min Guidance</label><input type="number" id="mus-min-guid" value="3.0" min="0" max="30" step="0.5"></div>
+        </div>
+      </details>
+    </div>
+    <div style="display:flex;gap:8px;align-items:stretch">
+      <button class="hud-btn" id="mus-gen-btn" onclick="generateMusic()" style="margin:0;white-space:nowrap;height:42px;padding:0 24px;flex-shrink:0">Generate</button>
+      <div id="mus-out" style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(0,229,255,0.1);border-radius:var(--radius-sm);padding:0 12px;display:flex;align-items:center;font-size:12px;color:var(--text-dim);min-height:42px">Enter a prompt and click Generate.</div>
+    </div>
+    <div id="mus-progress-wrap" style="display:none">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px"><span id="mus-progress-label">Starting...</span><span id="mus-progress-pct">0%</span></div>
+      <div style="height:6px;background:rgba(0,229,255,0.1);border-radius:3px;overflow:hidden"><div id="mus-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#00e5ff,#7c4dff);border-radius:3px;transition:width .3s ease"></div></div>
+    </div>
+    <div id="mus-player" style="display:none"></div>
+    <div id="mus-gallery"></div>
   </div>
-  <div id="mus-progress-wrap" style="display:none;margin:8px 0">
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px"><span id="mus-progress-label">Starting...</span><span id="mus-progress-pct">0%</span></div>
-    <div style="height:6px;background:rgba(0,229,255,0.1);border-radius:3px;overflow:hidden"><div id="mus-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#00e5ff,#7c4dff);border-radius:3px;transition:width .3s ease"></div></div>
-  </div>
-  <div id="mus-player" style="display:none;margin-top:10px"></div>
-  <div id="mus-gallery" style="margin-top:12px"></div>
 </div></div>
 <div style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap">
   <a href="/" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:8px 16px;background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.2);border-radius:8px;color:#00e5ff;text-decoration:none">Dashboard</a>

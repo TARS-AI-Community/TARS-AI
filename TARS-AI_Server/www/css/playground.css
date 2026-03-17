@@ -87,6 +87,19 @@ img.preview{max-width:100%;max-height:400px;margin-top:12px;border:1px solid var
 .img-gallery-item .img-del:hover{opacity:1;background:rgba(255,68,68,0.2);border-color:var(--red)}
 .img-gallery-item .img-meta{position:absolute;bottom:0;left:0;right:0;padding:4px 6px;background:linear-gradient(transparent,rgba(0,0,0,0.8));font-size:9px;color:var(--text-dim);opacity:0;transition:opacity .2s;pointer-events:none}
 .img-gallery-item:hover .img-meta{opacity:1}
+.mus-params-section{background:rgba(0,0,0,0.15);border:1px solid rgba(0,229,255,0.08);border-radius:var(--radius-sm);padding:12px 14px}
+.mus-params-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.mus-params-row label{font-size:9px;margin-bottom:2px}
+.mus-params-row input,.mus-params-row select{padding:8px 10px;font-size:12px;margin:2px 0}
+.mus-advanced{margin-top:10px}
+.mus-advanced summary{font-family:var(--font-hud);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);cursor:pointer;padding:6px 0;list-style:none;display:flex;align-items:center;gap:6px;transition:color .2s;user-select:none}
+.mus-advanced summary::before{content:'\25B6';font-size:7px;transition:transform .2s;display:inline-block}
+.mus-advanced[open] summary::before{transform:rotate(90deg)}
+.mus-advanced summary:hover{color:var(--cyan)}
+.mus-advanced summary::-webkit-details-marker{display:none}
+#mus-player .tars-player{max-width:100%}
+@media(max-width:700px){.mus-params-row{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:480px){.mus-params-row{grid-template-columns:repeat(2,1fr)}}
 input[type=file]{font-family:var(--font-mono);font-size:12px;color:var(--text-dim)}
 input[type=file]::file-selector-button{font-family:var(--font-hud);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:8px 16px;border:1px solid rgba(0,229,255,0.3);border-radius:var(--radius-sm);background:rgba(0,229,255,0.06);color:var(--cyan);cursor:pointer;margin-right:10px;transition:all .2s}
 input[type=file]::file-selector-button:hover{background:rgba(0,229,255,0.12);border-color:var(--border-hi)}
