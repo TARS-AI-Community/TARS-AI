@@ -73,7 +73,27 @@ if CONFIG['TTS']['ttsoption'] == 'piper':
             queue_message("[Piper] Try re-downloading the .onnx voice model.")
             voice = None
 
-async def synthesize(voice, chunk):
+def _get_piper_speaker_id(emotion):
+    """Return speaker ID for the given emotion axis, or None if multispeaker is disabled."""
+    try:
+        if not CONFIG['TTS']['piper_multispeaker']:
+            return None
+    except (KeyError, AttributeError):
+        return None
+    # Default to neutral when no emotion detected
+    if not emotion:
+        emotion = 'neutral'
+    try:
+        return int(CONFIG['TTS'][f'piper_speaker_{emotion}'])
+    except (KeyError, AttributeError, ValueError, TypeError):
+        # Fall back to neutral if the specific emotion key doesn't exist
+        try:
+            return int(CONFIG['TTS']['piper_speaker_neutral'])
+        except (KeyError, AttributeError, ValueError, TypeError):
+            return None
+
+
+async def synthesize(voice, chunk, speaker_id=None):
     """
     Synthesize a chunk of text into a BytesIO buffer.
     """
@@ -83,6 +103,10 @@ async def synthesize(voice, chunk):
         wav_file.setsampwidth(2)  # 16-bit samples
         wav_file.setframerate(voice.config.sample_rate)
         try:
+            # Set speaker on the voice config for multispeaker models
+            if speaker_id is not None:
+                voice.config.speaker_id = speaker_id
+
             # need both methods for compatibility
             if hasattr(voice, "synthesize_wav"):
                 voice.synthesize_wav(chunk, wav_file)
@@ -96,13 +120,18 @@ async def synthesize(voice, chunk):
     wav_buffer.seek(0)
     return wav_buffer
 
-async def text_to_speech_with_pipelining_piper(text):
+async def text_to_speech_with_pipelining_piper(text, emotion=None):
     """
     Converts text to speech using the Piper model and streams audio as it's generated.
+    When piper_multispeaker is enabled, selects speaker based on detected emotion.
     """
     if voice is None:
         queue_message("[Piper] Cannot synthesize - voice model not loaded. Check logs for details.")
         return
+
+    speaker_id = _get_piper_speaker_id(emotion)
+    queue_message(f"DEBUG: [Piper] emotion={emotion or 'none'}, speaker_id={speaker_id}, multispeaker={CONFIG['TTS']['piper_multispeaker']}")
+
     # Split text into smaller chunks
     # Split at sentence boundaries and commas for faster first-chunk playback
     chunks = re.split(r'(?<=[.!?;])\s+|,\s+', text)
@@ -117,5 +146,5 @@ async def text_to_speech_with_pipelining_piper(text):
     # Yield each audio chunk as soon as it's ready
     for chunk in chunks:
         if chunk.strip():  # Ignore empty chunks
-            wav_buffer = await synthesize(voice, chunk.strip())
+            wav_buffer = await synthesize(voice, chunk.strip(), speaker_id=speaker_id)
             yield wav_buffer  # Return the chunk for external playback

@@ -1942,6 +1942,7 @@ body::after {
 }
 .config-tag-remove:hover { background: rgba(var(--accent-rgb),0.18); color: white; }
 
+
 .config-tag-input {
   flex: 1; min-width: 100px;
   background: transparent; border: none; outline: none;

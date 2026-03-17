@@ -322,6 +322,8 @@ def utterance_callback(message):
                     update_emotion(emotion)
                 except Exception:
                     pass
+                # Update pipeline so remaining sentences use the detected emotion
+                pipeline.set_emotion(emotion)
         emo_dur = speed.stop('emotion')
 
         # Log interaction for dashboard analytics
@@ -389,7 +391,7 @@ def utterance_callback(message):
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=reply_clean)
             speed.start('tts')
-            was_interrupted = asyncio.run(play_audio_chunks(reply_clean, CONFIG['TTS']['ttsoption']))
+            was_interrupted = asyncio.run(play_audio_chunks(reply_clean, CONFIG['TTS']['ttsoption'], emotion=emotion))
             pipeline._duration = speed.stop('tts')
             if stt_manager:
                 stt_manager.stop_bargein_monitor()
@@ -412,7 +414,7 @@ def utterance_callback(message):
             if stt_manager:
                 stt_manager.start_bargein_monitor(tts_text=followup_clean)
             speed.start('followup_tts')
-            was_interrupted = asyncio.run(play_audio_chunks(followup_clean, CONFIG['TTS']['ttsoption']))
+            was_interrupted = asyncio.run(play_audio_chunks(followup_clean, CONFIG['TTS']['ttsoption'], emotion=emotion))
             followup_tts_dur = speed.stop('followup_tts')
             if stt_manager:
                 stt_manager.stop_bargein_monitor()

@@ -252,9 +252,21 @@ class TTSConfig:
     ttsurl: Optional[str] = None
     openai_voice: Optional[str] = None
     openai_api_key: Optional[str] = None
+    piper_multispeaker: bool = False
+    piper_speaker_joy: int = 0
+    piper_speaker_neutral: int = 1
+    piper_speaker_fear: int = 2
+    piper_speaker_curiosity: int = 3
+    piper_speaker_love: int = 4
+    piper_speaker_sadness: int = 5
+    piper_speaker_surprise: int = 6
+    piper_speaker_anger: int = 7
 
     def __getitem__(self, key):
         return getattr(self, key)
+
+    def get(self, key, default=None):
+        return getattr(self, key, default)
 
     def validate(self) -> bool:
         if self.ttsoption == "elevenlabs":
@@ -278,6 +290,15 @@ class TTSConfig:
             ttsurl=config_dict.get('ttsurl'),
             openai_voice=config_dict.get('openai_voice'),
             openai_api_key=config_dict.get('openai_api_key'),
+            piper_multispeaker=config_dict.get('piper_multispeaker', False),
+            piper_speaker_joy=config_dict.get('piper_speaker_joy', 0),
+            piper_speaker_neutral=config_dict.get('piper_speaker_neutral', 1),
+            piper_speaker_fear=config_dict.get('piper_speaker_fear', 2),
+            piper_speaker_curiosity=config_dict.get('piper_speaker_curiosity', 3),
+            piper_speaker_love=config_dict.get('piper_speaker_love', 4),
+            piper_speaker_sadness=config_dict.get('piper_speaker_sadness', 5),
+            piper_speaker_surprise=config_dict.get('piper_speaker_surprise', 6),
+            piper_speaker_anger=config_dict.get('piper_speaker_anger', 7),
         )
 
 
@@ -450,6 +471,15 @@ def load_config():
             "is_talking": False,
             "global_timer_paused": False,
             "openai_voice" : config['TTS']['openai_voice'],
+            "piper_multispeaker": config.getboolean('TTS', 'piper_multispeaker', fallback=False),
+            "piper_speaker_joy": config.getint('TTS', 'piper_speaker_joy', fallback=0),
+            "piper_speaker_neutral": config.getint('TTS', 'piper_speaker_neutral', fallback=1),
+            "piper_speaker_fear": config.getint('TTS', 'piper_speaker_fear', fallback=2),
+            "piper_speaker_curiosity": config.getint('TTS', 'piper_speaker_curiosity', fallback=3),
+            "piper_speaker_love": config.getint('TTS', 'piper_speaker_love', fallback=4),
+            "piper_speaker_sadness": config.getint('TTS', 'piper_speaker_sadness', fallback=5),
+            "piper_speaker_surprise": config.getint('TTS', 'piper_speaker_surprise', fallback=6),
+            "piper_speaker_anger": config.getint('TTS', 'piper_speaker_anger', fallback=7),
         }),
         "RAG": {
             "enabled": config.getboolean('RAG', 'enabled', fallback=True),
@@ -788,6 +818,51 @@ CONFIG_METADATA = {
             'depends_on': [{'field': 'ttsoption', 'values': ['openai']}],
             'options': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
             'description': 'Only matters if you are using "openai" as your TTS engine. Each voice has a different personality: "alloy" is neutral and balanced. "echo" is warm and conversational. "fable" has a British accent and is expressive. "onyx" is deep and authoritative (the best match for TARS from the movie). "nova" is friendly and upbeat. "shimmer" is clear and gentle. Try a few and see which one you like!'
+        },
+        'piper_multispeaker': {
+            'label': 'Multi-Speaker Mode',
+            'depends_on': [{'field': 'ttsoption', 'values': ['piper']}],
+            'description': 'Enable this if your Piper voice model supports multiple speakers (i.e. it was trained with multiple voices, one per emotion). When ON, TARS will automatically select the speaker that matches the detected emotion of its response. Leave OFF for standard single-speaker Piper models.'
+        },
+        'piper_speaker_joy': {
+            'label': 'Speaker ID — Joy',
+            'depends_on': [{'field': 'ttsoption', 'values': ['piper']}, {'field': 'piper_multispeaker', 'values': ['true', 'True']}],
+            'description': 'Piper speaker ID to use when TARS expresses joy. Check your model\'s .onnx.json for available speaker IDs.'
+        },
+        'piper_speaker_neutral': {
+            'label': 'Speaker ID — Neutral',
+            'depends_on': [{'field': 'ttsoption', 'values': ['piper']}, {'field': 'piper_multispeaker', 'values': ['true', 'True']}],
+            'description': 'Piper speaker ID to use for neutral responses.'
+        },
+        'piper_speaker_fear': {
+            'label': 'Speaker ID — Fear',
+            'depends_on': [{'field': 'ttsoption', 'values': ['piper']}, {'field': 'piper_multispeaker', 'values': ['true', 'True']}],
+            'description': 'Piper speaker ID to use when TARS expresses fear.'
+        },
+        'piper_speaker_curiosity': {
+            'label': 'Speaker ID — Curiosity',
+            'depends_on': [{'field': 'ttsoption', 'values': ['piper']}, {'field': 'piper_multispeaker', 'values': ['true', 'True']}],
+            'description': 'Piper speaker ID to use when TARS expresses curiosity.'
+        },
+        'piper_speaker_love': {
+            'label': 'Speaker ID — Love',
+            'depends_on': [{'field': 'ttsoption', 'values': ['piper']}, {'field': 'piper_multispeaker', 'values': ['true', 'True']}],
+            'description': 'Piper speaker ID to use when TARS expresses love.'
+        },
+        'piper_speaker_sadness': {
+            'label': 'Speaker ID — Sadness',
+            'depends_on': [{'field': 'ttsoption', 'values': ['piper']}, {'field': 'piper_multispeaker', 'values': ['true', 'True']}],
+            'description': 'Piper speaker ID to use when TARS expresses sadness.'
+        },
+        'piper_speaker_surprise': {
+            'label': 'Speaker ID — Surprise',
+            'depends_on': [{'field': 'ttsoption', 'values': ['piper']}, {'field': 'piper_multispeaker', 'values': ['true', 'True']}],
+            'description': 'Piper speaker ID to use when TARS expresses surprise.'
+        },
+        'piper_speaker_anger': {
+            'label': 'Speaker ID — Anger',
+            'depends_on': [{'field': 'ttsoption', 'values': ['piper']}, {'field': 'piper_multispeaker', 'values': ['true', 'True']}],
+            'description': 'Piper speaker ID to use when TARS expresses anger.'
         },
     },
     'EMOTION': {

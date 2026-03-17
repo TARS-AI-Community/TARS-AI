@@ -145,15 +145,15 @@ def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normal
         queue_message(f"ERROR: Error during audio playback: {e}")
 
 
-async def generate_tts_audio(text, ttsoption, is_wakeword=False, ttsurl=None, toggle_charvoice=True, tts_voice=None):
+async def generate_tts_audio(text, ttsoption, is_wakeword=False, ttsurl=None, toggle_charvoice=True, tts_voice=None, emotion=None):
     try:
         if ttsoption == "espeak" and text_to_speech_with_pipelining_espeak:
             async for chunk in text_to_speech_with_pipelining_espeak(text):
                 yield chunk
 
         elif ttsoption == "piper" and text_to_speech_with_pipelining_piper:
-            async for chunk in text_to_speech_with_pipelining_piper(text):
-                yield chunk  
+            async for chunk in text_to_speech_with_pipelining_piper(text, emotion=emotion):
+                yield chunk
 
         elif ttsoption == "elevenlabs" and text_to_speech_with_pipelining_elevenlabs:
             async for chunk in text_to_speech_with_pipelining_elevenlabs(text, is_wakeword):
@@ -258,11 +258,16 @@ class SentenceTTSPipeline:
         self._duration = 0.0
         self._play_time = 0.0   # Actual TTS synthesis+playback time (excludes queue waits)
         self._thread = None
+        self._emotion = None    # Set via set_emotion() once detected
 
     def start(self):
         """Start the TTS worker thread."""
         self._thread = threading.Thread(target=self._worker, daemon=True, name="tts-pipeline")
         self._thread.start()
+
+    def set_emotion(self, emotion):
+        """Set the emotion for multispeaker TTS. Can be called while pipeline is running."""
+        self._emotion = emotion
 
     def feed(self, text):
         """Feed visible text. Complete sentences are queued for TTS immediately."""
@@ -367,7 +372,7 @@ class SentenceTTSPipeline:
                         )
                     else:
                         was_int = loop.run_until_complete(
-                            play_audio_chunks(sentence, self._tts_option)
+                            play_audio_chunks(sentence, self._tts_option, emotion=self._emotion)
                         )
                 except Exception as e:
                     queue_message(f"ERROR: TTS pipeline failed: {e}")
@@ -386,7 +391,7 @@ class SentenceTTSPipeline:
             loop.close()
 
 
-async def play_audio_chunks(text, config, is_wakeword=False):
+async def play_audio_chunks(text, config, is_wakeword=False, emotion=None):
     if not is_wakeword:
         queue_message(f"DEBUG: TTS speaking (direct): {text}")
     _tts_cancel_event.clear()
@@ -395,7 +400,7 @@ async def play_audio_chunks(text, config, is_wakeword=False):
     was_interrupted = False
 
     async def synthesize_chunks():
-        gen = generate_tts_audio(text, config, is_wakeword).__aiter__()
+        gen = generate_tts_audio(text, config, is_wakeword, emotion=emotion).__aiter__()
         try:
             async for audio_chunk in gen:
                 if _tts_cancel_event.is_set():
