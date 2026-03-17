@@ -11,6 +11,7 @@ import sys
 import shutil
 import threading
 import time
+from pathlib import Path
 import logging
 import json
 import asyncio
@@ -2863,6 +2864,245 @@ def dashboard_prompt():
         })
     return jsonify({"interactions": items
     })
+
+
+# ── Movement Builder ─────────────────────────────────────────────────────────
+
+_SEQUENCES_FILE = Path(__file__).parent.parent / "custom_sequences.json"
+
+
+def _load_sequences():
+    if not _SEQUENCES_FILE.exists():
+        return {}
+    try:
+        return json.loads(_SEQUENCES_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def _save_sequences(data):
+    _SEQUENCES_FILE.write_text(json.dumps(data, indent=2))
+
+
+@flask_app.route('/get_arms_status', methods=['GET'])
+def get_arms_status():
+    import modules.module_servoctl as _sc
+    return jsonify({"arms_present": bool(_sc.ARMS_PRESENT)}), 200
+
+
+@flask_app.route('/play_sequence', methods=['POST'])
+def play_sequence():
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    steps = request.get_json().get('steps', [])
+    return _execute_steps(steps)
+
+
+@flask_app.route('/save_sequence', methods=['POST'])
+def save_sequence():
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+
+    steps = data.get('steps', [])
+    seq_type = data.get('type', 'movement')
+    quick = bool(data.get('quick', False))
+
+    sequences = _load_sequences()
+    sequences[name] = {"type": seq_type, "quick": quick, "steps": steps}
+    _save_sequences(sequences)
+    return jsonify({"success": True, "name": name}), 200
+
+
+@flask_app.route('/get_saved_sequences', methods=['GET'])
+def get_saved_sequences():
+    return jsonify(_load_sequences()), 200
+
+
+@flask_app.route('/delete_saved_sequence', methods=['POST'])
+def delete_saved_sequence():
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    sequences = _load_sequences()
+    if name not in sequences:
+        return jsonify({"error": f"'{name}' not found"}), 404
+
+    del sequences[name]
+    _save_sequences(sequences)
+    return jsonify({"success": True}), 200
+
+
+@flask_app.route('/play_saved_sequence', methods=['POST'])
+def play_saved_sequence():
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    sequences = _load_sequences()
+    if name not in sequences:
+        return jsonify({"error": f"'{name}' not found"}), 404
+
+    entry = sequences[name]
+    steps = entry.get('steps', []) if isinstance(entry, dict) else entry
+    return _execute_steps(steps)
+
+
+def _execute_steps(steps):
+    import modules.module_servoctl as _sc
+    import time as _time
+
+    if _sc.MOVING:
+        return jsonify({"error": "Robot is already moving"}), 409
+
+    _sc.MOVING = True
+    _sc._notify_movement_start()
+    try:
+        for step in steps:
+            if step.get('movement'):
+                name = step['movement']
+                if name in globals():
+                    globals()[name]()
+                elif name == 'reset_positions':
+                    reset_positions()
+            else:
+                lh = step.get('left_height', 50)
+                rh = step.get('right_height', 50)
+                ll = step.get('left_leg', 50)
+                rl = step.get('right_leg', 50)
+                spd = step.get('speed', 0.85)
+                move_legs(lh, rh, ll, rl, spd)
+
+                if _sc.ARMS_PRESENT:
+                    lm = step.get('left_main')
+                    lf = step.get('left_forearm')
+                    lhv = step.get('left_hand')
+                    rm = step.get('right_main')
+                    rf = step.get('right_forearm')
+                    rhv = step.get('right_hand')
+                    if any(v is not None for v in [lm, lf, lhv, rm, rf, rhv]):
+                        move_arm(lm, lf, lhv, rm, rf, rhv, spd)
+
+                hold = step.get('hold_time', 0.0)
+                if hold and hold > 0:
+                    _time.sleep(hold)
+
+        move_legs(50, 50, 50, 50, 0.8)
+        disable_all_servos()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _sc.MOVING = False
+        _sc._notify_movement_end()
+
+
+@flask_app.route('/get_movement_steps/<name>', methods=['GET'])
+def get_movement_steps(name):
+    import modules.module_movements as _mm
+    import inspect
+
+    try:
+        src = inspect.getsource(getattr(_mm, name))
+    except (AttributeError, OSError):
+        return jsonify({"error": f"Movement '{name}' not found"}), 404
+
+    steps = _parse_movement_steps(src)
+    if not steps:
+        return jsonify({"error": f"No move_legs calls found in '{name}'"}), 422
+
+    return jsonify({"name": name, "steps": steps}), 200
+
+
+def _parse_movement_steps(src):
+    import re as _re
+
+    def parse_val(v, default=50):
+        try:
+            return int(round(float(v)))
+        except (ValueError, TypeError):
+            return default
+
+    def extract_steps(lines):
+        result = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            loop_m = _re.search(r"for\s+\w+\s+in\s+range\((\d+)\)\s*:", line)
+            if loop_m:
+                repeat = int(loop_m.group(1))
+                loop_indent = len(line) - len(line.lstrip())
+                body_lines = []
+                i += 1
+                while i < len(lines):
+                    bl = lines[i]
+                    if bl.strip() == "":
+                        i += 1
+                        continue
+                    bl_indent = len(bl) - len(bl.lstrip())
+                    if bl_indent > loop_indent:
+                        body_lines.append(bl)
+                        i += 1
+                    else:
+                        break
+                for _ in range(repeat):
+                    result.extend(extract_steps(body_lines))
+                continue
+
+            ml = _re.search(r"move_legs\(([^)]+)\)", line)
+            if ml:
+                args = [a.strip() for a in ml.group(1).split(",")]
+                if len(args) >= 4:
+                    step = {
+                        "movement": None,
+                        "left_height": parse_val(args[0]),
+                        "right_height": parse_val(args[1]),
+                        "left_leg": parse_val(args[2]),
+                        "right_leg": parse_val(args[3]),
+                        "left_main": None, "left_forearm": None, "left_hand": None,
+                        "right_main": None, "right_forearm": None, "right_hand": None,
+                        "speed": round(float(args[4]), 2) if len(args) > 4 and _re.match(r"[\d.]+", args[4]) else 0.85,
+                        "hold_time": 0.0
+                    }
+                    # check for time.sleep on next 1-2 lines
+                    for j in range(i + 1, min(i + 3, len(lines))):
+                        sl = _re.search(r"time\.sleep\(([^)]+)\)", lines[j])
+                        if sl:
+                            try:
+                                step["hold_time"] = float(sl.group(1))
+                            except ValueError:
+                                pass
+                            break
+                    result.append(step)
+
+            arm_m = _re.search(r"move_arm\(([^)]+)\)", line)
+            if arm_m and result:
+                args = [a.strip() for a in arm_m.group(1).split(",")]
+                def _arm_val(v):
+                    try:
+                        return int(round(float(v)))
+                    except (ValueError, TypeError):
+                        return None
+                if len(args) >= 6:
+                    result[-1]["left_main"] = _arm_val(args[0])
+                    result[-1]["left_forearm"] = _arm_val(args[1])
+                    result[-1]["left_hand"] = _arm_val(args[2])
+                    result[-1]["right_main"] = _arm_val(args[3])
+                    result[-1]["right_forearm"] = _arm_val(args[4])
+                    result[-1]["right_hand"] = _arm_val(args[5])
+
+            i += 1
+        return result
+
+    lines = src.splitlines()
+    return extract_steps(lines)
 
 
 def start_flask_app(port=None):

@@ -1,0 +1,331 @@
+<div class="tab-pane fade" id="builder" role="tabpanel">
+  <div class="builder-wrap">
+
+    <div class="builder-header">
+      <span class="section-label">MOVEMENT BUILDER</span>
+      <button class="bld-live-btn" id="bldLiveToggle">Live: OFF</button>
+    </div>
+
+    <!-- Channel legend -->
+    <div class="bld-legend">
+      <span><b>LH</b> left height</span>
+      <span><b>RH</b> right height</span>
+      <span><b>LL</b> left leg fwd/back</span>
+      <span><b>RL</b> right leg fwd/back</span>
+    </div>
+
+    <!-- Step list -->
+    <div class="bld-step-list" id="bldStepList"></div>
+
+    <!-- Add steps -->
+    <div class="bld-section">
+      <div class="section-label">ADD STEP</div>
+      <button class="hud-btn hud-btn-secondary" id="bldAddPosition">+ Position Step</button>
+      <div class="bld-movement-add">
+        <select id="bldMovementSelect" class="hud-select bld-movement-sel">
+          <option value="">Loading…</option>
+        </select>
+        <button class="hud-btn hud-btn-secondary" id="bldAddMovement" title="Append as named movement step">⚡</button>
+        <button class="hud-btn hud-btn-secondary" id="bldImportMovement" title="Import as editable position steps">↓</button>
+      </div>
+      <div class="bld-hint">
+        <span>⚡ named step</span>
+        <span>↓ import as editable steps</span>
+      </div>
+    </div>
+
+    <!-- Playback -->
+    <div class="bld-section">
+      <div class="section-label">PLAYBACK</div>
+      <div class="bld-row-actions">
+        <button class="hud-btn hud-btn-primary" id="bldPlay">▶ Play</button>
+        <button class="hud-btn hud-btn-secondary" id="bldNeutral">↺ Neutral</button>
+      </div>
+    </div>
+
+    <!-- Save -->
+    <div class="bld-section">
+      <div class="section-label">SAVE</div>
+      <div class="bld-save-row">
+        <input type="text" id="bldSeqName" class="hud-input bld-name-input" placeholder="Sequence name">
+        <button class="hud-btn hud-btn-primary" id="bldSave">Save</button>
+        <button class="hud-btn hud-btn-secondary" id="bldClear" title="Clear all steps">🗑</button>
+      </div>
+      <div class="bld-overwrite-confirm" id="bldOverwriteConfirm" style="display:none">
+        <span class="bld-confirm-msg"></span>
+        <button class="hud-btn hud-btn-danger" id="bldOverwriteReplace">Replace</button>
+        <button class="hud-btn" id="bldOverwriteCancel">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Feedback -->
+    <div class="bld-feedback" id="bldFeedback"></div>
+
+    <!-- Saved sequences -->
+    <div class="bld-section">
+      <div class="section-label">SAVED</div>
+      <div class="bld-saved-list" id="bldSavedList">
+        <span class="bld-empty">No saved sequences.</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<style>
+#builder {
+  overflow-y: auto;
+}
+.builder-wrap {
+  padding: 1rem;
+  max-width: 700px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-bottom: calc(var(--mobile-nav-h, 60px) + 1rem);
+}
+.builder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.bld-live-btn {
+  background: transparent;
+  border: 1px solid var(--text-dim);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.bld-live-btn.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.bld-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+.bld-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.bld-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 60px;
+}
+.bld-step {
+  cursor: default;
+}
+.bld-step-label {
+  font-size: 0.7rem;
+  opacity: 0.5;
+  margin-bottom: 2px;
+}
+.bld-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px;
+}
+.bld-movement-row {
+  align-items: center;
+}
+.bld-grip {
+  cursor: grab;
+  opacity: 0.4;
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+}
+.bld-zap {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.bld-movement-name {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+.bld-del {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.bld-del:hover { color: var(--red); }
+.bld-sliders {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.bld-slider-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 70px;
+}
+.bld-slider-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+.bld-slider-val {
+  font-family: monospace;
+}
+.bld-slider {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+}
+.bld-arm-toggle {
+  background: transparent;
+  border: 1px solid var(--text-dim);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  margin-top: 4px;
+}
+.bld-arm-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 4px;
+}
+.bld-movement-add {
+  display: flex;
+  gap: 6px;
+}
+.bld-movement-sel {
+  flex: 1;
+}
+.bld-hint {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  opacity: 0.5;
+}
+.bld-row-actions {
+  display: flex;
+  gap: 8px;
+}
+.bld-save-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.bld-name-input {
+  flex: 1;
+  min-width: 120px;
+}
+.bld-type-sel {
+  width: auto;
+}
+.bld-quick-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bld-overwrite-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.bld-confirm-msg {
+  flex: 1;
+  opacity: 0.8;
+}
+.bld-feedback {
+  font-size: 0.85rem;
+  min-height: 1.2em;
+  opacity: 0.8;
+}
+.bld-saved-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bld-empty {
+  font-size: 0.8rem;
+  opacity: 0.4;
+}
+.bld-chip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+.bld-chip-play {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.bld-chip-play:hover { color: var(--cyan); }
+.bld-chip-edit,
+.bld-chip-del {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.bld-chip-edit:hover { color: var(--cyan); }
+.bld-chip-del:hover { color: var(--red); }
+.hud-input {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: inherit;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+.hud-btn-secondary {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text-dim);
+}
+.hud-btn-secondary:hover {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  color: var(--cyan);
+}
+.hud-btn-danger {
+  background: rgba(255,68,68,0.12);
+  border: 1px solid rgba(255,68,68,0.4);
+  color: var(--red);
+}
+</style>
