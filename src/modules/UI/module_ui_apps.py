@@ -28,6 +28,7 @@ except ImportError:
     HAS_OPENGL = False
 
 from modules.UI.apps.module_app_clock import ClockApp
+from modules.UI.apps.module_app_audio_timeline import AudioTimelineApp
 
 try:
     from modules.UI.apps.module_app_eyes import EyesApp
@@ -55,6 +56,7 @@ AVAILABLE_APPS = {
     **({"eyes": {"class": EyesApp, "type": "pygame", "label": "Eyes"}} if HAS_EYES else {}),
     **({"avatar": {"class": AvatarApp, "type": "pygame", "label": "Avatar"}} if HAS_AVATAR else {}),
     **({"remote": {"class": RemoteApp, "type": "pygame", "label": "Remote"}} if HAS_REMOTE else {}),
+    "audio": {"class": AudioTimelineApp, "type": "pygame", "label": "Audio"},
 }
 
 
