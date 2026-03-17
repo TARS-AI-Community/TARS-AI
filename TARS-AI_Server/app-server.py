@@ -400,7 +400,7 @@ _CONFIG_DEFAULTS = {
     "tts":        {"voices_dir": "", "default_voice": "", "cache_size": "100"},
     "vision":     {"model": "Salesforce/blip-image-captioning-base", "device": "auto"},
     "imagegen":   {"model": "stabilityai/stable-diffusion-xl-base-1.0", "default_steps": "20", "default_cfg": "7.0", "device": "auto"},
-    "musicgen":   {"model": "ACE-Step/ACE-Step-v1-3.5B", "default_duration": "60", "default_steps": "60", "default_cfg": "15.0", "device": "auto"},
+    "musicgen":   {"model": "ACE-Step/ACE-Step-v1-3.5B", "default_duration": "60", "default_steps": "60", "default_cfg": "15.0", "default_scheduler": "euler", "default_cfg_type": "apg", "default_omega_scale": "10.0", "default_guidance_interval": "0.5", "default_min_guidance": "3.0", "device": "auto"},
     "embeddings": {"model": "all-MiniLM-L6-v2", "device": "auto"},
 }
 
@@ -1537,8 +1537,12 @@ class MusicGenService:
 
     def generate(self, prompt: str, lyrics: str = "", duration_sec: float = 30.0,
                  infer_steps: int = 60, guidance_scale: float = 15.0,
-                 seed: int = -1, task_id: str = None) -> bytes:
-        """Generate music with vocals from prompt + lyrics. Returns WAV bytes."""
+                 seed: int = -1, task_id: str = None,
+                 scheduler_type: str = "euler", cfg_type: str = "apg",
+                 omega_scale: float = 10.0, guidance_interval: float = 0.5,
+                 min_guidance_scale: float = 3.0,
+                 batch_size: int = 1) -> list:
+        """Generate music with vocals from prompt + lyrics. Returns list of OGG bytes."""
         if task_id:
             MusicGenService._progress[task_id] = {"status": "processing", "pct": 0}
 
@@ -1558,10 +1562,13 @@ class MusicGenService:
                 audio_duration=duration_sec,
                 infer_step=infer_steps,
                 guidance_scale=guidance_scale,
-                scheduler_type="euler",
-                cfg_type="apg",
+                scheduler_type=scheduler_type,
+                cfg_type=cfg_type,
+                omega_scale=omega_scale,
+                guidance_interval=guidance_interval,
+                min_guidance_scale=min_guidance_scale,
                 manual_seeds=manual_seeds,
-                batch_size=1,
+                batch_size=batch_size,
                 format="wav",
                 save_path=out_dir,
             )
@@ -1569,17 +1576,18 @@ class MusicGenService:
             if task_id:
                 MusicGenService._progress[task_id] = {"status": "encoding", "pct": 90}
 
-            # Result is a list: [filepath1, ..., params_dict]
-            audio_path = result[0]
-            with open(audio_path, "rb") as f:
-                audio_bytes = f.read()
-            # Clean up the temp file
-            try:
-                os.unlink(audio_path)
-            except Exception:
-                pass
-            # Encode to OGG Vorbis (~12x smaller than 48kHz stereo WAV, pure Python)
-            return self._wav_to_ogg(audio_bytes)
+            # Result is a list: [filepath1, ..., filepathN, params_dict]
+            audio_paths = [r for r in result if isinstance(r, str) and os.path.isfile(r)]
+            ogg_list = []
+            for audio_path in audio_paths:
+                with open(audio_path, "rb") as f:
+                    audio_bytes = f.read()
+                try:
+                    os.unlink(audio_path)
+                except Exception:
+                    pass
+                ogg_list.append(self._wav_to_ogg(audio_bytes))
+            return ogg_list
         finally:
             if task_id:
                 MusicGenService._progress.pop(task_id, None)
@@ -2249,6 +2257,7 @@ async def generate_music(request: Request):
         task_id = body.get("task_id")
         lyrics = body.get("lyrics", "")
         loop = asyncio.get_event_loop()
+        batch_size = max(1, min(16, int(body.get("batch_size", 1))))
         gen_kwargs = dict(
             prompt=prompt,
             lyrics=lyrics,
@@ -2257,18 +2266,21 @@ async def generate_music(request: Request):
             guidance_scale=float(body.get("guidance_scale", 15.0)),
             seed=int(body.get("seed", -1)),
             task_id=task_id,
+            scheduler_type=body.get("scheduler_type", "euler"),
+            cfg_type=body.get("cfg_type", "apg"),
+            omega_scale=float(body.get("omega_scale", 10.0)),
+            guidance_interval=float(body.get("guidance_interval", 0.5)),
+            min_guidance_scale=float(body.get("min_guidance_scale", 3.0)),
+            batch_size=batch_size,
         )
-        audio_bytes = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["musicgen"].generate(**gen_kwargs))
-        log.info(f"MusicGen: \"{prompt[:60]}\"")
-        # Save to output folder with JSON sidecar metadata
+        ogg_list = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["musicgen"].generate(**gen_kwargs))
+        log.info(f"MusicGen: \"{prompt[:60]}\" (batch={batch_size}, got {len(ogg_list)})")
+        # Save all outputs to gallery with JSON sidecar metadata
         out_dir = Path(__file__).parent / "output" / "musicgen"
         out_dir.mkdir(parents=True, exist_ok=True)
         ts = time.strftime("%Y%m%d_%H%M%S")
-        fname = f"{ts}_{uuid.uuid4().hex[:8]}.ogg"
-        fpath = out_dir / fname
-        with open(str(fpath), "wb") as f:
-            f.write(audio_bytes)
-        meta = {
+        filenames = []
+        meta_base = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "prompt": prompt,
             "lyrics": lyrics,
@@ -2276,11 +2288,28 @@ async def generate_music(request: Request):
             "steps": gen_kwargs["infer_steps"],
             "guidance_scale": gen_kwargs["guidance_scale"],
             "seed": gen_kwargs["seed"],
+            "scheduler_type": gen_kwargs["scheduler_type"],
+            "cfg_type": gen_kwargs["cfg_type"],
+            "omega_scale": gen_kwargs["omega_scale"],
+            "guidance_interval": gen_kwargs["guidance_interval"],
+            "min_guidance_scale": gen_kwargs["min_guidance_scale"],
+            "batch_size": batch_size,
         }
-        with open(str(fpath).replace(".ogg", ".json"), "w") as f:
-            json.dump(meta, f)
-        return StreamingResponse(BytesIO(audio_bytes), media_type="audio/ogg",
-                                 headers={"X-Audio-Filename": fname})
+        for i, audio_bytes in enumerate(ogg_list):
+            fname = f"{ts}_{uuid.uuid4().hex[:8]}.ogg"
+            fpath = out_dir / fname
+            with open(str(fpath), "wb") as f:
+                f.write(audio_bytes)
+            meta = {**meta_base, "batch_index": i}
+            with open(str(fpath).replace(".ogg", ".json"), "w") as f:
+                json.dump(meta, f)
+            filenames.append(fname)
+        # For batch=1, return audio stream directly (backwards compatible)
+        if batch_size == 1:
+            return StreamingResponse(BytesIO(ogg_list[0]), media_type="audio/ogg",
+                                     headers={"X-Audio-Filename": filenames[0]})
+        # For batch>1, return JSON with filenames so the UI can load from gallery
+        return JSONResponse({"filenames": filenames, "count": len(filenames)})
     except torch.cuda.OutOfMemoryError:
         gc.collect()
         torch.cuda.empty_cache()
@@ -2793,16 +2822,23 @@ async def settings_page():
 # ===================================================================
 # CLI + Startup
 # ===================================================================
-BANNER = r"""
- ████████╗ █████╗ ██████╗ ███████╗
- ╚══██╔══╝██╔══██╗██╔══██╗██╔════╝
-    ██║   ███████║██████╔╝███████╗
-    ██║   ██╔══██║██╔══██╗╚════██║
-    ██║   ██║  ██║██║  ██║███████║
-    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
-   [ TARS-AI SERVER MODULE  v2.0 ]
-=====================================
-"""
+BANNER = (
+    # Cyberpunk palette
+    # R = Reset, C = Cyan, P = Purple, B = Blue, W = Bold white, D = Dim gray, Y = Yellow/gold
+    "\n"
+    "\033[38;5;240m        \u250c\u2500\033[38;5;135m\u2593\u2593\033[38;5;240m\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\033[38;5;135m\u2593\u2593\033[38;5;240m\u2500\u2510\033[0m\n"
+    "\033[38;5;240m        \u2502\033[38;5;135m\u2591\u2592\u2593\033[38;5;240m                                             \033[38;5;135m\u2593\u2592\u2591\033[38;5;240m\u2502\033[0m\n"
+    "\033[38;5;240m        \u2502  \033[38;5;51m      \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\033[38;5;240m          \u2502\033[0m\n"
+    "\033[38;5;240m        \u2502  \033[38;5;51m      \u255a\u2550\u2550\u2588\u2588\u2551\u2550\u2550\u255d\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255d\033[38;5;240m          \u2502\033[0m\n"
+    "\033[38;5;240m        \u2502  \033[1;97m         \u2588\u2588\u2551   \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2551\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255d\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\033[38;5;240m          \u2502\033[0m\n"
+    "\033[38;5;240m        \u2502  \033[38;5;63m         \u2588\u2588\u2551   \u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2551\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u255a\u2550\u2550\u2550\u2550\u2588\u2588\u2551\033[38;5;240m          \u2502\033[0m\n"
+    "\033[38;5;240m        \u2502  \033[38;5;135m         \u2588\u2588\u2551   \u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2551\033[38;5;240m          \u2502\033[0m\n"
+    "\033[38;5;240m        \u2502  \033[38;5;135m         \u255a\u2550\u255d   \u255a\u2550\u255d  \u255a\u2550\u255d\u255a\u2550\u255d  \u255a\u2550\u255d\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u255d\033[38;5;240m          \u2502\033[0m\n"
+    "\033[38;5;240m        \u2502\033[38;5;135m\u2591\u2592\u2593\033[38;5;240m                                             \033[38;5;135m\u2593\u2592\u2591\033[38;5;240m\u2502\033[0m\n"
+    "\033[38;5;240m        \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524\033[0m\n"
+    "\033[38;5;240m        \u2502         \033[1;97mT A R S  \033[38;5;240m//  \033[38;5;51mSERVER \033[38;5;240m:  \033[38;5;220mA M E L I A\033[38;5;240m        \u2502\033[0m\n"
+    "\033[38;5;240m        \u2514\u2500\033[38;5;135m\u2593\u2593\033[38;5;240m\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\033[38;5;135m\u2593\u2593\033[38;5;240m\u2500\u2518\033[0m\n"
+)
 
 def parse_args():
     cfg = load_config()
@@ -3116,11 +3152,6 @@ def _shutdown_handler(signum, frame):
 # Main
 # ===================================================================
 if __name__ == "__main__":
-    try:
-        print(BANNER)
-    except UnicodeEncodeError:
-        print("[ TARS-AI SERVER MODULE v2.0 ]")
-        print("=" * 37)
     args = parse_args()
     _LAUNCH_ARGS = args
     _LLM_SEMAPHORE = asyncio.Semaphore(1)
@@ -3149,6 +3180,12 @@ if __name__ == "__main__":
             display_host = "localhost"
 
     base_url = f"{proto}://{display_host}:{args.port}"
+
+    try:
+        print(BANNER)
+    except UnicodeEncodeError:
+        print("[ TARS-AI SERVER MODULE ]")
+        print("=" * 37)
 
     log.info("=" * 50)
     log.info(f"TARS-AI Server ready on {base_url}")
