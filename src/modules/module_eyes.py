@@ -181,17 +181,6 @@ class RoboEyes:
         self._saccade_timer = 0.0
         self._next_saccade = random.uniform(0.5, 2.0)
 
-        # Animation system
-        self._current_animation = None
-        self._anim_timer = 0.0
-        self._anim_duration = 0.0
-        self._anim_phase = 0.0
-
-        # Legacy animations
-        self._anim_laugh = False
-        self._anim_laugh_timer = 0.0
-        self._anim_confused = False
-        self._anim_confused_timer = 0.0
         self._anim_offset_x = 0.0
         self._anim_offset_y = 0.0
 
@@ -256,64 +245,6 @@ class RoboEyes:
 
     def set_squint(self, intensity: float):
         self._squint_target = max(0.0, min(1.0, intensity))
-
-    # ── Animation Sequences ───────────────────────────────────────────────────
-
-    def is_animating(self) -> bool:
-        return self._current_animation is not None
-
-    def anim_wink(self, eye: str = 'right'):
-        self._current_animation = 'wink'
-        self._anim_timer = 0.0
-        self._anim_duration = 0.3
-        self._blink_left = (eye == 'left')
-        self._blink_right = (eye == 'right')
-
-    def anim_double_take(self):
-        self._current_animation = 'double_take'
-        self._anim_timer = 0.0
-        self._anim_duration = 1.5
-        self._anim_phase = 0
-
-    def anim_eye_roll(self):
-        self._current_animation = 'eye_roll'
-        self._anim_timer = 0.0
-        self._anim_duration = 2.0
-
-    def anim_excited(self):
-        self._current_animation = 'excited'
-        self._anim_timer = 0.0
-        self._anim_duration = 0.8
-
-    def anim_sleepy(self):
-        self._current_animation = 'sleepy'
-        self._anim_timer = 0.0
-        self._anim_duration = 2.0
-
-    def anim_thinking(self):
-        self._current_animation = 'thinking'
-        self._anim_timer = 0.0
-        self._anim_duration = 2.5
-        self._anim_phase = 0
-
-    def anim_blink_fast(self):
-        self._current_animation = 'blink_fast'
-        self._anim_timer = 0.0
-        self._anim_duration = 0.4
-        self._anim_phase = 0
-
-    def anim_squint_suspicious(self):
-        self._current_animation = 'squint_suspicious'
-        self._anim_timer = 0.0
-        self._anim_duration = 1.5
-
-    def anim_laugh(self):
-        self._anim_laugh = True
-        self._anim_laugh_timer = 0.5
-
-    def anim_confused(self):
-        self._anim_confused = True
-        self._anim_confused_timer = 0.5
 
     def get_current_mood(self) -> Tuple[Mood, float]:
         return (self._mood, self._mood_intensity)
@@ -623,7 +554,6 @@ class RoboEyes:
                 self._next_saccade = random.uniform(0.5, 2.0)
 
         if self._touch_reaction is None:
-            self._update_animations(dt)
             self._update_mood(dt)
 
         speed = EMOTION_TRANSITION_SPEEDS.get(self._mood, 6.0)
@@ -667,96 +597,6 @@ class RoboEyes:
             h[0] += h[4] * dt   # horizontal drift
             h[2] *= 0.995       # shrink slowly
         self._heart_particles = [h for h in self._heart_particles if h[3] < 2.5]
-
-    def _update_animations(self, dt: float):
-        if self._current_animation is None:
-            if self._anim_laugh:
-                self._anim_laugh_timer -= dt
-                self._anim_offset_y = math.sin(self._anim_laugh_timer * 50) * 5
-                if self._anim_laugh_timer <= 0:
-                    self._anim_laugh = False
-                    self._anim_offset_y = 0
-            if self._anim_confused:
-                self._anim_confused_timer -= dt
-                self._anim_offset_x = math.sin(self._anim_confused_timer * 50) * 5
-                if self._anim_confused_timer <= 0:
-                    self._anim_confused = False
-                    self._anim_offset_x = 0
-            return
-
-        self._anim_timer += dt
-        progress = min(1.0, self._anim_timer / self._anim_duration)
-
-        if self._current_animation == 'wink':
-            if progress < 0.5:
-                self._is_blinking = True
-                self._blink_phase = progress * 2
-            else:
-                self._is_blinking = False
-
-        elif self._current_animation == 'double_take':
-            if progress < 0.3:
-                self._target_look_x = 0.8
-            elif progress < 0.35:
-                self._target_look_x = 0.0
-            elif progress < 0.6:
-                self._left_open_target = 1.3
-                self._right_open_target = 1.3
-            else:
-                self._left_open_target = 1.0
-                self._right_open_target = 1.0
-
-        elif self._current_animation == 'eye_roll':
-            angle = progress * 3.14159 * 2
-            self._target_look_x = math.sin(angle) * 0.6
-            self._target_look_y = -math.cos(angle) * 0.6 - 0.3
-
-        elif self._current_animation == 'excited':
-            bounce = math.sin(progress * 3.14159 * 4) * 0.3
-            self._anim_offset_y = -abs(bounce) * 10
-            self._left_open_target = 1.3
-            self._right_open_target = 1.3
-
-        elif self._current_animation == 'sleepy':
-            if progress < 0.7:
-                self._left_open_target = 1.0 - progress / 0.7
-                self._right_open_target = 1.0 - progress / 0.7
-            else:
-                self._left_open_target = 1.0
-                self._right_open_target = 1.0
-
-        elif self._current_animation == 'thinking':
-            cycle = int(progress * 3)
-            if cycle == 0:
-                self._target_look_x = -0.4
-                self._target_look_y = -0.6
-            elif cycle == 1:
-                self._target_look_x = 0.4
-                self._target_look_y = -0.6
-            else:
-                self._target_look_x = 0.0
-                self._target_look_y = 0.0
-            self._squint_target = 0.2
-
-        elif self._current_animation == 'blink_fast':
-            blink_cycle = int(progress * 4) % 2
-            if blink_cycle == 0:
-                self._left_open_target = 0.0
-                self._right_open_target = 0.0
-            else:
-                self._left_open_target = 1.0
-                self._right_open_target = 1.0
-
-        elif self._current_animation == 'squint_suspicious':
-            self._squint_target = progress * 0.7
-            self._target_look_x = math.sin(progress * 3.14159) * 0.3
-
-        if progress >= 1.0:
-            self._current_animation = None
-            self._anim_timer = 0.0
-            self._anim_offset_x = 0.0
-            self._anim_offset_y = 0.0
-            self._squint_target = 0.0
 
     def _update_mood(self, dt: float):
         target_top_l = 0.0
