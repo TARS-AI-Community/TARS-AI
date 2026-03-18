@@ -3069,10 +3069,6 @@ function $(id) { return document.getElementById(id); }
           renderMoodTimeline(_moodData.timeline);
           renderActivityHeatmap(_moodData.activity_heatmap || {});
         }
-        if (panelId === 'dshTopicsPanel' && _topicsData && !_panelRendered.topics) {
-          _panelRendered.topics = true;
-          renderTopicsGraph(_topicsData);
-        }
         if (panelId === 'dshPrompt' && _promptInteractions.length && !_panelRendered.prompt) {
           _panelRendered.prompt = true;
           populatePromptDropdown();

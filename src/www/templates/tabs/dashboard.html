@@ -27,14 +27,13 @@
       <button class="dash-subtab active" data-panel="dshGraph">Graph</button>
       <button class="dash-subtab" data-panel="dshMood">Mood</button>
       <button class="dash-subtab" data-panel="dshLog">Log</button>
-      <button class="dash-subtab" data-panel="dshTopicsPanel">Topics</button>
       <button class="dash-subtab" data-panel="dshPrompt">Prompt</button>
       <button class="dash-subtab" data-panel="dshSys">Sys</button>
     </div>
 
     <!-- ── GRAPH panel ── -->
     <div class="dash-panel active" id="dshGraph">
-      <div class="section-label"><span>Memory &amp; Knowledge Graph</span></div>
+      <div class="section-label"><span>Memory, Topics &amp; Knowledge Graph</span></div>
       <div class="dash-graph-controls">
         <label>
           Max nodes
@@ -90,20 +89,6 @@
       <div class="section-label"><span>Interaction Audit Log</span></div>
       <div class="dash-log-list" id="dshLogList">
         <div class="dash-log-empty">No interactions recorded yet.</div>
-      </div>
-    </div>
-
-    <!-- ── TOPICS panel ── -->
-    <div class="dash-panel" id="dshTopicsPanel">
-      <div class="section-label"><span>Knowledge Topics</span></div>
-      <div class="dash-topics-graph" id="dshTopicsGraph"></div>
-      <div class="dash-topics-table-wrap">
-        <table class="dash-topics-table" id="dshTopicsTable">
-          <thead>
-            <tr><th>Topic</th><th>Mentions</th><th>First Seen</th><th>Last Seen</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
       </div>
     </div>
 

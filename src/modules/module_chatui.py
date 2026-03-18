@@ -2690,9 +2690,9 @@ def dashboard_graph():
         # Knowledge / unattributed conversations cluster
         if conversations:
             add_node({
-                "id": "cluster_convos", "name": f"KNOWLEDGE ({len(conversations)})",
+                "id": "cluster_convos", "name": f"CONVERSATIONS ({len(conversations)})",
                 "color": "#29b6f6", "size": 12 + min(len(conversations), 12), "group": "cluster",
-                "details": {"count": len(conversations), "description": "Ingested knowledge and conversations"}
+                "details": {"count": len(conversations), "description": "Unattributed conversations and general memories"}
             })
             links.append({"source": "hub_memory", "target": "cluster_convos"})
             overflow = add_memory_leaves("cluster_convos", conversations, "#81d4fa")
@@ -2702,7 +2702,7 @@ def dashboard_graph():
 
     # ── KNOWLEDGE (TOPICS): categorized ──
     if mm and hasattr(mm, 'topic_index') and mm.topic_index.get('topics'):
-        add_node({"id": "hub_knowledge", "name": "KNOWLEDGE", "color": "#39ff14", "size": 22, "group": "hub"})
+        add_node({"id": "hub_knowledge", "name": "TOPICS", "color": "#39ff14", "size": 22, "group": "hub"})
         links.append({"source": "BRAIN", "target": "hub_knowledge"})
 
         categories = {
