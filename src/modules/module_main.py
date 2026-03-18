@@ -37,11 +37,6 @@ if CAPABILITIES is None or CAPABILITIES.can_use_ui:
     except ImportError as e:
         print(f"WARNING: UIManager not available: {e}")
 
-# Discord - lightweight, available on all devices
-try:
-    from modules.module_discord import *
-except ImportError as e:
-    print(f"WARNING: Discord module not available: {e}")
 
 # BT Controller
 try:
@@ -79,25 +74,6 @@ def start_bt_controller_thread():
         queue_message(f"ERROR: {e}")
 
 # === Callback Functions ===
-def process_discord_message_callback(user_message, image_b64=None):
-    """
-    Processes the user's message and generates a response.
-
-    Parameters:
-    - user_message (str): The message content sent by the user.
-    - image_b64 (str|None): Base64-encoded image data, if an image was attached.
-
-    Returns:
-    - str|dict: The bot's response (dict with 'reply', 'function_calls', 'new_memories'
-                or a plain string on error).
-    """
-    try:
-        reply = process_completion(user_message, image_b64=image_b64)
-    except Exception as e:
-        queue_message(f"ERROR: Discord callback: {e}")
-        reply = "Sorry, I encountered an error processing your message."
-
-    return reply
 
 def wake_word_callback(wake_response):
     """
@@ -106,6 +82,13 @@ def wake_word_callback(wake_response):
     Parameters:
     - wake_response (str): The response to the wake word.
     """ 
+
+    # User is talking to the device — set route to voice
+    try:
+        from modules.module_router import set_active_route
+        set_active_route("voice")
+    except Exception:
+        pass
 
     # Deactivate screensaver when wake word is detected
     if ui_manager:
@@ -168,12 +151,20 @@ def utterance_callback(message):
         if ui_manager:
             ui_manager.update_data(_speaker_display, user_text, _speaker_display)
 
-        # Push voice-mode user message to web UI
+        # Check once if user is on webui — used to gate all webui emissions
         try:
-            from modules.module_chatui import push_user_message
-            push_user_message(user_text, speaker_name=_speaker_display)
+            from modules.module_router import get_active_route
+            _is_webui = get_active_route().get("source") == "webui"
         except Exception:
-            pass
+            _is_webui = False
+
+        # Push voice-mode user message to web UI (only if user is on webui)
+        if _is_webui:
+            try:
+                from modules.module_chatui import push_user_message
+                push_user_message(user_text, speaker_name=_speaker_display)
+            except Exception:
+                pass
 
         if "shutdown pc" in user_text.lower():
             queue_message(f"SHUTDOWN: Shutting down the PC...")
@@ -230,12 +221,13 @@ def utterance_callback(message):
             if ui_manager:
                 ui_manager.update_streaming_data(clean_total)
 
-            # Stream new text to web UI
-            try:
-                from modules.module_chatui import stream_reply_token
-                stream_reply_token(new_clean)
-            except Exception:
-                pass
+            # Stream new text to web UI (only if user is on webui)
+            if _is_webui:
+                try:
+                    from modules.module_chatui import stream_reply_token
+                    stream_reply_token(new_clean)
+                except Exception:
+                    pass
 
             # Update barge-in monitor with latest TTS text (streaming mode)
             if stt_manager:
@@ -285,8 +277,9 @@ def utterance_callback(message):
                 if stt_manager:
                     stt_manager.stop_bargein_monitor()
                 try:
-                    from modules.module_chatui import socketio
-                    socketio.emit('bot_message', {'message': ''})
+                    if _is_webui:
+                        from modules.module_chatui import socketio
+                        socketio.emit('bot_message', {'message': ''})
                 except Exception:
                     pass
             set_tars_state(TarsState.LISTENING)
@@ -426,15 +419,13 @@ def utterance_callback(message):
             time.sleep(0.3)
         set_tars_state(TarsState.LISTENING)
 
-        # Push final reply to web UI (finalizes streaming bubble or creates one for preemptive)
-        # Mark audio_streamed=True since audio was played on Pi speakers — prevents
-        # browser from also fetching legacy /audio_stream (double-play) and ensures
-        # voice mode mic restarts properly via bot_audio_done
+        # Push final reply to web UI (only if user is on webui)
         try:
-            from modules.module_chatui import socketio
-            socketio.emit('bot_message', {'message': reply, 'audio_streamed': True})
-            socketio.emit('bot_audio_done', {})
-            socketio.emit('talking_state', {'talking': False})
+            if _is_webui:
+                from modules.module_chatui import socketio
+                socketio.emit('bot_message', {'message': reply, 'audio_streamed': True})
+                socketio.emit('bot_audio_done', {})
+                socketio.emit('talking_state', {'talking': False})
         except Exception:
             pass
 

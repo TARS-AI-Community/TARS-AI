@@ -137,46 +137,30 @@ def execute(parameters, context):
     queue_message(f"Generating image: {prompt}")
     source = context.get("source", "voice")
 
-    _callback = None
-    if source == "webui":
-        def _on_image_ready(image_bytes):
-            try:
-                queue_message(f"[SD] Image ready ({len(image_bytes)} bytes) — emitting to WebUI")
-                import base64 as _b64
-                b64 = _b64.b64encode(image_bytes).decode('utf-8')
-                img_html = f'<img style="max-width:100%;border-radius:8px;" src="data:image/png;base64,{b64}">'
-                from modules.module_chatui import socketio
-                socketio.emit('bot_message', {'message': img_html})
-                queue_message("[SD] WebUI image emit sent")
-            except Exception as _e:
-                queue_message(f"[SD] WebUI image emit failed: {_e}")
-        _callback = _on_image_ready
-
-    def _notify_user(msg):
-        """Send a message to the user via SocketIO and TTS."""
+    def _on_image_ready(image_bytes):
         try:
-            from modules.module_chatui import socketio
-            socketio.emit('bot_message', {'message': msg})
-        except Exception:
-            pass
-        try:
-            from modules.module_tts import generate_tts_audio
-            from modules.module_config import load_config
-            cfg = load_config()
-            generate_tts_audio(msg, cfg['TTS']['ttsoption'])
-        except Exception:
-            pass
+            queue_message(f"[SD] Image ready ({len(image_bytes)} bytes) — routing to active device")
+            from modules.module_router import send_image as _send, get_active_route
+            queue_message(f"[SD] Active route: {get_active_route()}")
+            _send(image_bytes, "Here's your generated image!")
+            queue_message(f"[SD] Image routed successfully")
+        except Exception as _e:
+            import traceback
+            queue_message(f"[SD] Image delivery failed: {_e}")
+            traceback.print_exc()
 
     def _generate_bg():
         queue_message("[SD] Background generation thread started")
         try:
-            result = generate_image(prompt, skill_config=skill_config, on_image_ready=_callback)
+            result = generate_image(prompt, skill_config=skill_config, on_image_ready=_on_image_ready)
             queue_message(f"[SD] Background generation done: {result}")
             if result and "failed" in result.lower():
-                _notify_user(f"Sorry, image generation failed.")
+                from modules.module_router import send as _send
+                _send("Sorry, image generation failed.")
         except Exception as _e:
             queue_message(f"[SD] Background image generation failed: {_e}")
-            _notify_user(f"Sorry, image generation failed.")
+            from modules.module_router import send as _send
+            _send("Sorry, image generation failed.")
 
     if source == "webui":
         try:
