@@ -37,11 +37,6 @@ if CAPABILITIES is None or CAPABILITIES.can_use_ui:
     except ImportError as e:
         print(f"WARNING: UIManager not available: {e}")
 
-# Discord - lightweight, available on all devices
-try:
-    from modules.module_discord import *
-except ImportError as e:
-    print(f"WARNING: Discord module not available: {e}")
 
 # BT Controller
 try:
@@ -79,25 +74,6 @@ def start_bt_controller_thread():
         queue_message(f"ERROR: {e}")
 
 # === Callback Functions ===
-def process_discord_message_callback(user_message, image_b64=None):
-    """
-    Processes the user's message and generates a response.
-
-    Parameters:
-    - user_message (str): The message content sent by the user.
-    - image_b64 (str|None): Base64-encoded image data, if an image was attached.
-
-    Returns:
-    - str|dict: The bot's response (dict with 'reply', 'function_calls', 'new_memories'
-                or a plain string on error).
-    """
-    try:
-        reply = process_completion(user_message, image_b64=image_b64)
-    except Exception as e:
-        queue_message(f"ERROR: Discord callback: {e}")
-        reply = "Sorry, I encountered an error processing your message."
-
-    return reply
 
 def wake_word_callback(wake_response):
     """

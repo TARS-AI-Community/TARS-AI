@@ -2,12 +2,12 @@
 Module: Router
 Tracks where the user is currently interacting and delivers messages there.
 
-Every time the user sends a message (voice, webui, Discord), the active
+Every time the user sends a message (voice, webui, Discord, etc.), the active
 route is updated. Any module can call send() / send_image() to deliver
 to wherever the user last spoke from.
 
-Voice TTS is queued (not blocking) so reminders and async output don't
-conflict with ongoing playback.
+External targets (like Discord) register themselves via register_target()
+so the router has zero knowledge of specific integrations.
 """
 
 import os
@@ -17,6 +17,9 @@ from modules.module_messageQue import queue_message
 
 _lock = threading.Lock()
 _active_route = {"source": "voice"}  # default to device
+
+# External target registry — skills register their send functions here
+_custom_targets = {}  # name -> callable(text, route, image_path)
 
 # Voice TTS queue — serializes TTS playback so async callers never block
 _voice_queue = _queue.Queue()
@@ -56,6 +59,19 @@ def _start_voice_worker():
     threading.Thread(target=_worker, daemon=True, name="router-voice").start()
 
 
+# ── Target registration ─────────────────────────────────────────────────────
+
+def register_target(name: str, send_fn):
+    """Register an external delivery target.
+
+    Args:
+        name: Route source name (e.g. "discord", "telegram", "slack")
+        send_fn: callable(text: str, route: dict, image_path: str|None)
+    """
+    _custom_targets[name] = send_fn
+    queue_message(f"ROUTER: Registered target '{name}'")
+
+
 # ── Update active route (called at every entry point) ────────────────────────
 
 def set_active_route(source: str, **kwargs):
@@ -63,8 +79,8 @@ def set_active_route(source: str, **kwargs):
 
     Called automatically by voice/webui/discord entry points.
     Args:
-        source: "voice", "webui", or "discord"
-        **kwargs: source-specific metadata (discord_channel_id, discord_user_id)
+        source: "voice", "webui", or any registered target name
+        **kwargs: source-specific metadata (e.g. discord_channel_id)
     """
     global _active_route
     with _lock:
@@ -125,15 +141,16 @@ def _deliver(text: str, route: dict, image_path: str = None):
             _send_voice(text, image_path)
         elif source == "webui":
             _send_webui(text, image_path)
-        elif source == "discord":
-            _send_discord(text, route, image_path)
+        elif source in _custom_targets:
+            _custom_targets[source](text, route, image_path)
+        else:
+            queue_message(f"ROUTER: Unknown target '{source}'")
     except Exception as e:
         queue_message(f"ROUTER: Failed to send to {source}: {e}")
 
     # Clean up temp image file after all targets have consumed it
     if image_path and image_path.endswith('.png'):
         try:
-            # Small delay so async targets (Discord) finish reading the file
             def _cleanup():
                 import time
                 time.sleep(5)
@@ -167,43 +184,3 @@ def _send_webui(text: str, image_path: str = None):
         socketio.emit('bot_audio_done', {})
     except Exception as e:
         queue_message(f"ROUTER: WebUI send failed: {e}")
-
-
-def _send_discord(text: str, route: dict, image_path: str = None):
-    """Send to a Discord channel or DM."""
-    channel_id = route.get("discord_channel_id")
-    user_id = route.get("discord_user_id")
-    if not channel_id and not user_id:
-        return
-
-    try:
-        import asyncio
-        from modules.module_discord import bot
-
-        async def _do_send():
-            # Try cached channel first, fall back to fetch (needed for DMs)
-            channel = bot.get_channel(int(channel_id)) if channel_id else None
-            if not channel and user_id:
-                try:
-                    user = await bot.fetch_user(int(user_id))
-                    channel = await user.create_dm()
-                except Exception as e:
-                    queue_message(f"ROUTER: Could not open DM for user {user_id}: {e}")
-                    return
-            if not channel:
-                queue_message(f"ROUTER: Discord channel {channel_id} not found")
-                return
-
-            if image_path:
-                import discord as _discord
-                msg = text or ""
-                await channel.send(msg, file=_discord.File(image_path))
-            elif text:
-                await channel.send(text)
-
-        if bot.loop and bot.loop.is_running():
-            asyncio.run_coroutine_threadsafe(_do_send(), bot.loop)
-        else:
-            asyncio.run(_do_send())
-    except Exception as e:
-        queue_message(f"ROUTER: Discord send failed: {e}")

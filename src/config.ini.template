@@ -293,7 +293,6 @@ rightHandOffset = 0
 
 [SKILL:discord]
 disabled = true
-channel_id = 811470553139249186
 
 [SKILL:home_assistant]
 disabled = true

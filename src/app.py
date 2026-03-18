@@ -260,16 +260,7 @@ def init_app():
         update_tts_settings(CONFIG['TTS']['ttsurl'])
 
 
-def start_discord_in_thread():
-    """Start the Discord bot in a separate thread."""
-    from modules.module_main import start_discord_bot, process_discord_message_callback
-    discord_thread = threading.Thread(
-        target=start_discord_bot,
-        args=(process_discord_message_callback,),
-        daemon=True
-    )
-    discord_thread.start()
-    queue_message("INFO: Discord bot started in a separate thread.")
+
 
 
 # === Main Application Logic ===
@@ -381,12 +372,6 @@ if __name__ == "__main__":
         queue_message("LOAD: Identity coordinator enabled")
     except Exception as e:
         queue_message(f"WARNING: Identity coordinator not available: {e}")
-
-    # === Discord (enabled via Skills panel) ===
-    from modules.module_skills import get_skill_manager
-    _sm = get_skill_manager()
-    if _sm and _sm.is_enabled('discord') and os.getenv('DISCORD_TOKEN'):
-        start_discord_in_thread()
 
     # === Initialize Managers ===
     initialize_managers(
