@@ -196,6 +196,7 @@ class HyperDB:
 
         # Initialize BM25 components
         queue_message(f"INFO: Initializing HyperDB with {rag_strategy} RAG strategy")
+        self._bm25_stale = False  # True when documents added since last BM25 rebuild
         if self.rag_strategy == "hybrid":
             self.stemmer = Stemmer.Stemmer("english")
             self.bm25_retriever = bm25s.BM25(method="lucene")
@@ -287,9 +288,10 @@ class HyperDB:
         self.vectors = np.vstack([self.vectors, vector]).astype(np.float32)
         self.documents.append(document)
 
-        # Update BM25 index if using hybrid strategy
+        # Mark BM25 index as stale — it will be rebuilt lazily before the next query.
+        # Rebuilding on every insert is O(n) and adds latency to every conversation turn.
         if self.rag_strategy == "hybrid":
-            self._init_bm25_index()
+            self._bm25_stale = True
 
     def add_documents(self, documents, vectors=None):
         if not documents:
@@ -502,6 +504,11 @@ class HyperDB:
         if self.rag_strategy != "hybrid":
             queue_message("WARNING: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
             return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
+
+        # Lazy BM25 rebuild — only when documents have changed since last query
+        if self._bm25_stale:
+            self._init_bm25_index()
+            self._bm25_stale = False
 
         try:
             # Vector Search

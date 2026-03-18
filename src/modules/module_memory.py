@@ -175,21 +175,39 @@ class MemoryManager:
             return ""
 
         topics = self.topic_index['topics']
-        last_updated = self.topic_index.get('last_updated', 'unknown')
 
         recent_topics = [t for t in topics if isinstance(t, dict) and self._is_recent_topic(t)]
         older_topics = [t for t in topics if isinstance(t, dict) and not self._is_recent_topic(t)]
 
-        recent_names = [t.get('topic', t) if isinstance(t, dict) else t for t in recent_topics]
-        older_names = [t.get('topic', t) if isinstance(t, dict) else t for t in older_topics]
+        summary_parts = ["=== Known Facts About the User ==="]
 
-        summary_parts = ["=== Discussion Topics Index ==="]
+        if recent_topics:
+            summary_parts.append("Recent:")
+            for t in recent_topics[:15]:
+                name = t.get('topic', '') if isinstance(t, dict) else str(t)
+                count = t.get('mention_count', 1) if isinstance(t, dict) else 1
+                last = t.get('last_mentioned', '')
+                if last:
+                    try:
+                        last_dt = datetime.fromisoformat(last)
+                        days_ago = (datetime.now() - last_dt).days
+                        if days_ago == 0:
+                            when = "today"
+                        elif days_ago == 1:
+                            when = "yesterday"
+                        elif days_ago < 7:
+                            when = f"{days_ago}d ago"
+                        else:
+                            when = f"{days_ago // 7}w ago"
+                        summary_parts.append(f"  - {name} (mentioned {count}x, last {when})")
+                    except Exception:
+                        summary_parts.append(f"  - {name}")
+                else:
+                    summary_parts.append(f"  - {name}")
 
-        if recent_names:
-            summary_parts.append(f"Recent: {', '.join(recent_names[:15])}")
-
-        if older_names:
-            summary_parts.append(f"Previous: {', '.join(older_names[:20])}")
+        if older_topics:
+            older_names = [t.get('topic', '') if isinstance(t, dict) else str(t) for t in older_topics[:20]]
+            summary_parts.append(f"Older: {', '.join(older_names)}")
 
         summary_parts.append("===")
 
@@ -495,12 +513,28 @@ class MemoryManager:
             doc_id_to_idx = {id(doc): idx for idx, doc in enumerate(documents)}
             num_docs = len(documents)
 
-            # Map results to indices with scores
+            # Map results to indices with scores, deduplicating near-identical content.
+            # Without this, "what color is my dog?" could return 5 exchanges that all
+            # say "dog named Max" — wasting the limited context budget on repetition.
             primary_hits = []
-            for doc, score in results[:self.max_memories_to_use]:
+            seen_content = []
+            for doc, score in results:
+                if len(primary_hits) >= self.max_memories_to_use:
+                    break
                 idx = doc_id_to_idx.get(id(doc))
-                if idx is not None:
+                if idx is None:
+                    continue
+                # Check for duplicate content (same user_input or very similar)
+                content_key = doc.get('user_input', '').lower().strip()
+                is_dup = False
+                for prev in seen_content:
+                    if content_key and prev and self._is_similar_memory(content_key, prev):
+                        is_dup = True
+                        break
+                if not is_dup:
                     primary_hits.append((idx, float(score)))
+                    if content_key:
+                        seen_content.append(content_key)
 
             if not primary_hits:
                 return []
@@ -638,24 +672,60 @@ class MemoryManager:
             return ""
 
     def get_conversation_summary(self, lookback_hours: int = 24) -> str:
+        """Episodic summary: what happened in the last N hours, grouped by time.
+
+        Includes both user input and a truncated bot response so the LLM
+        gets real context (not just a list of questions).
+        """
         try:
             documents = self.hyper_db.documents
             cutoff_time = datetime.now() - timedelta(hours=lookback_hours)
 
-            recent_topics = []
+            today_entries = []
+            yesterday_entries = []
+            older_entries = []
+            now = datetime.now()
+
             for doc in reversed(documents):
                 timestamp = self._parse_timestamp(doc)
+                if not timestamp or timestamp < cutoff_time:
+                    continue
+                user_input = doc.get('user_input', '')
+                if not user_input:
+                    continue
 
-                if timestamp and timestamp > cutoff_time:
-                    user_input = doc.get('user_input', '')
-                    if user_input:
-                        recent_topics.append(user_input)
+                # Truncate bot response to keep summary compact
+                bot_short = doc.get('bot_response', '')
+                if len(bot_short) > 60:
+                    bot_short = bot_short[:57] + "..."
 
-            if recent_topics:
-                return f"Recent topics discussed: {', '.join(recent_topics[:5])}"
-            return ""
+                entry = f"{user_input} -> {bot_short}" if bot_short else user_input
 
-        except Exception as e:
+                delta = now - timestamp
+                if delta.days == 0:
+                    today_entries.append(entry)
+                elif delta.days == 1:
+                    yesterday_entries.append(entry)
+                else:
+                    older_entries.append(entry)
+
+                if len(today_entries) + len(yesterday_entries) + len(older_entries) >= 12:
+                    break
+
+            if not today_entries and not yesterday_entries and not older_entries:
+                return ""
+
+            parts = []
+            if today_entries:
+                parts.append("Today: " + " | ".join(today_entries[:5]))
+            if yesterday_entries:
+                parts.append("Yesterday: " + " | ".join(yesterday_entries[:4]))
+            if older_entries:
+                parts.append("Earlier: " + " | ".join(older_entries[:3]))
+
+            return "Recent activity: " + "\n  ".join(parts)
+
+        except Exception:
             return ""
 
     def get_shortterm_memories_recent(self, max_entries: int) -> List[str]:

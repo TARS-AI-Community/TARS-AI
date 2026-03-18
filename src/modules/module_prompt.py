@@ -364,13 +364,10 @@ IMPORTANT: Humor should complement a good answer, never replace it. If the user 
 
 === PART 4: MEMORY USAGE ===
 
-You have access to two types of memory:
-
-RECENT CONVERSATION (use this FIRST):
-{{short_term_memory}}
-
-LONG-TERM TOPICS (broader context):
-{{long_term_memory}}
+You have access to memory in the CONVERSATION CONTEXT section below:
+- RECENT CONVERSATION: The last several exchanges (use this FIRST for context)
+- LONG-TERM TOPICS: Facts about the user + relevant older conversations found by search
+- CONVERSATION SUMMARY: Brief overview of what was discussed recently (if available)
 
 MEMORY RULES:
 1. CONTEXT IS KING: Before you do ANYTHING, read the recent conversation above. The user's message almost always connects to what was just said.
@@ -588,9 +585,16 @@ def clean_text(text):
     )
 
 def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config, character_manager):
-    past_memory = clean_text(memory_manager.get_longterm_memory(user_prompt))
     short_term_memory = ""
+    past_memory = ""
+    conversation_summary = ""
     example_dialog = ""
+
+    # Episodic summary — lightweight overview of the last 24 hours
+    try:
+        conversation_summary = memory_manager.get_conversation_summary(lookback_hours=24)
+    except Exception:
+        pass
 
     total_base_prompt = "".join([
         base_prompt,
@@ -602,18 +606,47 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     base_length = memory_manager.token_count(total_base_prompt).get('length', 0)
     available_tokens = max(0, context_size - base_length)
 
-    if available_tokens > 0:
-        short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(available_tokens)
+    # Split token budget: 65% short-term (recent conversation), 35% long-term (RAG + topics)
+    # Short-term is the primary context for follow-up questions; long-term handles
+    # recall across sessions. This prevents either from starving the other.
+    shortterm_budget = int(available_tokens * 0.65)
+    longterm_budget = available_tokens - shortterm_budget
+
+    if shortterm_budget > 0:
+        short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(shortterm_budget)
         # Replace {user}/{char} placeholders with actual names so the LLM
         # sees "Joe: hello" instead of "{user}: hello" in conversation history
         active_user = _get_active_user_name(config['CHAR']['user_name'])
         short_term_memory = short_term_memory.replace("{user}", active_user).replace("{char}", character_manager.char_name)
-        memory_length = memory_manager.token_count(short_term_memory).get('length', 0)
-        available_tokens -= memory_length
+        shortterm_used = memory_manager.token_count(short_term_memory).get('length', 0)
+        # Give any unused short-term budget back to long-term
+        longterm_budget += (shortterm_budget - shortterm_used)
 
-    if available_tokens > 0 and character_manager.example_dialogue:
+    if longterm_budget > 0:
+        raw_longterm = clean_text(memory_manager.get_longterm_memory(user_prompt))
+        if raw_longterm:
+            lt_length = memory_manager.token_count(raw_longterm).get('length', 0)
+            if lt_length <= longterm_budget:
+                past_memory = raw_longterm
+            else:
+                # Truncate to fit — keep topic summary, trim RAG results
+                lines = raw_longterm.split('\n')
+                truncated = []
+                running = 0
+                for line in lines:
+                    line_len = memory_manager.token_count(line).get('length', 0)
+                    if running + line_len > longterm_budget:
+                        break
+                    truncated.append(line)
+                    running += line_len
+                past_memory = '\n'.join(truncated)
+        remaining_tokens = longterm_budget - memory_manager.token_count(past_memory).get('length', 0) if past_memory else longterm_budget
+    else:
+        remaining_tokens = 0
+
+    if remaining_tokens > 0 and character_manager.example_dialogue:
         example_length = memory_manager.token_count(character_manager.example_dialogue).get('length', 0)
-        if example_length <= available_tokens:
+        if example_length <= remaining_tokens:
             active_user_ex = _get_active_user_name(config['CHAR']['user_name'])
             ex_text = character_manager.example_dialogue.replace("{user}", active_user_ex).replace("{char}", character_manager.char_name)
             ex_text = ex_text.replace("{{user}}", active_user_ex).replace("{{char}}", character_manager.char_name)
@@ -714,9 +747,10 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         f"{base_prompt}"
         f"{example_dialog}"
         f"\n=== CONVERSATION CONTEXT ===\n"
+        f"{f'{conversation_summary}{chr(10)}' if conversation_summary else ''}"
         f"\n* RECENT CONVERSATION (use for context, but don't drag in topics the user moved on from) *\n"
         f"{short_term_memory}\n"
-        f"\nLong-Term Topics:\n{past_memory}\n"
+        f"\nLong-Term Memory:\n{past_memory}\n"
         f"\n=== CURRENT INTERACTION ===\n"
         f"\n*** RULES FOR THIS RESPONSE ***\n"
         f"{intent_instruction}"
