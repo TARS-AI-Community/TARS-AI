@@ -28,8 +28,16 @@
         </div>
       </div>
 
-      <!-- RIGHT: Import + Save + Saved -->
+      <!-- RIGHT: Preview + Import + Save + Saved -->
       <div class="body-side">
+        <div class="body-panel bld-panel-preview">
+          <div class="body-panel-label">PREVIEW</div>
+          <div class="bld-preview-viewport" id="bldPreviewViewport"></div>
+          <div class="bld-preview-controls">
+            <button class="hud-btn hud-btn-secondary" id="bldPreview"><i class="bi bi-play-fill"></i> Preview</button>
+            <button class="hud-btn hud-btn-secondary" id="bldPreviewStop" style="display:none"><i class="bi bi-stop-fill"></i> Stop</button>
+          </div>
+        </div>
         <div class="body-panel">
           <div class="body-panel-label">IMPORT</div>
           <div class="bld-movement-add">
@@ -458,6 +466,32 @@
   background: rgba(255,68,68,0.12);
   border: 1px solid rgba(255,68,68,0.4);
   color: var(--red);
+}
+.bld-panel-preview {
+  display: flex;
+  flex-direction: column;
+}
+.bld-preview-viewport {
+  width: 100%;
+  height: 220px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #0a0a14;
+  border: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+}
+.bld-preview-viewport canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+.bld-preview-controls {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.bld-preview-controls .hud-btn {
+  flex: 1;
 }
 @media (max-width: 768px) {
   #motionBuilder .body-sides {

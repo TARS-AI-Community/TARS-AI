@@ -5250,6 +5250,9 @@ function $(id) { return document.getElementById(id); }
     });
   });
 
+  // ── Expose steps for 3D preview ──────────────────────────────────────────
+  window._bldGetSteps = function () { return JSON.parse(JSON.stringify(steps)); };
+
   // ── Boot ──────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', init);
 })();
