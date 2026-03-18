@@ -52,6 +52,8 @@ function _dbg(...args) {
     } catch {}
   }
 
+  window.wfLoadStatus = loadStatus;
+
   window.wfScan = async function () {
     const list = $('wfNetList');
     list.innerHTML = '<div class="wf-scanning"><span class="wf-spinner"></span>Scanning…</div>';
@@ -138,8 +140,6 @@ function _dbg(...args) {
       .finally(() => { btn.disabled = false; });
   };
 
-  const wifiTab = $('wifi-tab');
-  if (wifiTab) wifiTab.addEventListener('shown.bs.tab', () => { loadStatus(); wfScan(); });
 })();
 
 
@@ -1360,7 +1360,8 @@ function executeAction() {
     'BATTERY':'bi-battery-half',
     'SKILLS':'bi-lightning-fill',
     'MISC':'bi-wrench-adjustable',
-    'CHARACTER_EDITOR':'bi-person-lines-fill'
+    'CHARACTER_EDITOR':'bi-person-lines-fill',
+    'WIFI':'bi-wifi'
   };
   const SECTION_LABELS = {
     'CHAR':'System','CONTROLS':'Controls',
@@ -1370,14 +1371,15 @@ function executeAction() {
     'BATTERY':'Battery',
     'SKILLS':'Skills',
     'MISC':'Misc',
-    'CHARACTER_EDITOR':'Character'
+    'CHARACTER_EDITOR':'Character',
+    'WIFI':'WiFi'
   };
 
   const SECTION_ORDER = [
     'CHAR', 'LLM', 'SKILLS',
     'STT', 'TTS',
     'EMOTION', 'VISION', 'RAG',
-    'UI', 'ACCESS',
+    'UI', 'ACCESS', 'WIFI',
     'CONTROLS',
     'BATTERY'
   ];
@@ -1595,7 +1597,7 @@ function executeAction() {
       // Order sections: SECTION_ORDER first, then any extras from backend
       // SKILLS is always shown (it has its own data source, not config.ini)
       const allSections = Object.keys(data.config);
-      const alwaysShow = ['SKILLS'];
+      const alwaysShow = ['SKILLS', 'WIFI'];
       const ordered = SECTION_ORDER.filter(s => allSections.includes(s) || alwaysShow.includes(s));
       allSections.forEach(s => { if (!ordered.includes(s)) ordered.push(s); });
 
@@ -1634,6 +1636,12 @@ function executeAction() {
               <div class="config-loading"><div class="hud-spinner"></div><span>Loading skills…</span></div>
             </div>
           </div></div>`;
+          continue;
+        }
+
+        // WiFi section: embedded WiFi manager
+        if (section === 'WIFI') {
+          html += `<div class="config-panel-body" id="configWifiPanel"></div></div>`;
           continue;
         }
 
@@ -1804,6 +1812,14 @@ function executeAction() {
       form.innerHTML = html;
       activeConfigSection = null;
 
+      // Move WiFi content into the WiFi config panel
+      var wifiPanel = document.getElementById('configWifiPanel');
+      var wifiSource = document.getElementById('configWifiSource');
+      if (wifiPanel && wifiSource) {
+        while (wifiSource.firstChild) wifiPanel.appendChild(wifiSource.firstChild);
+        wifiSource.remove();
+      }
+
       // Wire up character editor events
       initCharacterEditor();
 
@@ -1826,6 +1842,7 @@ function executeAction() {
             grid.classList.add('has-active');
             activeConfigSection = target;
             if (target === 'SKILLS') loadSkillsPanel();
+            if (target === 'WIFI') { wfLoadStatus(); wfScan(); }
             if (target === 'CHARACTER_EDITOR' && window.onCharacterEditorOpen) window.onCharacterEditorOpen();
             setTimeout(() => panel.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
           }
@@ -2657,8 +2674,8 @@ window.showToast = function (message, type, duration) {
 
 // ── MOBILE SWIPE NAV ─────────────────────────────────────────────────────────
 (function () {
-  const TAB_IDS = ['chat', 'motion', 'emotions', 'wifi', 'dashboard', 'config'];
-  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'emotions-tab', 'wifi-tab', 'dashboard-tab', 'config-tab'];
+  const TAB_IDS = ['chat', 'motion', 'emotions', 'dashboard', 'config'];
+  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'emotions-tab', 'dashboard-tab', 'config-tab'];
   let currentIndex = 0;
   let isMobile = false;
 

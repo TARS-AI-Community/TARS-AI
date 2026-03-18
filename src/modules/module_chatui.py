@@ -2702,7 +2702,7 @@ def dashboard_graph():
 
     # ── KNOWLEDGE (TOPICS): categorized ──
     if mm and hasattr(mm, 'topic_index') and mm.topic_index.get('topics'):
-        add_node({"id": "hub_knowledge", "name": "TOPICS", "color": "#39ff14", "size": 22, "group": "hub"})
+        add_node({"id": "hub_knowledge", "name": "SEMANTICS", "color": "#39ff14", "size": 22, "group": "hub"})
         links.append({"source": "BRAIN", "target": "hub_knowledge"})
 
         categories = {
