@@ -646,6 +646,14 @@ def llm_execute_side_effects(parsed, user_input, source="voice", has_image=False
                         queue_message(f"MEMORY: Failed to save: {e}")
 
                 threading.Thread(target=save_memories).start()
+
+            # Save transient activity context (e.g. "cooking spaghetti for dinner")
+            current_activity = parsed.get("current_activity")
+            if current_activity and isinstance(current_activity, str) and current_activity.strip():
+                threading.Thread(
+                    target=memory_manager.save_current_activity,
+                    args=(current_activity,)
+                ).start()
     except Exception as e:
         queue_message(f"ERROR: Side effects execution failed: {e}")
 

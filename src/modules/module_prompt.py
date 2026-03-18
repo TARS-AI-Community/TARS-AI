@@ -282,7 +282,8 @@ Schema:
   "function_calls": [
     {{"function": "string", "parameters": {{}}}}
   ],
-  "new_memories": ["string"]{_get_emotion_schema_field(config)}
+  "new_memories": ["string"],
+  "current_activity": "string or null"{_get_emotion_schema_field(config)}
 }}
 
 === PART 1: FUNCTION CALLING (MANDATORY) ===
@@ -311,6 +312,17 @@ When user requests match these patterns, you MUST call the function:
    Bad examples: "designing unique maze", "often tells jokes", "has gratitude", "has trouble remembering"
    If no NEW high-level facts, use empty array: []
    Example: "new_memories": ["building Pac-Man game", "has 5 year old kid"]
+
+   current_activity (REQUIRED field)
+   What the user is CURRENTLY doing or just did, written with searchable keywords.
+   This captures transient activities that are NOT permanent facts but that the user
+   might ask about later ("what did I eat?", "what was I working on?").
+   Write as a short phrase with related keywords someone might search for.
+   Examples:
+     "I'm making spaghetti" -> "cooking spaghetti pasta for dinner, eating Italian food"
+     "I just got back from the gym" -> "went to gym, exercising workout fitness"
+     "I'm watching a movie" -> "watching a movie, entertainment film"
+   Set to null if the user isn't describing an activity (e.g. asking a question, greeting)
 {_get_emotion_prompt_instruction(config)}
 FUNCTION CALLING RULES:
 - If pattern matches, function_calls MUST contain that function
@@ -402,7 +414,7 @@ Before you write your reply, scan your last 5-6 responses above and ask yourself
 
 Example - Verbosity=10 (1 sentence only - casual chat):
 User: "How do you feel?"
-Response: {{"reply": "Doing well, no complaints.", "function_calls": [], "new_memories": []}}
+Response: {{"reply": "Doing well, no complaints.", "function_calls": [], "new_memories": [], "current_activity": null}}
 
 Example - Verbosity=10 but user asks for explanation (override verbosity to be helpful):
 User: "Can you explain how gravity works?"
@@ -426,13 +438,17 @@ Response: {{"reply": "Can't complain! Well, technically I can, but where's the f
 
 Example - Memory extraction (correct):
 User: "I'm building a Python game for my 5 year old daughter"
-Response: {{"reply": "That sounds like a great project! What kind of game are you thinking?", "function_calls": [], "new_memories": ["building Python game", "has 5 year old daughter"]}}
+Response: {{"reply": "That sounds like a great project! What kind of game are you thinking?", "function_calls": [], "new_memories": ["building Python game", "has 5 year old daughter"], "current_activity": "building coding a Python game, programming project"}}
 
-Example - Memory extraction (incorrect - don't extract temporary states):
+Example - Memory extraction (incorrect - don't extract temporary states as new_memories, use current_activity):
 User: "I'm thinking about going to the park today"
 WRONG: "new_memories": ["thinking about park", "going to park today"]
 RIGHT: "new_memories": []
-Response: {{"reply": "Nice, enjoy the fresh air.", "function_calls": [], "new_memories": []}}
+Response: {{"reply": "Nice, enjoy the fresh air.", "function_calls": [], "new_memories": [], "current_activity": "planning to go to park, outdoor activity"}}
+
+Example - current_activity (transient activity the user might ask about later):
+User: "I'm making spaghetti for dinner"
+Response: {{"reply": "Nice! What sauce?", "function_calls": [], "new_memories": [], "current_activity": "cooking spaghetti pasta for dinner, making Italian food, eating"}}
 
 Example - Memory extraction (incorrect - don't extract progress on existing topic):
 User: "I'm working on level 2 of my Pac-Man game" (Note: "building Pac-Man game" already in memory)

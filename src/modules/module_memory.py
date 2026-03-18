@@ -170,6 +170,47 @@ class MemoryManager:
         except Exception:
             pass  # heartbeat not available — memory will flush on shutdown only
 
+    # --- Current Activity Tracking ---
+    # Transient activities (TTL-based) that bridge the gap between short-term
+    # conversation context and permanent topic facts.
+
+    def save_current_activity(self, activity: str):
+        """Store a transient activity note with a timestamp. Auto-pruned on read."""
+        if not activity or not activity.strip():
+            return
+        activities = self.hyper_db.extra_data.setdefault("current_activities", [])
+        activities.append({
+            "text": activity.strip(),
+            "timestamp": datetime.now().isoformat()
+        })
+        # Keep list bounded to avoid unbounded growth
+        if len(activities) > 50:
+            activities[:] = activities[-50:]
+        self._mark_dirty()
+
+    def get_current_activities(self, max_age_hours: int = 4) -> str:
+        """Return recent activities as a prompt-injectable string, pruning expired ones."""
+        activities = self.hyper_db.extra_data.get("current_activities", [])
+        if not activities:
+            return ""
+        cutoff = datetime.now() - timedelta(hours=max_age_hours)
+        valid = []
+        for a in activities:
+            try:
+                ts = datetime.fromisoformat(a["timestamp"])
+                if ts >= cutoff:
+                    valid.append(a)
+            except Exception:
+                continue
+        # Prune expired entries
+        if len(valid) != len(activities):
+            self.hyper_db.extra_data["current_activities"] = valid
+            self._mark_dirty()
+        if not valid:
+            return ""
+        lines = [a["text"] for a in valid[-8:]]  # last 8 activities
+        return "Current/recent activities: " + " | ".join(lines)
+
     def get_topic_index_summary(self) -> str:
         if not self.topic_index.get('topics'):
             return ""
@@ -223,12 +264,13 @@ class MemoryManager:
         return False
 
     def _is_similar_memory(self, new_memory: str, existing_memory: str) -> bool:
-        new_words = set(new_memory.lower().split())
-        existing_words = set(existing_memory.lower().split())
+        filler = {'the', 'a', 'an', 'is', 'on', 'with', 'and', 'or', 'of', 'to', 'in',
+                  'has', 'had', 'have', 'was', 'were', 'been', 'be', 'am', 'are',
+                  'i', 'my', 'me', 'you', 'your', 'they', 'their', 'it', 'its',
+                  'that', 'this', 'for', 'at', 'by', 'from', 'about', 'just', 'so'}
 
-        filler = {'the', 'a', 'an', 'is', 'on', 'with', 'and', 'or', 'of', 'to', 'in'}
-        new_words -= filler
-        existing_words -= filler
+        new_words = set(new_memory.lower().split()) - filler
+        existing_words = set(existing_memory.lower().split()) - filler
 
         if not new_words or not existing_words:
             return False
@@ -236,8 +278,10 @@ class MemoryManager:
         overlap = len(new_words & existing_words)
         smaller_set_size = min(len(new_words), len(existing_words))
 
+        # Use overlap ratio against the SMALLER set — catches cases like
+        # "has dog named Max" vs "adopted a dog called Max" (overlap: {dog, max})
         similarity = overlap / smaller_set_size if smaller_set_size > 0 else 0
-        return similarity >= 0.7
+        return similarity >= 0.6
 
     def update_topic_index_with_ai_response(self, ai_extracted_topics: str):
         try:
@@ -294,6 +338,17 @@ class MemoryManager:
             if added_count > 0:
                 self.topic_index['last_updated'] = datetime.now().isoformat()
                 self.topic_index['total_conversations'] = self.topic_index.get('total_conversations', 0) + 1
+
+                # Prune if over 100 topics — drop oldest, lowest mention-count entries
+                max_topics = 100
+                topics = self.topic_index['topics']
+                if len(topics) > max_topics:
+                    topics.sort(key=lambda t: (
+                        t.get('mention_count', 1) if isinstance(t, dict) else 1,
+                        t.get('last_mentioned', '') if isinstance(t, dict) else ''
+                    ))
+                    self.topic_index['topics'] = topics[-max_topics:]
+
                 self.save_topic_index()
 
                 for mem in added_memories:
@@ -524,6 +579,10 @@ class MemoryManager:
                 idx = doc_id_to_idx.get(id(doc))
                 if idx is None:
                     continue
+                # Skip tool-only entries (no user_input) — these are noise from
+                # write_tool_used() and pollute search results
+                if not doc.get('user_input'):
+                    continue
                 # Check for duplicate content (same user_input or very similar)
                 content_key = doc.get('user_input', '').lower().strip()
                 is_dup = False
@@ -654,6 +713,13 @@ class MemoryManager:
 
             context_parts = []
 
+            # Transient activities (last 4h) — bridges the gap between
+            # short-term conversation and permanent topics
+            activity_ctx = self.get_current_activities(max_age_hours=4)
+            if activity_ctx:
+                context_parts.append(activity_ctx)
+                context_parts.append("")
+
             topic_summary = self.get_topic_index_summary()
             if topic_summary:
                 context_parts.append(topic_summary)
@@ -700,6 +766,11 @@ class MemoryManager:
                     bot_short = bot_short[:57] + "..."
 
                 entry = f"{user_input} -> {bot_short}" if bot_short else user_input
+
+                # Skip near-duplicate entries (user asked same thing multiple times)
+                all_so_far = today_entries + yesterday_entries + older_entries
+                if any(self._is_similar_memory(user_input, prev.split(' -> ')[0]) for prev in all_so_far if prev):
+                    continue
 
                 delta = now - timestamp
                 if delta.days == 0:
