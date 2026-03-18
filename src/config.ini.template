@@ -170,9 +170,7 @@ enabled = True
 enable_topic_tracking = True
 # Search method: naive (vector only) | hybrid (vector + keyword, recommended)
 strategy = hybrid
-# Meaning vs keyword weight in hybrid mode (0.5 = equal)
-vector_weight = 0.5
-# Surrounding entries to include with each retrieved memory
+# Surrounding entries to include with each retrieved memory (0-2, lower = less noise)
 context_window = 2
 # Top N memories that get context window expansion
 max_memories = 3

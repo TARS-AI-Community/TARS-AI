@@ -50,7 +50,6 @@ class MemoryManager:
 
         rag_config = self.config.get('RAG', {})
         self.rag_strategy = rag_config.get('strategy', 'naive')
-        self.vector_weight = float(rag_config.get('vector_weight', 0.5))
         self.top_k = int(rag_config.get('top_k', 5))
 
         self.context_window_size = int(rag_config.get('context_window', 2))
@@ -369,7 +368,7 @@ class MemoryManager:
                     self.save_topic_index()
                     break
 
-    def write_longterm_memory(self, user_input: str, bot_response: str):
+    def write_longterm_memory(self, user_input: str, bot_response: str, activity_context: str = None):
         self.ui_manager.save_memory()
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         document = {
@@ -377,6 +376,11 @@ class MemoryManager:
             "user_input": user_input,
             "bot_response": bot_response,
         }
+        # Store enriched activity keywords on the document itself so they're
+        # permanently searchable via BM25 and embedding — not just the 4h TTL cache.
+        # e.g. "cooking spaghetti pasta for dinner, making Italian food, eating"
+        if activity_context:
+            document["activity_context"] = activity_context
         # Tag memory with current speaker and present people via identity coordinator
         try:
             if self._identity_manager is None:
@@ -429,6 +433,7 @@ class MemoryManager:
         self._mark_dirty()
         self.flush(blocking=True)
         queue_message(f"MEMORY: Reindex complete. {count} document vectors updated.")
+
 
     def _parse_timestamp(self, memory: Dict[str, Any]) -> Optional[datetime]:
         cached = memory.get('_parsed_ts')

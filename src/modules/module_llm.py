@@ -631,9 +631,13 @@ def llm_execute_side_effects(parsed, user_input, source="voice", has_image=False
             queue_message(f"DEBUG: No function calls to execute (value: {fc!r})")
 
         if memory_manager:
+            # Extract activity BEFORE writing memory so it gets stored on the document
+            current_activity = parsed.get("current_activity")
+            activity_str = current_activity.strip() if isinstance(current_activity, str) and current_activity else None
+
             threading.Thread(
                 target=memory_manager.write_longterm_memory,
-                args=(user_input, parsed["reply"])
+                args=(user_input, parsed["reply"], activity_str)
             ).start()
 
             new_memories = parsed.get("new_memories", [])
@@ -647,12 +651,11 @@ def llm_execute_side_effects(parsed, user_input, source="voice", has_image=False
 
                 threading.Thread(target=save_memories).start()
 
-            # Save transient activity context (e.g. "cooking spaghetti for dinner")
-            current_activity = parsed.get("current_activity")
-            if current_activity and isinstance(current_activity, str) and current_activity.strip():
+            # Also save to the short-lived activity cache (injected directly into prompt)
+            if activity_str:
                 threading.Thread(
                     target=memory_manager.save_current_activity,
-                    args=(current_activity,)
+                    args=(activity_str,)
                 ).start()
     except Exception as e:
         queue_message(f"ERROR: Side effects execution failed: {e}")

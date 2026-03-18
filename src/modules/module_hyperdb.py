@@ -86,13 +86,16 @@ def get_embedding(documents, key=None):
             elif key is None:
                 for doc in documents:
                     # For conversation documents, embed only the actual content
-                    # (not metadata labels like "timestamp:", "speaker:" which pollute the vector)
+                    # (not metadata labels like "timestamp:", "speaker:" which pollute the vector).
+                    # Include activity_context for enriched searchability.
                     if "user_input" in doc or "bot_response" in doc:
                         parts = []
                         if doc.get("user_input"):
                             parts.append(doc["user_input"])
                         if doc.get("bot_response"):
                             parts.append(doc["bot_response"])
+                        if doc.get("activity_context"):
+                            parts.append(doc["activity_context"])
                         text = " ".join(parts) if parts else ", ".join(str(v) for v in doc.values())
                     else:
                         text = ", ".join([f"{k}: {v}" for k, v in doc.items()])
@@ -243,8 +246,10 @@ class HyperDB:
                 if "user_input" in doc:
                     text += doc["user_input"] + " "
                 if "bot_response" in doc:
-                    text += doc["bot_response"]
-                if not text:  # If no specific fields found, use all text fields
+                    text += doc["bot_response"] + " "
+                if "activity_context" in doc:
+                    text += doc["activity_context"]
+                if not text.strip():  # If no specific fields found, use all text fields
                     text = " ".join(str(v) for v in doc.values() if isinstance(v, (str, int, float)))
             else:
                 text = str(doc)
@@ -457,8 +462,10 @@ class HyperDB:
                     if "user_input" in doc:
                         text += doc["user_input"] + " "
                     if "bot_response" in doc:
-                        text += doc["bot_response"]
-                    if not text:  # Fallback: use all text fields from dict.
+                        text += doc["bot_response"] + " "
+                    if "activity_context" in doc:
+                        text += doc["activity_context"]
+                    if not text.strip():  # Fallback: use all text fields from dict.
                         text = " ".join(str(v) for v in doc.values() if isinstance(v, (str, int, float)))
                 else:
                     text = str(doc)
