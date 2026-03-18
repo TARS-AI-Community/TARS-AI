@@ -130,14 +130,51 @@ function _dbg(...args) {
   window.wfToggleHotspot = function () {
     const btn = $('wfHotspotBtn');
     const isHotspot = btn.textContent.trim() === 'Stop Hotspot';
-    const msg = isHotspot
-      ? 'Stop the hotspot and go offline?'
-      : 'This will disconnect Wi-Fi and start the hotspot. Continue?';
-    if (!confirm(msg)) return;
-    btn.disabled = true;
-    fetch('/api/wifi/hotspot', { method: 'PUT' })
-      .then(() => setTimeout(loadStatus, 1500))
-      .finally(() => { btn.disabled = false; });
+    const title = isHotspot ? 'STOP HOTSPOT' : 'START HOTSPOT';
+    const subtitle = isHotspot
+      ? 'This will stop the hotspot and go offline.'
+      : 'This will disconnect Wi-Fi and start the TARS hotspot.';
+    const icon = isHotspot ? 'bi-wifi-off' : 'bi-broadcast';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'reboot-overlay';
+    overlay.innerHTML = `
+      <div class="reboot-card">
+        <div class="reboot-icon"><i class="bi ${icon}"></i></div>
+        <div class="reboot-title">${title}</div>
+        <p class="reboot-subtitle">${subtitle}</p>
+        <div class="reboot-actions">
+          <button class="hud-btn hud-btn-ghost" id="hotspotNo">Cancel</button>
+          <button class="hud-btn hud-btn-primary" id="hotspotYes"><i class="bi ${icon}"></i> ${isHotspot ? 'Stop' : 'Start'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('active')));
+
+    function close() {
+      overlay.classList.remove('active');
+      setTimeout(() => overlay.remove(), 300);
+    }
+
+    overlay.querySelector('#hotspotNo').onclick = close;
+    overlay.querySelector('#hotspotYes').onclick = function () {
+      const card = overlay.querySelector('.reboot-card');
+      card.innerHTML = `
+        <div class="reboot-icon"><i class="bi bi-arrow-repeat spin"></i></div>
+        <div class="reboot-title">${isHotspot ? 'STOPPING' : 'STARTING'}…</div>
+        <p class="reboot-subtitle">Please wait…</p>`;
+      btn.disabled = true;
+      fetch('/api/wifi/hotspot', { method: 'PUT' })
+        .then(() => {
+          setTimeout(() => {
+            loadStatus();
+            close();
+          }, 1500);
+        })
+        .catch(() => close())
+        .finally(() => { btn.disabled = false; });
+    };
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   };
 
 })();
