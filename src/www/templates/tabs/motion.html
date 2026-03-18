@@ -2,48 +2,70 @@
   <div class="motion-camera-bg" id="motionCameraBg">
     <img id="motionCameraFeed" src="" alt="">
   </div>
-  <div class="motion-wrap">
 
-    <!-- D-Pad -->
-    <div class="dpad-section">
-      <div class="section-label">MOVEMENT</div>
-      <div class="dpad-housing">
-        <div class="dpad">
-          <button class="dpad-btn dpad-up"    id="btnUp"    aria-label="Forward"><i class="bi bi-caret-up-fill"></i></button>
-          <button class="dpad-btn dpad-left"  id="btnLeft"  aria-label="Left"><i class="bi bi-caret-left-fill"></i></button>
-          <div class="dpad-center">
-            <button class="camera-toggle-btn" id="motionCameraToggle" title="Toggle camera view">
-              <i class="bi bi-camera-video"></i>
-            </button>
-          </div>
-          <button class="dpad-btn dpad-right" id="btnRight" aria-label="Right"><i class="bi bi-caret-right-fill"></i></button>
-          <button class="dpad-btn dpad-down"  id="btnDown"  aria-label="Backward"><i class="bi bi-caret-down-fill"></i></button>
-        </div>
-        <div class="speed-pills">
-          <label class="speed-pill">
-            <input type="radio" name="speed" value="slow" checked>
-            <span>SLOW</span>
-          </label>
-          <label class="speed-pill">
-            <input type="radio" name="speed" value="fast">
-            <span>FAST</span>
-          </label>
-        </div>
-      </div>
+  <!-- Sub-tab switcher (same style as dashboard) -->
+  <div class="motion-subtabs-bar">
+    <div class="dash-subtabs motion-subtabs">
+      <button class="dash-subtab active" data-motion-panel="motionRemote">Remote</button>
+      <button class="dash-subtab" data-motion-panel="motionBuilder">Builder</button>
+      <button class="dash-subtab" data-motion-panel="motionServo">Servo</button>
     </div>
-
-    <!-- Actions -->
-    <div class="actions-section">
-      <div class="section-label">EXECUTE</div>
-      <div class="actions-panel">
-        <select id="actionSelect" class="hud-select">
-          <option value="">Loading…</option>
-        </select>
-        <button class="hud-btn hud-btn-primary" onclick="executeAction()">
-          <i class="bi bi-play-fill"></i> RUN
-        </button>
-      </div>
-    </div>
-
   </div>
+
+  <!-- ── REMOTE panel ── -->
+  <div class="motion-panel active" id="motionRemote">
+    <div class="motion-wrap">
+      <!-- D-Pad -->
+      <div class="dpad-section">
+        <div class="section-label">MOVEMENT</div>
+        <div class="dpad-housing">
+          <div class="dpad">
+            <button class="dpad-btn dpad-up"    id="btnUp"    aria-label="Forward"><i class="bi bi-caret-up-fill"></i></button>
+            <button class="dpad-btn dpad-left"  id="btnLeft"  aria-label="Left"><i class="bi bi-caret-left-fill"></i></button>
+            <div class="dpad-center">
+              <button class="camera-toggle-btn" id="motionCameraToggle" title="Toggle camera view">
+                <i class="bi bi-camera-video"></i>
+              </button>
+            </div>
+            <button class="dpad-btn dpad-right" id="btnRight" aria-label="Right"><i class="bi bi-caret-right-fill"></i></button>
+            <button class="dpad-btn dpad-down"  id="btnDown"  aria-label="Backward"><i class="bi bi-caret-down-fill"></i></button>
+          </div>
+          <div class="speed-pills">
+            <label class="speed-pill">
+              <input type="radio" name="speed" value="slow" checked>
+              <span>SLOW</span>
+            </label>
+            <label class="speed-pill">
+              <input type="radio" name="speed" value="fast">
+              <span>FAST</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions-section">
+        <div class="section-label">EXECUTE</div>
+        <div class="actions-panel">
+          <select id="actionSelect" class="hud-select">
+            <option value="">Loading…</option>
+          </select>
+          <button class="hud-btn hud-btn-primary" onclick="executeAction()">
+            <i class="bi bi-play-fill"></i> RUN
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── BUILDER panel ── -->
+  <div class="motion-panel" id="motionBuilder">
+    {% include 'tabs/builder_content.html' %}
+  </div>
+
+  <!-- ── SERVO panel ── -->
+  <div class="motion-panel" id="motionServo">
+    {% include 'tabs/body_content.html' %}
+  </div>
+
 </div>
