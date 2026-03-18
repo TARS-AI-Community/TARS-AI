@@ -330,41 +330,47 @@
 }
 .bld-movement-add {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   align-items: stretch;
+  height: 34px;
 }
 .bld-movement-add .hud-btn {
-  padding: 0 12px;
+  padding: 0 8px;
   font-size: 11px;
+  letter-spacing: 0.08em;
+  min-width: 0;
 }
 .bld-movement-sel {
   flex: 1;
-  padding: 8px 10px;
-  font-size: 12px;
+  padding: 0 8px;
+  font-size: 11px;
   font-family: var(--font-hud);
   letter-spacing: 0.05em;
-  background: rgba(var(--panel-rgb), 0.35);
-  border: 1px solid rgba(var(--accent-rgb), 0.15);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
   border-radius: var(--radius-sm);
   color: var(--text);
   transition: border-color 0.25s;
 }
 .bld-save-row {
   display: flex;
-  gap: 6px;
-  align-items: center;
+  gap: 4px;
+  align-items: stretch;
+  height: 34px;
 }
 .bld-save-row .hud-btn {
-  padding: 6px 10px;
-  font-size: 13px;
+  padding: 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
   line-height: 1;
   flex-shrink: 0;
+  min-width: 0;
 }
 .bld-name-input {
   flex: 1;
-  min-width: 80px;
-  padding: 6px 10px;
-  font-size: 12px;
+  min-width: 60px;
+  padding: 0 8px;
+  font-size: 11px;
   font-family: var(--font-hud);
   letter-spacing: 0.05em;
   background: rgba(255,255,255,0.02);
@@ -385,19 +391,26 @@
 .bld-overwrite-confirm {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 4px 8px;
   background: rgba(255,255,255,0.05);
   border-radius: var(--radius-sm);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+}
+.bld-overwrite-confirm .hud-btn {
+  padding: 3px 8px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
 }
 .bld-confirm-msg {
   flex: 1;
   opacity: 0.8;
 }
+.bld-feedback:empty {
+  display: none;
+}
 .bld-feedback {
-  font-size: 0.85rem;
-  min-height: 1.2em;
+  font-size: 0.8rem;
   opacity: 0.8;
 }
 .bld-saved-list {
