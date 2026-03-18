@@ -4828,6 +4828,51 @@ function $(id) { return document.getElementById(id); }
     });
   }
 
+  // Touch-based drag reorder for mobile
+  function addTouchDrag(grip, stepIndex) {
+    grip.addEventListener('pointerdown', function () { dragFromIndex = stepIndex; });
+
+    var startY = 0, currentEl = null;
+    grip.addEventListener('touchstart', function (e) {
+      e.preventDefault();
+      startY = e.touches[0].clientY;
+      currentEl = grip.closest('.bld-step');
+      if (currentEl) currentEl.style.opacity = '0.5';
+    }, { passive: false });
+
+    grip.addEventListener('touchmove', function (e) {
+      e.preventDefault();
+      var touchY = e.touches[0].clientY;
+      var container = el('bldStepList');
+      var children = Array.from(container.children);
+      for (var j = 0; j < children.length; j++) {
+        var rect = children[j].getBoundingClientRect();
+        if (touchY >= rect.top && touchY <= rect.bottom && j !== stepIndex) {
+          dragOverIndex = j;
+          // Visual feedback
+          children.forEach(function (c) { c.style.borderTop = ''; c.style.borderBottom = ''; });
+          if (j < stepIndex) {
+            children[j].style.borderTop = '2px solid var(--cyan)';
+          } else {
+            children[j].style.borderBottom = '2px solid var(--cyan)';
+          }
+          break;
+        }
+      }
+    }, { passive: false });
+
+    grip.addEventListener('touchend', function () {
+      if (currentEl) currentEl.style.opacity = '';
+      if (dragFromIndex !== null && dragOverIndex !== null && dragFromIndex !== dragOverIndex) {
+        var moved = steps.splice(dragFromIndex, 1)[0];
+        steps.splice(dragOverIndex, 0, moved);
+      }
+      dragFromIndex = null;
+      dragOverIndex = null;
+      renderSteps();
+    });
+  }
+
   function buildMovementRow(step, i) {
     var row = document.createElement('div');
     row.className = 'bld-row bld-movement-row';
@@ -4835,7 +4880,7 @@ function $(id) { return document.getElementById(id); }
     var grip = document.createElement('span');
     grip.className = 'bld-grip';
     grip.textContent = '⠿';
-    grip.addEventListener('pointerdown', function () { dragFromIndex = i; });
+    addTouchDrag(grip, i);
     row.appendChild(grip);
 
     var icon = document.createElement('span');
@@ -4864,7 +4909,7 @@ function $(id) { return document.getElementById(id); }
     var grip = document.createElement('span');
     grip.className = 'bld-grip';
     grip.textContent = '⠿';
-    grip.addEventListener('pointerdown', function () { dragFromIndex = i; });
+    addTouchDrag(grip, i);
     row.appendChild(grip);
 
     var sliders = document.createElement('div');
@@ -4927,23 +4972,23 @@ function $(id) { return document.getElementById(id); }
     var wrap = document.createElement('div');
     wrap.className = 'bld-slider-wrap';
 
+    // Label + value together
     var header = document.createElement('div');
     header.className = 'bld-slider-header';
-
     var labelEl = document.createElement('span');
     labelEl.textContent = cfg.label;
-
-    var valEl = document.createElement('span');
-    valEl.className = 'bld-slider-val';
     var rawVal = step[cfg.field];
     if (rawVal === null || rawVal === undefined) rawVal = 1;
+    var valEl = document.createElement('span');
+    valEl.className = 'bld-slider-val';
     valEl.textContent = cfg.field === 'speed' ? rawVal.toFixed(2)
       : cfg.field === 'hold_time' ? rawVal.toFixed(1)
       : rawVal;
-
     header.appendChild(labelEl);
     header.appendChild(valEl);
+    wrap.appendChild(header);
 
+    // Range input
     var input = document.createElement('input');
     input.type = 'range';
     input.min = cfg.min;
@@ -4951,6 +4996,7 @@ function $(id) { return document.getElementById(id); }
     input.step = cfg.step;
     input.value = rawVal;
     input.className = 'bld-slider';
+    wrap.appendChild(input);
 
     input.addEventListener('input', function () {
       var v = cfg.field === 'speed' || cfg.field === 'hold_time'
@@ -4961,6 +5007,18 @@ function $(id) { return document.getElementById(id); }
         : cfg.field === 'hold_time' ? v.toFixed(1)
         : v;
     });
+
+    // Click wrap to expand slider, release slider to collapse
+    wrap.addEventListener('click', function (e) {
+      if (e.target === input) return; // don't toggle when dragging slider
+      // Close any other active slider wraps
+      document.querySelectorAll('.bld-slider-wrap.active').forEach(function (w) {
+        if (w !== wrap) w.classList.remove('active');
+      });
+      wrap.classList.toggle('active');
+    });
+    input.addEventListener('mouseup', function () { wrap.classList.remove('active'); });
+    input.addEventListener('touchend', function () { wrap.classList.remove('active'); });
 
     if (liveEnabled && cfg.field !== 'hold_time') {
       var sendLive = function () {
@@ -4980,8 +5038,6 @@ function $(id) { return document.getElementById(id); }
       input.addEventListener('touchend', sendLive);
     }
 
-    wrap.appendChild(header);
-    wrap.appendChild(input);
     return wrap;
   }
 
