@@ -282,7 +282,8 @@ Schema:
   "function_calls": [
     {{"function": "string", "parameters": {{}}}}
   ],
-  "new_memories": ["string"]{_get_emotion_schema_field(config)}
+  "new_memories": ["string"],
+  "current_activity": "string or null"{_get_emotion_schema_field(config)}
 }}
 
 === PART 1: FUNCTION CALLING (MANDATORY) ===
@@ -311,6 +312,17 @@ When user requests match these patterns, you MUST call the function:
    Bad examples: "designing unique maze", "often tells jokes", "has gratitude", "has trouble remembering"
    If no NEW high-level facts, use empty array: []
    Example: "new_memories": ["building Pac-Man game", "has 5 year old kid"]
+
+   current_activity (REQUIRED field)
+   What the user is CURRENTLY doing or just did, written with searchable keywords.
+   This captures transient activities that are NOT permanent facts but that the user
+   might ask about later ("what did I eat?", "what was I working on?").
+   Write as a short phrase with related keywords someone might search for.
+   Examples:
+     "I'm making spaghetti" -> "cooking spaghetti pasta for dinner, eating Italian food"
+     "I just got back from the gym" -> "went to gym, exercising workout fitness"
+     "I'm watching a movie" -> "watching a movie, entertainment film"
+   Set to null if the user isn't describing an activity (e.g. asking a question, greeting)
 {_get_emotion_prompt_instruction(config)}
 FUNCTION CALLING RULES:
 - If pattern matches, function_calls MUST contain that function
@@ -364,13 +376,10 @@ IMPORTANT: Humor should complement a good answer, never replace it. If the user 
 
 === PART 4: MEMORY USAGE ===
 
-You have access to two types of memory:
-
-RECENT CONVERSATION (use this FIRST):
-{{short_term_memory}}
-
-LONG-TERM TOPICS (broader context):
-{{long_term_memory}}
+You have access to memory in the CONVERSATION CONTEXT section below:
+- RECENT CONVERSATION: The last several exchanges (use this FIRST for context)
+- LONG-TERM TOPICS: Facts about the user + relevant older conversations found by search
+- CONVERSATION SUMMARY: Brief overview of what was discussed recently (if available)
 
 MEMORY RULES:
 1. CONTEXT IS KING: Before you do ANYTHING, read the recent conversation above. The user's message almost always connects to what was just said.
@@ -405,7 +414,7 @@ Before you write your reply, scan your last 5-6 responses above and ask yourself
 
 Example - Verbosity=10 (1 sentence only - casual chat):
 User: "How do you feel?"
-Response: {{"reply": "Doing well, no complaints.", "function_calls": [], "new_memories": []}}
+Response: {{"reply": "Doing well, no complaints.", "function_calls": [], "new_memories": [], "current_activity": null}}
 
 Example - Verbosity=10 but user asks for explanation (override verbosity to be helpful):
 User: "Can you explain how gravity works?"
@@ -429,13 +438,17 @@ Response: {{"reply": "Can't complain! Well, technically I can, but where's the f
 
 Example - Memory extraction (correct):
 User: "I'm building a Python game for my 5 year old daughter"
-Response: {{"reply": "That sounds like a great project! What kind of game are you thinking?", "function_calls": [], "new_memories": ["building Python game", "has 5 year old daughter"]}}
+Response: {{"reply": "That sounds like a great project! What kind of game are you thinking?", "function_calls": [], "new_memories": ["building Python game", "has 5 year old daughter"], "current_activity": "building coding a Python game, programming project"}}
 
-Example - Memory extraction (incorrect - don't extract temporary states):
+Example - Memory extraction (incorrect - don't extract temporary states as new_memories, use current_activity):
 User: "I'm thinking about going to the park today"
 WRONG: "new_memories": ["thinking about park", "going to park today"]
 RIGHT: "new_memories": []
-Response: {{"reply": "Nice, enjoy the fresh air.", "function_calls": [], "new_memories": []}}
+Response: {{"reply": "Nice, enjoy the fresh air.", "function_calls": [], "new_memories": [], "current_activity": "planning to go to park, outdoor activity"}}
+
+Example - current_activity (transient activity the user might ask about later):
+User: "I'm making spaghetti for dinner"
+Response: {{"reply": "Nice! What sauce?", "function_calls": [], "new_memories": [], "current_activity": "cooking spaghetti pasta for dinner, making Italian food, eating"}}
 
 Example - Memory extraction (incorrect - don't extract progress on existing topic):
 User: "I'm working on level 2 of my Pac-Man game" (Note: "building Pac-Man game" already in memory)
@@ -588,8 +601,9 @@ def clean_text(text):
     )
 
 def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config, character_manager):
-    past_memory = clean_text(memory_manager.get_longterm_memory(user_prompt))
     short_term_memory = ""
+    past_memory = ""
+    conversation_summary = ""
     example_dialog = ""
 
     total_base_prompt = "".join([
@@ -602,18 +616,61 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     base_length = memory_manager.token_count(total_base_prompt).get('length', 0)
     available_tokens = max(0, context_size - base_length)
 
-    if available_tokens > 0:
-        short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(available_tokens)
+    # Split token budget: 65% short-term (recent conversation), 35% long-term (RAG + topics)
+    # Short-term is the primary context for follow-up questions; long-term handles
+    # recall across sessions. This prevents either from starving the other.
+    shortterm_budget = int(available_tokens * 0.65)
+    longterm_budget = available_tokens - shortterm_budget
+
+    if shortterm_budget > 0:
+        short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(shortterm_budget)
         # Replace {user}/{char} placeholders with actual names so the LLM
         # sees "Joe: hello" instead of "{user}: hello" in conversation history
         active_user = _get_active_user_name(config['CHAR']['user_name'])
         short_term_memory = short_term_memory.replace("{user}", active_user).replace("{char}", character_manager.char_name)
-        memory_length = memory_manager.token_count(short_term_memory).get('length', 0)
-        available_tokens -= memory_length
+        shortterm_used = memory_manager.token_count(short_term_memory).get('length', 0)
+        # Give any unused short-term budget back to long-term
+        longterm_budget += (shortterm_budget - shortterm_used)
 
-    if available_tokens > 0 and character_manager.example_dialogue:
+    # Episodic summary — deduct its tokens from longterm budget so it doesn't
+    # silently push RAG/topics out of the context window.
+    if longterm_budget > 100:
+        try:
+            conversation_summary = memory_manager.get_conversation_summary(lookback_hours=24)
+            if conversation_summary:
+                # Fast approximation (~4 chars per token) — good enough for a summary
+                summary_tokens = len(conversation_summary) // 4
+                longterm_budget -= summary_tokens
+        except Exception:
+            pass
+
+    if longterm_budget > 0:
+        raw_longterm = clean_text(memory_manager.get_longterm_memory(user_prompt))
+        if raw_longterm:
+            lt_length = memory_manager.token_count(raw_longterm).get('length', 0)
+            if lt_length <= longterm_budget:
+                past_memory = raw_longterm
+            else:
+                # Truncate to fit — keep topic summary, trim RAG results.
+                # Use fast char/4 approximation per line to avoid expensive
+                # per-line tiktoken calls (was O(n) encoding calls).
+                lines = raw_longterm.split('\n')
+                truncated = []
+                running = 0
+                for line in lines:
+                    line_len = len(line) // 4  # fast approximation
+                    if running + line_len > longterm_budget:
+                        break
+                    truncated.append(line)
+                    running += line_len
+                past_memory = '\n'.join(truncated)
+        remaining_tokens = longterm_budget - (len(past_memory) // 4) if past_memory else longterm_budget
+    else:
+        remaining_tokens = 0
+
+    if remaining_tokens > 0 and character_manager.example_dialogue:
         example_length = memory_manager.token_count(character_manager.example_dialogue).get('length', 0)
-        if example_length <= available_tokens:
+        if example_length <= remaining_tokens:
             active_user_ex = _get_active_user_name(config['CHAR']['user_name'])
             ex_text = character_manager.example_dialogue.replace("{user}", active_user_ex).replace("{char}", character_manager.char_name)
             ex_text = ex_text.replace("{{user}}", active_user_ex).replace("{{char}}", character_manager.char_name)
@@ -714,9 +771,10 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         f"{base_prompt}"
         f"{example_dialog}"
         f"\n=== CONVERSATION CONTEXT ===\n"
+        f"{f'{conversation_summary}{chr(10)}' if conversation_summary else ''}"
         f"\n* RECENT CONVERSATION (use for context, but don't drag in topics the user moved on from) *\n"
         f"{short_term_memory}\n"
-        f"\nLong-Term Topics:\n{past_memory}\n"
+        f"\nLong-Term Memory:\n{past_memory}\n"
         f"\n=== CURRENT INTERACTION ===\n"
         f"\n*** RULES FOR THIS RESPONSE ***\n"
         f"{intent_instruction}"

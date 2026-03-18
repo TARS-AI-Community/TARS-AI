@@ -485,7 +485,6 @@ def load_config():
             "enabled": config.getboolean('RAG', 'enabled', fallback=True),
             "strategy": config.get('RAG', 'strategy', fallback='naive'),
             "enable_topic_tracking": config.getboolean('RAG', 'enable_topic_tracking'),
-            "vector_weight": config.getfloat('RAG', 'vector_weight', fallback=0.5),
             "context_window": config.getint('RAG', 'context_window', fallback=2),
             "max_memories": config.getint('RAG', 'max_memories', fallback=3),
             "top_k": config.getint('RAG', 'top_k', fallback=5),
@@ -936,10 +935,6 @@ CONFIG_METADATA = {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],
             'options': ['naive', 'hybrid'],
             'description': 'How TARS searches through its memories. "hybrid" (recommended) uses two different search methods together - it looks for memories that are similar in meaning AND memories that contain matching keywords. This gives the best results. "naive" only uses meaning-based search, which is faster but might miss some relevant memories. Unless you are having performance issues, stick with "hybrid".'
-        },
-        'vector_weight': {
-            'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'strategy', 'values': ['hybrid']}],
-            'description': 'When using hybrid search, this controls how much weight goes to meaning-based search (vectors) vs keyword search. 0.5 = equal weight to both. Higher (0.7-0.9) = favors meaning and context. Lower (0.1-0.3) = favors exact keyword matches. Most people should leave this at 0.5.'
         },
         'context_window': {
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}],

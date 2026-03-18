@@ -120,14 +120,17 @@ class MemoryManagerLite:
                 if isinstance(raw, dict):
                     self.documents = raw.get("documents", [])
                     self._embedded_topics = raw.get("topics")
+                    self._current_activities = raw.get("current_activities", [])
                 else:
                     self.documents = raw  # legacy plain array
                     self._embedded_topics = None
+                    self._current_activities = []
                 queue_message(f"LOAD: Lite memory loaded with {len(self.documents)} entries")
             except Exception as e:
                 queue_message(f"LOAD: Memory load failed: {e}. Initializing new memory.")
                 self.documents = []
                 self._embedded_topics = None
+                self._current_activities = []
         else:
             queue_message(f"LOAD: No lite memory found. Creating new one: {self.memory_db_path}")
             self.documents = [{
@@ -136,6 +139,7 @@ class MemoryManagerLite:
                 "keywords": list(self._extract_keywords(self.char_greeting))
             }]
             self._embedded_topics = None
+            self._current_activities = []
             self._save_memory()
 
     def _save_memory(self):
@@ -144,6 +148,7 @@ class MemoryManagerLite:
             data = {
                 "documents": self.documents,
                 "topics": getattr(self, 'topic_index', None) or {},
+                "current_activities": getattr(self, '_current_activities', []),
             }
             with open(self.memory_db_path, 'w') as f:
                 json.dump(data, f, indent=2)
@@ -216,6 +221,43 @@ class MemoryManagerLite:
     def save_topic_index(self):
         self._mark_dirty()  # topics are saved alongside documents on next flush
 
+    # --- Current Activity Tracking ---
+
+    def save_current_activity(self, activity: str):
+        """Store a transient activity note with a timestamp. Auto-pruned on read."""
+        if not activity or not activity.strip():
+            return
+        activities = self._current_activities
+        activities.append({
+            "text": activity.strip(),
+            "timestamp": datetime.now().isoformat()
+        })
+        if len(activities) > 50:
+            activities[:] = activities[-50:]
+        self._mark_dirty()
+
+    def get_current_activities(self, max_age_hours: int = 4) -> str:
+        """Return recent activities as a prompt-injectable string, pruning expired ones."""
+        activities = self._current_activities
+        if not activities:
+            return ""
+        cutoff = datetime.now() - timedelta(hours=max_age_hours)
+        valid = []
+        for a in activities:
+            try:
+                ts = datetime.fromisoformat(a["timestamp"])
+                if ts >= cutoff:
+                    valid.append(a)
+            except Exception:
+                continue
+        if len(valid) != len(activities):
+            self._current_activities = valid
+            self._mark_dirty()
+        if not valid:
+            return ""
+        lines = [a["text"] for a in valid[-8:]]
+        return "Current/recent activities: " + " | ".join(lines)
+
     def get_topic_index_summary(self) -> str:
         if not self.topic_index.get('topics'):
             return ""
@@ -224,16 +266,35 @@ class MemoryManagerLite:
         recent_topics = [t for t in topics if isinstance(t, dict) and self._is_recent_topic(t)]
         older_topics = [t for t in topics if isinstance(t, dict) and not self._is_recent_topic(t)]
 
-        recent_names = [t.get('topic', t) if isinstance(t, dict) else t for t in recent_topics]
-        older_names = [t.get('topic', t) if isinstance(t, dict) else t for t in older_topics]
+        summary_parts = ["=== Known Facts About the User ==="]
 
-        summary_parts = ["=== Discussion Topics Index ==="]
+        if recent_topics:
+            summary_parts.append("Recent:")
+            for t in recent_topics[:15]:
+                name = t.get('topic', '') if isinstance(t, dict) else str(t)
+                count = t.get('mention_count', 1) if isinstance(t, dict) else 1
+                last = t.get('last_mentioned', '')
+                if last:
+                    try:
+                        last_dt = datetime.fromisoformat(last)
+                        days_ago = (datetime.now() - last_dt).days
+                        if days_ago == 0:
+                            when = "today"
+                        elif days_ago == 1:
+                            when = "yesterday"
+                        elif days_ago < 7:
+                            when = f"{days_ago}d ago"
+                        else:
+                            when = f"{days_ago // 7}w ago"
+                        summary_parts.append(f"  - {name} (mentioned {count}x, last {when})")
+                    except Exception:
+                        summary_parts.append(f"  - {name}")
+                else:
+                    summary_parts.append(f"  - {name}")
 
-        if recent_names:
-            summary_parts.append(f"Recent: {', '.join(recent_names[:15])}")
-
-        if older_names:
-            summary_parts.append(f"Previous: {', '.join(older_names[:20])}")
+        if older_topics:
+            older_names = [t.get('topic', '') if isinstance(t, dict) else str(t) for t in older_topics[:20]]
+            summary_parts.append(f"Older: {', '.join(older_names)}")
 
         summary_parts.append("===")
 
@@ -249,12 +310,13 @@ class MemoryManagerLite:
         return False
 
     def _is_similar_memory(self, new_memory: str, existing_memory: str) -> bool:
-        new_words = set(new_memory.lower().split())
-        existing_words = set(existing_memory.lower().split())
+        filler = {'the', 'a', 'an', 'is', 'on', 'with', 'and', 'or', 'of', 'to', 'in',
+                  'has', 'had', 'have', 'was', 'were', 'been', 'be', 'am', 'are',
+                  'i', 'my', 'me', 'you', 'your', 'they', 'their', 'it', 'its',
+                  'that', 'this', 'for', 'at', 'by', 'from', 'about', 'just', 'so'}
 
-        filler = {'the', 'a', 'an', 'is', 'on', 'with', 'and', 'or', 'of', 'to', 'in'}
-        new_words -= filler
-        existing_words -= filler
+        new_words = set(new_memory.lower().split()) - filler
+        existing_words = set(existing_memory.lower().split()) - filler
 
         if not new_words or not existing_words:
             return False
@@ -263,7 +325,7 @@ class MemoryManagerLite:
         smaller_set_size = min(len(new_words), len(existing_words))
 
         similarity = overlap / smaller_set_size if smaller_set_size > 0 else 0
-        return similarity >= 0.7
+        return similarity >= 0.6
 
     def update_topic_index_with_ai_response(self, ai_extracted_topics: str):
         try:
@@ -318,6 +380,17 @@ class MemoryManagerLite:
 
             if added_count > 0:
                 self.topic_index['last_updated'] = datetime.now().isoformat()
+
+                # Prune if over 100 topics — drop oldest, lowest mention-count entries
+                max_topics = 100
+                topics = self.topic_index['topics']
+                if len(topics) > max_topics:
+                    topics.sort(key=lambda t: (
+                        t.get('mention_count', 1) if isinstance(t, dict) else 1,
+                        t.get('last_mentioned', '') if isinstance(t, dict) else ''
+                    ))
+                    self.topic_index['topics'] = topics[-max_topics:]
+
                 self.save_topic_index()
                 queue_message(f"INFO: Added {added_count} new topics to index")
 
@@ -326,9 +399,11 @@ class MemoryManagerLite:
         except Exception as e:
             queue_message(f"WARN: Failed to update topic index: {e}")
 
-    def write_longterm_memory(self, user_input, bot_response):
+    def write_longterm_memory(self, user_input, bot_response, activity_context=None):
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         combined_text = f"{user_input} {bot_response}"
+        if activity_context:
+            combined_text += f" {activity_context}"
         keywords = list(self._extract_keywords(combined_text))
 
         document = {
@@ -337,6 +412,8 @@ class MemoryManagerLite:
             "timestamp": current_time,
             "keywords": keywords
         }
+        if activity_context:
+            document["activity_context"] = activity_context
         # Tag memory with current speaker and present people via identity coordinator
         try:
             from modules.module_identity import get_identity_manager
@@ -402,10 +479,28 @@ class MemoryManagerLite:
         if not results:
             return []
 
-        top_results = results[:self.max_memories_to_use]
+        # Deduplicate and filter tool-only docs (same logic as full version)
+        filtered = []
+        seen_content = []
+        for doc, score in results:
+            if len(filtered) >= self.max_memories_to_use:
+                break
+            if not doc.get('user_input'):
+                continue
+            content_key = doc.get('user_input', '').lower().strip()
+            is_dup = False
+            for prev in seen_content:
+                if content_key and prev and self._is_similar_memory(content_key, prev):
+                    is_dup = True
+                    break
+            if not is_dup:
+                filtered.append((doc, score))
+                if content_key:
+                    seen_content.append(content_key)
+
         memories_with_context = []
 
-        for doc, score in top_results:
+        for doc, score in filtered:
             if score < 0.05:
                 continue
 
@@ -493,6 +588,12 @@ class MemoryManagerLite:
 
             context_parts = []
 
+            # Transient activities (last 4h)
+            activity_ctx = self.get_current_activities(max_age_hours=4)
+            if activity_ctx:
+                context_parts.append(activity_ctx)
+                context_parts.append("")
+
             topic_summary = self.get_topic_index_summary()
             if topic_summary:
                 context_parts.append(topic_summary)
@@ -511,25 +612,62 @@ class MemoryManagerLite:
             return ""
 
     def get_conversation_summary(self, lookback_hours: int = 24) -> str:
+        """Episodic summary: what happened in the last N hours, grouped by time."""
         try:
             cutoff_time = datetime.now() - timedelta(hours=lookback_hours)
+            now = datetime.now()
 
-            recent_topics = []
-            for entry in reversed(self.documents):
+            today_entries = []
+            yesterday_entries = []
+            older_entries = []
+
+            for doc in reversed(self.documents):
                 try:
-                    timestamp = datetime.strptime(entry.get('timestamp', ''), "%Y-%m-%d %H:%M:%S")
-                    if timestamp > cutoff_time:
-                        user_input = entry.get('user_input', '')
-                        if user_input:
-                            recent_topics.append(user_input)
-                except:
+                    timestamp = datetime.strptime(doc.get('timestamp', ''), "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    continue
+                if timestamp < cutoff_time:
+                    continue
+                user_input = doc.get('user_input', '')
+                if not user_input:
                     continue
 
-            if recent_topics:
-                return f"Recent topics discussed: {', '.join(recent_topics[:5])}"
-            return ""
+                bot_short = doc.get('bot_response', '')
+                if len(bot_short) > 60:
+                    bot_short = bot_short[:57] + "..."
 
-        except Exception as e:
+                entry = f"{user_input} -> {bot_short}" if bot_short else user_input
+
+                # Skip near-duplicate entries
+                all_so_far = today_entries + yesterday_entries + older_entries
+                if any(self._is_similar_memory(user_input, prev.split(' -> ')[0]) for prev in all_so_far if prev):
+                    continue
+
+                delta = now - timestamp
+                if delta.days == 0:
+                    today_entries.append(entry)
+                elif delta.days == 1:
+                    yesterday_entries.append(entry)
+                else:
+                    older_entries.append(entry)
+
+                if len(today_entries) + len(yesterday_entries) + len(older_entries) >= 12:
+                    break
+
+            if not today_entries and not yesterday_entries and not older_entries:
+                return ""
+
+            parts = []
+            if today_entries:
+                parts.append("Today: " + " | ".join(today_entries[:5]))
+            if yesterday_entries:
+                parts.append("Yesterday: " + " | ".join(yesterday_entries[:4]))
+            if older_entries:
+                parts.append("Earlier: " + " | ".join(older_entries[:3]))
+
+            return "Recent activity: " + "\n  ".join(parts)
+
+        except Exception:
             return ""
 
     def get_shortterm_memories_recent(self, max_entries: int) -> List[Dict]:

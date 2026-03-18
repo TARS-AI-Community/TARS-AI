@@ -85,7 +85,20 @@ def get_embedding(documents, key=None):
                     texts.append(doc.replace("\n", " "))
             elif key is None:
                 for doc in documents:
-                    text = ", ".join([f"{key}: {value}" for key, value in doc.items()])
+                    # For conversation documents, embed only the actual content
+                    # (not metadata labels like "timestamp:", "speaker:" which pollute the vector).
+                    # Include activity_context for enriched searchability.
+                    if "user_input" in doc or "bot_response" in doc:
+                        parts = []
+                        if doc.get("user_input"):
+                            parts.append(doc["user_input"])
+                        if doc.get("bot_response"):
+                            parts.append(doc["bot_response"])
+                        if doc.get("activity_context"):
+                            parts.append(doc["activity_context"])
+                        text = " ".join(parts) if parts else ", ".join(str(v) for v in doc.values())
+                    else:
+                        text = ", ".join([f"{k}: {v}" for k, v in doc.items()])
                     texts.append(text)
         elif isinstance(documents[0], str):
             texts = documents
@@ -186,6 +199,7 @@ class HyperDB:
 
         # Initialize BM25 components
         queue_message(f"INFO: Initializing HyperDB with {rag_strategy} RAG strategy")
+        self._bm25_stale = False  # True when documents added since last BM25 rebuild
         if self.rag_strategy == "hybrid":
             self.stemmer = Stemmer.Stemmer("english")
             self.bm25_retriever = bm25s.BM25(method="lucene")
@@ -232,8 +246,10 @@ class HyperDB:
                 if "user_input" in doc:
                     text += doc["user_input"] + " "
                 if "bot_response" in doc:
-                    text += doc["bot_response"]
-                if not text:  # If no specific fields found, use all text fields
+                    text += doc["bot_response"] + " "
+                if "activity_context" in doc:
+                    text += doc["activity_context"]
+                if not text.strip():  # If no specific fields found, use all text fields
                     text = " ".join(str(v) for v in doc.values() if isinstance(v, (str, int, float)))
             else:
                 text = str(doc)
@@ -277,9 +293,10 @@ class HyperDB:
         self.vectors = np.vstack([self.vectors, vector]).astype(np.float32)
         self.documents.append(document)
 
-        # Update BM25 index if using hybrid strategy
+        # Mark BM25 index as stale — it will be rebuilt lazily before the next query.
+        # Rebuilding on every insert is O(n) and adds latency to every conversation turn.
         if self.rag_strategy == "hybrid":
-            self._init_bm25_index()
+            self._bm25_stale = True
 
     def add_documents(self, documents, vectors=None):
         if not documents:
@@ -378,40 +395,45 @@ class HyperDB:
             traceback.print_exc()
             return False
 
-    def query(self, query_text: str, top_k: int = 5, return_similarities: bool = True):
+    def query(self, query_text: str, top_k: int = 5, return_similarities: bool = True, query_vector=None):
         """
         Query the database using the configured RAG strategy.
         For backward compatibility, this uses either vector-only search or hybrid search
         based on the configured rag_strategy.
-        
+
         Parameters:
             query_text (str): The text to search for
             top_k (int): Number of results to return
             return_similarities (bool): Whether to return similarity scores
-            
+            query_vector: Pre-computed query embedding (skips redundant embedding if provided)
+
         Returns:
             List of documents or (document, score) tuples if return_similarities is True
         """
         if self.rag_strategy == "naive":
-            return self._vector_query(query_text, top_k, return_similarities)
+            return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
         else:  # hybrid
-            return self.hybrid_query(query_text, top_k, return_similarities=return_similarities)
+            return self.hybrid_query(query_text, top_k, return_similarities=return_similarities, query_vector=query_vector)
 
-    def _vector_query(self, query_text: str, top_k: int = 5, return_similarities: bool = True):
+    def _vector_query(self, query_text: str, top_k: int = 5, return_similarities: bool = True, query_vector=None):
         """
         Perform vector-only search.
-        
+
         Parameters:
             query_text (str): The text to search for
             top_k (int): Number of results to return
             return_similarities (bool): Whether to return similarity scores
-            
+            query_vector: Pre-computed query embedding (skips redundant embedding if provided)
+
         Returns:
             List of documents or (document, score) tuples if return_similarities is True
         """
-        query_vector = self.embedding_function([query_text])[0]
+        if self.vectors is None or not self.vectors.size or not self.documents:
+            return [] if not return_similarities else []
+        if query_vector is None:
+            query_vector = self.embedding_function([query_text])[0]
         ranked_results, similarities = hyper_SVM_ranking_algorithm_sort(
-            self.vectors, query_vector, top_k=top_k, metric=self.similarity_metric
+            self.vectors, query_vector, top_k=min(top_k, len(self.documents)), metric=self.similarity_metric
         )
         if return_similarities:
             return list(
@@ -442,8 +464,10 @@ class HyperDB:
                     if "user_input" in doc:
                         text += doc["user_input"] + " "
                     if "bot_response" in doc:
-                        text += doc["bot_response"]
-                    if not text:  # Fallback: use all text fields from dict.
+                        text += doc["bot_response"] + " "
+                    if "activity_context" in doc:
+                        text += doc["activity_context"]
+                    if not text.strip():  # Fallback: use all text fields from dict.
                         text = " ".join(str(v) for v in doc.values() if isinstance(v, (str, int, float)))
                 else:
                     text = str(doc)
@@ -471,11 +495,12 @@ class HyperDB:
             return candidate_docs
 
     def hybrid_query(
-        self, 
-        query_text: str, 
-        top_k: int = 5, 
+        self,
+        query_text: str,
+        top_k: int = 5,
         return_similarities: bool = True,
-        rrf_k: int = 60
+        rrf_k: int = 60,
+        query_vector=None
     ):
         """
         Hybrid search using RRF fusion and FlashRank reranker.
@@ -483,15 +508,21 @@ class HyperDB:
         """
         if not self.documents or not self.vectors.size:
             queue_message("WARNING: Empty database, returning empty results")
-            return [] if not return_similarities else []
+            return []
 
         if self.rag_strategy != "hybrid":
             queue_message("WARNING: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
-            return self._vector_query(query_text, top_k, return_similarities)
+            return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
+
+        # Lazy BM25 rebuild — only when documents have changed since last query
+        if self._bm25_stale:
+            self._init_bm25_index()
+            self._bm25_stale = False
 
         try:
             # Vector Search
-            query_vector = self.embedding_function([query_text])[0]
+            if query_vector is None:
+                query_vector = self.embedding_function([query_text])[0]
             vector_results, vector_scores = hyper_SVM_ranking_algorithm_sort(
                 self.vectors, query_vector, top_k=min(top_k * 2, len(self.documents)), 
                 metric=self.similarity_metric
@@ -504,24 +535,24 @@ class HyperDB:
             # Validate BM25 results
             if not isinstance(bm25_results, (list, np.ndarray)) or not isinstance(bm25_scores, (list, np.ndarray)):
                 queue_message("WARNING: Invalid BM25 results format, falling back to vector search")
-                return self._vector_query(query_text, top_k, return_similarities)
+                return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
 
             try:
                 bm25_results = bm25_results[0]
                 bm25_scores = bm25_scores[0]
             except (IndexError, TypeError) as e:
                 queue_message(f"WARNING: Error processing BM25 results: {e}")
-                return self._vector_query(query_text, top_k, return_similarities)
+                return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
 
             # RRF Fusion
-            vector_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(vector_results) 
+            vector_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(vector_results)
                         if isinstance(doc_id, (int, np.integer)) and doc_id < len(self.documents)}
-            bm25_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(bm25_results) 
+            bm25_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(bm25_results)
                         if isinstance(doc_id, (int, np.integer)) and doc_id < len(self.documents)}
 
             if not vector_ranks and not bm25_ranks:
                 queue_message("WARNING: No valid ranks found")
-                return self._vector_query(query_text, top_k, return_similarities)
+                return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
 
             # Calculate RRF scores
             rrf_scores = {}
@@ -549,7 +580,7 @@ class HyperDB:
 
             if not candidate_docs:
                 queue_message("WARNING: No valid candidates for reranking")
-                return self._vector_query(query_text, top_k, return_similarities)
+                return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
 
             # Apply FlashRank reranking
             reranked_results = self._rerank_results(query_text, candidate_docs)
@@ -579,4 +610,4 @@ class HyperDB:
             queue_message(f"WARNING: Hybrid query failed: {e}")
             import traceback
             traceback.print_exc()
-            return self._vector_query(query_text, top_k, return_similarities)
+            return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)

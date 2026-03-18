@@ -50,7 +50,6 @@ class MemoryManager:
 
         rag_config = self.config.get('RAG', {})
         self.rag_strategy = rag_config.get('strategy', 'naive')
-        self.vector_weight = float(rag_config.get('vector_weight', 0.5))
         self.top_k = int(rag_config.get('top_k', 5))
 
         self.context_window_size = int(rag_config.get('context_window', 2))
@@ -170,26 +169,85 @@ class MemoryManager:
         except Exception:
             pass  # heartbeat not available — memory will flush on shutdown only
 
+    # --- Current Activity Tracking ---
+    # Transient activities (TTL-based) that bridge the gap between short-term
+    # conversation context and permanent topic facts.
+
+    def save_current_activity(self, activity: str):
+        """Store a transient activity note with a timestamp. Auto-pruned on read."""
+        if not activity or not activity.strip():
+            return
+        activities = self.hyper_db.extra_data.setdefault("current_activities", [])
+        activities.append({
+            "text": activity.strip(),
+            "timestamp": datetime.now().isoformat()
+        })
+        # Keep list bounded to avoid unbounded growth
+        if len(activities) > 50:
+            activities[:] = activities[-50:]
+        self._mark_dirty()
+
+    def get_current_activities(self, max_age_hours: int = 4) -> str:
+        """Return recent activities as a prompt-injectable string, pruning expired ones."""
+        activities = self.hyper_db.extra_data.get("current_activities", [])
+        if not activities:
+            return ""
+        cutoff = datetime.now() - timedelta(hours=max_age_hours)
+        valid = []
+        for a in activities:
+            try:
+                ts = datetime.fromisoformat(a["timestamp"])
+                if ts >= cutoff:
+                    valid.append(a)
+            except Exception:
+                continue
+        # Prune expired entries
+        if len(valid) != len(activities):
+            self.hyper_db.extra_data["current_activities"] = valid
+            self._mark_dirty()
+        if not valid:
+            return ""
+        lines = [a["text"] for a in valid[-8:]]  # last 8 activities
+        return "Current/recent activities: " + " | ".join(lines)
+
     def get_topic_index_summary(self) -> str:
         if not self.topic_index.get('topics'):
             return ""
 
         topics = self.topic_index['topics']
-        last_updated = self.topic_index.get('last_updated', 'unknown')
 
         recent_topics = [t for t in topics if isinstance(t, dict) and self._is_recent_topic(t)]
         older_topics = [t for t in topics if isinstance(t, dict) and not self._is_recent_topic(t)]
 
-        recent_names = [t.get('topic', t) if isinstance(t, dict) else t for t in recent_topics]
-        older_names = [t.get('topic', t) if isinstance(t, dict) else t for t in older_topics]
+        summary_parts = ["=== Known Facts About the User ==="]
 
-        summary_parts = ["=== Discussion Topics Index ==="]
+        if recent_topics:
+            summary_parts.append("Recent:")
+            for t in recent_topics[:15]:
+                name = t.get('topic', '') if isinstance(t, dict) else str(t)
+                count = t.get('mention_count', 1) if isinstance(t, dict) else 1
+                last = t.get('last_mentioned', '')
+                if last:
+                    try:
+                        last_dt = datetime.fromisoformat(last)
+                        days_ago = (datetime.now() - last_dt).days
+                        if days_ago == 0:
+                            when = "today"
+                        elif days_ago == 1:
+                            when = "yesterday"
+                        elif days_ago < 7:
+                            when = f"{days_ago}d ago"
+                        else:
+                            when = f"{days_ago // 7}w ago"
+                        summary_parts.append(f"  - {name} (mentioned {count}x, last {when})")
+                    except Exception:
+                        summary_parts.append(f"  - {name}")
+                else:
+                    summary_parts.append(f"  - {name}")
 
-        if recent_names:
-            summary_parts.append(f"Recent: {', '.join(recent_names[:15])}")
-
-        if older_names:
-            summary_parts.append(f"Previous: {', '.join(older_names[:20])}")
+        if older_topics:
+            older_names = [t.get('topic', '') if isinstance(t, dict) else str(t) for t in older_topics[:20]]
+            summary_parts.append(f"Older: {', '.join(older_names)}")
 
         summary_parts.append("===")
 
@@ -205,12 +263,13 @@ class MemoryManager:
         return False
 
     def _is_similar_memory(self, new_memory: str, existing_memory: str) -> bool:
-        new_words = set(new_memory.lower().split())
-        existing_words = set(existing_memory.lower().split())
+        filler = {'the', 'a', 'an', 'is', 'on', 'with', 'and', 'or', 'of', 'to', 'in',
+                  'has', 'had', 'have', 'was', 'were', 'been', 'be', 'am', 'are',
+                  'i', 'my', 'me', 'you', 'your', 'they', 'their', 'it', 'its',
+                  'that', 'this', 'for', 'at', 'by', 'from', 'about', 'just', 'so'}
 
-        filler = {'the', 'a', 'an', 'is', 'on', 'with', 'and', 'or', 'of', 'to', 'in'}
-        new_words -= filler
-        existing_words -= filler
+        new_words = set(new_memory.lower().split()) - filler
+        existing_words = set(existing_memory.lower().split()) - filler
 
         if not new_words or not existing_words:
             return False
@@ -218,8 +277,10 @@ class MemoryManager:
         overlap = len(new_words & existing_words)
         smaller_set_size = min(len(new_words), len(existing_words))
 
+        # Use overlap ratio against the SMALLER set — catches cases like
+        # "has dog named Max" vs "adopted a dog called Max" (overlap: {dog, max})
         similarity = overlap / smaller_set_size if smaller_set_size > 0 else 0
-        return similarity >= 0.7
+        return similarity >= 0.6
 
     def update_topic_index_with_ai_response(self, ai_extracted_topics: str):
         try:
@@ -276,6 +337,17 @@ class MemoryManager:
             if added_count > 0:
                 self.topic_index['last_updated'] = datetime.now().isoformat()
                 self.topic_index['total_conversations'] = self.topic_index.get('total_conversations', 0) + 1
+
+                # Prune if over 100 topics — drop oldest, lowest mention-count entries
+                max_topics = 100
+                topics = self.topic_index['topics']
+                if len(topics) > max_topics:
+                    topics.sort(key=lambda t: (
+                        t.get('mention_count', 1) if isinstance(t, dict) else 1,
+                        t.get('last_mentioned', '') if isinstance(t, dict) else ''
+                    ))
+                    self.topic_index['topics'] = topics[-max_topics:]
+
                 self.save_topic_index()
 
                 for mem in added_memories:
@@ -296,7 +368,7 @@ class MemoryManager:
                     self.save_topic_index()
                     break
 
-    def write_longterm_memory(self, user_input: str, bot_response: str):
+    def write_longterm_memory(self, user_input: str, bot_response: str, activity_context: str = None):
         self.ui_manager.save_memory()
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         document = {
@@ -304,6 +376,11 @@ class MemoryManager:
             "user_input": user_input,
             "bot_response": bot_response,
         }
+        # Store enriched activity keywords on the document itself so they're
+        # permanently searchable via BM25 and embedding — not just the 4h TTL cache.
+        # e.g. "cooking spaghetti pasta for dinner, making Italian food, eating"
+        if activity_context:
+            document["activity_context"] = activity_context
         # Tag memory with current speaker and present people via identity coordinator
         try:
             if self._identity_manager is None:
@@ -337,6 +414,27 @@ class MemoryManager:
         self.hyper_db.add_document(document)
         self._mark_dirty()
 
+    def reindex_embeddings(self):
+        """Re-embed all documents with current embedding function.
+
+        Run once after changing the embedding logic (Change B) to fix old
+        vectors that were computed from metadata-polluted text.
+        Can be triggered from the console or a startup flag.
+        """
+        if not self.hyper_db.documents:
+            queue_message("MEMORY: No documents to reindex.")
+            return
+        count = len(self.hyper_db.documents)
+        queue_message(f"MEMORY: Reindexing {count} documents (this may take a while)...")
+        new_vectors = self.hyper_db.embedding_function(self.hyper_db.documents)
+        self.hyper_db.vectors = np.array(new_vectors, dtype=np.float32)
+        if self.hyper_db.rag_strategy == "hybrid":
+            self.hyper_db._init_bm25_index()
+        self._mark_dirty()
+        self.flush(blocking=True)
+        queue_message(f"MEMORY: Reindex complete. {count} document vectors updated.")
+
+
     def _parse_timestamp(self, memory: Dict[str, Any]) -> Optional[datetime]:
         cached = memory.get('_parsed_ts')
         if cached is not None:
@@ -362,6 +460,57 @@ class MemoryManager:
             return 1.0 - (days_old / (self.recency_boost_days * 2))
         else:
             return max(0.1, 0.5 * np.exp(-(days_old - self.recency_boost_days) / 30))
+
+    def _parse_time_reference(self, query: str):
+        """Parse temporal references from query. Returns (target_datetime, window_timedelta) or (None, None)."""
+        import re
+        q = query.lower()
+        now = datetime.now()
+
+        # "N days/hours/weeks/months ago"
+        m = re.search(r'(\d+)\s+(day|hour|week|month)s?\s+ago', q)
+        if m:
+            num = int(m.group(1))
+            unit = m.group(2)
+            if unit == 'hour':
+                return now - timedelta(hours=num), timedelta(hours=2)
+            elif unit == 'day':
+                return now - timedelta(days=num), timedelta(days=1)
+            elif unit == 'week':
+                return now - timedelta(weeks=num), timedelta(days=3)
+            elif unit == 'month':
+                return now - timedelta(days=num * 30), timedelta(days=7)
+
+        if 'yesterday' in q:
+            return now - timedelta(days=1), timedelta(days=1)
+        if 'last night' in q:
+            return now - timedelta(days=1), timedelta(hours=12)
+        if 'today' in q or 'this morning' in q or 'tonight' in q or 'earlier' in q:
+            return now, timedelta(days=1)
+        if 'last week' in q:
+            return now - timedelta(weeks=1), timedelta(days=3)
+        if 'last month' in q:
+            return now - timedelta(days=30), timedelta(days=7)
+        if 'few days ago' in q or 'other day' in q:
+            return now - timedelta(days=3), timedelta(days=2)
+
+        return None, None
+
+    def _calculate_time_boost(self, memory: Dict[str, Any], time_target, time_window) -> float:
+        """Score multiplier based on how close a memory is to the target time."""
+        timestamp = self._parse_timestamp(memory)
+        if not timestamp or not time_target:
+            return 1.0
+
+        distance = abs((timestamp - time_target).total_seconds())
+        window_seconds = time_window.total_seconds()
+
+        if distance <= window_seconds:
+            return 2.0   # Strong boost — within target window
+        elif distance <= window_seconds * 2:
+            return 1.5   # Moderate boost — close to target
+        else:
+            return 1.0   # No boost
 
     def prefetch_embedding(self, query: str):
         """Start computing the query embedding in a background thread.
@@ -400,26 +549,65 @@ class MemoryManager:
         self.ui_manager.think()
 
         try:
-            query_vector = self._get_query_vector(query)
-            from modules.module_hyperdb import hyper_SVM_ranking_algorithm_sort
-            ranked_results, similarities = hyper_SVM_ranking_algorithm_sort(
-                self.hyper_db.vectors, query_vector,
-                top_k=self.top_k, metric=self.hyper_db.similarity_metric
-            )
-            if not ranked_results.size:
+            documents = self.hyper_db.documents
+            if not documents:
                 return []
 
-            documents = self.hyper_db.documents
+            # Parse temporal reference for time-aware boosting
+            time_target, time_window = self._parse_time_reference(query)
+
+            # Use prefetched query vector if available
+            query_vector = self._get_query_vector(query)
+
+            # Use configured search strategy (hybrid or naive) — this is where
+            # BM25 keyword matching + FlashRank reranking actually run now
+            results = self.hyper_db.query(
+                query, top_k=self.top_k,
+                return_similarities=True, query_vector=query_vector
+            )
+
+            if not results:
+                return []
+
+            # Build identity map for O(1) doc-to-index lookup
+            doc_id_to_idx = {id(doc): idx for idx, doc in enumerate(documents)}
             num_docs = len(documents)
+
+            # Map results to indices with scores, deduplicating near-identical content.
+            # Without this, "what color is my dog?" could return 5 exchanges that all
+            # say "dog named Max" — wasting the limited context budget on repetition.
+            primary_hits = []
+            seen_content = []
+            for doc, score in results:
+                if len(primary_hits) >= self.max_memories_to_use:
+                    break
+                idx = doc_id_to_idx.get(id(doc))
+                if idx is None:
+                    continue
+                # Skip tool-only entries (no user_input) — these are noise from
+                # write_tool_used() and pollute search results
+                if not doc.get('user_input'):
+                    continue
+                # Check for duplicate content (same user_input or very similar)
+                content_key = doc.get('user_input', '').lower().strip()
+                is_dup = False
+                for prev in seen_content:
+                    if content_key and prev and self._is_similar_memory(content_key, prev):
+                        is_dup = True
+                        break
+                if not is_dup:
+                    primary_hits.append((idx, float(score)))
+                    if content_key:
+                        seen_content.append(content_key)
+
+            if not primary_hits:
+                return []
+
+            # Context window expansion + recency scoring + time boosting
             expanded_memories = []
             seen_indices = set()
 
-            num_to_process = min(self.max_memories_to_use, len(ranked_results))
-
-            for i in range(num_to_process):
-                start_index = int(ranked_results[i])
-                similarity = float(similarities[i])
-
+            for start_index, similarity in primary_hits:
                 if include_context:
                     context_start = max(start_index - self.context_window_size, 0)
                     context_end = min(start_index + self.context_window_size + 1, num_docs)
@@ -428,11 +616,12 @@ class MemoryManager:
                         if idx not in seen_indices:
                             mem_doc = documents[idx]
                             recency_score = self._calculate_recency_score(mem_doc)
+                            time_boost = self._calculate_time_boost(mem_doc, time_target, time_window) if time_target else 1.0
 
                             if idx == start_index:
-                                combined_score = 0.8 * similarity + 0.2 * recency_score
+                                combined_score = (0.8 * similarity + 0.2 * recency_score) * time_boost
                             else:
-                                combined_score = 0.5 * similarity + 0.5 * recency_score
+                                combined_score = (0.5 * similarity + 0.5 * recency_score) * time_boost
 
                             expanded_memories.append({
                                 'document': mem_doc,
@@ -446,7 +635,8 @@ class MemoryManager:
                 else:
                     mem_doc = documents[start_index]
                     recency_score = self._calculate_recency_score(mem_doc)
-                    combined_score = 0.7 * similarity + 0.3 * recency_score
+                    time_boost = self._calculate_time_boost(mem_doc, time_target, time_window) if time_target else 1.0
+                    combined_score = (0.7 * similarity + 0.3 * recency_score) * time_boost
 
                     expanded_memories.append({
                         'document': mem_doc,
@@ -528,6 +718,13 @@ class MemoryManager:
 
             context_parts = []
 
+            # Transient activities (last 4h) — bridges the gap between
+            # short-term conversation and permanent topics
+            activity_ctx = self.get_current_activities(max_age_hours=4)
+            if activity_ctx:
+                context_parts.append(activity_ctx)
+                context_parts.append("")
+
             topic_summary = self.get_topic_index_summary()
             if topic_summary:
                 context_parts.append(topic_summary)
@@ -546,24 +743,65 @@ class MemoryManager:
             return ""
 
     def get_conversation_summary(self, lookback_hours: int = 24) -> str:
+        """Episodic summary: what happened in the last N hours, grouped by time.
+
+        Includes both user input and a truncated bot response so the LLM
+        gets real context (not just a list of questions).
+        """
         try:
             documents = self.hyper_db.documents
             cutoff_time = datetime.now() - timedelta(hours=lookback_hours)
 
-            recent_topics = []
+            today_entries = []
+            yesterday_entries = []
+            older_entries = []
+            now = datetime.now()
+
             for doc in reversed(documents):
                 timestamp = self._parse_timestamp(doc)
+                if not timestamp or timestamp < cutoff_time:
+                    continue
+                user_input = doc.get('user_input', '')
+                if not user_input:
+                    continue
 
-                if timestamp and timestamp > cutoff_time:
-                    user_input = doc.get('user_input', '')
-                    if user_input:
-                        recent_topics.append(user_input)
+                # Truncate bot response to keep summary compact
+                bot_short = doc.get('bot_response', '')
+                if len(bot_short) > 60:
+                    bot_short = bot_short[:57] + "..."
 
-            if recent_topics:
-                return f"Recent topics discussed: {', '.join(recent_topics[:5])}"
-            return ""
+                entry = f"{user_input} -> {bot_short}" if bot_short else user_input
 
-        except Exception as e:
+                # Skip near-duplicate entries (user asked same thing multiple times)
+                all_so_far = today_entries + yesterday_entries + older_entries
+                if any(self._is_similar_memory(user_input, prev.split(' -> ')[0]) for prev in all_so_far if prev):
+                    continue
+
+                delta = now - timestamp
+                if delta.days == 0:
+                    today_entries.append(entry)
+                elif delta.days == 1:
+                    yesterday_entries.append(entry)
+                else:
+                    older_entries.append(entry)
+
+                if len(today_entries) + len(yesterday_entries) + len(older_entries) >= 12:
+                    break
+
+            if not today_entries and not yesterday_entries and not older_entries:
+                return ""
+
+            parts = []
+            if today_entries:
+                parts.append("Today: " + " | ".join(today_entries[:5]))
+            if yesterday_entries:
+                parts.append("Yesterday: " + " | ".join(yesterday_entries[:4]))
+            if older_entries:
+                parts.append("Earlier: " + " | ".join(older_entries[:3]))
+
+            return "Recent activity: " + "\n  ".join(parts)
+
+        except Exception:
             return ""
 
     def get_shortterm_memories_recent(self, max_entries: int) -> List[str]:

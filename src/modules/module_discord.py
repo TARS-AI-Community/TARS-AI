@@ -181,12 +181,14 @@ def _run_side_effects(reply, user_message):
         return
     func_calls = reply.get("function_calls", [])
     new_mems = reply.get("new_memories", [])
-    if func_calls or new_mems:
+    cur_activity = reply.get("current_activity")
+    if func_calls or new_mems or cur_activity:
         try:
             from modules.module_llm import llm_execute_side_effects
             threading.Thread(
                 target=llm_execute_side_effects,
-                args=(reply, user_message), daemon=True
+                args=(reply, user_message),
+                kwargs={"source": "discord"}, daemon=True
             ).start()
         except Exception as e:
             queue_message(f"ERROR: Discord side effects failed: {e}")
