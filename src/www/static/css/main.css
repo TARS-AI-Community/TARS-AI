@@ -3566,6 +3566,9 @@ body::after {
   flex-direction: column;
   gap: 8px;
 }
+#dshSys {
+  padding: 14px 12px;
+}
 
 /* ── Graph panel ── */
 .dash-graph-layout {
