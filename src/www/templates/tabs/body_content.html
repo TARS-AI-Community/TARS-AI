@@ -1,0 +1,100 @@
+<div class="body-wrap">
+  <!-- Header -->
+  <div class="body-header">
+    <div class="body-header-title">
+      <i class="bi bi-person-arms-up"></i> BODY CONTROLS
+    </div>
+    <span class="live-dot"></span>
+  </div>
+
+  <!-- Scrollable content -->
+  <div class="body-scroll">
+
+    <!-- Speed -->
+    <div class="body-speed">
+      <span class="body-speed-label"><i class="bi bi-speedometer2"></i> SPEED</span>
+      <input type="range" id="bodySpeedSlider" class="hud-range" min="0.65" max="1" step="0.05" value="0.85">
+      <span class="body-speed-val">0.85</span>
+    </div>
+
+    <!-- Two-column: LEFT / RIGHT -->
+    <div class="body-sides">
+      <!-- ── LEFT SIDE ── -->
+      <div class="body-side">
+        <div class="body-panel">
+          <div class="body-panel-label">LEFT ARM</div>
+          <div class="servo-card">
+            <span class="servo-card-label">MAIN</span>
+            <input type="range" id="leftMain" class="body-range" min="1" max="100" step="5" value="1" oninput="updateBodyArmVal(this); updateArmConstraints();">
+            <span class="servo-val" onclick="resetBodyServo('leftMain',1)">1</span>
+          </div>
+          <div class="servo-card">
+            <span class="servo-card-label">FORE</span>
+            <input type="range" id="leftForearm" class="body-range" min="1" max="100" step="5" value="1" oninput="updateBodyArmVal(this); updateArmConstraints();">
+            <span class="servo-val" onclick="resetBodyServo('leftForearm',1)">1</span>
+          </div>
+          <div class="servo-card">
+            <span class="servo-card-label">HAND</span>
+            <input type="range" id="leftHand" class="body-range" min="1" max="100" step="5" value="1" oninput="updateBodyArmVal(this)">
+            <span class="servo-val" onclick="resetBodyServo('leftHand',1)">1</span>
+          </div>
+        </div>
+        <div class="body-panel">
+          <div class="body-panel-label">LEFT LEG</div>
+          <div class="servo-card">
+            <span class="servo-card-label">LEG</span>
+            <input type="range" id="leftLeg" class="body-range" min="5" max="100" step="5" value="50" oninput="updateBodyLegVal(this)">
+            <span class="servo-val" onclick="resetBodyServo('leftLeg',50)">50</span>
+          </div>
+          <div class="servo-card">
+            <span class="servo-card-label">HEIGHT</span>
+            <input type="range" id="leftHeight" class="body-range" min="5" max="100" step="5" value="50" oninput="updateBodyLegVal(this)">
+            <span class="servo-val" onclick="resetBodyServo('leftHeight',50)">50</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── RIGHT SIDE ── -->
+      <div class="body-side">
+        <div class="body-panel">
+          <div class="body-panel-label">RIGHT ARM</div>
+          <div class="servo-card">
+            <span class="servo-card-label">MAIN</span>
+            <input type="range" id="rightMain" class="body-range" min="1" max="100" step="5" value="1" oninput="updateBodyArmVal(this); updateArmConstraints();">
+            <span class="servo-val" onclick="resetBodyServo('rightMain',1)">1</span>
+          </div>
+          <div class="servo-card">
+            <span class="servo-card-label">FORE</span>
+            <input type="range" id="rightForearm" class="body-range" min="1" max="100" step="5" value="1" oninput="updateBodyArmVal(this); updateArmConstraints();">
+            <span class="servo-val" onclick="resetBodyServo('rightForearm',1)">1</span>
+          </div>
+          <div class="servo-card">
+            <span class="servo-card-label">HAND</span>
+            <input type="range" id="rightHand" class="body-range" min="1" max="100" step="5" value="1" oninput="updateBodyArmVal(this)">
+            <span class="servo-val" onclick="resetBodyServo('rightHand',1)">1</span>
+          </div>
+        </div>
+        <div class="body-panel">
+          <div class="body-panel-label">RIGHT LEG</div>
+          <div class="servo-card">
+            <span class="servo-card-label">LEG</span>
+            <input type="range" id="rightLeg" class="body-range" min="5" max="100" step="5" value="50" oninput="updateBodyLegVal(this)">
+            <span class="servo-val" onclick="resetBodyServo('rightLeg',50)">50</span>
+          </div>
+          <div class="servo-card">
+            <span class="servo-card-label">HEIGHT</span>
+            <input type="range" id="rightHeight" class="body-range" min="5" max="100" step="5" value="50" oninput="updateBodyLegVal(this)">
+            <span class="servo-val" onclick="resetBodyServo('rightHeight',50)">50</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Sticky action bar -->
+  <div class="body-actions">
+    <button class="hud-btn hud-btn-primary" onclick="applyBodyControls()"><i class="bi bi-play-fill"></i> EXECUTE</button>
+    <button class="hud-btn hud-btn-warn" onclick="resetBody()"><i class="bi bi-arrow-counterclockwise"></i> RESET</button>
+  </div>
+</div>

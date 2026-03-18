@@ -2476,24 +2476,53 @@ function executeAction() {
 
 
 // ── TAB RESET LOGIC ──────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', function () {
-  const bodyTab = $('body-tab');
+// Body reset is now handled by motion sub-tab switching (see motion-subtab logic below)
 
-  if (bodyTab) bodyTab.addEventListener('hide.bs.tab', () => {
-    const lh=+$('leftHeight').value, rh=+$('rightHeight').value,
-          ll=+$('leftLeg').value,    rl=+$('rightLeg').value;
-    const lm=+$('leftMain').value, lf=+$('leftForearm').value, lha=+$('leftHand').value,
-          rm=+$('rightMain').value, rf=+$('rightForearm').value, rha=+$('rightHand').value;
-    if (lh!==50||rh!==50||ll!==50||rl!==50||lm!==1||lf!==1||lha!==1||rm!==1||rf!==1||rha!==1) resetBody();
+// ── MOTION SUB-TAB SWITCHING ─────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+  var lastMotionPanel = 'motionRemote';
+
+  document.querySelectorAll('.motion-subtabs .dash-subtab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var panelId = btn.getAttribute('data-motion-panel');
+
+      // Reset body servos when leaving Servo sub-tab
+      if (lastMotionPanel === 'motionServo' && panelId !== 'motionServo') {
+        var lh=+$('leftHeight').value, rh=+$('rightHeight').value,
+            ll=+$('leftLeg').value,    rl=+$('rightLeg').value;
+        var lm=+$('leftMain').value, lf=+$('leftForearm').value, lha=+$('leftHand').value,
+            rm=+$('rightMain').value, rf=+$('rightForearm').value, rha=+$('rightHand').value;
+        if (lh!==50||rh!==50||ll!==50||rl!==50||lm!==1||lf!==1||lha!==1||rm!==1||rf!==1||rha!==1) resetBody();
+      }
+
+      // Fetch reset_positions when entering Servo sub-tab
+      if (panelId === 'motionServo' && lastMotionPanel !== 'motionServo') {
+        fetch('/reset_positions',{method:'POST',headers:{'Content-Type':'application/json'}}).catch(function(){});
+      }
+
+      // Switch active sub-tab button
+      document.querySelectorAll('.motion-subtabs .dash-subtab').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+
+      // Switch active panel
+      document.querySelectorAll('.motion-panel').forEach(function (p) { p.classList.remove('active'); });
+      var panel = document.getElementById(panelId);
+      if (panel) panel.classList.add('active');
+
+      lastMotionPanel = panelId;
+    });
   });
 
-  document.querySelectorAll('.custom-tab').forEach(tab => {
-    tab.addEventListener('shown.bs.tab', e => {
-      const id = e.target.getAttribute('data-bs-target')?.replace('#','');
-      if (id==='body') {
-        fetch('/reset_positions',{method:'POST',headers:{'Content-Type':'application/json'}}).catch(()=>{});
-      }
-    });
+  // Also reset body when leaving the motion tab entirely while on Servo sub-tab
+  var motionTab = $('motion-tab');
+  if (motionTab) motionTab.addEventListener('hide.bs.tab', function () {
+    if (lastMotionPanel === 'motionServo') {
+      var lh=+$('leftHeight').value, rh=+$('rightHeight').value,
+          ll=+$('leftLeg').value,    rl=+$('rightLeg').value;
+      var lm=+$('leftMain').value, lf=+$('leftForearm').value, lha=+$('leftHand').value,
+          rm=+$('rightMain').value, rf=+$('rightForearm').value, rha=+$('rightHand').value;
+      if (lh!==50||rh!==50||ll!==50||rl!==50||lm!==1||lf!==1||lha!==1||rm!==1||rf!==1||rha!==1) resetBody();
+    }
   });
 });
 
@@ -2619,8 +2648,8 @@ window.showToast = function (message, type, duration) {
 
 // ── MOBILE SWIPE NAV ─────────────────────────────────────────────────────────
 (function () {
-  const TAB_IDS = ['chat', 'motion', 'body', 'emotions', 'wifi', 'config', 'dashboard', 'nexus', 'builder'];
-  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'body-tab', 'emotions-tab', 'wifi-tab', 'config-tab', 'dashboard-tab', 'nexus-tab', 'builder-tab'];
+  const TAB_IDS = ['chat', 'motion', 'emotions', 'wifi', 'config', 'dashboard', 'nexus'];
+  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'emotions-tab', 'wifi-tab', 'config-tab', 'dashboard-tab', 'nexus-tab'];
   let currentIndex = 0;
   let isMobile = false;
 
