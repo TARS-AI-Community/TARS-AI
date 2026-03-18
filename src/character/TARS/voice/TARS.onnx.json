@@ -493,14 +493,14 @@
     "num_symbols": 256,
     "num_speakers": 8,
     "speaker_id_map": {
-        "fear": 0,
-        "joy": 1,
-        "love": 2,
-        "neutral": 3,
-        "sadness": 4,
-        "surprise": 5,
-        "curiosity": 6,
-        "anger": 7
+        "anger": 0,
+        "curiosity": 1,
+        "fear": 2,
+        "joy": 3,
+        "love": 4,
+        "neutral": 5,
+        "sadness": 6,
+        "surprise": 7
     },
     "piper_version": "1.0.0"
 }
