@@ -606,12 +606,6 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     conversation_summary = ""
     example_dialog = ""
 
-    # Episodic summary — lightweight overview of the last 24 hours
-    try:
-        conversation_summary = memory_manager.get_conversation_summary(lookback_hours=24)
-    except Exception:
-        pass
-
     total_base_prompt = "".join([
         base_prompt,
         f"\n### User: {_get_active_user_name(config['CHAR']['user_name'])}\n### Character: {character_manager.char_name}\n",
@@ -638,6 +632,18 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
         # Give any unused short-term budget back to long-term
         longterm_budget += (shortterm_budget - shortterm_used)
 
+    # Episodic summary — deduct its tokens from longterm budget so it doesn't
+    # silently push RAG/topics out of the context window.
+    if longterm_budget > 100:
+        try:
+            conversation_summary = memory_manager.get_conversation_summary(lookback_hours=24)
+            if conversation_summary:
+                # Fast approximation (~4 chars per token) — good enough for a summary
+                summary_tokens = len(conversation_summary) // 4
+                longterm_budget -= summary_tokens
+        except Exception:
+            pass
+
     if longterm_budget > 0:
         raw_longterm = clean_text(memory_manager.get_longterm_memory(user_prompt))
         if raw_longterm:
@@ -645,18 +651,20 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
             if lt_length <= longterm_budget:
                 past_memory = raw_longterm
             else:
-                # Truncate to fit — keep topic summary, trim RAG results
+                # Truncate to fit — keep topic summary, trim RAG results.
+                # Use fast char/4 approximation per line to avoid expensive
+                # per-line tiktoken calls (was O(n) encoding calls).
                 lines = raw_longterm.split('\n')
                 truncated = []
                 running = 0
                 for line in lines:
-                    line_len = memory_manager.token_count(line).get('length', 0)
+                    line_len = len(line) // 4  # fast approximation
                     if running + line_len > longterm_budget:
                         break
                     truncated.append(line)
                     running += line_len
                 past_memory = '\n'.join(truncated)
-        remaining_tokens = longterm_budget - memory_manager.token_count(past_memory).get('length', 0) if past_memory else longterm_budget
+        remaining_tokens = longterm_budget - (len(past_memory) // 4) if past_memory else longterm_budget
     else:
         remaining_tokens = 0
 

@@ -187,7 +187,8 @@ def _run_side_effects(reply, user_message):
             from modules.module_llm import llm_execute_side_effects
             threading.Thread(
                 target=llm_execute_side_effects,
-                args=(reply, user_message), daemon=True
+                args=(reply, user_message),
+                kwargs={"source": "discord"}, daemon=True
             ).start()
         except Exception as e:
             queue_message(f"ERROR: Discord side effects failed: {e}")
