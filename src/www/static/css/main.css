@@ -1569,6 +1569,7 @@ body::after {
 }
 
 .config-header-left i { color: var(--gold); font-size: 16px; filter: drop-shadow(0 0 6px rgba(var(--accent-rgb),0.4)); }
+.config-title-short { display: none; }
 .config-header-actions { display: flex; gap: 8px; align-items: center; }
 
 .config-body {
@@ -2040,12 +2041,9 @@ body::after {
 #wifi { overflow-y: auto; }
 
 .wf-wrap {
-  max-width: 480px;
+  max-width: 700px;
   margin: 0 auto;
   padding: 14px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .wf-card {
@@ -2062,7 +2060,17 @@ body::after {
   display: flex; align-items: center; gap: 10px;
 }
 
-.wf-icon { width: 26px; height: 26px; flex-shrink: 0; }
+.wf-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.wf-dot-ok  { background: var(--green);  box-shadow: 0 0 8px var(--green);  animation: livePulse 1.4s ease-in-out infinite; }
+.wf-dot-hot { background: var(--orange); box-shadow: 0 0 8px var(--orange); animation: livePulse 1.4s ease-in-out infinite; }
+.wf-dot-off { background: var(--red);    box-shadow: 0 0 8px var(--red);    animation: none; }
+.wf-hotspot-btn { margin-top: 8px; width: 100%; }
 
 .wf-status-info {
   flex: 1;
@@ -3006,6 +3014,8 @@ body::after {
   }
 
   .config-header-left { font-size: 12px; }
+  .config-title-full { display: none; }
+  .config-title-short { display: inline; }
 
   .config-body { padding: 10px 10px; }
 

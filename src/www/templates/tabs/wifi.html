@@ -1,56 +1,56 @@
-<div class="wf-wrap">
+<div class="row g-2">
 
-    <!-- Status card -->
-    <div class="wf-card">
-      <div class="wf-status-row">
-        <img id="wfStatusIcon" class="wf-icon" src="/static/imgs/wifi-gray.png" alt="">
-        <div class="wf-status-info">
-          <strong id="wfStatusSsid">Loading…</strong>
-          <span id="wfStatusIp"></span>
-        </div>
-        <span id="wfStatusBadge" class="wf-badge wf-badge-off">—</span>
-        <button class="hud-btn hud-btn-ghost hud-btn-sm" id="wfHotspotBtn" onclick="wfToggleHotspot()">Hotspot</button>
+  <!-- Status + Hotspot -->
+  <div class="col-md-6"><div class="field-wrapper">
+    <label class="form-label d-flex align-items-center gap-1"><span>status</span></label>
+    <div class="wf-status-row">
+      <span id="wfStatusDot" class="wf-dot wf-dot-off"></span>
+      <div class="wf-status-info">
+        <strong id="wfStatusSsid">Loading…</strong>
+        <span id="wfStatusIp"></span>
       </div>
     </div>
+    <button class="hud-btn hud-btn-ghost hud-btn-sm wf-hotspot-btn" id="wfHotspotBtn" onclick="wfToggleHotspot()">Hotspot</button>
+  </div></div>
 
-    <!-- Networks card -->
-    <div class="wf-card">
-      <div class="wf-card-header">
-        <span>NETWORKS</span>
-        <button class="hud-btn hud-btn-ghost hud-btn-sm" onclick="wfScan()" id="wfScanBtn">⟳ SCAN</button>
-      </div>
-      <div class="wf-net-list" id="wfNetList">
-        <div class="wf-scanning"><span class="wf-spinner"></span>Scanning…</div>
-      </div>
-
-      <!-- Selected network connect form -->
-      <div id="wfSelectedCard" style="display:none;" class="wf-connect-form">
-        <div class="wf-connect-header">
-          <div>
-            <strong id="wfCardSsid"></strong>
-            <span id="wfCardDesc"></span>
-          </div>
-          <button class="wf-close-btn" onclick="wfDeselect()">✕</button>
-        </div>
-        <div id="wfPersonalFields">
-          <label class="wf-label">Password</label>
-          <input type="password" class="hud-input" id="wfPassword" placeholder="Leave blank for open networks">
-        </div>
-        <div id="wfEnterpriseFields" style="display:none;">
-          <label class="wf-label">Username</label>
-          <input type="text" class="hud-input" id="wfUsername" placeholder="e.g. student ID">
-          <label class="wf-label" style="margin-top:.5rem;">Password</label>
-          <input type="password" class="hud-input" id="wfPasswordEnt" placeholder="Password">
-        </div>
-        <div class="wf-connect-actions">
-          <button class="hud-btn hud-btn-ghost" onclick="wfDeselect()">Cancel</button>
-          <button class="hud-btn hud-btn-primary" id="wfConnectBtn" onclick="wfConnect()">Connect</button>
-        </div>
-        <p class="wf-msg" id="wfMsg"></p>
-      </div>
+  <!-- Networks -->
+  <div class="col-md-6"><div class="field-wrapper">
+    <label class="form-label d-flex align-items-center gap-1">
+      <span>networks</span>
+      <button class="hud-btn hud-btn-ghost hud-btn-sm ms-auto" onclick="wfScan()" id="wfScanBtn" style="padding:2px 8px;font-size:.7rem;">⟳ SCAN</button>
+    </label>
+    <div class="wf-net-list" id="wfNetList">
+      <div class="wf-scanning"><span class="wf-spinner"></span>Scanning…</div>
     </div>
 
-  </div><!-- /wf-wrap -->
+    <!-- Selected network connect form -->
+    <div id="wfSelectedCard" style="display:none;" class="wf-connect-form">
+      <div class="wf-connect-header">
+        <div>
+          <strong id="wfCardSsid"></strong>
+          <span id="wfCardDesc"></span>
+        </div>
+        <button class="wf-close-btn" onclick="wfDeselect()">✕</button>
+      </div>
+      <div id="wfPersonalFields">
+        <label class="wf-label">Password</label>
+        <input type="password" class="hud-input" id="wfPassword" placeholder="Leave blank for open networks">
+      </div>
+      <div id="wfEnterpriseFields" style="display:none;">
+        <label class="wf-label">Username</label>
+        <input type="text" class="hud-input" id="wfUsername" placeholder="e.g. student ID">
+        <label class="wf-label" style="margin-top:.5rem;">Password</label>
+        <input type="password" class="hud-input" id="wfPasswordEnt" placeholder="Password">
+      </div>
+      <div class="wf-connect-actions">
+        <button class="hud-btn hud-btn-ghost" onclick="wfDeselect()">Cancel</button>
+        <button class="hud-btn hud-btn-primary" id="wfConnectBtn" onclick="wfConnect()">Connect</button>
+      </div>
+      <p class="wf-msg" id="wfMsg"></p>
+    </div>
+  </div></div>
+
+</div>
 
   <!-- Confirm overlay -->
   <div id="wfConfirmOverlay" class="wf-overlay" style="display:none;">

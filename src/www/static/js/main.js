@@ -33,20 +33,20 @@ function _dbg(...args) {
   async function loadStatus() {
     try {
       const d = await fetch('/api/wifi/status').then(r => r.json());
-      const icon  = $('wfStatusIcon'), ssid = $('wfStatusSsid'),
-            ip    = $('wfStatusIp'),   badge = $('wfStatusBadge'),
+      const dot   = $('wfStatusDot'), ssid = $('wfStatusSsid'),
+            ip    = $('wfStatusIp'),
             hbtn  = $('wfHotspotBtn');
       if (d.mode === 'client') {
-        icon.src = '/static/imgs/wifi-blue.png'; ssid.textContent = d.ssid || 'Connected';
-        ip.textContent = d.ip || ''; badge.textContent = 'CONNECTED'; badge.className = 'wf-badge wf-badge-ok';
+        dot.className = 'wf-dot wf-dot-ok'; ssid.textContent = d.ssid || 'Connected';
+        ip.textContent = d.ip || '';
         hbtn.textContent = 'Start Hotspot';
       } else if (d.mode === 'hotspot') {
-        icon.src = '/static/imgs/wifi-yellow.png'; ssid.textContent = 'TARS-Setup';
-        ip.textContent = '10.42.0.1'; badge.textContent = 'HOTSPOT'; badge.className = 'wf-badge wf-badge-hot';
+        dot.className = 'wf-dot wf-dot-hot'; ssid.textContent = 'TARS-Setup';
+        ip.textContent = '10.42.0.1';
         hbtn.textContent = 'Stop Hotspot';
       } else {
-        icon.src = '/static/imgs/wifi-gray.png'; ssid.textContent = 'Not connected';
-        ip.textContent = ''; badge.textContent = 'OFFLINE'; badge.className = 'wf-badge wf-badge-off';
+        dot.className = 'wf-dot wf-dot-off'; ssid.textContent = 'Not connected';
+        ip.textContent = '';
         hbtn.textContent = 'Start Hotspot';
       }
     } catch {}
