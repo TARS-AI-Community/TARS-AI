@@ -417,16 +417,31 @@ class WiFiManager:
                     "signal": 100,
                 }
 
-            # Client mode — get signal from nmcli
+            # Client mode — get actual SSID and signal
             signal = self._get_client_signal()
+            ssid = self._get_active_ssid() or connection
             return {
                 "mode": "client",
-                "ssid": connection,
+                "ssid": ssid,
                 "ip": self._get_ip_address(),
                 "signal": signal,
             }
 
         return {"mode": "disconnected", "ssid": None, "ip": None, "signal": 0}
+
+    def _get_active_ssid(self) -> str:
+        """Return the actual SSID of the active WiFi connection (not the connection profile name)."""
+        code, out, _ = self._run_command(
+            ["nmcli", "-t", "-f", "IN-USE,SSID", "device", "wifi"],
+            timeout=5
+        )
+        if code != 0:
+            return ""
+        for line in out.split("\n"):
+            parts = line.split(":")
+            if len(parts) >= 2 and parts[0].strip() == "*":
+                return parts[1].strip()
+        return ""
 
     def _get_client_signal(self) -> int:
         """Return the signal strength (0-100) of the active WiFi connection."""

@@ -33,24 +33,26 @@ function _dbg(...args) {
   async function loadStatus() {
     try {
       const d = await fetch('/api/wifi/status').then(r => r.json());
-      const icon  = $('wfStatusIcon'), ssid = $('wfStatusSsid'),
-            ip    = $('wfStatusIp'),   badge = $('wfStatusBadge'),
+      const dot   = $('wfStatusDot'), ssid = $('wfStatusSsid'),
+            ip    = $('wfStatusIp'),
             hbtn  = $('wfHotspotBtn');
       if (d.mode === 'client') {
-        icon.src = '/static/imgs/wifi-blue.png'; ssid.textContent = d.ssid || 'Connected';
-        ip.textContent = d.ip || ''; badge.textContent = 'CONNECTED'; badge.className = 'wf-badge wf-badge-ok';
+        dot.className = 'wf-dot wf-dot-ok'; ssid.textContent = d.ssid || 'Connected';
+        ip.textContent = d.ip || '';
         hbtn.textContent = 'Start Hotspot';
       } else if (d.mode === 'hotspot') {
-        icon.src = '/static/imgs/wifi-yellow.png'; ssid.textContent = 'TARS-Setup';
-        ip.textContent = '10.42.0.1'; badge.textContent = 'HOTSPOT'; badge.className = 'wf-badge wf-badge-hot';
+        dot.className = 'wf-dot wf-dot-hot'; ssid.textContent = 'TARS-Setup';
+        ip.textContent = '10.42.0.1';
         hbtn.textContent = 'Stop Hotspot';
       } else {
-        icon.src = '/static/imgs/wifi-gray.png'; ssid.textContent = 'Not connected';
-        ip.textContent = ''; badge.textContent = 'OFFLINE'; badge.className = 'wf-badge wf-badge-off';
+        dot.className = 'wf-dot wf-dot-off'; ssid.textContent = 'Not connected';
+        ip.textContent = '';
         hbtn.textContent = 'Start Hotspot';
       }
     } catch {}
   }
+
+  window.wfLoadStatus = loadStatus;
 
   window.wfScan = async function () {
     const list = $('wfNetList');
@@ -128,18 +130,53 @@ function _dbg(...args) {
   window.wfToggleHotspot = function () {
     const btn = $('wfHotspotBtn');
     const isHotspot = btn.textContent.trim() === 'Stop Hotspot';
-    const msg = isHotspot
-      ? 'Stop the hotspot and go offline?'
-      : 'This will disconnect Wi-Fi and start the hotspot. Continue?';
-    if (!confirm(msg)) return;
-    btn.disabled = true;
-    fetch('/api/wifi/hotspot', { method: 'PUT' })
-      .then(() => setTimeout(loadStatus, 1500))
-      .finally(() => { btn.disabled = false; });
+    const title = isHotspot ? 'STOP HOTSPOT' : 'START HOTSPOT';
+    const subtitle = isHotspot
+      ? 'This will stop the hotspot and go offline.'
+      : 'This will disconnect Wi-Fi and start the TARS hotspot.';
+    const icon = isHotspot ? 'bi-wifi-off' : 'bi-broadcast';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'reboot-overlay';
+    overlay.innerHTML = `
+      <div class="reboot-card">
+        <div class="reboot-icon"><i class="bi ${icon}"></i></div>
+        <div class="reboot-title">${title}</div>
+        <p class="reboot-subtitle">${subtitle}</p>
+        <div class="reboot-actions">
+          <button class="hud-btn hud-btn-ghost" id="hotspotNo">Cancel</button>
+          <button class="hud-btn hud-btn-primary" id="hotspotYes"><i class="bi ${icon}"></i> ${isHotspot ? 'Stop' : 'Start'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('active')));
+
+    function close() {
+      overlay.classList.remove('active');
+      setTimeout(() => overlay.remove(), 300);
+    }
+
+    overlay.querySelector('#hotspotNo').onclick = close;
+    overlay.querySelector('#hotspotYes').onclick = function () {
+      const card = overlay.querySelector('.reboot-card');
+      card.innerHTML = `
+        <div class="reboot-icon"><i class="bi bi-arrow-repeat spin"></i></div>
+        <div class="reboot-title">${isHotspot ? 'STOPPING' : 'STARTING'}…</div>
+        <p class="reboot-subtitle">Please wait…</p>`;
+      btn.disabled = true;
+      fetch('/api/wifi/hotspot', { method: 'PUT' })
+        .then(() => {
+          setTimeout(() => {
+            loadStatus();
+            close();
+          }, 1500);
+        })
+        .catch(() => close())
+        .finally(() => { btn.disabled = false; });
+    };
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   };
 
-  const wifiTab = $('wifi-tab');
-  if (wifiTab) wifiTab.addEventListener('shown.bs.tab', () => { loadStatus(); wfScan(); });
 })();
 
 
@@ -1360,7 +1397,8 @@ function executeAction() {
     'BATTERY':'bi-battery-half',
     'SKILLS':'bi-lightning-fill',
     'MISC':'bi-wrench-adjustable',
-    'CHARACTER_EDITOR':'bi-person-lines-fill'
+    'CHARACTER_EDITOR':'bi-person-lines-fill',
+    'WIFI':'bi-wifi'
   };
   const SECTION_LABELS = {
     'CHAR':'System','CONTROLS':'Controls',
@@ -1370,14 +1408,15 @@ function executeAction() {
     'BATTERY':'Battery',
     'SKILLS':'Skills',
     'MISC':'Misc',
-    'CHARACTER_EDITOR':'Character'
+    'CHARACTER_EDITOR':'Character',
+    'WIFI':'WiFi'
   };
 
   const SECTION_ORDER = [
     'CHAR', 'LLM', 'SKILLS',
     'STT', 'TTS',
     'EMOTION', 'VISION', 'RAG',
-    'UI', 'ACCESS',
+    'UI', 'ACCESS', 'WIFI',
     'CONTROLS',
     'BATTERY'
   ];
@@ -1595,7 +1634,7 @@ function executeAction() {
       // Order sections: SECTION_ORDER first, then any extras from backend
       // SKILLS is always shown (it has its own data source, not config.ini)
       const allSections = Object.keys(data.config);
-      const alwaysShow = ['SKILLS'];
+      const alwaysShow = ['SKILLS', 'WIFI'];
       const ordered = SECTION_ORDER.filter(s => allSections.includes(s) || alwaysShow.includes(s));
       allSections.forEach(s => { if (!ordered.includes(s)) ordered.push(s); });
 
@@ -1634,6 +1673,12 @@ function executeAction() {
               <div class="config-loading"><div class="hud-spinner"></div><span>Loading skills…</span></div>
             </div>
           </div></div>`;
+          continue;
+        }
+
+        // WiFi section: embedded WiFi manager
+        if (section === 'WIFI') {
+          html += `<div class="config-panel-body" id="configWifiPanel"></div></div>`;
           continue;
         }
 
@@ -1804,6 +1849,14 @@ function executeAction() {
       form.innerHTML = html;
       activeConfigSection = null;
 
+      // Move WiFi content into the WiFi config panel
+      var wifiPanel = document.getElementById('configWifiPanel');
+      var wifiSource = document.getElementById('configWifiSource');
+      if (wifiPanel && wifiSource) {
+        while (wifiSource.firstChild) wifiPanel.appendChild(wifiSource.firstChild);
+        wifiSource.remove();
+      }
+
       // Wire up character editor events
       initCharacterEditor();
 
@@ -1826,6 +1879,7 @@ function executeAction() {
             grid.classList.add('has-active');
             activeConfigSection = target;
             if (target === 'SKILLS') loadSkillsPanel();
+            if (target === 'WIFI') { wfLoadStatus(); wfScan(); }
             if (target === 'CHARACTER_EDITOR' && window.onCharacterEditorOpen) window.onCharacterEditorOpen();
             setTimeout(() => panel.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
           }
@@ -2657,8 +2711,8 @@ window.showToast = function (message, type, duration) {
 
 // ── MOBILE SWIPE NAV ─────────────────────────────────────────────────────────
 (function () {
-  const TAB_IDS = ['chat', 'motion', 'emotions', 'wifi', 'dashboard', 'config'];
-  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'emotions-tab', 'wifi-tab', 'dashboard-tab', 'config-tab'];
+  const TAB_IDS = ['chat', 'motion', 'emotions', 'dashboard', 'config'];
+  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'emotions-tab', 'dashboard-tab', 'config-tab'];
   let currentIndex = 0;
   let isMobile = false;
 
