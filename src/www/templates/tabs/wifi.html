@@ -1,7 +1,7 @@
 <div class="row g-2">
 
-  <!-- Status + Hotspot -->
-  <div class="col-md-6"><div class="field-wrapper">
+  <!-- Status -->
+  <div class="col-md-6 col-lg-4"><div class="field-wrapper">
     <label class="form-label d-flex align-items-center gap-1"><span>status</span></label>
     <div class="wf-status-row">
       <span id="wfStatusDot" class="wf-dot wf-dot-off"></span>
@@ -10,11 +10,16 @@
         <span id="wfStatusIp"></span>
       </div>
     </div>
-    <button class="hud-btn hud-btn-ghost hud-btn-sm wf-hotspot-btn" id="wfHotspotBtn" onclick="wfToggleHotspot()">Hotspot</button>
+  </div></div>
+
+  <!-- Hotspot -->
+  <div class="col-md-6 col-lg-4"><div class="field-wrapper">
+    <label class="form-label d-flex align-items-center gap-1"><span>hotspot</span></label>
+    <button class="hud-btn hud-btn-ghost hud-btn-sm wf-hotspot-btn" id="wfHotspotBtn" onclick="wfToggleHotspot()">Start Hotspot</button>
   </div></div>
 
   <!-- Networks -->
-  <div class="col-md-6"><div class="field-wrapper">
+  <div class="col-md-6 col-lg-4"><div class="field-wrapper">
     <label class="form-label d-flex align-items-center gap-1">
       <span>networks</span>
       <button class="hud-btn hud-btn-ghost hud-btn-sm ms-auto" onclick="wfScan()" id="wfScanBtn" style="padding:2px 8px;font-size:.7rem;">⟳ SCAN</button>
