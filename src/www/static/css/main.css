@@ -1018,6 +1018,12 @@ body::after {
   flex-shrink: 0;
 }
 .motion-subtabs { width: 100%; }
+.motion-divider {
+  border: none;
+  border-top: 1px solid rgba(var(--accent-rgb), 0.2);
+  margin: 10px 12px 0;
+  flex-shrink: 0;
+}
 .motion-panel {
   display: none;
   flex: 1;
