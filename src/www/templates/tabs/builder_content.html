@@ -43,7 +43,7 @@
         <div class="body-panel">
           <div class="body-panel-label">SAVE</div>
           <div class="bld-save-row">
-            <input type="text" id="bldSeqName" class="hud-input bld-name-input" placeholder="Sequence name">
+            <input type="text" id="bldSeqName" class="form-control form-control-sm config-input bld-name-input" placeholder="Sequence name">
             <button class="hud-btn hud-btn-primary" id="bldSave"><i class="bi bi-save"></i></button>
             <button class="hud-btn hud-btn-secondary" id="bldClear" title="Clear all steps"><i class="bi bi-trash3"></i></button>
           </div>
@@ -332,17 +332,16 @@
   display: flex;
   gap: 4px;
   align-items: stretch;
-  height: 34px;
 }
 .bld-movement-add .hud-btn {
-  padding: 0 8px;
+  padding: 8px 10px;
   font-size: 11px;
   letter-spacing: 0.08em;
   min-width: 0;
 }
 .bld-movement-sel {
   flex: 1;
-  padding: 0 8px;
+  padding: 8px 10px;
   font-size: 11px;
   font-family: var(--font-hud);
   letter-spacing: 0.05em;
@@ -356,37 +355,20 @@
   display: flex;
   gap: 4px;
   align-items: stretch;
-  height: 34px;
 }
 .bld-save-row .hud-btn {
-  padding: 0 8px;
+  padding: 8px 10px;
   font-size: 11px;
   letter-spacing: 0.08em;
-  line-height: 1;
   flex-shrink: 0;
   min-width: 0;
 }
 .bld-name-input {
   flex: 1;
   min-width: 60px;
-  padding: 0 8px;
-  font-size: 11px;
-  font-family: var(--font-hud);
-  letter-spacing: 0.05em;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.05);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  transition: border-color 0.25s;
-}
-.bld-name-input:focus {
-  outline: none;
-  border-color: rgba(var(--accent-rgb), 0.4);
-  box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.15);
 }
 .bld-name-input::placeholder {
-  color: var(--text-dim);
-  opacity: 0.5;
+  color: rgba(226,234,242,0.5) !important;
 }
 .bld-overwrite-confirm {
   display: flex;
