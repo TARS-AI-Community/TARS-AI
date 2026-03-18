@@ -27,13 +27,13 @@
       <button class="dash-subtab active" data-panel="dshGraph">Graph</button>
       <button class="dash-subtab" data-panel="dshMood">Mood</button>
       <button class="dash-subtab" data-panel="dshLog">Log</button>
-      <button class="dash-subtab" data-panel="dshTopicsPanel">Topics</button>
       <button class="dash-subtab" data-panel="dshPrompt">Prompt</button>
+      <button class="dash-subtab" data-panel="dshSys">Sys</button>
     </div>
 
     <!-- ── GRAPH panel ── -->
     <div class="dash-panel active" id="dshGraph">
-      <div class="section-label"><span>Memory &amp; Knowledge Graph</span></div>
+      <div class="section-label"><span>Memory, Topics &amp; Knowledge Graph</span></div>
       <div class="dash-graph-controls">
         <label>
           Max nodes
@@ -92,20 +92,6 @@
       </div>
     </div>
 
-    <!-- ── TOPICS panel ── -->
-    <div class="dash-panel" id="dshTopicsPanel">
-      <div class="section-label"><span>Knowledge Topics</span></div>
-      <div class="dash-topics-graph" id="dshTopicsGraph"></div>
-      <div class="dash-topics-table-wrap">
-        <table class="dash-topics-table" id="dshTopicsTable">
-          <thead>
-            <tr><th>Topic</th><th>Mentions</th><th>First Seen</th><th>Last Seen</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-
     <!-- ── PROMPT DEBUGGER panel ── -->
     <div class="dash-panel" id="dshPrompt">
       <div class="section-label"><span>Prompt Debugger</span></div>
@@ -125,6 +111,31 @@
           <i class="bi bi-bug" style="font-size:2rem;opacity:0.3"></i>
           <div>Select an interaction above to inspect its prompt</div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── SYS panel (system metrics + console) ── -->
+    <div class="dash-panel" id="dshSys">
+      <div class="nexus-status-strip">
+        <div class="nexus-metric">
+          <span class="nexus-metric-label">CPU</span>
+          <span class="nexus-metric-value" id="nxCpu">--</span>
+          <div class="nexus-metric-bar"><div class="nexus-metric-fill nexus-bar-cpu" id="nxCpuBar"></div></div>
+        </div>
+        <div class="nexus-metric">
+          <span class="nexus-metric-label">RAM</span>
+          <span class="nexus-metric-value" id="nxRam">--</span>
+          <div class="nexus-metric-bar"><div class="nexus-metric-fill nexus-bar-ram" id="nxRamBar"></div></div>
+        </div>
+        <div class="nexus-metric">
+          <span class="nexus-metric-label">TEMP</span>
+          <span class="nexus-metric-value" id="nxTemp">--</span>
+          <div class="nexus-metric-bar"><div class="nexus-metric-fill nexus-bar-temp" id="nxTempBar"></div></div>
+        </div>
+      </div>
+      <div class="nexus-panel nexus-panel-console">
+        <div class="section-label"><span>Real-time Console</span></div>
+        <div class="nexus-console" id="nxConsole"></div>
       </div>
     </div>
 

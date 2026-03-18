@@ -2620,36 +2620,45 @@ window.showToast = function (message, type, duration) {
       .catch(function () {});
   }
 
-  // Start polling when nexus tab is shown
+  // Start polling when Sys sub-tab inside Dashboard is shown
   document.addEventListener('DOMContentLoaded', function () {
-    var nexusTab = document.getElementById('nexus-tab');
-    if (!nexusTab) return;
-
-    nexusTab.addEventListener('shown.bs.tab', function () {
-      nexusActive = true;
-      fetchMetrics();
-      fetchLogs();
-      if (!pollInterval) {
-        pollInterval = setInterval(function () {
-          if (nexusActive) {
-            fetchMetrics();
-            fetchLogs();
+    // Listen for clicks on dashboard sub-tabs to detect Sys panel activation
+    document.querySelectorAll('.dash-subtab').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var panelId = btn.getAttribute('data-panel');
+        if (panelId === 'dshSys') {
+          nexusActive = true;
+          fetchMetrics();
+          fetchLogs();
+          if (!pollInterval) {
+            pollInterval = setInterval(function () {
+              if (nexusActive) {
+                fetchMetrics();
+                fetchLogs();
+              }
+            }, 2000);
           }
-        }, 2000);
-      }
+        } else {
+          nexusActive = false;
+        }
+      });
     });
 
-    nexusTab.addEventListener('hide.bs.tab', function () {
-      nexusActive = false;
-    });
+    // Also stop polling when leaving the dashboard tab entirely
+    var dashTab = document.getElementById('dashboard-tab');
+    if (dashTab) {
+      dashTab.addEventListener('hide.bs.tab', function () {
+        nexusActive = false;
+      });
+    }
   });
 })();
 
 
 // ── MOBILE SWIPE NAV ─────────────────────────────────────────────────────────
 (function () {
-  const TAB_IDS = ['chat', 'motion', 'emotions', 'wifi', 'config', 'dashboard', 'nexus'];
-  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'emotions-tab', 'wifi-tab', 'config-tab', 'dashboard-tab', 'nexus-tab'];
+  const TAB_IDS = ['chat', 'motion', 'emotions', 'wifi', 'dashboard', 'config'];
+  const TAB_BTN_IDS = ['chat-tab', 'motion-tab', 'emotions-tab', 'wifi-tab', 'dashboard-tab', 'config-tab'];
   let currentIndex = 0;
   let isMobile = false;
 
@@ -3059,10 +3068,6 @@ function $(id) { return document.getElementById(id); }
           renderEmotionalRadar(_moodData.emotional_state);
           renderMoodTimeline(_moodData.timeline);
           renderActivityHeatmap(_moodData.activity_heatmap || {});
-        }
-        if (panelId === 'dshTopicsPanel' && _topicsData && !_panelRendered.topics) {
-          _panelRendered.topics = true;
-          renderTopicsGraph(_topicsData);
         }
         if (panelId === 'dshPrompt' && _promptInteractions.length && !_panelRendered.prompt) {
           _panelRendered.prompt = true;
