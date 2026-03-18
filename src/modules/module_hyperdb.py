@@ -428,10 +428,12 @@ class HyperDB:
         Returns:
             List of documents or (document, score) tuples if return_similarities is True
         """
+        if self.vectors is None or not self.vectors.size or not self.documents:
+            return [] if not return_similarities else []
         if query_vector is None:
             query_vector = self.embedding_function([query_text])[0]
         ranked_results, similarities = hyper_SVM_ranking_algorithm_sort(
-            self.vectors, query_vector, top_k=top_k, metric=self.similarity_metric
+            self.vectors, query_vector, top_k=min(top_k, len(self.documents)), metric=self.similarity_metric
         )
         if return_similarities:
             return list(
@@ -506,7 +508,7 @@ class HyperDB:
         """
         if not self.documents or not self.vectors.size:
             queue_message("WARNING: Empty database, returning empty results")
-            return [] if not return_similarities else []
+            return []
 
         if self.rag_strategy != "hybrid":
             queue_message("WARNING: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
@@ -533,24 +535,24 @@ class HyperDB:
             # Validate BM25 results
             if not isinstance(bm25_results, (list, np.ndarray)) or not isinstance(bm25_scores, (list, np.ndarray)):
                 queue_message("WARNING: Invalid BM25 results format, falling back to vector search")
-                return self._vector_query(query_text, top_k, return_similarities)
+                return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
 
             try:
                 bm25_results = bm25_results[0]
                 bm25_scores = bm25_scores[0]
             except (IndexError, TypeError) as e:
                 queue_message(f"WARNING: Error processing BM25 results: {e}")
-                return self._vector_query(query_text, top_k, return_similarities)
+                return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
 
             # RRF Fusion
-            vector_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(vector_results) 
+            vector_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(vector_results)
                         if isinstance(doc_id, (int, np.integer)) and doc_id < len(self.documents)}
-            bm25_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(bm25_results) 
+            bm25_ranks = {doc_id: rank + 1 for rank, doc_id in enumerate(bm25_results)
                         if isinstance(doc_id, (int, np.integer)) and doc_id < len(self.documents)}
 
             if not vector_ranks and not bm25_ranks:
                 queue_message("WARNING: No valid ranks found")
-                return self._vector_query(query_text, top_k, return_similarities)
+                return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
 
             # Calculate RRF scores
             rrf_scores = {}
@@ -578,7 +580,7 @@ class HyperDB:
 
             if not candidate_docs:
                 queue_message("WARNING: No valid candidates for reranking")
-                return self._vector_query(query_text, top_k, return_similarities)
+                return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
 
             # Apply FlashRank reranking
             reranked_results = self._rerank_results(query_text, candidate_docs)
@@ -608,4 +610,4 @@ class HyperDB:
             queue_message(f"WARNING: Hybrid query failed: {e}")
             import traceback
             traceback.print_exc()
-            return self._vector_query(query_text, top_k, return_similarities)
+            return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
