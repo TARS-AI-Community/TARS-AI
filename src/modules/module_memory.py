@@ -337,6 +337,26 @@ class MemoryManager:
         self.hyper_db.add_document(document)
         self._mark_dirty()
 
+    def reindex_embeddings(self):
+        """Re-embed all documents with current embedding function.
+
+        Run once after changing the embedding logic (Change B) to fix old
+        vectors that were computed from metadata-polluted text.
+        Can be triggered from the console or a startup flag.
+        """
+        if not self.hyper_db.documents:
+            queue_message("MEMORY: No documents to reindex.")
+            return
+        count = len(self.hyper_db.documents)
+        queue_message(f"MEMORY: Reindexing {count} documents (this may take a while)...")
+        new_vectors = self.hyper_db.embedding_function(self.hyper_db.documents)
+        self.hyper_db.vectors = np.array(new_vectors, dtype=np.float32)
+        if self.hyper_db.rag_strategy == "hybrid":
+            self.hyper_db._init_bm25_index()
+        self._mark_dirty()
+        self.flush(blocking=True)
+        queue_message(f"MEMORY: Reindex complete. {count} document vectors updated.")
+
     def _parse_timestamp(self, memory: Dict[str, Any]) -> Optional[datetime]:
         cached = memory.get('_parsed_ts')
         if cached is not None:
@@ -362,6 +382,57 @@ class MemoryManager:
             return 1.0 - (days_old / (self.recency_boost_days * 2))
         else:
             return max(0.1, 0.5 * np.exp(-(days_old - self.recency_boost_days) / 30))
+
+    def _parse_time_reference(self, query: str):
+        """Parse temporal references from query. Returns (target_datetime, window_timedelta) or (None, None)."""
+        import re
+        q = query.lower()
+        now = datetime.now()
+
+        # "N days/hours/weeks/months ago"
+        m = re.search(r'(\d+)\s+(day|hour|week|month)s?\s+ago', q)
+        if m:
+            num = int(m.group(1))
+            unit = m.group(2)
+            if unit == 'hour':
+                return now - timedelta(hours=num), timedelta(hours=2)
+            elif unit == 'day':
+                return now - timedelta(days=num), timedelta(days=1)
+            elif unit == 'week':
+                return now - timedelta(weeks=num), timedelta(days=3)
+            elif unit == 'month':
+                return now - timedelta(days=num * 30), timedelta(days=7)
+
+        if 'yesterday' in q:
+            return now - timedelta(days=1), timedelta(days=1)
+        if 'last night' in q:
+            return now - timedelta(days=1), timedelta(hours=12)
+        if 'today' in q or 'this morning' in q or 'tonight' in q or 'earlier' in q:
+            return now, timedelta(days=1)
+        if 'last week' in q:
+            return now - timedelta(weeks=1), timedelta(days=3)
+        if 'last month' in q:
+            return now - timedelta(days=30), timedelta(days=7)
+        if 'few days ago' in q or 'other day' in q:
+            return now - timedelta(days=3), timedelta(days=2)
+
+        return None, None
+
+    def _calculate_time_boost(self, memory: Dict[str, Any], time_target, time_window) -> float:
+        """Score multiplier based on how close a memory is to the target time."""
+        timestamp = self._parse_timestamp(memory)
+        if not timestamp or not time_target:
+            return 1.0
+
+        distance = abs((timestamp - time_target).total_seconds())
+        window_seconds = time_window.total_seconds()
+
+        if distance <= window_seconds:
+            return 2.0   # Strong boost — within target window
+        elif distance <= window_seconds * 2:
+            return 1.5   # Moderate boost — close to target
+        else:
+            return 1.0   # No boost
 
     def prefetch_embedding(self, query: str):
         """Start computing the query embedding in a background thread.
@@ -400,26 +471,45 @@ class MemoryManager:
         self.ui_manager.think()
 
         try:
-            query_vector = self._get_query_vector(query)
-            from modules.module_hyperdb import hyper_SVM_ranking_algorithm_sort
-            ranked_results, similarities = hyper_SVM_ranking_algorithm_sort(
-                self.hyper_db.vectors, query_vector,
-                top_k=self.top_k, metric=self.hyper_db.similarity_metric
-            )
-            if not ranked_results.size:
+            documents = self.hyper_db.documents
+            if not documents:
                 return []
 
-            documents = self.hyper_db.documents
+            # Parse temporal reference for time-aware boosting
+            time_target, time_window = self._parse_time_reference(query)
+
+            # Use prefetched query vector if available
+            query_vector = self._get_query_vector(query)
+
+            # Use configured search strategy (hybrid or naive) — this is where
+            # BM25 keyword matching + FlashRank reranking actually run now
+            results = self.hyper_db.query(
+                query, top_k=self.top_k,
+                return_similarities=True, query_vector=query_vector
+            )
+
+            if not results:
+                return []
+
+            # Build identity map for O(1) doc-to-index lookup
+            doc_id_to_idx = {id(doc): idx for idx, doc in enumerate(documents)}
             num_docs = len(documents)
+
+            # Map results to indices with scores
+            primary_hits = []
+            for doc, score in results[:self.max_memories_to_use]:
+                idx = doc_id_to_idx.get(id(doc))
+                if idx is not None:
+                    primary_hits.append((idx, float(score)))
+
+            if not primary_hits:
+                return []
+
+            # Context window expansion + recency scoring + time boosting
             expanded_memories = []
             seen_indices = set()
 
-            num_to_process = min(self.max_memories_to_use, len(ranked_results))
-
-            for i in range(num_to_process):
-                start_index = int(ranked_results[i])
-                similarity = float(similarities[i])
-
+            for start_index, similarity in primary_hits:
                 if include_context:
                     context_start = max(start_index - self.context_window_size, 0)
                     context_end = min(start_index + self.context_window_size + 1, num_docs)
@@ -428,11 +518,12 @@ class MemoryManager:
                         if idx not in seen_indices:
                             mem_doc = documents[idx]
                             recency_score = self._calculate_recency_score(mem_doc)
+                            time_boost = self._calculate_time_boost(mem_doc, time_target, time_window) if time_target else 1.0
 
                             if idx == start_index:
-                                combined_score = 0.8 * similarity + 0.2 * recency_score
+                                combined_score = (0.8 * similarity + 0.2 * recency_score) * time_boost
                             else:
-                                combined_score = 0.5 * similarity + 0.5 * recency_score
+                                combined_score = (0.5 * similarity + 0.5 * recency_score) * time_boost
 
                             expanded_memories.append({
                                 'document': mem_doc,
@@ -446,7 +537,8 @@ class MemoryManager:
                 else:
                     mem_doc = documents[start_index]
                     recency_score = self._calculate_recency_score(mem_doc)
-                    combined_score = 0.7 * similarity + 0.3 * recency_score
+                    time_boost = self._calculate_time_boost(mem_doc, time_target, time_window) if time_target else 1.0
+                    combined_score = (0.7 * similarity + 0.3 * recency_score) * time_boost
 
                     expanded_memories.append({
                         'document': mem_doc,

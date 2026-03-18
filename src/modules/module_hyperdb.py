@@ -85,7 +85,17 @@ def get_embedding(documents, key=None):
                     texts.append(doc.replace("\n", " "))
             elif key is None:
                 for doc in documents:
-                    text = ", ".join([f"{key}: {value}" for key, value in doc.items()])
+                    # For conversation documents, embed only the actual content
+                    # (not metadata labels like "timestamp:", "speaker:" which pollute the vector)
+                    if "user_input" in doc or "bot_response" in doc:
+                        parts = []
+                        if doc.get("user_input"):
+                            parts.append(doc["user_input"])
+                        if doc.get("bot_response"):
+                            parts.append(doc["bot_response"])
+                        text = " ".join(parts) if parts else ", ".join(str(v) for v in doc.values())
+                    else:
+                        text = ", ".join([f"{k}: {v}" for k, v in doc.items()])
                     texts.append(text)
         elif isinstance(documents[0], str):
             texts = documents
@@ -378,38 +388,41 @@ class HyperDB:
             traceback.print_exc()
             return False
 
-    def query(self, query_text: str, top_k: int = 5, return_similarities: bool = True):
+    def query(self, query_text: str, top_k: int = 5, return_similarities: bool = True, query_vector=None):
         """
         Query the database using the configured RAG strategy.
         For backward compatibility, this uses either vector-only search or hybrid search
         based on the configured rag_strategy.
-        
+
         Parameters:
             query_text (str): The text to search for
             top_k (int): Number of results to return
             return_similarities (bool): Whether to return similarity scores
-            
+            query_vector: Pre-computed query embedding (skips redundant embedding if provided)
+
         Returns:
             List of documents or (document, score) tuples if return_similarities is True
         """
         if self.rag_strategy == "naive":
-            return self._vector_query(query_text, top_k, return_similarities)
+            return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
         else:  # hybrid
-            return self.hybrid_query(query_text, top_k, return_similarities=return_similarities)
+            return self.hybrid_query(query_text, top_k, return_similarities=return_similarities, query_vector=query_vector)
 
-    def _vector_query(self, query_text: str, top_k: int = 5, return_similarities: bool = True):
+    def _vector_query(self, query_text: str, top_k: int = 5, return_similarities: bool = True, query_vector=None):
         """
         Perform vector-only search.
-        
+
         Parameters:
             query_text (str): The text to search for
             top_k (int): Number of results to return
             return_similarities (bool): Whether to return similarity scores
-            
+            query_vector: Pre-computed query embedding (skips redundant embedding if provided)
+
         Returns:
             List of documents or (document, score) tuples if return_similarities is True
         """
-        query_vector = self.embedding_function([query_text])[0]
+        if query_vector is None:
+            query_vector = self.embedding_function([query_text])[0]
         ranked_results, similarities = hyper_SVM_ranking_algorithm_sort(
             self.vectors, query_vector, top_k=top_k, metric=self.similarity_metric
         )
@@ -471,11 +484,12 @@ class HyperDB:
             return candidate_docs
 
     def hybrid_query(
-        self, 
-        query_text: str, 
-        top_k: int = 5, 
+        self,
+        query_text: str,
+        top_k: int = 5,
         return_similarities: bool = True,
-        rrf_k: int = 60
+        rrf_k: int = 60,
+        query_vector=None
     ):
         """
         Hybrid search using RRF fusion and FlashRank reranker.
@@ -487,11 +501,12 @@ class HyperDB:
 
         if self.rag_strategy != "hybrid":
             queue_message("WARNING: Hybrid query called but RAG strategy is 'naive'. Falling back to vector search.")
-            return self._vector_query(query_text, top_k, return_similarities)
+            return self._vector_query(query_text, top_k, return_similarities, query_vector=query_vector)
 
         try:
             # Vector Search
-            query_vector = self.embedding_function([query_text])[0]
+            if query_vector is None:
+                query_vector = self.embedding_function([query_text])[0]
             vector_results, vector_scores = hyper_SVM_ranking_algorithm_sort(
                 self.vectors, query_vector, top_k=min(top_k * 2, len(self.documents)), 
                 metric=self.similarity_metric
