@@ -598,7 +598,7 @@ def llm_parse_response(bot_response):
 def llm_execute_side_effects(parsed, user_input, source="voice", has_image=False):
     """Execute function_calls and save memories. Safe to run in a background thread.
 
-    source: 'voice' or 'webui' — controls where generated images are displayed.
+    source: 'voice', 'webui', or 'discord'.
     has_image: True when the user already provided an image (skip camera capture).
     """
     global memory_manager

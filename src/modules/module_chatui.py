@@ -189,6 +189,17 @@ def handle_client_debug(msg):
 def handle_browser_audio(data):
     """Receive audio from browser, transcribe with local STT (sherpa-onnx) or OpenAI Whisper."""
     import numpy as np
+
+    # Reject browser audio while TARS is talking — prevents TTS echo from
+    # being transcribed and submitted as a phantom user message.
+    try:
+        from modules.module_state import get_tars_state, TarsState
+        if get_tars_state() == TarsState.TALKING:
+            _sio_emit('browser_transcription', {'text': ''})
+            return
+    except Exception:
+        pass
+
     try:
         audio_b64 = data.get('audio', '') if isinstance(data, dict) else ''
         if not audio_b64:
@@ -891,6 +902,14 @@ def receive_user_message():
         except Exception as e:
             queue_message(f"WARNING: PIL could not validate image ({file.filename}, {len(file_bytes)} bytes): {e}")
         base64_image = base64.b64encode(file_bytes).decode('utf-8')
+
+    # Only switch route to webui for intentional user messages (not empty/phantom)
+    if user_message and user_message.strip():
+        try:
+            from modules.module_router import set_active_route
+            set_active_route("webui")
+        except Exception:
+            pass
 
     socketio.start_background_task(_process_chat_message, user_message, base64_image)
     return jsonify({"status": "success"})

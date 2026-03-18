@@ -23,6 +23,11 @@ SKILL = {
             "default": "",
             "description": "Discord channel ID (right-click channel > Copy Channel ID in Developer Mode)",
         },
+        "allowed_user": {
+            "type": "text",
+            "default": "",
+            "description": "Discord username to respond to (e.g. 'pyrater'). Leave empty to respond to all DMs.",
+        },
         "command_prefix": {
             "type": "text",
             "default": "!",

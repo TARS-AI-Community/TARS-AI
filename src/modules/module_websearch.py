@@ -258,6 +258,9 @@ def get_weather(query):
         response.raise_for_status()
         data = response.json()
 
+        if 'current_condition' not in data or not data['current_condition']:
+            return f"Weather data unavailable for {location_display}. The weather service may be temporarily down."
+
         current = data['current_condition'][0]
         forecasts = data.get('weather', [])
 

@@ -92,24 +92,15 @@ def _fire_reminder(task_id, meta):
         except Exception:
             pass
 
-    # Determine what to speak
-    speak_text = llm_reply if llm_reply else f"Reminder: {message}"
-
-    # TTS announcement
-    try:
-        from modules.module_tts import play_audio_chunks
-        from modules.module_config import load_config
-        config = load_config()
-        asyncio.run(play_audio_chunks(speak_text, config['TTS']['ttsoption']))
-    except Exception as e:
-        try:
-            from modules.module_messageQue import queue_message
-            queue_message(f"REMINDER: TTS failed: {e}")
-        except Exception:
-            pass
-
-    # Push to OpenGL terminal UI
+    # Deliver to wherever the user currently is (follows the user)
     display_text = llm_reply if llm_reply else f"Reminder: {message}"
+    try:
+        from modules.module_router import send
+        send(display_text)
+    except Exception:
+        pass
+
+    # Push to OpenGL terminal UI (always, regardless of source)
     try:
         from modules.module_main import ui_manager
         from modules.module_config import load_config
@@ -117,14 +108,6 @@ def _fire_reminder(task_id, meta):
         character_name = _cfg['CHAR']['character_name']
         if ui_manager:
             ui_manager.update_data(character_name, display_text, character_name)
-    except Exception:
-        pass
-
-    # Push to web UI
-    try:
-        from modules.module_chatui import socketio
-        socketio.emit('bot_message', {'message': display_text})
-        socketio.emit('bot_audio_done', {})
     except Exception:
         pass
 

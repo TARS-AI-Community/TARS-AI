@@ -22,7 +22,6 @@ import base64
 import tempfile
 import io
 import threading
-import sqlite3
 from datetime import datetime, timedelta
 
 import discord
@@ -175,8 +174,9 @@ async def _speak_in_voice(text, voice_client):
         queue_message(f"ERROR: Discord voice speak failed: {e}")
 
 
-def _run_side_effects(reply, user_message):
-    """Run LLM side effects (function calls, memories) in a background thread."""
+def _run_side_effects_sync(reply, user_message):
+    """Run LLM side effects synchronously (blocking). Used by DM handler
+    so follow-up replies (web search, camera, etc.) get sent back."""
     if not isinstance(reply, dict):
         return
     func_calls = reply.get("function_calls", [])
@@ -185,11 +185,7 @@ def _run_side_effects(reply, user_message):
     if func_calls or new_mems or cur_activity:
         try:
             from modules.module_llm import llm_execute_side_effects
-            threading.Thread(
-                target=llm_execute_side_effects,
-                args=(reply, user_message),
-                kwargs={"source": "discord"}, daemon=True
-            ).start()
+            llm_execute_side_effects(reply, user_message, source="discord")
         except Exception as e:
             queue_message(f"ERROR: Discord side effects failed: {e}")
 
@@ -201,12 +197,13 @@ def _run_side_effects(reply, user_message):
 @bot.event
 async def on_ready():
     queue_message(f"INFO: Discord bot logged in as {bot.user}")
-    # Register cog classes directly — no external files needed
+    # Register cog classes (skip if already loaded from a previous on_ready)
     for cog_cls in (_VoiceCog, _RemindersCog):
-        try:
-            await bot.add_cog(cog_cls(bot))
-        except Exception as e:
-            queue_message(f"WARNING: Failed to load Discord cog {cog_cls.__name__}: {e}")
+        if not bot.get_cog(cog_cls.__cog_name__):
+            try:
+                await bot.add_cog(cog_cls(bot))
+            except Exception as e:
+                queue_message(f"WARNING: Failed to load Discord cog {cog_cls.__name__}: {e}")
 
 
 @bot.event
@@ -223,26 +220,35 @@ async def on_message(message):
     if ctx.valid:
         return
 
-    # Determine whether to respond
-    is_dm = isinstance(message.channel, discord.DMChannel)
-    is_mention = bot.user in message.mentions
-    is_reply_to_bot = (
-        message.reference
-        and message.reference.resolved
-        and isinstance(message.reference.resolved, discord.Message)
-        and message.reference.resolved.author == bot.user
-    )
-
-    if not (is_dm or is_mention or is_reply_to_bot):
+    # Only respond to DMs
+    if not isinstance(message.channel, discord.DMChannel):
         return
+
+    # Filter by allowed user (if configured in skill settings)
+    try:
+        from modules.module_skills import get_skill_manager
+        _sm = get_skill_manager()
+        if _sm:
+            _dc = _sm.get_skill_config("discord")
+            _allowed = _dc.get("allowed_user", "").strip()
+            if _allowed and message.author.name.lower() != _allowed.lower():
+                return
+    except Exception:
+        pass
 
     user_message = _strip_bot_mention(message.content)
     if not user_message and not message.attachments:
         return
 
+    # Track that user is talking via Discord
+    from modules.module_router import set_active_route
+    set_active_route("discord",
+        discord_channel_id=message.channel.id,
+        discord_user_id=str(message.author.id),
+    )
+
     # Log
-    display = await replace_mentions_with_usernames(message.content)
-    queue_message(f"{'DM' if is_dm else 'DISCORD'}: {message.author.name}: {display}")
+    queue_message(f"DM: {message.author.name}: {message.content}")
 
     # Image attachment
     image_b64 = await _extract_image_b64(message)
@@ -269,13 +275,21 @@ async def on_message(message):
 
     reply_text = re.sub(r'<think>.*?</think>', '', reply_text, flags=re.DOTALL).strip()
 
-    if is_dm:
-        await _send_long_message(message.channel, reply_text)
-    else:
-        await _send_long_message(message.channel, f"{message.author.mention} {reply_text}")
-
+    await _send_long_message(message.channel, reply_text)
     queue_message(f"DISCORD: Replied to {message.author.name}")
-    _run_side_effects(reply, user_message)
+
+    # Run side effects inline so follow-up replies (web search results,
+    # camera analysis, etc.) get sent back to Discord.
+    if isinstance(reply, dict):
+        initial_reply = reply.get('reply', '')
+        await asyncio.get_event_loop().run_in_executor(
+            None, lambda: _run_side_effects_sync(reply, user_message)
+        )
+        updated_reply = reply.get('reply', '')
+        if updated_reply and updated_reply != initial_reply:
+            followup_text = re.sub(r'<think>.*?</think>', '', updated_reply, flags=re.DOTALL).strip()
+            if followup_text:
+                await _send_long_message(message.channel, followup_text)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -378,6 +392,11 @@ class _VoiceCog(commands.Cog, name="Voice"):
         if not process_discord_message_callback:
             await ctx.send("Error: No processing logic available.")
             return
+        from modules.module_router import set_active_route
+        set_active_route("discord",
+            discord_channel_id=ctx.channel.id,
+            discord_user_id=str(ctx.author.id),
+        )
 
         async with ctx.typing():
             try:
@@ -396,7 +415,19 @@ class _VoiceCog(commands.Cog, name="Voice"):
         reply_text = re.sub(r'<think>.*?</think>', '', reply_text, flags=re.DOTALL).strip()
         await _send_long_message(ctx.channel, reply_text)
         await _speak_in_voice(reply_text, ctx.voice_client)
-        _run_side_effects(reply, question)
+
+        # Run side effects inline for follow-up replies
+        if isinstance(reply, dict):
+            initial_reply = reply.get('reply', '')
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda: _run_side_effects_sync(reply, question)
+            )
+            updated_reply = reply.get('reply', '')
+            if updated_reply and updated_reply != initial_reply:
+                followup_text = re.sub(r'<think>.*?</think>', '', updated_reply, flags=re.DOTALL).strip()
+                if followup_text:
+                    await _send_long_message(ctx.channel, followup_text)
+                    await _speak_in_voice(followup_text, ctx.voice_client)
 
     @say.error
     @ask.error
@@ -418,80 +449,25 @@ class _VoiceCog(commands.Cog, name="Voice"):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Reminders Cog
+# Reminders Cog — thin wrapper over skill_reminder + module_router
 # ═══════════════════════════════════════════════════════════════════════════════
-
-# Reminders DB lives next to other TARS data
-_REMINDERS_DB = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), '..', 'memory', 'discord_reminders.db'
-)
-
-
-def _get_reminders_db():
-    os.makedirs(os.path.dirname(_REMINDERS_DB), exist_ok=True)
-    conn = sqlite3.connect(_REMINDERS_DB)
-    conn.row_factory = sqlite3.Row
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS reminders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            channel_id TEXT NOT NULL,
-            due_time TEXT NOT NULL,
-            note TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    return conn
 
 
 class _RemindersCog(commands.Cog, name="Reminders"):
+    """Discord commands for reminders. All logic lives in skill_reminder.py."""
 
     def __init__(self, bot):
         self.bot = bot
-        self._tasks = {}  # id -> asyncio.Task
-        self.bot.loop.create_task(self._load())
-
-    async def _load(self):
-        await self.bot.wait_until_ready()
-        conn = _get_reminders_db()
-        try:
-            rows = conn.execute(
-                "SELECT * FROM reminders WHERE due_time > ?", (datetime.now().isoformat(),)
-            ).fetchall()
-            for row in rows:
-                self._schedule(dict(row))
-            if rows:
-                queue_message(f"INFO: Discord reminders: rescheduled {len(rows)}")
-        finally:
-            conn.close()
-
-    def _schedule(self, data):
-        rid = data['id']
-        due = datetime.fromisoformat(data['due_time'])
-
-        async def _fire():
-            delay = (due - datetime.now()).total_seconds()
-            if delay > 0:
-                await asyncio.sleep(delay)
-            ch = self.bot.get_channel(int(data['channel_id']))
-            if ch:
-                await ch.send(f"**REMINDER:** <@{data['user_id']}> - {data['note']}")
-            self._db_delete(rid)
-            self._tasks.pop(rid, None)
-
-        self._tasks[rid] = self.bot.loop.create_task(_fire())
-
-    def _db_delete(self, rid):
-        conn = _get_reminders_db()
-        try:
-            conn.execute("DELETE FROM reminders WHERE id = ?", (rid,))
-            conn.commit()
-        finally:
-            conn.close()
 
     @commands.command(name="remind")
     async def remind(self, ctx, minutes: int, *, note: str):
         """Set a reminder. Usage: !remind <minutes> <message>"""
+        # Update active route so the reminder fires back here
+        from modules.module_router import set_active_route
+        set_active_route("discord",
+            discord_channel_id=ctx.channel.id,
+            discord_user_id=str(ctx.author.id),
+        )
         if minutes <= 0:
             await ctx.send("Minutes must be positive.")
             return
@@ -499,72 +475,34 @@ class _RemindersCog(commands.Cog, name="Reminders"):
             await ctx.send("Max reminder duration is 10080 minutes (1 week).")
             return
 
-        due_time = (datetime.now() + timedelta(minutes=minutes)).isoformat()
-        conn = _get_reminders_db()
-        try:
-            cur = conn.execute(
-                "INSERT INTO reminders (user_id, channel_id, due_time, note) VALUES (?,?,?,?)",
-                (str(ctx.author.id), str(ctx.channel.id), due_time, note)
-            )
-            rid = cur.lastrowid
-            conn.commit()
-        finally:
-            conn.close()
-
-        self._schedule({
-            'id': rid, 'user_id': str(ctx.author.id),
-            'channel_id': str(ctx.channel.id), 'due_time': due_time, 'note': note
-        })
-        await ctx.send(
-            f"Reminder set (ID: {rid}). "
-            f"I'll remind you in {minutes} minute{'s' if minutes != 1 else ''}: **{note}**"
+        from skills.skill_reminder import execute as reminder_execute
+        result = reminder_execute(
+            {"action": "set", "seconds": minutes * 60, "message": note},
+            context={},
         )
+        if result:
+            await ctx.send(result)
+        else:
+            await ctx.send(
+                f"Reminder set! I'll remind you in "
+                f"{minutes} minute{'s' if minutes != 1 else ''}: **{note}**"
+            )
 
     @commands.command(name="timers", aliases=["reminders"])
     async def timers(self, ctx):
         """List your active reminders."""
-        conn = _get_reminders_db()
-        try:
-            rows = conn.execute(
-                "SELECT * FROM reminders WHERE user_id = ? ORDER BY due_time ASC",
-                (str(ctx.author.id),)
-            ).fetchall()
-        finally:
-            conn.close()
-
-        if not rows:
-            await ctx.send("You have no active reminders.")
-            return
-
-        embed = discord.Embed(title="Your Active Reminders", color=0x3498db)
-        for row in rows:
-            left = datetime.fromisoformat(row['due_time']) - datetime.now()
-            mins = max(0, int(left.total_seconds() // 60))
-            status = f"In {mins}m" if mins > 0 else "Due now!"
-            embed.add_field(name=f"ID: {row['id']} | {status}", value=row['note'], inline=False)
-        await ctx.send(embed=embed)
+        from skills.skill_reminder import execute as reminder_execute
+        result = reminder_execute({"action": "list"}, context={})
+        await ctx.send(result or "You have no active reminders.")
 
     @commands.command(name="cancel", aliases=["kill"])
     async def cancel(self, ctx, reminder_id: int):
         """Cancel a reminder by ID."""
-        conn = _get_reminders_db()
-        try:
-            row = conn.execute(
-                "SELECT * FROM reminders WHERE id = ? AND user_id = ?",
-                (reminder_id, str(ctx.author.id))
-            ).fetchone()
-        finally:
-            conn.close()
-
-        if not row:
-            await ctx.send(f"Reminder `{reminder_id}` not found or doesn't belong to you.")
-            return
-
-        task = self._tasks.pop(reminder_id, None)
-        if task:
-            task.cancel()
-        self._db_delete(reminder_id)
-        await ctx.send(f"Reminder `{reminder_id}` cancelled.")
+        from skills.skill_reminder import execute as reminder_execute
+        result = reminder_execute(
+            {"action": "cancel", "id": reminder_id}, context={}
+        )
+        await ctx.send(result or f"Reminder `{reminder_id}` cancelled.")
 
     @remind.error
     async def _remind_error(self, ctx, error):

@@ -160,6 +160,7 @@ src/logs/
 *.pickle.gz
 TARS.wav
 src/memory/flashrank_cache
+src/memory/*.png
 TARS_topics.json
 TARS_lite.json
 initial_memory.loaded
