@@ -197,6 +197,7 @@ dashboard.ini
 !KIPP.onnx*
 !PLEX.onnx*
 !Bishop.onnx*
+!hey_tars.onnx
 
 # Speech-to-text (STT) Folder
 stt/
