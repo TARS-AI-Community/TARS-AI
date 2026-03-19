@@ -202,6 +202,7 @@ class STTManager:
         self.smart_turn_audio_buffer = deque(maxlen=32)
         self._smart_turn_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SmartTurn")
         self._smart_turn_future = None  # pending inference Future
+        self._smart_turn_last_buf_len = 0  # buffer size at last inference submission
 
         # Barge-in monitoring
         self._bargein_active = False
@@ -1011,6 +1012,7 @@ class STTManager:
         had_stale_buffer = len(self.smart_turn_audio_buffer) > 0
         self.smart_turn_audio_buffer.clear()
         self._smart_turn_future = None
+        self._smart_turn_last_buf_len = 0
         if had_stale_future or had_stale_buffer:
             queue_message(f"DEBUG: Reset stale Smart Turn state (future={had_stale_future}, buf_chunks={had_stale_buffer})")
 
@@ -1529,6 +1531,7 @@ class STTManager:
                 silent_frames = 0
                 self.smart_turn_audio_buffer.append(data.astype(np.float32).flatten() / 32768.0)
                 self._smart_turn_future = None  # discard stale result if speaker resumed
+                self._smart_turn_last_buf_len = 0  # reset cache so next silence triggers inference
                 clear_bar()
                 return False, detected_speech, silent_frames
 
@@ -1560,13 +1563,16 @@ class STTManager:
                     queue_message(f"WARNING: Smart Turn inference error: {e}")
                     self._smart_turn_future = None
 
-            # Kick off inference if not already running
+            # Kick off inference if not already running and buffer has new audio
+            _cur_buf_len = len(self.smart_turn_audio_buffer)
             if (silent_frames >= 3 and detected_speech
                     and self.smart_turn_audio_buffer
-                    and self._smart_turn_future is None):
+                    and self._smart_turn_future is None
+                    and _cur_buf_len != self._smart_turn_last_buf_len):
                 audio_snapshot = np.concatenate(list(self.smart_turn_audio_buffer))
+                self._smart_turn_last_buf_len = _cur_buf_len
                 if self.DEBUG:
-                    queue_message(f"DEBUG: Smart Turn submitting inference (silent={silent_frames}, buf_chunks={len(self.smart_turn_audio_buffer)}, samples={len(audio_snapshot)})")
+                    queue_message(f"DEBUG: Smart Turn submitting inference (silent={silent_frames}, buf_chunks={_cur_buf_len}, samples={len(audio_snapshot)})")
                 self._smart_turn_future = self._smart_turn_executor.submit(
                     self._smart_turn_infer, audio_snapshot
                 )
