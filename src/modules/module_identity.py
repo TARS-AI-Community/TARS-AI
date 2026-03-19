@@ -172,11 +172,35 @@ class IdentityManager:
     def get_active_user_name(self, fallback: str) -> str:
         """Get the best-known user name for conversation display.
 
-        Priority: voice speaker > single known face > config fallback.
+        Voice path (speaker ID enabled):
+          identified name > last named speaker > "Unknown"
+          NEVER returns config fallback — that causes flip-flopping.
+
+        Webui/text or speaker ID disabled:
+          Returns the config fallback name.
         """
+        # Webui/text interactions use config name directly
+        try:
+            from modules.module_router import get_active_route
+            if get_active_route().get("source") == "webui":
+                return fallback
+        except Exception:
+            pass
+
         speaker = self.get_current_speaker()
         if speaker and speaker != "Unknown" and not speaker.startswith("Unknown_"):
             return speaker
+        if self._speaker_id is not None and self._speaker_id.enabled:
+            if speaker and (speaker == "Unknown" or speaker.startswith("Unknown_")):
+                # Active utterance being processed — genuinely unknown.
+                # Don't assume last speaker (could be someone else).
+                return "Unknown"
+            # speaker is None → recency expired, no active utterance.
+            # Safe to use last named speaker to avoid config flip-flop.
+            last = self._speaker_id.get_last_named_speaker()
+            if last:
+                return last
+            return "Unknown"
         return fallback
 
     def auto_train_face(self, name: str):
