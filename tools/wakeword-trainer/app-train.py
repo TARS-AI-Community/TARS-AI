@@ -1088,20 +1088,30 @@ def main():
             existing = [f for f in os.listdir(mic_dir) if f.endswith(".wav")]
 
         if existing:
-            status("info", f"Found {len(existing)} existing mic recordings in mic_audio/")
-            reuse = input("    Use existing recordings? [Y/n]: ").strip().lower()
-            if reuse != "n":
-                status("ok", f"Reusing {len(existing)} mic recordings")
-                return mic_dir
-            else:
-                status("info", "Will re-record (overwriting existing files)")
+            # Count unique speakers by prefix
+            speakers = set()
+            for f in existing:
+                # Files are like: oliver_mic_pos_00.wav or mic_pos_00.wav (legacy)
+                parts = f.split("_mic_")
+                if len(parts) == 2:
+                    speakers.add(parts[0])
+                else:
+                    speakers.add("(default)")
+            status("info", f"Found {len(existing)} recordings from {len(speakers)} speaker(s): {', '.join(sorted(speakers))}")
 
-        # Ask if user wants to record
+        # Ask if user wants to add more recordings
         print()
-        answer = input("    Would you like to record real audio samples? (recommended) [y/N]: ").strip().lower()
+        answer = input("    Record audio from a new speaker? (recommended) [y/N]: ").strip().lower()
         if answer != "y":
+            if existing:
+                status("ok", f"Using {len(existing)} existing mic recordings")
+                return mic_dir
             status("info", "Skipping mic recording")
-            return None
+            return None if not existing else mic_dir
+
+        # Generate unique speaker ID
+        speaker = hashlib.md5(str(time.time()).encode()).hexdigest()[:6]
+        status("ok", f"Speaker ID: \033[33m{speaker}\033[0m")
 
         os.makedirs(mic_dir, exist_ok=True)
 
@@ -1224,7 +1234,7 @@ def main():
             audio = vad_record(f"Say '\033[33m{args.wake_word}\033[0m'",
                                f"{i+1}/{positive_count}")
             if audio is not None:
-                save_wav(audio, os.path.join(mic_dir, f"mic_pos_{i:02d}.wav"))
+                save_wav(audio, os.path.join(mic_dir, f"{speaker}_mic_pos_{i:02d}.wav"))
             if i < positive_count - 1:
                 # Cooldown between recordings
                 for c in range(2, 0, -1):
@@ -1253,7 +1263,7 @@ def main():
             audio = vad_record(f"Say '\033[33m{phrase}\033[0m'",
                                f"{i+1}/{len(confusable_prompts)}")
             if audio is not None:
-                save_wav(audio, os.path.join(mic_dir, f"mic_neg_{i:02d}.wav"))
+                save_wav(audio, os.path.join(mic_dir, f"{speaker}_mic_neg_{i:02d}.wav"))
             if i < len(confusable_prompts) - 1:
                 for c in range(2, 0, -1):
                     print(f"\r    \033[90m  next in {c}...\033[0m   ", end="", flush=True)
@@ -1274,7 +1284,7 @@ def main():
         sd.wait()
         print()
         noise_audio = noise_audio.flatten()
-        save_wav(noise_audio, os.path.join(mic_dir, "mic_noise.wav"))
+        save_wav(noise_audio, os.path.join(mic_dir, f"{speaker}_mic_noise.wav"))
         status("ok", f"Recorded {noise_duration:.0f}s of ambient noise")
 
         # --- Record conversation (natural speech negative) ---
@@ -1295,7 +1305,7 @@ def main():
         sd.wait()
         print()
         conv_audio = conv_audio.flatten()
-        save_wav(conv_audio, os.path.join(mic_dir, "mic_conversation.wav"))
+        save_wav(conv_audio, os.path.join(mic_dir, f"{speaker}_mic_conversation.wav"))
         status("ok", f"Recorded {conv_duration:.0f}s of conversation")
 
         total_files = len([f for f in os.listdir(mic_dir) if f.endswith(".wav")])
@@ -1388,19 +1398,16 @@ def main():
                     except Exception:
                         continue
 
-                    if mf.startswith("mic_pos_"):
-                        # Mic positives are the most valuable — add multiple copies
-                        # so they get augmented more during feature extraction
-                        for _ in range(3):  # 3x copies → 3x more augmented features
+                    # Match both old format (mic_pos_00.wav) and new (oliver_mic_pos_00.wav)
+                    if "_mic_pos_" in mf or mf.startswith("mic_pos_"):
+                        for _ in range(3):
                             raw_positives.append(audio.copy())
                         mic_pos += 1
-                    elif mf.startswith("mic_neg_"):
-                        for _ in range(2):  # 2x copies for mic negatives
+                    elif "_mic_neg_" in mf or mf.startswith("mic_neg_"):
+                        for _ in range(2):
                             raw_negatives.append(audio.copy())
                         mic_neg += 1
-                    elif mf.startswith("mic_noise") or mf.startswith("mic_conversation"):
-                        # Split noise/conversation into 1-second chunks as negative samples
-                        # Use overlapping windows for conversation to get more samples
+                    elif "_mic_noise" in mf or "_mic_conversation" in mf or mf.startswith("mic_noise") or mf.startswith("mic_conversation"):
                         chunk_len = SAMPLE_RATE
                         hop = chunk_len // 2 if "conversation" in mf else chunk_len
                         for ci in range(0, len(audio) - chunk_len, hop):
@@ -1410,7 +1417,7 @@ def main():
                 # Generate synthetic hard negatives from mic positives:
                 # Take real "hey tars" recordings and corrupt them to teach the model
                 # that partial/truncated wake words are NOT valid
-                mic_pos_files = [f for f in mic_files if f.startswith("mic_pos_")]
+                mic_pos_files = [f for f in mic_files if "_mic_pos_" in f or f.startswith("mic_pos_")]
                 mic_corrupted = 0
                 for mf in mic_pos_files:
                     fpath = os.path.join(mic_audio_dir, mf)
