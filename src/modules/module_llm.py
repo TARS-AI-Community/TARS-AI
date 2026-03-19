@@ -50,7 +50,7 @@ except ImportError:
 _reply_chunk_callback = None
 
 # Speaker ID start timestamp — set by module_main.py so the deferred wait
-# can happen after prompt build but before the HTTP request.
+# in build_prompt can block for the remaining budget before resolving the name.
 _sid_start_time = None
 
 
