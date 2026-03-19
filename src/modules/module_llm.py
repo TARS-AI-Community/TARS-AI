@@ -33,6 +33,10 @@ CAPABILITIES = get_capabilities()
 character_manager = None
 memory_manager = None
 
+# Persistent HTTP session — reuses TCP+TLS connections across LLM requests,
+# saving ~100-200ms per call (especially on Pi where TLS handshake is slow).
+_http_session = requests.Session()
+
 process_camera_image = None
 try:
     from modules.module_vision import process_camera_image as _pci
@@ -44,6 +48,10 @@ except ImportError:
 # Callback invoked with (text_chunk, is_first) as reply text streams from LLM.
 # Set by module_main.py before calling process_completion(); cleared afterward.
 _reply_chunk_callback = None
+
+# Speaker ID start timestamp — set by module_main.py so the deferred wait
+# can happen after prompt build but before the HTTP request.
+_sid_start_time = None
 
 
 class _ReplyExtractor:
@@ -178,7 +186,7 @@ def get_completion(user_prompt, istext=True, image_b64=None, source="voice"):
     url, data = _prepare_request_data(llm_backend, prompt, image_b64=image_b64)
 
     try:
-        response = requests.post(url, headers=headers, json=data, stream=True)
+        response = _http_session.post(url, headers=headers, json=data, stream=True)
         response.raise_for_status()
 
         # Stream tokens from SSE response
@@ -303,7 +311,7 @@ def process_completion(prompt, image_b64=None):
         llm_backend = CONFIG['LLM']['llm_backend']
         url, data = _prepare_request_data(llm_backend, built_prompt, image_b64=image_b64)
 
-        response = requests.post(url, headers=headers, json=data, stream=True)
+        response = _http_session.post(url, headers=headers, json=data, stream=True)
         response.raise_for_status()
         _t_first_byte = None
 
@@ -769,7 +777,7 @@ def raw_complete_llm(user_prompt, istext=True):
     url, data = _prepare_request_data(llm_backend, user_prompt)
 
     try:
-        response = requests.post(url, headers=headers, json=data)
+        response = _http_session.post(url, headers=headers, json=data)
         response.raise_for_status()
         bot_reply = _extract_text(response.json(), istext)
         return bot_reply

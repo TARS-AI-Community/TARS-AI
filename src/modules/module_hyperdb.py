@@ -50,6 +50,16 @@ def _get_local_model():
         _EMBEDDING_MODEL = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device='cpu')
     return _EMBEDDING_MODEL
 
+# Eagerly load and pre-warm the embedding model at import time so the first
+# real query doesn't pay the ~2s cold-start cost.
+if _EMBEDDING_SOURCE == 'local':
+    import threading as _threading
+    def _eager_load_embedding():
+        model = _get_local_model()
+        # Dummy encode to trigger any lazy JIT / ONNX warm-up
+        model.encode(["warm-up"])
+    _threading.Thread(target=_eager_load_embedding, daemon=True, name="embedding-warmup").start()
+
 def _get_embedding_api(texts, url, api_key, model=None):
     """Fetch embeddings from an OpenAI-compatible API endpoint."""
     headers = {"Content-Type": "application/json"}
