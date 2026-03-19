@@ -210,9 +210,21 @@ def _get_speaker_context():
 def _get_active_user_name(config_user_name: str) -> str:
     """Return the best-known user name for conversation display.
 
-    Prefers the fused IdentityManager (voice + face), falls back to
-    voice-only SpeakerIDManager, then config fallback.
+    Voice path (speaker ID enabled):
+      identified name > last named speaker > "Unknown"
+      NEVER falls back to config_user_name — that would cause flip-flopping.
+
+    Webui/text path (no voice) or speaker ID disabled:
+      Uses config_user_name as the display name.
     """
+    # Check if this is a webui/text interaction — use config name directly
+    try:
+        from modules.module_router import get_active_route
+        if get_active_route().get("source") == "webui":
+            return config_user_name
+    except Exception:
+        pass
+
     try:
         from modules.module_identity import get_identity_manager
         im = get_identity_manager()
@@ -227,6 +239,18 @@ def _get_active_user_name(config_user_name: str) -> str:
             speaker = sid.get_current_speaker()
             if speaker and not speaker.startswith("Unknown"):
                 return speaker
+            if speaker and speaker.startswith("Unknown"):
+                # Active utterance being processed — genuinely unknown right
+                # now. Don't assume it's the last named speaker (could be
+                # someone else). The deferred wait in build_prompt will block
+                # for the observer to finish and resolve the real name.
+                return "Unknown"
+            # speaker is None → recency expired, no active utterance.
+            # Safe to use the last named speaker to avoid config flip-flop.
+            last = sid.get_last_named_speaker()
+            if last:
+                return last
+            return "Unknown"
     except Exception:
         pass
     return config_user_name

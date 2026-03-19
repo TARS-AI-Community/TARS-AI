@@ -100,6 +100,7 @@ class SpeakerIDManager:
         # Speaker state
         self.current_speaker: Optional[str] = None
         self.current_confidence: float = 0.0
+        self._last_named_speaker: Optional[str] = None  # last non-Unknown speaker name (survives recency timeout)
         self.last_identified_time: float = 0.0
         self._lock = threading.Lock()
 
@@ -479,16 +480,13 @@ class SpeakerIDManager:
         """
         if not self.enabled or not self._running:
             return
-        # Replace stale speaker state with a fresh Unknown tag.  The background
-        # observer will overwrite this with the real identification result.
-        # If identification fails or times out, the Unknown tag remains —
-        # the ROUND log never shows "?" for an active utterance.
+        # Reset to Unknown for the new utterance — we genuinely don't know
+        # who is speaking yet.  The background observer will overwrite with
+        # the real identification result.  The fallback chain in
+        # _get_active_user_name uses _last_named_speaker (not Unknown) when
+        # the recency window expires between conversations, but during an
+        # active utterance we correctly show Unknown until identified.
         with self._lock:
-            # Always create a fresh Unknown tag for each new utterance.
-            # The old session ID may belong to a different person; the observer
-            # thread will overwrite this with the real result once identification
-            # completes.  If the same unknown person speaks again, _handle_unknown
-            # will match them via embedding consistency and reuse their profile.
             self._unknown_session_id = f"Unknown_{int(time.time())}"
             self.current_speaker = self._unknown_session_id
             self.current_confidence = 0.0
@@ -917,14 +915,29 @@ class SpeakerIDManager:
 
         Returns the speaker name if identified within the recency window,
         or None if no recent identification.
+        Also tracks the last named (non-Unknown) speaker for fallback.
         """
         with self._lock:
             if self.current_speaker is None:
                 return None
+            # Track the last named speaker so it survives recency timeouts
+            if (self.current_speaker
+                    and not self.current_speaker.startswith("Unknown")):
+                self._last_named_speaker = self.current_speaker
             elapsed = time.time() - self.last_identified_time
             if elapsed > self.RECENCY_WINDOW:
                 return None
             return self.current_speaker
+
+    def get_last_named_speaker(self) -> Optional[str]:
+        """Return the last positively identified (non-Unknown) speaker name.
+
+        Unlike get_current_speaker(), this does NOT expire with the recency
+        window.  Use this as a fallback instead of the config.ini default
+        when speaker ID is enabled, to avoid name flip-flopping.
+        """
+        with self._lock:
+            return self._last_named_speaker
 
     def get_speaker_context(self) -> str:
         """Get a formatted string for LLM prompt injection.
