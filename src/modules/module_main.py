@@ -133,16 +133,12 @@ def utterance_callback(message):
         if memory_manager and memory_manager.long_mem_use:
             memory_manager.prefetch_embedding(user_text)
 
-        # Resolve speaker name for display (voice mode)
-        # Wait for background speaker ID — returns immediately if already done
+        # Speaker ID: non-blocking at this stage. We record the start time and
+        # defer the blocking wait until right before the LLM call, giving the
+        # background observer maximum time to finish identification.
+        _sid_start = time.perf_counter()
         _speaker_display = CONFIG['CHAR'].get('user_name', 'User')
         try:
-            from modules.module_speaker_id import get_speaker_id_manager
-            sid = get_speaker_id_manager()
-            if sid and sid.enabled:
-                identified = sid.wait_for_identification(timeout=0.5)
-                if not identified:
-                    queue_message("DEBUG: Speaker ID timed out (0.5s) — using default name")
             from modules.module_prompt import _get_active_user_name
             _speaker_display = _get_active_user_name(_speaker_display)
         except Exception:
@@ -255,11 +251,26 @@ def utterance_callback(message):
             pipeline.start()
             llm_mod._reply_chunk_callback = on_reply_chunk
 
+            # Pass speaker ID start time so the deferred wait happens at the
+            # very end of prompt build (after memory retrieval), giving speaker
+            # ID maximum background processing time.
+            llm_mod._sid_start_time = _sid_start
+
             try:
                 stt_to_llm_dur = speed.stop('stt_to_llm')
                 speed.start('llm_total')
                 parsed = process_completion(user_text)
                 llm_total_dur = speed.stop('llm_total')
+                # Refresh UI display name now that speaker ID has resolved
+                try:
+                    from modules.module_prompt import _get_active_user_name
+                    _resolved = _get_active_user_name(_speaker_display)
+                    if _resolved != _speaker_display:
+                        _speaker_display = _resolved
+                        if ui_manager:
+                            ui_manager.update_data(_speaker_display, user_text, _speaker_display)
+                except Exception:
+                    pass
             finally:
                 llm_mod._reply_chunk_callback = None
                 # Flush remaining — try pipeline remainder, fall back to raw
