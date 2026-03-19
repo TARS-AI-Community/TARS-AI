@@ -5,9 +5,9 @@
   "n_features": 39,
   "n_fft": 512,
   "target_frames": 62,
-  "optimal_threshold": 0.5200000000000002,
-  "f1_score": 0.990013092575371,
-  "n_positive_samples": 6090,
-  "n_negative_samples": 12180,
-  "trained_at": "2026-03-19 09:20:17"
+  "optimal_threshold": 0.5100000000000002,
+  "f1_score": 0.9887588846520784,
+  "n_positive_samples": 6540,
+  "n_negative_samples": 13080,
+  "trained_at": "2026-03-19 19:03:49"
 }
