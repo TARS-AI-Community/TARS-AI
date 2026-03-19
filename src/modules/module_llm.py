@@ -616,19 +616,34 @@ def llm_execute_side_effects(parsed, user_input, source="voice", has_image=False
             # Filter out no-op identify_speaker_name calls when the name matches
             # the already-identified speaker. Allow calls with a DIFFERENT name
             # through — those may be legitimate rename corrections.
+            # Also allow through when an unknown face is on camera so that
+            # auto_train_face can trigger inside the skill.
             try:
                 from modules.module_speaker_id import get_speaker_id_manager
                 _sid = get_speaker_id_manager()
                 if _sid:
                     _cur = _sid.get_current_speaker()
                     if _cur and not _cur.startswith("Unknown"):
-                        before = len(fc)
-                        fc = [f for f in fc if not (
-                            f.get("function") == "identify_speaker_name"
-                            and f.get("parameters", {}).get("name", "").strip() == _cur
-                        )]
-                        if len(fc) < before:
-                            queue_message(f"DEBUG: Filtered {before - len(fc)} identify_speaker_name call(s) — name matches current speaker '{_cur}'")
+                        # Check if an unknown face is visible — if so, let the
+                        # call through so auto_train_face can enroll the face.
+                        _has_unknown_face = False
+                        try:
+                            from modules.module_identity import get_identity_manager
+                            _im = get_identity_manager()
+                            if _im is not None:
+                                _face_det = _im._get_face_id_detector()
+                                if _face_det and _face_det.enabled and _face_det.has_unknown:
+                                    _has_unknown_face = True
+                        except Exception:
+                            pass
+                        if not _has_unknown_face:
+                            before = len(fc)
+                            fc = [f for f in fc if not (
+                                f.get("function") == "identify_speaker_name"
+                                and f.get("parameters", {}).get("name", "").strip() == _cur
+                            )]
+                            if len(fc) < before:
+                                queue_message(f"DEBUG: Filtered {before - len(fc)} identify_speaker_name call(s) — name matches current speaker '{_cur}'")
             except Exception:
                 pass
             queue_message(f"DEBUG: Executing {len(fc)} function call(s): {fc}")
