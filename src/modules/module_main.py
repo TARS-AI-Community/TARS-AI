@@ -526,6 +526,17 @@ def post_utterance_callback():
     Restart listening for another utterance after handling the current one.
     """
     global stt_manager
+
+    # Check if radio is active — if so, go back to wake word mode
+    try:
+        from skills.skill_tars_radio import _radio_thread, _radio_cancel
+        if _radio_thread is not None and _radio_thread.is_alive() and not _radio_cancel.is_set():
+            queue_message("DEBUG: post_utterance_callback -> radio active, returning to wake word loop")
+            set_tars_state(TarsState.STANDBY)
+            return
+    except Exception:
+        pass
+
     queue_message("DEBUG: post_utterance_callback -> starting new recording round")
     stt_manager._transcribe_utterance()
 

@@ -65,6 +65,8 @@ wake_word = hey tars
 #   Pi3: sherpa-onnx | atomik
 #   PiZero2: atomik
 wake_word_processor = atomik
+# Atomik detection mode (atomik only) auto = use ONNX model if available, otherwise fall back to template, model = ONNX model only (trained with tools/wakeword-trainer), template = cosine similarity only (record wake word 5 times on device)
+atomik_mode = auto
 # Wake word strictness 1–10 (atomik only; 1 = lenient, 10 = strict)
 sensitivity = 7
 # Speech-to-text engine (independent of wake_word_processor — mix freely)

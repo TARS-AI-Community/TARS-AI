@@ -204,6 +204,7 @@ stt/
 src/tts/kokoro*
 src/tts/cache/
 src/tts/*_templates.pkl
+src/tts/*_model.pkl
 
 # Character Image Exceptions
 src/character/**
