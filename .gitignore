@@ -198,6 +198,7 @@ dashboard.ini
 !KIPP.onnx*
 !PLEX.onnx*
 !Bishop.onnx*
+!hey_tars.onnx
 
 # Speech-to-text (STT) Folder
 stt/
@@ -205,6 +206,7 @@ stt/
 src/tts/kokoro*
 src/tts/cache/
 src/tts/*_templates.pkl
+src/tts/*_model.pkl
 
 # Character Image Exceptions
 src/character/**

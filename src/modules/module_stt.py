@@ -323,7 +323,9 @@ class STTManager:
         if WakeWordSystem is None:
             queue_message("WARNING: Atomik wake word not available")
             return
-        WakeWordSystem(self.WAKE_WORD).createModel()
+        atomik_mode = CONFIG['STT'].get('atomik_mode', 'auto').strip().lower()
+        mode = None if atomik_mode == 'auto' else atomik_mode
+        WakeWordSystem(self.WAKE_WORD, mode=mode).createModel()
 
     def _load_silero_model(self):
         """Load Silero STT model via Torch Hub into the stt folder."""
@@ -1253,9 +1255,22 @@ class STTManager:
     def _detect_wake_word_atomik(self) -> bool:
         sensitivity = float(CONFIG["STT"]["sensitivity"])
         norm = (sensitivity - 1) / 9
-        curve = norm ** 1.6
-        threshold = round(max(0.2, min(0.2 + curve * 0.5, 0.7)), 2)
-        detector = WakeWordSystem(self.WAKE_WORD, self.MODEL_RATE, threshold)
+        atomik_mode = CONFIG['STT'].get('atomik_mode', 'auto').strip().lower()
+        mode = None if atomik_mode == 'auto' else atomik_mode
+
+        if atomik_mode == 'template':
+            # Template mode: cosine similarity scores range ~0.4-0.9
+            # Higher sensitivity = lower threshold = easier to trigger
+            # sens 1 → 0.70, sens 5 → 0.55, sens 10 → 0.40
+            curve = norm ** 1.3
+            threshold = round(max(0.35, min(0.70 - curve * 0.35, 0.70)), 2)
+        else:
+            # Model mode: CNN/ONNX outputs 0-1 probability
+            # sens 1 → 0.80, sens 5 → 0.68, sens 10 → 0.40
+            curve = norm ** 1.6
+            threshold = round(max(0.40, min(0.80 - curve * 0.4, 0.80)), 2)
+
+        detector = WakeWordSystem(self.WAKE_WORD, self.MODEL_RATE, threshold, debug=self.DEBUG, mode=mode)
         detector.createModel()
         # Wait for TTS to finish before entering blocking wake word listener
         while is_tts_playing():

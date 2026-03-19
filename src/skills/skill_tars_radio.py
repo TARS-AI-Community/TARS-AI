@@ -760,6 +760,14 @@ def _do_play(parameters, skill_config):
     player = _get_player()
     player._cancel.clear()  # Reset from any previous stop()
 
+    # Set STANDBY so post_utterance_callback returns to wake word mode
+    # instead of looping in transcription mode during music playback
+    try:
+        from modules.module_state import set_tars_state, TarsState
+        set_tars_state(TarsState.STANDBY)
+    except Exception:
+        pass
+
     _register_state_hooks()
 
     _radio_thread = threading.Thread(
