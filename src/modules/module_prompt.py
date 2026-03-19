@@ -277,11 +277,10 @@ def build_prompt(user_prompt, character_manager, memory_manager, config, debug=F
         character_manager.traits = fresh_traits
     now = datetime.now()
 
-    # Use the config default name for now — speaker ID may still be running
-    # in the background. We'll resolve and replace at the very end of prompt
-    # build, after memory retrieval, to give it maximum processing time.
-    _default_user_name = config['CHAR']['user_name']
-    user_name = _default_user_name
+    # Speaker ID wait is deferred to right before _get_speaker_context()
+    # below — after persona reload and location resolution are done — to
+    # give the background observer maximum free processing time.
+    user_name = config['CHAR']['user_name']  # overwritten after speaker ID wait
     char_name = character_manager.char_name
     persona_display = "\n".join([f"{trait}: {value}" for trait, value in character_manager.traits.items()])
 
@@ -576,6 +575,32 @@ Current Date: {now.strftime('%m/%d/%Y')}
 Current Time: {now.strftime('%H:%M:%S')}
 {location_line}
 """
+    # Deferred speaker ID wait: block for whatever remains of the 1.5s
+    # budget BEFORE resolving the user name and speaker context.  Speaker ID
+    # has been running in the background since STT _emit_result, through all
+    # of: utterance_callback setup, memory prefetch, persona reload, and
+    # location resolution.  This is the latest point we can wait while still
+    # guaranteeing 100% correct speaker identification in the prompt.
+    try:
+        import modules.module_llm as _llm_mod
+        _sid_t0 = getattr(_llm_mod, '_sid_start_time', None)
+        if _sid_t0 is not None:
+            from modules.module_speaker_id import get_speaker_id_manager
+            _sid = get_speaker_id_manager()
+            if _sid and _sid.enabled:
+                _sid_elapsed = _time.perf_counter() - _sid_t0
+                _sid_remaining = max(0, 1.5 - _sid_elapsed)
+                if _sid_remaining > 0:
+                    identified = _sid.wait_for_identification(timeout=_sid_remaining)
+                    if not identified:
+                        queue_message(f"DEBUG: Speaker ID timed out ({_sid_elapsed + _sid_remaining:.1f}s total) — using default name")
+            _llm_mod._sid_start_time = None
+    except Exception:
+        pass
+
+    # Now resolve the user name — speaker ID has either finished or timed out
+    user_name = _get_active_user_name(config['CHAR']['user_name'])
+
     # Identity / speaker context (voice ID + face recognition)
     speed.start('identity')
     speaker_ctx = _get_speaker_context()
@@ -605,33 +630,6 @@ Current Time: {now.strftime('%H:%M:%S')}
 
     if debug:
         queue_message(f"DEBUG PROMPT:\n{final_prompt}")
-
-    # Deferred speaker ID wait: now that the entire prompt (including memory
-    # retrieval) is built, block for whatever remains of the 1.5s budget.
-    # Speaker ID has been running in the background since STT _emit_result,
-    # through all of: utterance_callback setup, memory prefetch, identity
-    # context, emotion, and memory retrieval — maximum free processing time.
-    try:
-        import modules.module_llm as _llm_mod
-        _sid_t0 = getattr(_llm_mod, '_sid_start_time', None)
-        if _sid_t0 is not None:
-            from modules.module_speaker_id import get_speaker_id_manager
-            _sid = get_speaker_id_manager()
-            if _sid and _sid.enabled:
-                _sid_elapsed = _time.perf_counter() - _sid_t0
-                _sid_remaining = max(0, 1.5 - _sid_elapsed)
-                if _sid_remaining > 0:
-                    identified = _sid.wait_for_identification(timeout=_sid_remaining)
-                    if not identified:
-                        queue_message(f"DEBUG: Speaker ID timed out ({_sid_elapsed + _sid_remaining:.1f}s total) — using default name")
-            # Clear so it doesn't fire again for non-voice paths
-            _llm_mod._sid_start_time = None
-            # Replace placeholder default name with resolved speaker name
-            resolved_name = _get_active_user_name(_default_user_name)
-            if resolved_name != _default_user_name:
-                final_prompt = final_prompt.replace(_default_user_name, resolved_name)
-    except Exception:
-        pass
 
     # Cache the last prompt in-memory (replaces old last_prompt.txt file IPC)
     global _last_built_prompt
