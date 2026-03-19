@@ -1,53 +1,51 @@
 /* ═══════════════════════════════════════════════════════
-   T.A.R.S. · Theme: Cyberpunk / Neon City
-   Blade Runner 2049 aesthetic — perspective grid floor,
-   digital rain, chromatic aberration glitch, neon flicker,
-   heavy scanlines, circuit traces, pure CSS maximalism
+   T.A.R.S. · Theme: Cyberpunk 2077
+   Night City corporate UI — yellow primary, sharp edges,
+   glitch artifacts, data stream overlays, HUD feel.
 ═══════════════════════════════════════════════════════ */
 :root {
-  /* RGB components — hot neon cyan + magenta */
-  --accent-rgb:  0, 229, 255;
-  --panel-rgb:   6, 8, 14;
-  --magenta-rgb: 255, 0, 255;
-  --purple-rgb:  180, 77, 255;
+  /* Primary: CP2077 signature yellow */
+  --accent-rgb:  252, 238, 9;
+  --panel-rgb:   10, 10, 18;
+  --cyan-rgb:    0, 240, 255;
+  --red-rgb:     255, 0, 60;
 
-  /* Backgrounds — abyss black */
-  --bg:          #040609;
-  --bg2:         #06080e;
-  --panel:       rgba(var(--panel-rgb), 0.88);
-  --panel-solid: rgba(var(--panel-rgb), 0.94);
-  --glass-blur:  18px;
-  --glass-border: rgba(var(--accent-rgb), 0.25);
+  /* Backgrounds — deep night city dark */
+  --bg:          #08080f;
+  --bg2:         #0e0e18;
+  --panel:       rgba(var(--panel-rgb), 0.92);
+  --panel-solid: rgba(var(--panel-rgb), 0.96);
+  --glass-blur:  16px;
+  --glass-border: rgba(var(--accent-rgb), 0.18);
   --glass-shine: linear-gradient(135deg,
-    rgba(0,229,255,0.08) 0%,
-    rgba(0,229,255,0.02) 30%,
-    transparent 50%,
-    rgba(255,0,255,0.04) 80%,
-    rgba(255,0,255,0.08) 100%);
+    rgba(252,238,9,0.04) 0%,
+    transparent 40%,
+    transparent 60%,
+    rgba(0,240,255,0.03) 100%);
 
-  /* Borders — neon edges */
-  --border:      rgba(var(--accent-rgb), 0.22);
-  --border-hi:   rgba(var(--accent-rgb), 0.6);
+  /* Borders */
+  --border:      rgba(var(--accent-rgb), 0.15);
+  --border-hi:   rgba(var(--accent-rgb), 0.5);
 
-  /* Accent colors — full neon */
-  --cyan:        rgb(var(--accent-rgb));
-  --cyan-dim:    rgba(var(--accent-rgb), 0.5);
-  --cyan-glow:   rgba(var(--accent-rgb), 0.2);
-  --magenta:     rgb(var(--magenta-rgb));
-  --magenta-dim: rgba(var(--magenta-rgb), 0.5);
-  --purple:      rgb(var(--purple-rgb));
-  --purple-dim:  rgba(var(--purple-rgb), 0.5);
-  --gold:        #ffb700;
-  --gold-dim:    rgba(255, 183, 0, 0.5);
+  /* Accent colors */
+  --cyan:        rgb(var(--cyan-rgb));
+  --cyan-dim:    rgba(var(--cyan-rgb), 0.4);
+  --cyan-glow:   rgba(var(--cyan-rgb), 0.15);
+  --magenta:     rgb(var(--red-rgb));
+  --magenta-dim: rgba(var(--red-rgb), 0.4);
+  --purple:      #b44dff;
+  --purple-dim:  rgba(180, 77, 255, 0.4);
+  --gold:        #fcee09;
+  --gold-dim:    rgba(252, 238, 9, 0.4);
 
-  /* Status colors — neon */
-  --green:       #39ff14;
-  --orange:      #ffb700;
-  --red:         #ff2244;
+  /* Status colors */
+  --green:       #30d158;
+  --orange:      #fcee09;
+  --red:         #ff003c;
 
-  /* Text — icy bright */
-  --text:        #e8f0ff;
-  --text-dim:    #5a7a99;
+  /* Text */
+  --text:        #eaeaea;
+  --text-dim:    #5a6070;
 
   /* Typography */
   --font-mono:   'Share Tech Mono', monospace;
@@ -58,11 +56,11 @@
   --font-size-md: 13px;
   --font-size-lg: 16px;
 
-  /* Layout */
+  /* Layout — sharp angular */
   --tab-h:       52px;
-  --radius:      4px;
-  --radius-sm:   2px;
-  --radius-lg:   6px;
+  --radius:      2px;
+  --radius-sm:   1px;
+  --radius-lg:   3px;
   --ease:        cubic-bezier(0.4, 0, 0.2, 1);
   --space-xs:    4px;
   --space-sm:    8px;
@@ -71,236 +69,170 @@
   --space-xl:    32px;
 
   /* ── Theme-specific ── */
-  /* Neon nebula blobs — intense */
-  --nebula-1:       radial-gradient(circle, rgba(0,229,255,0.35) 0%, rgba(0,140,200,0.10) 40%, transparent 65%);
-  --nebula-1-size:  600px;
-  --nebula-1-anim:  cyberDrift1 35s ease-in-out infinite;
-  --nebula-2:       radial-gradient(circle, rgba(255,0,255,0.30) 0%, rgba(180,0,200,0.08) 40%, transparent 65%);
-  --nebula-2-size:  550px;
-  --nebula-2-anim:  cyberDrift2 40s ease-in-out infinite;
-  --nebula-3:       radial-gradient(circle, rgba(180,77,255,0.25) 0%, rgba(120,40,200,0.06) 40%, transparent 65%);
+  /* Ambient glow blobs */
+  --nebula-1:       radial-gradient(circle, rgba(252,238,9,0.1) 0%, rgba(252,238,9,0.02) 40%, transparent 65%);
+  --nebula-1-size:  700px;
+  --nebula-1-anim:  cp77drift1 50s ease-in-out infinite;
+  --nebula-2:       radial-gradient(circle, rgba(0,240,255,0.07) 0%, rgba(0,200,255,0.015) 40%, transparent 65%);
+  --nebula-2-size:  600px;
+  --nebula-2-anim:  cp77drift2 60s ease-in-out infinite;
+  --nebula-3:       radial-gradient(circle, rgba(255,0,60,0.06) 0%, rgba(255,0,60,0.01) 40%, transparent 65%);
   --nebula-3-size:  500px;
-  --nebula-3-anim:  cyberDrift3 45s ease-in-out infinite;
-  --nebula-blur:    80px;
+  --nebula-3-anim:  cp77drift3 55s ease-in-out infinite;
+  --nebula-blur:    100px;
 
-  /* Particle system — neon rainbow */
-  --particle-orb-hues: 185, 295, 270;
-  --particle-prism: 0,229,255; 255,0,255; 180,77,255; 0,200,240; 255,60,200; 120,0,255; 0,255,180;
+  /* Particles */
+  --particle-orb-hues: 50, 185, 350;
+  --particle-prism: 252,238,9; 0,240,255; 255,0,60; 200,200,40; 0,180,220; 252,200,0; 0,255,200;
 
-  /* Heavy CRT scanlines */
+  /* Scanlines — subtle CRT texture */
   --scanlines: repeating-linear-gradient(
     0deg,
     rgba(0,0,0,0) 0px,
     rgba(0,0,0,0) 2px,
-    rgba(0,0,0,0.25) 2px,
-    rgba(0,0,0,0.25) 4px);
-  --scanline-opacity: 1;
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 3px);
+  --scanline-opacity: 0.5;
 
-  /* Deep tunnel vignette */
-  --vignette: radial-gradient(ellipse at 50% 50%, transparent 20%, rgba(0,0,0,0.5) 60%, rgba(0,0,0,0.85) 100%);
+  /* Vignette */
+  --vignette: radial-gradient(ellipse at 50% 50%, transparent 35%, rgba(0,0,0,0.45) 75%, rgba(0,0,0,0.75) 100%);
 }
 
 /* ═══════════════════════════════════════════════════════
    ANIMATIONS
 ═══════════════════════════════════════════════════════ */
 
-/* Nebula drifts */
-@keyframes cyberDrift1 {
-  0%   { transform: translate(-10vw, -8vh) scale(1);    opacity: 0.5; }
-  25%  { transform: translate(10vw, 15vh) scale(1.3);   opacity: 0.8; }
-  50%  { transform: translate(22vw, 5vh) scale(0.85);   opacity: 0.4; }
-  75%  { transform: translate(8vw, -12vh) scale(1.2);   opacity: 0.7; }
-  100% { transform: translate(-10vw, -8vh) scale(1);    opacity: 0.5; }
+/* Ambient nebula drifts */
+@keyframes cp77drift1 {
+  0%   { transform: translate(-5vw, -5vh) scale(1);   opacity: 0.6; }
+  50%  { transform: translate(8vw, 8vh) scale(1.15);   opacity: 0.4; }
+  100% { transform: translate(-5vw, -5vh) scale(1);    opacity: 0.6; }
 }
-@keyframes cyberDrift2 {
-  0%   { transform: translate(12vw, 8vh) scale(1);      opacity: 0.4; }
-  25%  { transform: translate(-8vw, -12vh) scale(1.25); opacity: 0.7; }
-  50%  { transform: translate(-18vw, 10vh) scale(1.1);  opacity: 0.5; }
-  75%  { transform: translate(2vw, 18vh) scale(0.9);    opacity: 0.8; }
-  100% { transform: translate(12vw, 8vh) scale(1);      opacity: 0.4; }
+@keyframes cp77drift2 {
+  0%   { transform: translate(8vw, 5vh) scale(1);      opacity: 0.4; }
+  50%  { transform: translate(-6vw, -8vh) scale(1.1);  opacity: 0.5; }
+  100% { transform: translate(8vw, 5vh) scale(1);      opacity: 0.4; }
 }
-@keyframes cyberDrift3 {
-  0%   { transform: translate(0, 10vh) scale(1);        opacity: 0.5; }
-  33%  { transform: translate(-15vw, -5vh) scale(1.15); opacity: 0.6; }
-  66%  { transform: translate(10vw, -15vh) scale(0.95); opacity: 0.7; }
-  100% { transform: translate(0, 10vh) scale(1);        opacity: 0.5; }
+@keyframes cp77drift3 {
+  0%   { transform: translate(0, 8vh) scale(1);        opacity: 0.3; }
+  50%  { transform: translate(-8vw, -3vh) scale(1.1);  opacity: 0.45; }
+  100% { transform: translate(0, 8vh) scale(1);         opacity: 0.3; }
 }
 
-/* Digital rain — tall gradient columns animating downward */
-@keyframes digitalRain {
-  0%   { background-position: 0 -100vh; }
-  100% { background-position: 0 100vh; }
-}
-
-/* Chromatic aberration glitch on glass panels */
-@keyframes glitchShift {
-  0%, 87%, 100%  {
-    box-shadow:
-      0 8px 32px rgba(0,0,0,0.5),
-      0 0 60px rgba(0,229,255,0.08),
-      inset 0 1px 0 rgba(0,229,255,0.1),
-      inset 0 -1px 0 rgba(0,0,0,0.3);
-    transform: translate(0, 0);
-  }
-  88% {
-    box-shadow:
-      -3px 0 0 rgba(255,0,0,0.4),
-      3px 0 0 rgba(0,255,255,0.4),
-      0 8px 32px rgba(0,0,0,0.5),
-      0 0 60px rgba(0,229,255,0.15);
-    transform: translate(-1px, 0);
-  }
-  89% {
-    box-shadow:
-      4px 0 0 rgba(0,255,255,0.3),
-      -4px 0 0 rgba(255,0,0,0.3),
-      0 8px 32px rgba(0,0,0,0.5),
-      0 0 60px rgba(255,0,255,0.12);
-    transform: translate(2px, -1px);
-  }
-  90% {
-    box-shadow:
-      0 8px 32px rgba(0,0,0,0.5),
-      0 0 60px rgba(0,229,255,0.08),
-      inset 0 1px 0 rgba(0,229,255,0.1),
-      inset 0 -1px 0 rgba(0,0,0,0.3);
-    transform: translate(0, 0);
-  }
-  93% {
-    box-shadow:
-      -2px 1px 0 rgba(255,0,0,0.35),
-      2px -1px 0 rgba(0,255,255,0.35),
-      0 8px 32px rgba(0,0,0,0.5),
-      0 0 80px rgba(255,0,255,0.1);
-    transform: translate(1px, 1px);
-  }
-  94% {
-    box-shadow:
-      0 8px 32px rgba(0,0,0,0.5),
-      0 0 60px rgba(0,229,255,0.08),
-      inset 0 1px 0 rgba(0,229,255,0.1),
-      inset 0 -1px 0 rgba(0,0,0,0.3);
-    transform: translate(0, 0);
-  }
-}
-
-/* Neon sign flicker for tab bar */
-@keyframes neonFlicker {
-  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
-    opacity: 1;
-    text-shadow: 0 0 8px rgba(0,229,255,0.8), 0 0 20px rgba(0,229,255,0.4);
-  }
-  20%, 24%, 55% {
-    opacity: 0.6;
-    text-shadow: none;
-  }
-}
-
-/* Neon tab icon pulse */
-@keyframes cyberTabPulse {
-  0%, 100% {
-    filter: drop-shadow(0 0 6px rgba(0,229,255,0.6));
-    color: rgba(0,229,255,1);
-  }
-  50% {
-    filter: drop-shadow(0 0 14px rgba(0,229,255,0.9)) drop-shadow(0 0 28px rgba(0,229,255,0.4));
-    color: #ffffff;
-  }
-}
-
-/* Watermark neon flicker */
-@keyframes watermarkFlicker {
-  0%, 18%, 22%, 25%, 53%, 57%, 100% {
-    opacity: 1;
-  }
-  20%, 24% {
-    opacity: 0.4;
-  }
-  55% {
-    opacity: 0.7;
-  }
-}
-
-/* Neon border pulse for input focus */
-@keyframes inputNeonPulse {
-  0%, 100% {
-    box-shadow:
-      0 0 0 3px rgba(0,229,255,0.15),
-      0 0 30px rgba(0,229,255,0.15),
-      0 0 60px rgba(0,229,255,0.05);
-    border-color: rgba(0,229,255,0.7);
-  }
-  50% {
-    box-shadow:
-      0 0 0 4px rgba(0,229,255,0.25),
-      0 0 40px rgba(0,229,255,0.25),
-      0 0 80px rgba(0,229,255,0.1),
-      0 0 120px rgba(255,0,255,0.05);
-    border-color: rgba(0,229,255,0.9);
-  }
-}
-
-/* Circuit trace pulse */
-@keyframes circuitPulse {
-  0%   { background-position: 0 0, 0 0, 0 100vh; }
-  100% { background-position: 0 0, 0 0, 0 0; }
-}
-
-/* Tab bar accent line sweep */
-@keyframes neonLineSweep {
+/* Tab accent line sweep */
+@keyframes cp77LineSweep {
   0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
+/* Active tab pulse */
+@keyframes cp77Pulse {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+
+/* Input focus glow */
+@keyframes inputFocusPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(252,238,9,0.1), 0 0 20px rgba(252,238,9,0.08);
+    border-color: rgba(252,238,9,0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(252,238,9,0.18), 0 0 35px rgba(252,238,9,0.14);
+    border-color: rgba(252,238,9,0.7);
+  }
+}
+
+/* ── Glitch effect — chromatic split, brief and random-feeling ── */
+@keyframes cp77Glitch {
+  0%, 100%  { transform: translate(0,0); filter: none; }
+  /* Quiet for most of the cycle */
+  86%       { transform: translate(0,0); filter: none; }
+  /* Rapid burst */
+  87%       { transform: translate(-2px, 1px); filter: drop-shadow(2px 0 0 rgba(0,240,255,0.7)) drop-shadow(-2px 0 0 rgba(255,0,60,0.7)); }
+  88%       { transform: translate(3px, 0px);  filter: drop-shadow(-3px 0 0 rgba(0,240,255,0.5)) drop-shadow(3px 0 0 rgba(255,0,60,0.5)); }
+  89%       { transform: translate(-1px,-1px); filter: drop-shadow(1px 0 0 rgba(252,238,9,0.6)); }
+  90%       { transform: translate(0,0);       filter: none; }
+  /* Second micro-burst */
+  94%       { transform: translate(0,0);       filter: none; }
+  95%       { transform: translate(2px, 0);    filter: drop-shadow(-2px 0 0 rgba(0,240,255,0.6)) drop-shadow(2px 0 0 rgba(255,0,60,0.4)); }
+  96%       { transform: translate(0,0);       filter: none; }
+}
+
+/* Glitch for text elements — horizontal skew slice */
+@keyframes cp77TextGlitch {
+  0%, 100%  { transform: none; opacity: 1; }
+  88%       { transform: none; opacity: 1; }
+  89%       { transform: skewX(-2deg) translateX(2px); opacity: 0.8; }
+  90%       { transform: skewX(1deg) translateX(-1px); opacity: 0.9; }
+  91%       { transform: none; opacity: 1; }
+}
+
+/* Data stream — vertical thin lines scrolling down */
+@keyframes dataStream {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 200px; }
+}
+
+/* Hex grid subtle pulse */
+@keyframes hexPulse {
+  0%, 100% { opacity: 0.03; }
+  50%      { opacity: 0.06; }
+}
+
+/* Bot message slide-in */
+@keyframes msgSlideIn {
+  0%   { transform: translateX(-8px); opacity: 0; clip-path: inset(0 100% 0 0); }
+  100% { transform: translateX(0);    opacity: 1; clip-path: inset(0 0 0 0); }
+}
+
+/* User message slide-in */
+@keyframes msgSlideInRight {
+  0%   { transform: translateX(8px); opacity: 0; clip-path: inset(0 0 0 100%); }
+  100% { transform: translateX(0);   opacity: 1; clip-path: inset(0 0 0 0); }
+}
+
 /* ═══════════════════════════════════════════════════════
-   BODY — Perspective grid floor + circuit traces
+   BODY — HUD grid + data stream texture
 ═══════════════════════════════════════════════════════ */
 body {
   background:
-    /* Neon circuit trace — horizontal lines with glowing nodes */
-    linear-gradient(90deg,
-      transparent 0%, transparent 48%,
-      rgba(0,229,255,0.06) 48%, rgba(0,229,255,0.06) 48.3%,
-      transparent 48.3%, transparent 100%) ,
-    /* Perspective grid floor — converging lines */
+    /* Subtle hex/grid pattern — like a HUD wireframe */
     repeating-linear-gradient(
       90deg,
-      rgba(0,229,255,0.04) 0px,
-      rgba(0,229,255,0.04) 1px,
+      rgba(252,238,9,0.015) 0px,
+      rgba(252,238,9,0.015) 1px,
       transparent 1px,
-      transparent 60px),
+      transparent 80px),
     repeating-linear-gradient(
       0deg,
-      rgba(0,229,255,0.03) 0px,
-      rgba(0,229,255,0.03) 1px,
+      rgba(252,238,9,0.01) 0px,
+      rgba(252,238,9,0.01) 1px,
       transparent 1px,
-      transparent 60px),
-    /* Horizon glow — hot line at 65% from top */
+      transparent 80px),
+    /* Warm ambient horizon glow */
     linear-gradient(
       to bottom,
-      #040609 0%,
-      #040609 55%,
-      rgba(0,229,255,0.03) 64%,
-      rgba(255,0,255,0.04) 65%,
-      rgba(0,229,255,0.03) 66%,
-      #040609 75%,
-      #060810 100%),
+      #08080f 0%,
+      #0a0a14 40%,
+      rgba(252,238,9,0.018) 58%,
+      rgba(255,0,60,0.008) 62%,
+      rgba(0,240,255,0.01) 66%,
+      #0a0a12 80%,
+      #08080f 100%),
     var(--bg) !important;
   background-size:
-    100% 100%,
-    60px 60px,
-    60px 60px,
+    80px 80px,
+    80px 80px,
     100% 100%,
     100% 100% !important;
 }
 
-/* Apply perspective warp to the grid via a pseudo-element approach.
-   Since body itself can't have perspective transform on its background,
-   we use the grid on body and add a perspective-warped overlay. */
-
 /* ═══════════════════════════════════════════════════════
-   DIGITAL RAIN — via .nebula-layer::before
+   NEBULA OVERLAYS — Data stream + HUD lines
 ═══════════════════════════════════════════════════════ */
+
+/* Data stream overlay — thin vertical lines scrolling */
 .nebula-layer::before {
   content: '';
   position: fixed;
@@ -309,31 +241,23 @@ body {
   z-index: 1;
   background:
     repeating-linear-gradient(
-      180deg,
-      transparent 0px,
-      transparent 18px,
-      rgba(0,229,255,0.03) 18px,
-      rgba(0,229,255,0.06) 20px,
-      transparent 20px,
-      transparent 24px,
-      rgba(0,229,255,0.02) 24px,
-      rgba(0,229,255,0.04) 25px,
-      transparent 25px,
-      transparent 40px),
-    repeating-linear-gradient(
       90deg,
       transparent 0px,
-      transparent 28px,
-      rgba(0,229,255,0.015) 28px,
-      rgba(0,229,255,0.015) 29px,
-      transparent 29px,
-      transparent 56px);
-  background-size: 29px 40px, 56px 100%;
-  animation: digitalRain 8s linear infinite;
-  opacity: 0.7;
+      transparent 38px,
+      rgba(252,238,9,0.012) 38px,
+      rgba(252,238,9,0.018) 39px,
+      transparent 39px,
+      transparent 77px,
+      rgba(0,240,255,0.01) 77px,
+      rgba(0,240,255,0.015) 78px,
+      transparent 78px,
+      transparent 120px);
+  background-size: 120px 200px;
+  animation: dataStream 12s linear infinite;
+  opacity: 0.6;
 }
 
-/* ── Circuit node overlay via .nebula-layer::after ── */
+/* HUD horizon line + corner brackets */
 .nebula-layer::after {
   content: '';
   position: fixed;
@@ -341,207 +265,212 @@ body {
   pointer-events: none;
   z-index: 1;
   background:
-    /* Horizontal circuit traces — thin glowing lines */
+    /* Horizontal HUD line */
     linear-gradient(0deg,
-      transparent 0%, transparent 30%,
-      rgba(0,229,255,0.025) 30%, rgba(0,229,255,0.025) 30.15%,
-      transparent 30.15%, transparent 60%,
-      rgba(255,0,255,0.02) 60%, rgba(255,0,255,0.02) 60.1%,
-      transparent 60.1%, transparent 100%),
-    /* Vertical circuit traces */
-    linear-gradient(90deg,
-      transparent 0%, transparent 20%,
-      rgba(0,229,255,0.02) 20%, rgba(0,229,255,0.02) 20.1%,
-      transparent 20.1%, transparent 70%,
-      rgba(255,0,255,0.018) 70%, rgba(255,0,255,0.018) 70.1%,
-      transparent 70.1%, transparent 100%),
-    /* Glowing intersection nodes */
-    radial-gradient(circle 2px at 20% 30%, rgba(0,229,255,0.15) 0%, transparent 100%),
-    radial-gradient(circle 2px at 70% 60%, rgba(255,0,255,0.12) 0%, transparent 100%),
-    radial-gradient(circle 2px at 20% 60%, rgba(0,229,255,0.1) 0%, transparent 100%),
-    radial-gradient(circle 2px at 70% 30%, rgba(255,0,255,0.1) 0%, transparent 100%),
-    radial-gradient(circle 3px at 48% 65%, rgba(0,229,255,0.2) 0%, transparent 100%);
-  opacity: 0.8;
+      transparent 0%, transparent 57%,
+      rgba(252,238,9,0.015) 58%,
+      rgba(252,238,9,0.04) 59%,
+      rgba(252,238,9,0.015) 60%,
+      transparent 61%, transparent 100%),
+    /* Secondary subtle line */
+    linear-gradient(0deg,
+      transparent 0%, transparent 39%,
+      rgba(0,240,255,0.01) 39.5%,
+      rgba(0,240,255,0.02) 40%,
+      rgba(0,240,255,0.01) 40.5%,
+      transparent 41%, transparent 100%);
+  animation: hexPulse 8s ease-in-out infinite;
 }
 
 /* ═══════════════════════════════════════════════════════
-   GLASS PANELS — Chromatic aberration glitch
+   GLASS PANELS — Sharp edges, glitch on hover
 ═══════════════════════════════════════════════════════ */
 .glass {
-  border-radius: 4px !important;
-  border: 1px solid rgba(0,229,255,0.2) !important;
-  animation: glitchShift 12s linear infinite !important;
+  border-radius: 2px !important;
+  border: 1px solid rgba(252,238,9,0.12) !important;
+  box-shadow:
+    0 4px 24px rgba(0,0,0,0.5),
+    0 0 1px rgba(252,238,9,0.15),
+    inset 0 1px 0 rgba(252,238,9,0.06),
+    inset 0 -1px 0 rgba(0,0,0,0.3) !important;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease !important;
+}
+
+.glass:hover {
+  border-color: rgba(252,238,9,0.22) !important;
+  box-shadow:
+    0 4px 24px rgba(0,0,0,0.5),
+    0 0 1px rgba(252,238,9,0.25),
+    0 0 20px rgba(252,238,9,0.04),
+    inset 0 1px 0 rgba(252,238,9,0.08),
+    inset 0 -1px 0 rgba(0,0,0,0.3) !important;
 }
 
 .glass::before {
   background: linear-gradient(135deg,
-    rgba(0,229,255,0.07) 0%,
-    rgba(0,229,255,0.02) 25%,
-    transparent 45%,
-    transparent 55%,
-    rgba(255,0,255,0.03) 75%,
-    rgba(255,0,255,0.07) 100%) !important;
+    rgba(252,238,9,0.03) 0%,
+    transparent 30%,
+    transparent 70%,
+    rgba(0,240,255,0.02) 100%) !important;
 }
 
 /* ═══════════════════════════════════════════════════════
-   TAB BAR — Neon sign flicker
+   TAB BAR — Yellow accent, glitch on active
 ═══════════════════════════════════════════════════════ */
 .tab-bar {
-  background: rgba(4,5,10,0.95) !important;
-  border-bottom: 1px solid rgba(0,229,255,0.35) !important;
+  background: rgba(8,8,15,0.96) !important;
+  border-bottom: 1px solid rgba(252,238,9,0.2) !important;
   box-shadow:
-    0 2px 30px rgba(0,229,255,0.12),
-    0 0 60px rgba(0,229,255,0.05),
-    inset 0 -1px 0 rgba(0,229,255,0.2) !important;
+    0 2px 20px rgba(0,0,0,0.4),
+    inset 0 -1px 0 rgba(252,238,9,0.1) !important;
 }
 
 .tab-bar::after {
   background: linear-gradient(90deg,
     transparent 0%,
-    rgba(0,229,255,0.9) 20%,
-    rgba(255,0,255,0.7) 40%,
-    rgba(180,77,255,0.6) 50%,
-    rgba(255,0,255,0.7) 60%,
-    rgba(0,229,255,0.9) 80%,
+    rgba(252,238,9,0.6) 25%,
+    rgba(252,238,9,0.9) 50%,
+    rgba(252,238,9,0.6) 75%,
     transparent 100%) !important;
   background-size: 200% 100% !important;
-  animation: neonLineSweep 4s linear infinite !important;
-  box-shadow:
-    0 0 20px rgba(0,229,255,0.5),
-    0 0 40px rgba(255,0,255,0.2),
-    0 0 60px rgba(0,229,255,0.1) !important;
+  animation: cp77LineSweep 6s linear infinite !important;
+  box-shadow: 0 0 12px rgba(252,238,9,0.3) !important;
   height: 2px !important;
 }
 
-/* Tab icons — neon flicker */
+/* Tab icons */
 .custom-tab i {
-  animation: neonFlicker 5s linear infinite;
+  transition: all 0.2s ease !important;
 }
 
-/* Active tab — intense neon pulse */
+.custom-tab:hover i {
+  color: rgba(252,238,9,0.9) !important;
+  filter: drop-shadow(0 0 6px rgba(252,238,9,0.4)) !important;
+}
+
+/* Active tab — yellow glow + glitch effect */
 .custom-tab.active i {
-  animation: cyberTabPulse 2s ease-in-out infinite, neonFlicker 8s linear infinite !important;
-  color: rgba(0,229,255,1) !important;
+  color: rgba(252,238,9,1) !important;
+  filter: drop-shadow(0 0 8px rgba(252,238,9,0.5)) !important;
+  animation: cp77Pulse 3s ease-in-out infinite, cp77Glitch 8s linear infinite !important;
 }
 
 /* ═══════════════════════════════════════════════════════
-   CHAT BUBBLES — Neon bordered
+   CHAT BUBBLES — Data terminal style with slide-in
 ═══════════════════════════════════════════════════════ */
 
-/* Bot: cyan neon left border with glow */
+/* Bot: yellow accent, glitch animation */
 .msg-bubble-bot {
-  border-left: 3px solid rgba(0,229,255,0.7) !important;
-  border-radius: 2px 8px 8px 2px !important;
+  border-left: 2px solid rgba(252,238,9,0.6) !important;
+  border-radius: 1px 4px 4px 1px !important;
   box-shadow:
-    0 4px 20px rgba(0,0,0,0.4),
-    -4px 0 20px rgba(0,229,255,0.08),
-    inset 0 0 30px rgba(0,229,255,0.04) !important;
-  background: rgba(0,229,255,0.06) !important;
-  border-top: 1px solid rgba(0,229,255,0.12) !important;
-  border-right: 1px solid rgba(0,229,255,0.08) !important;
-  border-bottom: 1px solid rgba(0,229,255,0.08) !important;
+    0 2px 12px rgba(0,0,0,0.4),
+    -2px 0 12px rgba(252,238,9,0.04) !important;
+  background: rgba(252,238,9,0.03) !important;
+  border-top: 1px solid rgba(252,238,9,0.06) !important;
+  border-right: 1px solid rgba(252,238,9,0.04) !important;
+  border-bottom: 1px solid rgba(252,238,9,0.04) !important;
+  animation: msgSlideIn 0.3s var(--ease) both !important;
 }
 
-/* User: magenta neon right border with glow */
+/* User: cyan accent, slide from right */
 .msg-bubble-user {
-  border-right: 3px solid rgba(255,0,255,0.7) !important;
-  border-radius: 8px 2px 2px 8px !important;
+  border-right: 2px solid rgba(0,240,255,0.5) !important;
+  border-radius: 4px 1px 1px 4px !important;
   box-shadow:
-    0 4px 20px rgba(0,0,0,0.4),
-    4px 0 20px rgba(255,0,255,0.08),
-    inset 0 0 30px rgba(255,0,255,0.04) !important;
-  background: rgba(255,0,255,0.06) !important;
-  border-top: 1px solid rgba(255,0,255,0.12) !important;
-  border-left: 1px solid rgba(255,0,255,0.08) !important;
-  border-bottom: 1px solid rgba(255,0,255,0.08) !important;
+    0 2px 12px rgba(0,0,0,0.4),
+    2px 0 12px rgba(0,240,255,0.04) !important;
+  background: rgba(0,240,255,0.03) !important;
+  border-top: 1px solid rgba(0,240,255,0.06) !important;
+  border-left: 1px solid rgba(0,240,255,0.04) !important;
+  border-bottom: 1px solid rgba(0,240,255,0.04) !important;
+  animation: msgSlideInRight 0.3s var(--ease) both !important;
 }
 
 /* ═══════════════════════════════════════════════════════
-   WATERMARK — Animated neon flicker
+   WATERMARK — Glitchy yellow
 ═══════════════════════════════════════════════════════ */
 .tars-watermark {
   background: linear-gradient(90deg,
-    rgba(0,229,255,1) 0%,
-    rgba(180,77,255,0.8) 50%,
-    rgba(255,0,255,0.9) 100%) !important;
+    rgba(252,238,9,1) 0%,
+    rgba(252,200,0,0.8) 50%,
+    rgba(0,240,255,0.7) 100%) !important;
   -webkit-background-clip: text !important;
   background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
   text-shadow: none !important;
-  animation: watermarkFlicker 6s linear infinite !important;
-  filter: drop-shadow(0 0 6px rgba(0,229,255,0.4));
+  filter: drop-shadow(0 0 4px rgba(252,238,9,0.3));
+  animation: cp77TextGlitch 10s linear infinite !important;
 }
 
 /* ═══════════════════════════════════════════════════════
-   INPUT — Neon glow on focus
+   INPUT — Yellow glow focus + glitch on type
 ═══════════════════════════════════════════════════════ */
 .input-pill {
-  border-radius: 4px !important;
-  border: 1px solid rgba(0,229,255,0.15) !important;
-  background: rgba(6,8,14,0.6) !important;
+  border-radius: 2px !important;
+  border: 1px solid rgba(252,238,9,0.1) !important;
+  background: rgba(10,10,18,0.7) !important;
+  transition: all 0.2s ease !important;
 }
 
 .input-pill:focus-within {
-  border-color: rgba(0,229,255,0.7) !important;
-  animation: inputNeonPulse 2s ease-in-out infinite !important;
-  background: rgba(6,8,14,0.8) !important;
+  border-color: rgba(252,238,9,0.5) !important;
+  animation: inputFocusPulse 2.5s ease-in-out infinite !important;
+  background: rgba(10,10,18,0.85) !important;
 }
 
 /* ═══════════════════════════════════════════════════════
-   EMOTION BUTTONS — Neon hover states
+   EMOTION BUTTONS — Yellow hover with lift
 ═══════════════════════════════════════════════════════ */
 .em-btn {
-  border-radius: 4px !important;
+  border-radius: 2px !important;
   transition: all 0.2s var(--ease) !important;
 }
 
 .em-btn:hover {
   box-shadow:
-    0 0 30px rgba(0,229,255,0.3),
-    0 0 60px rgba(255,0,255,0.1),
-    inset 0 0 25px rgba(0,229,255,0.08) !important;
-  transform: translateY(-3px) !important;
-  border-color: rgba(0,229,255,0.5) !important;
+    0 0 20px rgba(252,238,9,0.15),
+    inset 0 0 15px rgba(252,238,9,0.04) !important;
+  transform: translateY(-2px) !important;
+  border-color: rgba(252,238,9,0.35) !important;
 }
 
 .em-btn.active {
   box-shadow:
-    0 0 30px rgba(0,229,255,0.4),
-    0 0 60px rgba(0,229,255,0.15),
-    inset 0 0 30px rgba(0,229,255,0.06) !important;
+    0 0 20px rgba(252,238,9,0.2),
+    inset 0 0 20px rgba(252,238,9,0.04) !important;
+  border-color: rgba(252,238,9,0.4) !important;
 }
 
 /* ═══════════════════════════════════════════════════════
-   SCROLLBAR — Neon styled
+   SCROLLBAR — Thin yellow
 ═══════════════════════════════════════════════════════ */
 ::-webkit-scrollbar {
-  width: 4px;
+  width: 3px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(4,6,9,0.8);
+  background: rgba(8,8,15,0.8);
 }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(0,229,255,0.4), rgba(255,0,255,0.4));
-  border-radius: 2px;
+  background: rgba(252,238,9,0.3);
+  border-radius: 1px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(0,229,255,0.7), rgba(255,0,255,0.7));
+  background: rgba(252,238,9,0.6);
 }
 
 /* ═══════════════════════════════════════════════════════
-   EXTRA — Neon link styling + selection color
+   SELECTION + ANGULAR STYLING
 ═══════════════════════════════════════════════════════ */
 ::selection {
-  background: rgba(0,229,255,0.3);
+  background: rgba(252,238,9,0.25);
   color: #fff;
 }
 
-/* All borders get the angular cyberpunk feel */
 .glass-deep {
-  border-radius: 4px !important;
+  border-radius: 2px !important;
 }
 
-/* Sharp angular corners on message bubbles */
 .msg-bubble {
-  border-radius: 2px 8px 8px 8px !important;
+  border-radius: 1px 4px 4px 4px !important;
 }
