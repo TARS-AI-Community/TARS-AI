@@ -134,13 +134,19 @@ def utterance_callback(message):
             memory_manager.prefetch_embedding(user_text)
 
         # Speaker ID: non-blocking at this stage. We record the start time and
-        # defer the blocking wait until right before the LLM call, giving the
-        # background observer maximum time to finish identification.
+        # defer the blocking wait to build_prompt (right before speaker context),
+        # giving the background observer maximum time to finish identification.
         _sid_start = time.perf_counter()
+        # Use last known named speaker for immediate UI display while the
+        # current utterance's speaker ID is still processing in the background.
         _speaker_display = CONFIG['CHAR'].get('user_name', 'User')
         try:
-            from modules.module_prompt import _get_active_user_name
-            _speaker_display = _get_active_user_name(_speaker_display)
+            from modules.module_speaker_id import get_speaker_id_manager
+            _sid_mgr = get_speaker_id_manager()
+            if _sid_mgr and _sid_mgr.enabled:
+                _last = _sid_mgr.get_last_named_speaker()
+                if _last:
+                    _speaker_display = _last
         except Exception:
             pass
 
@@ -251,9 +257,8 @@ def utterance_callback(message):
             pipeline.start()
             llm_mod._reply_chunk_callback = on_reply_chunk
 
-            # Pass speaker ID start time so the deferred wait happens at the
-            # very end of prompt build (after memory retrieval), giving speaker
-            # ID maximum background processing time.
+            # Pass speaker ID start time so the deferred wait happens in
+            # build_prompt (before speaker context and memory retrieval).
             llm_mod._sid_start_time = _sid_start
 
             try:
