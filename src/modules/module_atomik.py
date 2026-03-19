@@ -427,8 +427,8 @@ TARGET_FRAMES = 62  # ~1 second at 16kHz with 512-FFT / 256-hop
 
 
 class WakeWordSystem:
-    # Set to True to see detection scores in console (helps calibrate threshold)
-    DEBUG_DETECTION = True
+    # Set to True to force detection scores in console (overrides debug flag)
+    DEBUG_DETECTION = False
 
     # Detection modes
     MODE_MODEL = "model"       # CNN/ONNX neural network (trained model)
@@ -810,26 +810,23 @@ class WakeWordSystem:
         self._recent_scores.append(score)
         above_count = sum(1 for s in self._recent_scores if s >= self.threshold)
 
-        # Debug output — show every score above 0.1 (no throttling, real-time view)
+        # Debug output — single-line update (overwrites previous)
         if self.debug and score > 0.1:
             filled = int(score * 30)
             bar = "\u2588" * filled + "\u2591" * (30 - filled)
-            print(f"  [atomik] {bar} {score:.3f}/{self.threshold:.3f} [{above_count}/{self._confirmation_count}]")
+            print(f"\r  [atomik] {bar} {score:.3f}/{self.threshold:.3f} [{above_count}/{self._confirmation_count}]   ", end="", flush=True)
 
         if above_count >= self._confirmation_count:
-            # Speech quality check — reject pure noise/transients
-            # Real speech has higher zero-crossing rate variation and
-            # more energy in the 300-3000Hz speech band
             if not self._is_speech_like(audio_window):
                 if self.debug:
-                    print(f"  [atomik] rejected: not speech-like (noise/transient)")
+                    print(f"\r  [atomik] rejected: not speech-like                                    ", flush=True)
                 self._recent_scores.clear()
                 return False, score
 
             self.last_detection_time = time.time()
             self._recent_scores.clear()
             if self.debug:
-                print(f"  [atomik] >>> WAKE WORD DETECTED ({score:.3f}) <<<")
+                print(f"\r  [atomik] >>> WAKE WORD DETECTED ({score:.3f}) <<<                        ", flush=True)
             return True, score
 
         return False, score
@@ -843,8 +840,6 @@ class WakeWordSystem:
             signs[signs == 0] = 1
             zcr = np.sum(np.abs(np.diff(signs))) / (2.0 * len(audio))
             if zcr > 0.20 or zcr < 0.002:
-                if self.debug:
-                    print(f"  [atomik] speech gate: zcr={zcr:.3f} (reject)")
                 return False
 
             # 2. Energy envelope analysis
@@ -858,33 +853,23 @@ class WakeWordSystem:
             if len(energies) < 3:
                 return True
 
-            # Energy variance — speech has dynamic syllable patterns
             energy_cv = np.std(energies) / (np.mean(energies) + 1e-8)
             if energy_cv < 0.15:
-                if self.debug:
-                    print(f"  [atomik] speech gate: energy_cv={energy_cv:.2f} (flat, reject)")
                 return False
 
-            # 3. Syllable peak counting — "hey tars" should have 2 peaks
-            # Smooth the energy envelope and count peaks
+            # 3. Syllable peak counting
             smooth = np.convolve(energies, np.ones(3)/3, mode='same')
             threshold = np.mean(smooth) * 0.6
             above = smooth > threshold
-            # Count transitions from below to above threshold (rising edges = syllable onsets)
             transitions = np.diff(above.astype(int))
             n_peaks = np.sum(transitions == 1)
-            # "hey tars" = 2 syllables. Accept 1-4 peaks (account for noise variation)
             if n_peaks < 1 or n_peaks > 5:
-                if self.debug:
-                    print(f"  [atomik] speech gate: peaks={n_peaks} (reject)")
                 return False
 
-            # 4. Speech duration — high-energy portion should be 0.3-2.0s
+            # 4. Speech duration
             speech_chunks = np.sum(energies > threshold)
             speech_duration = speech_chunks * chunk_size / self.sample_rate
             if speech_duration < 0.2 or speech_duration > 2.5:
-                if self.debug:
-                    print(f"  [atomik] speech gate: duration={speech_duration:.1f}s (reject)")
                 return False
 
             return True
@@ -924,12 +909,12 @@ class WakeWordSystem:
         if self.debug and max_sim > 0.1:
             filled = int(max_sim * 30)
             bar = "\u2588" * filled + "\u2591" * (30 - filled)
-            print(f"  [atomik:tmpl] {bar} {max_sim:.3f}/{self.threshold:.3f}")
+            print(f"\r  [atomik:tmpl] {bar} {max_sim:.3f}/{self.threshold:.3f}   ", end="", flush=True)
 
         if max_sim >= self.threshold:
             self.last_detection_time = time.time()
             if self.debug:
-                print(f"  [atomik:tmpl] >>> WAKE WORD DETECTED ({max_sim:.3f}) <<<")
+                print(f"\r  [atomik:tmpl] >>> WAKE WORD DETECTED ({max_sim:.3f}) <<<                  ", flush=True)
             return True, max_sim
         return False, max_sim
 
