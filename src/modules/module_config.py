@@ -413,6 +413,7 @@ def load_config():
             "speaker_id_threshold": config.get('STT', 'speaker_id_threshold', fallback='0.75'),
             "mic_amp_gain": config.getfloat('STT', 'mic_amp_gain', fallback=10.0),
             "silence_margin": config.getfloat('STT', 'silence_margin', fallback=3.0),
+            "atomik_mode": config.get('STT', 'atomik_mode', fallback='auto'),
         },
         "CHAR": {
             "character_name": character_name,
@@ -745,6 +746,11 @@ CONFIG_METADATA = {
             'label': 'VAD Method',
             'options': ['silero', 'rms', 'sherpa-onnx', 'smart-turn'],
             'description': 'VAD stands for "Voice Activity Detection" - this is how TARS figures out when you have STOPPED talking so it can process your message. "rms" simply listens for silence (when the volume drops below a threshold). It is lightweight and works on any Pi. "silero" uses a small AI model to detect speech vs silence, which is more accurate but requires torch - only recommended for Pi 5. "sherpa-onnx" uses the same Silero VAD model but via ONNX runtime (no torch needed), so it works on Pi4 and Pi3 too. "smart-turn" uses Pipecat Smart Turn v3.2 for semantic turn detection - instead of just detecting silence, it predicts whether you have actually finished your sentence based on speech patterns and intonation, so it won\'t cut you off during mid-sentence pauses (Pi5/Pi4 only).'
+        },
+        'atomik_mode': {
+            'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],
+            'options': ['auto', 'model', 'template'],
+            'description': 'How the atomik wake word detector works. "auto" uses the ONNX model if available, otherwise falls back to template matching. "model" requires a pre-trained ONNX model (created with the wakeword-trainer tool on a PC). "template" uses cosine similarity — you record your wake word 5 times on the device and it matches against those recordings. Template mode is simpler to set up but less accurate.'
         },
         'sensitivity': {
             'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],

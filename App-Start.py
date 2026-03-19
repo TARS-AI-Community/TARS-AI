@@ -424,8 +424,21 @@ def check_required_file():
             wake_word_processor = config.get('STT', 'wake_word_processor').strip().lower()
             
             if wake_word_processor == 'atomik':
-                file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "tts", "hey_tars_templates.pkl")
-                return os.path.exists(file_path)
+                base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "tts")
+                wake_word = config.get('STT', 'wake_word', fallback='hey tars').strip()
+                ww_slug = wake_word.replace(' ', '_')
+                onnx_file = os.path.join(base_dir, f"{ww_slug}.onnx")
+                templates_file = os.path.join(base_dir, f"{ww_slug}_templates.pkl")
+
+                atomik_mode = config.get('STT', 'atomik_mode', fallback='auto').strip().lower()
+
+                if atomik_mode == 'template':
+                    return os.path.exists(templates_file)
+                elif atomik_mode == 'model':
+                    return os.path.exists(onnx_file)
+                else:
+                    # Auto — ONNX or templates
+                    return os.path.exists(onnx_file) or os.path.exists(templates_file)
             else:
                 return True
         else:
@@ -1048,7 +1061,21 @@ def check_aec_setup():
 if __name__ == "__main__":
     check_aec_setup()
     if not check_required_file():
-        print("[FILE.CHECK] hey_tars_templates.pkl not found — launching terminal mode.")
+        # Read atomik_mode to give a specific message
+        try:
+            _cfg = configparser.ConfigParser()
+            _cfg.read(os.path.join('src', 'config.ini'))
+            _amode = _cfg.get('STT', 'atomik_mode', fallback='auto').strip().lower()
+        except Exception:
+            _amode = 'auto'
+
+        if _amode == 'template':
+            print("[FILE.CHECK] Wake word templates not found — launching terminal mode for recording.")
+        elif _amode == 'model':
+            print("[FILE.CHECK] Wake word model (ONNX/CNN) not found — launching terminal mode for training.")
+            print("[FILE.CHECK] For ONNX: use tools/wakeword-trainer on a PC, then copy hey_tars.onnx to src/tts/")
+        else:
+            print("[FILE.CHECK] Wake word model not found — launching terminal mode for training.")
         run_tars_ai_normal()
     else:
         create_touch_menu()

@@ -1,0 +1,19 @@
+# TARS-AI Wake Word Trainer - Requirements
+# Install: pip install -r requirements.txt
+#
+# For GPU training (recommended):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+#   pip install -r requirements.txt
+#
+# For CPU training:
+#   pip install torch
+#   pip install -r requirements.txt
+
+edge-tts>=6.1.0
+numpy>=1.24.0
+scipy>=1.10.0
+soundfile>=0.12.0
+onnx>=1.14.0
+onnxscript>=0.1.0
+onnxruntime>=1.15.0
+sounddevice>=0.4.6
