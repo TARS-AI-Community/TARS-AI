@@ -271,9 +271,10 @@ def utterance_callback(message):
                     from modules.module_prompt import _get_active_user_name
                     _resolved = _get_active_user_name(_speaker_display)
                     if _resolved != _speaker_display:
+                        old_speaker = _speaker_display
                         _speaker_display = _resolved
                         if ui_manager:
-                            ui_manager.update_data(_speaker_display, user_text, _speaker_display)
+                            ui_manager.update_message_speaker(old_speaker, user_text, _speaker_display)
                 except Exception:
                     pass
             finally:

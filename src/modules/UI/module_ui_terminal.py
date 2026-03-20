@@ -283,6 +283,17 @@ class TerminalSystem:
             self.messages[-1] = (key, value, msg_type, timestamp)
             self.cache_dirty = True
 
+    def update_message_speaker(self, old_speaker, text, new_speaker):
+        """Update the speaker name of an existing message (for speaker ID resolution).
+        Searches backwards for a matching message to avoid adding duplicates."""
+        for i in range(len(self.messages) - 1, -1, -1):
+            key, msg_text, msg_type, timestamp = self.messages[i]
+            if msg_text == text and (key == old_speaker or key == new_speaker):
+                self.messages[i] = (new_speaker, msg_text, new_speaker, timestamp)
+                self.cache_dirty = True
+                return True
+        return False
+
     def clear_messages(self):
         self.messages.clear()
         self.wrapped_cache.clear()

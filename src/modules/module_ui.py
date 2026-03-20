@@ -371,6 +371,11 @@ class UIManager(threading.Thread):
         if self.terminal_system is not None:
             self.terminal_system.update_last_message(value)
 
+    def update_message_speaker(self, old_speaker: str, text: str, new_speaker: str) -> None:
+        """Update the speaker name of an existing message without adding a duplicate."""
+        if self.terminal_system is not None:
+            self.terminal_system.update_message_speaker(old_speaker, text, new_speaker)
+
     def _transform_mouse_pos(self, screen_pos, display_width, display_height):
         x, y = screen_pos
 
