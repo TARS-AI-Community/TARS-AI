@@ -1144,7 +1144,18 @@ main() {
     fi
     
     retry_pip_install
-    
+
+    # Allow Python to bind to port 80 without root (required for WebUI on default port)
+    tars_say "Granting Python permission to bind to port 80..." "info"
+    PYTHON_BIN=$(readlink -f "$(which python3)")
+    if sudo setcap 'cap_net_bind_service=+ep' "$PYTHON_BIN" 2>/dev/null; then
+        echo "|  [OK] Python can now bind to port 80 (WebUI)"
+    else
+        echo "| [!] Could not set port 80 capability — WebUI may show 'Permission denied'"
+        echo "|     To fix manually: sudo setcap 'cap_net_bind_service=+ep' \$(readlink -f \$(which python3))"
+    fi
+    echo ""
+
     tars_say "Initializing configuration files..." "info"
 
     if [ ! -f "config.ini" ]; then

@@ -1018,7 +1018,7 @@ class WakeWordSystem:
                     # ONNX model was trained on clean synthetic TTS audio.
                     # Real mic audio scores higher, so bump the threshold.
                     self.threshold = min(self.threshold + 0.25, 0.95)
-                print(f"   Loaded universal ONNX model ({size_kb:.0f}KB{meta_info}, threshold={self.threshold:.2f})")
+                print(f"INFO: Loaded universal ONNX model ({size_kb:.0f}KB{meta_info}, threshold={self.threshold:.2f})")
                 return True
             except Exception as e:
                 print(f"   Failed to load ONNX model: {e}")

@@ -14,6 +14,9 @@ import os
 import re
 import asyncio
 import base64
+import logging
+
+logging.getLogger('discord.client').setLevel(logging.ERROR)
 
 import discord
 from discord.ext import commands

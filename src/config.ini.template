@@ -74,7 +74,7 @@ sensitivity = 7
 #   Pi4: sherpa-onnx | openai | external
 #   Pi3: openai | external
 #   PiZero2: openai
-stt_processor = fastrtc
+stt_processor = sherpa-onnx
 # Play beep when listening starts and stops
 use_indicators = True
 # External STT server URL (stt_processor = external only)
@@ -96,13 +96,13 @@ bargein_mode = voiceprint
 # Barge-in sensitivity 1–10 (1 = hard to interrupt, 10 = very sensitive)
 bargein_sensitivity = 5
 # Silence before processing in tenths of a second (20 = 2s)
-speechdelay = 20
+speechdelay = 15
 # Speaker identification — passively identify who is speaking (Pi5/Pi4 only)
 speaker_id_enabled = True
 # Speaker ID cosine similarity threshold (0.0–1.0, higher = stricter matching)
 speaker_id_threshold = 0.75
 # Microphone amplification gain — multiplies raw mic input (higher = more sensitive, default 10.0)
-mic_amp_gain = 10.0
+mic_amp_gain = 13.0
 # Silence margin — how many times above background noise counts as speech (lower = more sensitive, default 3.0)
 silence_margin = 3.0
 
@@ -146,7 +146,7 @@ emotion_model = SamLowe/roberta-base-go_emotions-onnx
 
 [VISION]
 # Enable camera vision (~1GB RAM when active)
-enabled = False
+enabled = True
 # Camera rotation in degrees: 0, 90, 180, 270
 camera_rotation = 270
 # Vision processor: blip | llm | openai | server_hosted
