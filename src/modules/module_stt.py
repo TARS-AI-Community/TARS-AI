@@ -1028,6 +1028,9 @@ class STTManager:
                     queue_message("DEBUG: Flushing mic audio after TTS playback")
                     mic.flush()
                     clear_mic_flush()
+                    # Wait briefly for speaker echo to die down
+                    time.sleep(0.3)
+                    mic.flush()
             except Exception:
                 pass
 
