@@ -206,18 +206,24 @@ class IdentityManager:
     def auto_train_face(self, name: str):
         """Auto-start face training when a speaker identifies themselves by name.
 
-        Called after identify_speaker_name renames a voice profile. If an unknown
-        face is currently on camera, starts collecting face samples under this name.
+        Called after identify_speaker_name renames a voice profile. Enables face ID
+        temporarily if it is disabled so the person in front of the camera gets enrolled.
         """
         face_id = self._get_face_id_detector()
-        if face_id is None or not face_id.enabled:
-            return
-
-        if not face_id.has_unknown:
+        if face_id is None:
             return
 
         if face_id.training_mode:
             return
+
+        # If face ID is disabled but models are loaded, enable it temporarily
+        if not face_id.enabled:
+            if face_id.detector is None or face_id.recognizer is None:
+                queue_message(f"INFO: Identity fusion — face ID models not loaded, skipping face enroll for '{name}'")
+                return
+            queue_message(f"INFO: Identity fusion — temporarily enabling face ID to enroll '{name}'")
+            face_id.enabled = True
+            face_id._temp_enabled = True
 
         queue_message(f"INFO: Identity fusion — auto-training face for '{name}'")
         face_id.start_training(name)

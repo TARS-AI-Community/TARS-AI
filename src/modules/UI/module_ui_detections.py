@@ -265,6 +265,7 @@ class FaceRecognitionDetector(BaseDetector):
         self.training_status = ""
         self.has_unknown = False
         self._last_recognized = []
+        self._temp_enabled = False  # True if enabled temporarily for auto-enrollment
 
         try:
             _ensure_models(self.MODELS_DIR)
@@ -302,6 +303,9 @@ class FaceRecognitionDetector(BaseDetector):
         if not self.training_samples:
             self.training_status = "NO FACE"
             self.training_mode = False
+            if self._temp_enabled:
+                self.enabled = False
+                self._temp_enabled = False
             return
 
         avg_embedding = np.mean(self.training_samples, axis=0)
@@ -317,6 +321,9 @@ class FaceRecognitionDetector(BaseDetector):
         self._save_database()
         self.training_status = "SAVED"
         self.training_mode = False
+        if self._temp_enabled:
+            self.enabled = False
+            self._temp_enabled = False
 
     def rename_face(self, old_name, new_name):
         if old_name not in self.known_names:
