@@ -739,6 +739,11 @@ class UIManager(threading.Thread):
                             elif event.key == pygame.K_c:
                                 self.toggle_camera()
                     elif event.type == pygame.MOUSEBUTTONDOWN:
+                        # Mouse wheel scroll (button 4=up, 5=down) — route to scroll only
+                        if event.button in (4, 5):
+                            if not self.show_app and self.terminal_system:
+                                self.terminal_system.handle_scroll_wheel(1 if event.button == 4 else -1)
+                            continue
                         # Dismiss overlay image on touch
                         with self._overlay_lock:
                             if self._overlay_image is not None:
