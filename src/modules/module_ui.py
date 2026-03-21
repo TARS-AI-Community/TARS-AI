@@ -95,7 +95,7 @@ class UIManager(threading.Thread):
         self.silence_progress = 0
         self.speechdelay = speechdelay
 
-        self.background_types = ['particles', 'starfield', 'tesseract', 'video']
+        self.background_types = ['particles', 'starfield', 'tesseract', 'video', 'none']
         self.background_type = background_type
         self.current_background_index = self.background_types.index(background_type) if background_type in self.background_types else 0
         self.background_change_requested = False
@@ -971,6 +971,27 @@ class UIManager(threading.Thread):
                     if not self.show_camera:
                         self.video_system.update()
                     self.video_system.draw(original_surface)
+
+                    if self.spectrum_system and not self.show_camera:
+                        self.spectrum_system.update()
+                        self.spectrum_system.draw(original_surface)
+
+                    if self.show_camera and self.camera_module:
+                        self._draw_camera(original_surface)
+
+                    if self.terminal_system:
+                        self.terminal_system.update()
+                        self.terminal_system.draw(original_surface)
+
+                    if self.effective_rotate != 0:
+                        rotated_surface = pygame.transform.rotate(original_surface, self.effective_rotate)
+                        self._render_surface_to_opengl(rotated_surface, texture_id)
+                    else:
+                        self._render_surface_to_opengl(original_surface, texture_id)
+
+                else:
+                    # No background animation (e.g. background_type == 'none')
+                    original_surface.fill((0, 0, 0))
 
                     if self.spectrum_system and not self.show_camera:
                         self.spectrum_system.update()
