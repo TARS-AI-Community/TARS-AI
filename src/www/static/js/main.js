@@ -1684,12 +1684,37 @@ function executeAction() {
 
         html += `<div class="config-panel-body"><div class="row g-2">`;
 
+        let _curGroup = null;
         for (const [key, value] of Object.entries(fields)) {
           const fid = `cfg_${section}_${key}`, fi = data.field_options[`${section}.${key}`], desc2 = fi?.description||'';
+          const fieldGroup = fi?.group || null;
+
+          // Handle group transitions
+          if (fieldGroup !== _curGroup) {
+            if (_curGroup !== null) html += '</div></div></div>'; // close config-group-fields, config-group, col-md-4
+            if (fieldGroup !== null) {
+              const gl = fi?.group_label || '';
+              html += `<div class="col-md-4"><div class="config-group">`;
+              if (gl) html += `<div class="config-group-label">${gl}</div>`;
+              html += `<div class="config-group-fields">`;
+            }
+            _curGroup = fieldGroup;
+          }
+
           const depData = fi?.depends_on ? JSON.stringify(Array.isArray(fi.depends_on) ? fi.depends_on : [fi.depends_on]) : null;
-          html += depData
-            ? `<div class="col-md-6 col-lg-4" data-dep-conds='${depData}' data-dep-section="${section}"><div class="field-wrapper">`
-            : `<div class="col-md-6 col-lg-4"><div class="field-wrapper">`;
+          let openTag, closeTag;
+          if (fieldGroup) {
+            openTag = depData
+              ? `<div class="field-wrapper" data-dep-conds='${depData}' data-dep-section="${section}">`
+              : `<div class="field-wrapper">`;
+            closeTag = '</div>';
+          } else {
+            openTag = depData
+              ? `<div class="col-md-6 col-lg-4" data-dep-conds='${depData}' data-dep-section="${section}"><div class="field-wrapper">`
+              : `<div class="col-md-6 col-lg-4"><div class="field-wrapper">`;
+            closeTag = '</div></div>';
+          }
+          html += openTag;
           html += `<label for="${fid}" class="form-label d-flex align-items-center gap-1"><span>${fi?.label||key}</span>`;
           if (desc2) html += `<span class="config-tooltip-wrap" data-tip="${esc(desc2)}"><i class="bi bi-info-circle config-tooltip-icon"></i></span>`;
 
@@ -1727,8 +1752,9 @@ function executeAction() {
             }
           }
 
-          html += '</div></div>';
+          html += closeTag;
         }
+        if (_curGroup !== null) html += '</div></div></div>'; // close last group
 
         // Inject Remote Access tunnel controls into the ACCESS grid
         if (section === 'ACCESS') {
@@ -2218,6 +2244,8 @@ function executeAction() {
         const val = parentEl.type === 'checkbox'
           ? (parentEl.checked ? 'true' : 'false')
           : parentEl.value.toLowerCase();
+        if (cond.not_values)
+          return !cond.not_values.map(v => v.toLowerCase()).includes(val);
         return cond.values.map(v => v.toLowerCase()).includes(val);
       });
       wrapper.style.display = visible ? '' : 'none';

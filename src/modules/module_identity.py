@@ -12,6 +12,8 @@ Face recognition provides "who is present" (supplementary context).
 Degrades gracefully: works with voice-only, face-only, or both.
 """
 
+import threading
+import time
 from typing import Optional
 from modules.module_messageQue import queue_message
 
@@ -227,3 +229,58 @@ class IdentityManager:
 
         queue_message(f"INFO: Identity fusion — auto-training face for '{name}'")
         face_id.start_training(name)
+
+    def enable_background_detection(self, fps: float = 5.0):
+        """Start a background thread that runs face detection even when the camera
+        view is not open in the UI. Safe to call multiple times — only starts once.
+
+        Also ensures the FaceRecognitionDetector is enabled if models are loaded,
+        since it starts disabled by default.
+
+        Args:
+            fps: Frames per second to process. 5.0 gives responsive detection
+                 without excessive CPU load.
+        """
+        if getattr(self, '_bg_detection_thread', None) is not None:
+            return  # already running
+
+        dm = self._get_detection_manager()
+        if dm is None:
+            return
+
+        camera = getattr(self._ui_manager, 'camera_module', None)
+        if camera is None:
+            return
+
+        # Enable the face ID detector if models loaded but it's toggled off
+        face_id = dm._get_face_id_detector()
+        self._bg_enabled_face_id = False
+        if face_id is not None and not face_id.enabled:
+            if face_id.detector is not None and face_id.recognizer is not None:
+                face_id.enabled = True
+                self._bg_enabled_face_id = True
+
+        self._bg_detection_stop = threading.Event()
+
+        def _worker():
+            interval = 1.0 / max(fps, 0.5)
+            while not self._bg_detection_stop.is_set():
+                try:
+                    frame = camera.get_frame()
+                    if frame is not None:
+                        dm.process_frame(frame)
+                except Exception:
+                    pass
+                time.sleep(interval)
+
+        self._bg_detection_thread = threading.Thread(target=_worker, daemon=True)
+        self._bg_detection_thread.start()
+        queue_message("INFO: Presence gate — background face detection started")
+
+    def disable_background_detection(self):
+        """Stop the background detection thread if running."""
+        stop = getattr(self, '_bg_detection_stop', None)
+        if stop is not None:
+            stop.set()
+        self._bg_detection_thread = None
+        self._bg_detection_stop = None

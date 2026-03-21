@@ -1478,7 +1478,7 @@ def get_config():
                         field_options[field_key]['depends_on'] = field_def['depends_on']
                     if 'label' in field_def:
                         field_options[field_key]['label'] = field_def['label']
-                    for k in ('min', 'max', 'step'):
+                    for k in ('min', 'max', 'step', 'group', 'group_label'):
                         if k in field_def:
                             field_options[field_key][k] = field_def[k]
         
@@ -1522,6 +1522,21 @@ def get_config():
                         else:
                             labels[t] = t.replace('_', ' ').replace('-', ' ').title()
                     field_options[theme_key]['option_labels'] = labels
+
+        # Populate vad_speaker_verify options with enrolled named speakers
+        speaker_verify_key = 'STT.vad_speaker_verify'
+        if speaker_verify_key in field_options:
+            try:
+                from modules.module_speaker_id import get_speaker_id_manager
+                sid = get_speaker_id_manager()
+                if sid is not None:
+                    named = sorted(
+                        s for s in sid.get_enrolled_speakers()
+                        if not s.startswith('Unknown_')
+                    )
+                    field_options[speaker_verify_key]['options'] = ['off', 'any'] + named
+            except Exception:
+                pass
 
         return jsonify({
             "config": filtered_config,

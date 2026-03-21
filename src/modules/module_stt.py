@@ -778,7 +778,155 @@ class STTManager:
             queue_message(f"ERROR: Transcription failed: {e}")
             return None
 
+    # === Wake Word Gates ===
+
+    def _build_wake_gates(self):
+        """Build speaker + presence gate dependencies. Used by all wake word engines.
+        Returns (speaker_id_mgr, speaker_mode, speaker_threshold, presence_mode, identity_mgr).
+        """
+        stt_cfg = CONFIG.get('STT', {})
+        speaker_id_mgr = None
+        speaker_mode = 'any'
+        speaker_threshold = 0.60
+        presence_mode = 'off'
+        identity_mgr = None
+
+        raw_speaker = stt_cfg.get('vad_speaker_verify', 'off').strip().lower()
+        if raw_speaker != 'off':
+            try:
+                from modules.module_speaker_id import get_speaker_id_manager
+                speaker_id_mgr = get_speaker_id_manager()
+                speaker_mode = raw_speaker
+                speaker_threshold = float(stt_cfg.get('vad_speaker_threshold', '0.60'))
+            except Exception:
+                pass
+
+        raw_presence = stt_cfg.get('vad_presence_gate', 'off').strip().lower()
+        if raw_presence in ('any', 'known'):
+            try:
+                from modules.module_identity import get_identity_manager
+                identity_mgr = get_identity_manager()
+                if identity_mgr is not None:
+                    presence_mode = raw_presence
+                    identity_mgr.enable_background_detection()
+            except Exception:
+                pass
+
+        return speaker_id_mgr, speaker_mode, speaker_threshold, presence_mode, identity_mgr
+
+    def _run_wake_gates(self, audio_float32: np.ndarray, transcript_verify_fn=None) -> bool:
+        """Run post-detection gates synchronously after wake word is detected.
+        Returns True if all enabled gates pass (or have no applicable speakers/faces enrolled).
+        transcript_verify_fn: optional callable(audio, rate)->str for transcript verification gate.
+        """
+        speaker_id_mgr, speaker_mode, speaker_threshold, presence_mode, identity_mgr = \
+            self._build_wake_gates()
+
+        # Speaker gate
+        if speaker_id_mgr is not None:
+            try:
+                enrolled = speaker_id_mgr.get_enrolled_speakers()
+                named = [s for s in enrolled if not s.startswith('Unknown_')]
+                target = None if speaker_mode == 'any' else speaker_mode.lower()
+                applicable = named if target is None else [s for s in named if s.lower() == target]
+                if applicable and len(audio_float32) >= int(self.MODEL_RATE * 0.5):
+                    emb = speaker_id_mgr.extract_embedding(audio_float32, self.MODEL_RATE)
+                    if emb is not None:
+                        best_name, best_score = speaker_id_mgr.identify_speaker(emb, skip_margin=True)
+                        if best_name and best_name.startswith('Unknown_'):
+                            best_name = ''
+                        passed = (best_name and best_score >= speaker_threshold and
+                                  (target is None or best_name.lower() == target))
+                        if not passed:
+                            if self.DEBUG:
+                                queue_message(f"DEBUG: Wake gate REJECT speaker: '{best_name}' score={best_score:.3f}")
+                            return False
+            except Exception:
+                pass
+
+        # Presence gate
+        if presence_mode != 'off' and identity_mgr is not None:
+            try:
+                faces = identity_mgr.get_recognized_faces()
+                if not faces:
+                    if self.DEBUG:
+                        queue_message("DEBUG: Wake gate REJECT presence: no faces detected")
+                    return False
+                if presence_mode == 'known':
+                    known = [f for f in faces if f.get('name', 'UNKNOWN') != 'UNKNOWN']
+                    if not known:
+                        if self.DEBUG:
+                            queue_message("DEBUG: Wake gate REJECT presence: no known faces")
+                        return False
+            except Exception:
+                pass
+
+        # Transcript verify gate
+        if transcript_verify_fn is not None and audio_float32 is not None and len(audio_float32) > 0:
+            try:
+                text = transcript_verify_fn(audio_float32, self.MODEL_RATE)
+                if text:
+                    words = _NON_ALNUM_SPACE_RE.sub('', text.lower()).split()
+                    wake_words = _NON_ALNUM_RE.sub('', self.WAKE_WORD.lower()).split()
+                    joined = ' '.join(words)
+                    # Accept if any wake word token appears or fuzzy match passes
+                    exact = any(w in words for w in wake_words)
+                    fuzzy = self._fuzzy_wake_word_match(joined, self.WAKE_WORD)
+                    if not exact and not fuzzy:
+                        queue_message(f"INFO: Wake gate REJECT transcript: '{text}'")
+                        return False
+                    queue_message(f"INFO: Wake gate PASS transcript: '{text}'")
+            except Exception:
+                pass
+
+        return True
+
     # === Transcription Backends ===
+
+    def _build_transcript_verify_fn(self):
+        """Return a callable(audio_float32, sample_rate) -> str|None for wake word gate verification.
+
+        Uses the primary STT processor if it supports direct audio input (sherpa-onnx, fastrtc).
+        Remote processors (openai, external) fall back to whichever local model is loaded.
+        Returns None if no suitable model is available (gate will be skipped).
+        """
+        stt_proc = self.config.get('STT', {}).get('stt_processor', '')
+
+        # Pick the best model: prefer primary when it's a local processor, else take whatever is loaded
+        if stt_proc == 'sherpa-onnx':
+            recognizer, fastrtc = self.sherpa_recognizer, None
+        elif stt_proc == 'fastrtc':
+            recognizer, fastrtc = None, self.fastrtc_model
+        else:
+            recognizer, fastrtc = self.sherpa_recognizer, self.fastrtc_model
+
+        if recognizer is not None:
+            def _fn(audio_float32, sample_rate):
+                try:
+                    s = recognizer.create_stream()
+                    s.accept_waveform(sample_rate, audio_float32)
+                    recognizer.decode_stream(s)
+                    text = _SENSEVOICE_TAG_RE.sub('', s.result.text).strip()
+                    del s
+                    return text or None
+                except Exception:
+                    return None
+            return _fn
+
+        if fastrtc is not None:
+            def _fn(audio_float32, sample_rate):
+                try:
+                    return fastrtc.stt((sample_rate, audio_float32)).strip() or None
+                except Exception:
+                    return None
+            return _fn
+
+        queue_message(
+            f"WARN: Atomik transcript verify enabled but no local STT model is loaded "
+            f"(stt_processor={stt_proc}). Gate will be skipped. "
+            "Use sherpa-onnx or fastrtc as your STT processor to enable transcript verification."
+        )
+        return None
 
     def _transcribe_with_fastrtc(self):
         """Transcribe audio using FastRTC STT."""
@@ -1207,6 +1355,12 @@ class STTManager:
         except Exception:
             pass
 
+        # Transcript verify gate
+        transcript_verify_fn = None
+        stt_cfg = CONFIG.get('STT', {})
+        if stt_cfg.get('vad_transcript_verify', 'False').strip() == 'True':
+            transcript_verify_fn = self._build_transcript_verify_fn()
+
         RATE = self.MODEL_RATE
         frames_per_chunk = int(RATE * 2.0)
         self.smart_turn_audio_buffer.clear()
@@ -1250,6 +1404,8 @@ class STTManager:
                     queue_message(f"DEBUG: FastRTC Wake Word Transcript: '{transcript}'")
 
                 if self.WAKE_WORD in transcript:
+                    if not self._run_wake_gates(audio_data, transcript_verify_fn=transcript_verify_fn):
+                        continue
                     self._handle_wake_detected()
                     return True
 
@@ -1273,15 +1429,23 @@ class STTManager:
             curve = norm ** 1.6
             threshold = round(max(0.40, min(0.80 - curve * 0.4, 0.80)), 2)
 
+        # Transcript verify gate
+        transcript_verify_fn = None
+        stt_cfg = CONFIG.get('STT', {})
+        if stt_cfg.get('vad_transcript_verify', 'False').strip() == 'True':
+            transcript_verify_fn = self._build_transcript_verify_fn()
+
         detector = WakeWordSystem(self.WAKE_WORD, self.MODEL_RATE, threshold, debug=self.DEBUG, mode=mode)
         detector.createModel()
         # Wait for TTS to finish before entering blocking wake word listener
         while is_tts_playing():
             time.sleep(0.05)
-        if detector.listenForWakeWord():
-            self._handle_wake_detected()
-            return True
-        return False
+        while True:
+            detector.listenForWakeWord()
+            audio_window = np.array(list(detector.buffer)[-int(self.MODEL_RATE * 2):], dtype=np.float32)
+            if self._run_wake_gates(audio_window, transcript_verify_fn=transcript_verify_fn):
+                self._handle_wake_detected()
+                return True
 
     def _detect_wake_word_sherpa_onnx(self) -> bool:
         """Detect wake word using sherpa-onnx with a pre-allocated circular buffer."""
@@ -1290,6 +1454,12 @@ class STTManager:
             return False
 
         self._fire_and_forget_get(f"http://127.0.0.1:{self._webui_port}/stop_talking")
+
+        # Transcript verify gate
+        transcript_verify_fn = None
+        stt_cfg = CONFIG.get('STT', {})
+        if stt_cfg.get('vad_transcript_verify', 'False').strip() == 'True':
+            transcript_verify_fn = self._build_transcript_verify_fn()
 
         RATE = self.MODEL_RATE
         frames_per_chunk = int(RATE * 2.0)
@@ -1350,6 +1520,12 @@ class STTManager:
                     queue_message(f"DEBUG: Sherpa Wake Word Transcript: '{transcript}'")
 
                 if self.WAKE_WORD in transcript or self._fuzzy_wake_word_match(transcript, self.WAKE_WORD):
+                    if not self._run_wake_gates(transcode_data, transcript_verify_fn=transcript_verify_fn):
+                        # Gate failed — roll buffer forward and keep listening
+                        audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
+                        buf, _ = mic.read_exact(read_frames)
+                        audio_buffer[overlap_frames:] = buf.flatten()
+                        continue
                     # Break out of the loop first — the wake response callback
                     # plays TTS audio (sd.play + sd.wait) which deadlocks if
                     # the ResamplingInputStream is still open.
