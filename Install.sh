@@ -978,11 +978,6 @@ install_chromedriver() {
 }
 
 create_desktop_shortcut() {
-    if [[ "$PI_VERSION" == "pi3" || "$PI_VERSION" == "pizero2" ]]; then
-        tars_say "Skipping desktop shortcut (no UI for ${PI_VERSION^^})" "info"
-        return 0
-    fi
-
     tars_say "Creating desktop shortcut..." "info"
 
     local install_dir
@@ -1000,11 +995,8 @@ create_desktop_shortcut() {
     local desktop_file="${desktop_dir}/TARS"
     cat > "$desktop_file" << LAUNCHER
 #!/bin/bash
-echo "=== TARS Launcher ==="
-echo ""
 cd "${install_dir}" || { echo "ERROR: Could not cd to ${install_dir}"; read -p "Press Enter to close..."; exit 1; }
-source src/.venv/bin/activate || { echo "ERROR: Could not activate venv"; read -p "Press Enter to close..."; exit 1; }
-python App-Start.py
+./tars-launcher.sh
 echo ""
 read -p "Press Enter to close..."
 LAUNCHER
