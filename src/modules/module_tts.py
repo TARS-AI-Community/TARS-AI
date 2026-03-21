@@ -64,6 +64,9 @@ def _resolve_output_device():
         if dev.get("max_output_channels", 0) < 1:
             continue
         name = dev.get("name", "").lower()
+        # Skip HDMI outputs — they typically don't support standard PCM formats
+        if "hdmi" in name:
+            continue
         if "usb" in name:
             usb_devices.append((i, dev))
         elif "default" in name or "dmix" in name or "pulse" in name or "sysdefault" in name:
