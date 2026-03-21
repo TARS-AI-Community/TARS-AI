@@ -58,7 +58,7 @@ class WiFiManager:
         """Create the TARS-Setup hotspot profile in NetworkManager if absent."""
         code, out, _ = self._run_command(
             ["nmcli", "-t", "-f", "NAME", "connection", "show"],
-            timeout=5
+            timeout=15
         )
         if code == 0 and self.CONNECTION_NAME in out.split("\n"):
             return True
