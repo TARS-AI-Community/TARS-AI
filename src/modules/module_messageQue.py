@@ -115,7 +115,16 @@ def queue_message(message, stream=False):
     if not isinstance(message, str):
         message = str(message)
     if message and message.strip():
-        message_queue.put((message.strip(), stream))  # 🔹 No lock needed here
+        msg = message.strip()
+        # Suppress DEBUG messages unless launched with debug=true
+        if msg.startswith("DEBUG") or "[DEBUG]" in msg:
+            try:
+                from modules.module_config import load_config
+                if not load_config().get('debug_mode', False):
+                    return
+            except Exception:
+                return
+        message_queue.put((msg, stream))  # 🔹 No lock needed here
 
 def stop_message_processing():
     """ Stops the message processing thread safely. """
