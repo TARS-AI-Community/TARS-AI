@@ -66,7 +66,7 @@ wake_word = hey tars
 #   PiZero2: atomik
 wake_word_processor = atomik
 # Atomik detection mode (atomik only) auto = use ONNX model if available, otherwise fall back to template, model = ONNX model only (trained with tools/wakeword-trainer), template = cosine similarity only (record wake word 5 times on device)
-atomik_mode = auto
+atomik_mode = template
 # Wake word gates — apply to all wake word engines
 # Transcript verify: only active when wake_word_processor = atomik AND atomik_mode = template
 vad_transcript_verify = False
@@ -118,7 +118,7 @@ toggle_charvoice = True
 # TTS engine: espeak | piper | silero | elevenlabs | openai | other | external
 ttsoption = piper
 # External TTS server URL (ttsoption = other or external)
-ttsurl =
+ttsurl = 
 # Voice name/ID for external TTS server
 tts_voice =
 # ElevenLabs voice ID (find in elevenlabs.io dashboard)

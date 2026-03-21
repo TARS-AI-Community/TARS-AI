@@ -39,11 +39,12 @@ class PicturesAnimation:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         
         if pictures_folder is None:
-            self.pictures_folder = os.path.join(script_dir, "pictures")
+            # Pictures folder is one level up from screensavers/
+            self.pictures_folder = os.path.join(os.path.dirname(script_dir), "pictures")
         else:
             self.pictures_folder = pictures_folder
         
-        self.backgrounds_folder = script_dir
+        self.backgrounds_folder = os.path.dirname(script_dir)  # UI folder
         self.background_paths = []
         self.background_texture = None
         
