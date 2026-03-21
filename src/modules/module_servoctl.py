@@ -371,6 +371,8 @@ def disable_all_servos():
 def reset_positions():
     global servo_positions
 
+    move_legs(20, 20, None, None, 0.6)
+
     # Use saved positions as starting points (don't overwrite them)
     # This ensures smooth movement from last known position to neutral
     neutral_defaults = {
