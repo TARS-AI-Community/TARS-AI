@@ -37,47 +37,47 @@ _output_device_resolved = False
 
 
 def _resolve_output_device():
-    """Find and cache the audio output device. Runs once, no-op after."""
+    """Find and cache the audio output device. Runs once, no-op after.
+
+    Prefers real hardware (USB audio, headphones, I2S DACs) over virtual
+    ALSA devices like 'default' or 'dmix' which may route to HDMI/null.
+    """
     global _output_device, _output_device_resolved
     if _output_device_resolved:
         return
 
     _output_device_resolved = True
 
-    # 1. Try system default
-    try:
-        idx = sd.default.device[1]
-        if idx is not None and idx >= 0:
-            info = sd.query_devices(idx, kind="output")
-            if info.get("max_output_channels", 0) >= 1:
-                _output_device = idx
-                queue_message(f"INFO: Audio output: {info['name']} (device {idx})")
-                return
-    except Exception:
-        pass
-
-    # 2. Scan all devices
     try:
         devices = sd.query_devices()
-        for i, dev in enumerate(devices):
-            if dev.get("max_output_channels", 0) >= 1:
-                _output_device = i
-                queue_message(f"INFO: Audio output: {dev['name']} (device {i}, fallback scan)")
-                return
     except Exception:
-        pass
+        queue_message("WARNING: Could not query audio devices — using system default")
+        _output_device = None
+        return
 
-    # 3. PortAudio C-level fallback
-    try:
-        from sounddevice import _lib
-        pa_idx = _lib.Pa_GetDefaultOutputDevice()
-        if pa_idx >= 0:
-            info = sd.query_devices(pa_idx, kind="output")
-            _output_device = pa_idx
-            queue_message(f"INFO: Audio output: {info['name']} (device {pa_idx}, PortAudio fallback)")
+    # Categorize output devices by priority
+    usb_devices = []      # USB audio — most likely the external speaker
+    hw_devices = []       # Hardware devices (headphones, I2S DACs, bcm2835)
+    virtual_devices = []  # Virtual/default ALSA devices
+
+    for i, dev in enumerate(devices):
+        if dev.get("max_output_channels", 0) < 1:
+            continue
+        name = dev.get("name", "").lower()
+        if "usb" in name:
+            usb_devices.append((i, dev))
+        elif "default" in name or "dmix" in name or "pulse" in name or "sysdefault" in name:
+            virtual_devices.append((i, dev))
+        else:
+            hw_devices.append((i, dev))
+
+    # Pick best device: USB > hardware > virtual
+    for label, candidates in [("USB", usb_devices), ("hardware", hw_devices), ("virtual", virtual_devices)]:
+        if candidates:
+            idx, dev = candidates[0]
+            _output_device = idx
+            queue_message(f"INFO: Audio output: {dev['name']} (device {idx}, {label})")
             return
-    except Exception:
-        pass
 
     queue_message("WARNING: No audio output device found — using system default")
     _output_device = None
