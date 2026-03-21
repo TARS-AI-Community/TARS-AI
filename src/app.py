@@ -35,7 +35,7 @@ from modules.module_messageQue import queue_message
 
 # === Load Configuration ===
 CONFIG = load_config()
-VERSION = "6.0"
+VERSION = "Amelia"
 
 # Get device info
 DEVICE_INFO = CONFIG.get("_device", {})
