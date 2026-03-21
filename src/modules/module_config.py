@@ -397,23 +397,27 @@ def load_config():
         "STT": {
             "use_indicators": config.getboolean('STT', 'use_indicators'),
             "stt_processor": config['STT']['stt_processor'],
-            "wake_word_processor": config['STT']['wake_word_processor'],
-            "wake_word": config['STT']['wake_word'],
-            "vad_method": config['STT']['vad_method'],
-            "sensitivity": config['STT']['sensitivity'],
+            "language": config['STT']['language'],
             "external_url": config['STT']['external_url'],
+            "sherpa_onnx_denoise": config.get('STT', 'sherpa_onnx_denoise', fallback='False'),
+            "sherpa_onnx_punctuation": config.get('STT', 'sherpa_onnx_punctuation', fallback='False'),
+            "wake_word": config['STT']['wake_word'],
+            "wake_word_processor": config['STT']['wake_word_processor'],
+            "atomik_mode": config.get('STT', 'atomik_mode', fallback='auto'),
+            "sensitivity": config['STT']['sensitivity'],
+            "vad_transcript_verify": config.get('STT', 'vad_transcript_verify', fallback='False'),
+            "vad_presence_gate": config.get('STT', 'vad_presence_gate', fallback='off'),
+            "vad_speaker_verify": config.get('STT', 'vad_speaker_verify', fallback='off'),
+            "vad_speaker_threshold": config.get('STT', 'vad_speaker_threshold', fallback='0.60'),
             "enable_bargein": config.getboolean('STT', 'enable_bargein', fallback=True),
             "bargein_mode": config.get('STT', 'bargein_mode', fallback='fuzzy'),
             "bargein_sensitivity": config.getint('STT', 'bargein_sensitivity', fallback=5),
+            "vad_method": config['STT']['vad_method'],
             "speechdelay": int(config['STT']['speechdelay']),
-            "language": config['STT']['language'],
-            "sherpa_onnx_denoise": config.get('STT', 'sherpa_onnx_denoise', fallback='False'),
-            "sherpa_onnx_punctuation": config.get('STT', 'sherpa_onnx_punctuation', fallback='False'),
             "speaker_id_enabled": config.get('STT', 'speaker_id_enabled', fallback='False'),
             "speaker_id_threshold": config.get('STT', 'speaker_id_threshold', fallback='0.75'),
             "mic_amp_gain": config.getfloat('STT', 'mic_amp_gain', fallback=10.0),
             "silence_margin": config.getfloat('STT', 'silence_margin', fallback=3.0),
-            "atomik_mode": config.get('STT', 'atomik_mode', fallback='auto'),
         },
         "CHAR": {
             "character_name": character_name,
@@ -721,73 +725,142 @@ CONFIG_METADATA = {
         },
     },
     'STT': {
-        '__description__': 'Configure how TARS listens to you - wake word, speech recognition, and when to stop listening',
-        'use_indicators': {
-            'description': 'When ON, TARS plays a short high beep when it starts recording your voice (after the wake word triggers) and a lower beep when it stops. These audio cues are very useful for knowing exactly when to speak and when TARS has finished listening. Without them, it can be hard to tell when TARS is ready for your command. Turn OFF if the beeps are annoying or if you are running TARS somewhere where sound is disruptive.'
-        },
+        '__description__': 'Configure how TARS listens — wake word, speech recognition, and end-of-speech detection',
+
+        # ── Speech Recognition ────────────────────────────────────────────────
         'stt_processor': {
+            'group': 'stt', 'group_label': 'Speech Recognition',
             'label': 'STT Engine',
-            'options': ['silero', 'fastrtc', 'openai', 'external', 'sherpa-onnx'],
-            'description': 'After TARS hears the wake word, this is the software that converts your actual speech into text. Think of it as the "ears" of TARS. "fastrtc" sends your audio to the cloud for fast, accurate transcription (recommended if you have internet). "silero" runs on your Pi with no internet needed (Pi5 recommended). "openai" uses OpenAI\'s Whisper service (best for non-English languages, needs API key and internet). "external" lets you point to your own speech-to-text server running elsewhere. "sherpa-onnx" uses SenseVoiceTiny for fast offline multilingual transcription (Pi5/Pi4).'
+            'options': ['sherpa-onnx', 'fastrtc', 'openai', 'external', 'silero'],
+            'description': 'How TARS converts your speech to text after the wake word triggers. "sherpa-onnx" is fast and offline (Pi5/Pi4, recommended). "fastrtc" is cloud-based, very accurate. "openai" uses OpenAI Whisper (best for non-English, requires API key). "silero" runs on-device (Pi5 only). "external" forwards audio to your own STT server.'
+        },
+        'language': {
+            'group': 'stt',
+            'label': 'Spoken Language',
+            'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
+            'description': 'The language you speak to TARS. For non-English languages, set STT Engine to "openai" — most local on-device models only work well in English.'
         },
         'external_url': {
+            'group': 'stt',
+            'label': 'External STT Server URL',
             'depends_on': [{'field': 'stt_processor', 'values': ['external']}],
-            'description': 'If you set stt_processor to "external", put the web address of your speech-to-text server here. This is for advanced users who run their own Whisper or other STT server on a separate machine. If you are not using "external" mode, this setting is ignored. Format: http://IP-ADDRESS:PORT'
+            'description': 'URL of your external speech-to-text server. Format: http://IP-ADDRESS:PORT'
+        },
+        'sherpa_onnx_denoise': {
+            'group': 'stt',
+            'label': 'Noise Reduction',
+            'options': ['True', 'False'],
+            'depends_on': [{'field': 'stt_processor', 'values': ['sherpa-onnx']}],
+            'description': 'Clean up audio before transcription to remove background noise (fans, AC, etc). Uses the GTCRN denoiser (~5MB). Leave OFF in quiet environments.'
+        },
+        'sherpa_onnx_punctuation': {
+            'group': 'stt',
+            'label': 'Auto Punctuation',
+            'options': ['True', 'False'],
+            'depends_on': [{'field': 'stt_processor', 'values': ['sherpa-onnx']}],
+            'description': 'Add punctuation to transcribed text automatically. Uses the ct-transformer model (~200MB). Leave OFF if the model is not downloaded or you prefer raw transcriptions.'
+        },
+
+        # ── Wake Word ─────────────────────────────────────────────────────────
+        'wake_word': {
+            'group': 'wake_word', 'group_label': 'Wake Word',
+            'label': 'Wake Word',
+            'description': 'The phrase you say to activate TARS, like "Hey Siri" or "OK Google". Shorter phrases (2–3 syllables) work best — e.g. "hey tars", "ok robot", "computer". Avoid very common words that might trigger accidentally.'
         },
         'wake_word_processor': {
+            'group': 'wake_word',
             'label': 'Wake Word Engine',
             'options': ['atomik', 'fastrtc', 'sherpa-onnx'],
-            'description': 'The software that listens for your wake word. "atomik" is built right into TARS, completely free, and works offline - this is the recommended choice for most people. You can adjust how sensitive it is with the "sensitivity" setting below. "fastrtc" uses an internet-based service for detection. "sherpa-onnx" uses SenseVoiceTiny to transcribe and match the wake word (Pi5/Pi4, works offline).'
-        },
-        'wake_word': {
-            'description': 'The magic phrase you say to get TARS attention, like saying "Hey Siri" or "OK Google". TARS is always listening in the background for this specific phrase. When it hears it, it "wakes up" and starts recording whatever you say next. You can change this to anything you want, but shorter phrases (2-3 syllables) work best. For example: "hey tars", "ok robot", "computer". Avoid very common words that might trigger accidentally.'
-        },
-        'vad_method': {
-            'label': 'VAD Method',
-            'options': ['silero', 'rms', 'sherpa-onnx', 'smart-turn'],
-            'description': 'VAD stands for "Voice Activity Detection" - this is how TARS figures out when you have STOPPED talking so it can process your message. "rms" simply listens for silence (when the volume drops below a threshold). It is lightweight and works on any Pi. "silero" uses a small AI model to detect speech vs silence, which is more accurate but requires torch - only recommended for Pi 5. "sherpa-onnx" uses the same Silero VAD model but via ONNX runtime (no torch needed), so it works on Pi4 and Pi3 too. "smart-turn" uses Pipecat Smart Turn v3.2 for semantic turn detection - instead of just detecting silence, it predicts whether you have actually finished your sentence based on speech patterns and intonation, so it won\'t cut you off during mid-sentence pauses (Pi5/Pi4 only).'
+            'description': '"atomik" is built into TARS, works offline, and is the recommended choice. "sherpa-onnx" transcribes audio and matches the wake word offline (Pi5/Pi4). "fastrtc" uses an internet-based service for detection.'
         },
         'atomik_mode': {
+            'group': 'wake_word',
+            'label': 'Atomik Detection Mode',
             'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],
             'options': ['auto', 'model', 'template'],
-            'description': 'How the atomik wake word detector works. "auto" uses the ONNX model if available, otherwise falls back to template matching. "model" requires a pre-trained ONNX model (created with the wakeword-trainer tool on a PC). "template" uses cosine similarity — you record your wake word 5 times on the device and it matches against those recordings. Template mode is simpler to set up but less accurate.'
+            'description': '"auto" uses the ONNX model if available, otherwise falls back to template matching. "model" requires a trained ONNX model (created with the wakeword-trainer tool). "template" records your wake word 5 times on-device and matches by cosine similarity — easiest to set up.'
         },
         'sensitivity': {
+            'group': 'wake_word',
+            'label': 'Wake Word Strictness',
             'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],
-            'description': 'How carefully TARS listens for the wake word (only works with the "atomik" wake word processor). Scale of 1 to 10. At 1, TARS triggers very easily - even similar-sounding words might activate it (annoying but you will never miss a command). At 10, you need to say the wake word very clearly and precisely for it to work (fewer accidental activations but you might have to repeat yourself). Start at 5 and adjust from there. If TARS keeps activating randomly, increase this number. If TARS never hears you, decrease it.'
+            'type': 'slider',
+            'min': 1,
+            'max': 10,
+            'step': 1,
+            'description': 'How strictly TARS matches the wake word (atomik only). 1 = very lenient, triggers easily. 10 = very strict, requires a clear and precise match. Start at 5. Raise it if TARS activates randomly; lower it if TARS stops hearing you.'
         },
+
+        # ── Wake Word Gates ───────────────────────────────────────────────────
+        'vad_transcript_verify': {
+            'group': 'wake_gates', 'group_label': 'Wake Word Gates',
+            'label': 'Transcript Verification',
+            'options': ['True', 'False'],
+            'description': 'After wake word detection, TARS transcribes the audio and confirms the wake word was actually spoken before responding. Nearly eliminates false positives at a small cost (~100–200ms). Only active in atomik template mode; sherpa-onnx and fastrtc already use transcription as their primary detection.'
+        },
+        'vad_presence_gate': {
+            'group': 'wake_gates',
+            'label': 'Presence Gate',
+            'options': ['off', 'any', 'known'],
+            'description': 'Require someone to be visible on camera before TARS responds to the wake word. "off" = disabled. "any" = any face detected (good for keeping TARS quiet in an empty room). "known" = only a recognized enrolled person (prevents TARS responding to strangers or the TV). Background camera detection starts automatically when not "off".'
+        },
+        'vad_speaker_verify': {
+            'group': 'wake_gates',
+            'label': 'Speaker Verification',
+            'options': ['off', 'any'],
+            'description': 'Restrict who can trigger the wake word by voice. "off" = disabled. "any" = any enrolled named speaker. Select a specific name to allow only that person. Requires Speaker ID to be enabled. Skips automatically if no named speakers are enrolled yet.'
+        },
+        'vad_speaker_threshold': {
+            'group': 'wake_gates',
+            'label': 'Speaker Match Threshold',
+            'depends_on': [{'field': 'vad_speaker_verify', 'not_values': ['off']}],
+            'type': 'slider',
+            'min': 0.3,
+            'max': 0.9,
+            'step': 0.05,
+            'description': 'How closely the voice must match an enrolled speaker. 0.60 is a good starting point. Raise it if strangers or the TV are triggering TARS; lower it if your own voice is being rejected.'
+        },
+
+        # ── Barge-In ──────────────────────────────────────────────────────────
         'enable_bargein': {
-            'description': 'When ON, you can interrupt TARS while it is talking by speaking over it. TARS listens to the mic during playback and detects if you are saying something. When OFF, TARS will always finish its full response before listening again.'
+            'group': 'bargein', 'group_label': 'Barge-In',
+            'label': 'Enable Barge-In',
+            'description': 'Allow interrupting TARS while it\'s talking by speaking over it. When OFF, TARS always finishes its full response before listening again.'
         },
         'bargein_mode': {
+            'group': 'bargein',
+            'label': 'Barge-In Mode',
             'options': ['fuzzy', 'voiceprint'],
             'depends_on': [{'field': 'enable_bargein', 'values': ['True', 'true']}],
-            'description': 'How TARS decides if someone is interrupting vs just hearing its own speaker echo. "fuzzy" uses word matching — it transcribes what the mic picks up and checks if the words are different from what TARS is saying. Works without any setup. "voiceprint" uses speaker identification — it checks if the voice it hears matches a known user (like noise cancellation for everything except your voice). Requires Speaker ID to be enabled and at least one speaker enrolled. Best for rooms with lots of background noise or echo.'
+            'description': '"fuzzy" transcribes mic audio and checks if the words differ from what TARS is saying — works without any setup. "voiceprint" checks if the interrupting voice matches an enrolled speaker — best in noisy rooms with echo. Requires Speaker ID and at least one enrolled speaker.'
         },
         'bargein_sensitivity': {
+            'group': 'bargein',
+            'label': 'Barge-In Sensitivity',
             'type': 'slider',
             'min': 1,
             'max': 10,
             'step': 1,
             'depends_on': [{'field': 'enable_bargein', 'values': ['True', 'true']}],
-            'description': 'How easy it is to interrupt TARS. 1 = very hard (95% match). 5 = balanced (75%). 10 = very easy (50%). In fuzzy mode this controls how aggressively words are matched against speaker echo. In voiceprint mode this controls how closely your voice must match your enrolled voiceprint. Lower this if TARS gets falsely interrupted.'
+            'description': 'How easy it is to interrupt TARS. 1 = very hard to interrupt. 10 = interrupts at the slightest sound. Start at 5. Lower if TARS gets falsely interrupted by background noise or its own speaker.'
+        },
+
+        # ── End-of-Speech Detection ───────────────────────────────────────────
+        'use_indicators': {
+            'group': 'vad', 'group_label': 'End-of-Speech Detection',
+            'label': 'Audio Indicators',
+            'description': 'Play a beep when TARS starts and stops recording. The high beep means "I\'m listening", the low beep means "got it, processing". Turn OFF if the beeps are disruptive.'
+        },
+        'vad_method': {
+            'group': 'vad',
+            'label': 'Detection Method',
+            'options': ['smart-turn', 'sherpa-onnx', 'silero', 'rms'],
+            'description': 'How TARS knows you have finished speaking. "smart-turn" uses Pipecat Smart Turn to predict sentence completion from speech patterns — won\'t cut you off mid-pause (Pi5/Pi4). "sherpa-onnx" uses Silero VAD via ONNX (Pi5/Pi4/Pi3, no torch needed). "silero" uses Silero VAD with PyTorch (Pi5). "rms" detects silence by volume — lightweight and works on any Pi.'
         },
         'speechdelay': {
-            'description': 'After you stop talking, TARS waits this long before deciding you are done and processing your message. The number is in tenths of a second — so 10 = 1 second, 20 = 2 seconds. If set too short (5–8), TARS cuts you off whenever you pause mid-thought. If set too long (35+), there is an awkward gap after every sentence. 15–25 works well for most people and speaking styles. If you speak slowly or tend to pause between sentences, try 25–30. If you speak quickly and want snappy responses, try 12–15. This setting interacts with the VAD method: with "silero" VAD you can often use a lower value because it is better at detecting true silence.'
-        },
-        'language': {
-            'options': ['english', 'spanish', 'french', 'german', 'italian', 'portuguese', 'dutch', 'russian', 'chinese', 'japanese', 'korean'],
-            'description': 'What language are you speaking to TARS? Set this to your spoken language. IMPORTANT: If you pick anything other than English, you should also change the "stt_processor" setting below to "openai", because most of the local (on-device) speech recognition options only work well in English.'
-        },
-        'sherpa_onnx_denoise': {
-            'options': ['True', 'False'],
-            'depends_on': [{'field': 'stt_processor', 'values': ['sherpa-onnx']}],
-            'description': 'When ON, TARS cleans up your audio before transcribing it. This removes background noise like fans, air conditioning, or other ambient sounds, which can improve transcription accuracy in noisy environments. Uses the GTCRN denoiser model (~5MB). Leave OFF if your environment is quiet or if you notice it slowing things down.'
-        },
-        'sherpa_onnx_punctuation': {
-            'options': ['True', 'False'],
-            'depends_on': [{'field': 'stt_processor', 'values': ['sherpa-onnx']}],
-            'description': 'When ON, TARS adds punctuation (periods, commas, question marks) to transcribed text. Speech-to-text normally outputs raw text without punctuation, which can look messy in the chat and give the AI less context about sentence structure. Uses the ct-transformer model (~200MB). Leave OFF if you want raw transcriptions or if the model is not downloaded.'
+            'group': 'vad',
+            'label': 'Silence Before Processing',
+            'description': 'How long TARS waits after you stop talking before processing your message. In tenths of a second — 15 = 1.5s, 20 = 2s. Too short and TARS cuts you off mid-thought; too long and there\'s an awkward pause. 15–20 works for most people.'
         },
     },
     'TTS': {

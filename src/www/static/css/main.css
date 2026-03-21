@@ -1756,6 +1756,30 @@ body::after {
 }
 .field-wrapper:hover { background: rgba(var(--panel-rgb), 0.35); border-color: rgba(var(--accent-rgb), 0.18); box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
 
+.config-group {
+  background: rgba(var(--panel-rgb), 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.10);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  height: 100%;
+  box-sizing: border-box;
+}
+.config-group-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255,255,255,0.35);
+  padding-bottom: 7px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.config-group-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.config-group-fields .field-wrapper { margin: 0; }
+
 .config-panel-body .form-label {
   color: var(--text-dim) !important;
   font-size: var(--font-size-sm) !important;
