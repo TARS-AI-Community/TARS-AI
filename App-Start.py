@@ -432,13 +432,11 @@ def check_required_file():
 
                 atomik_mode = config.get('STT', 'atomik_mode', fallback='auto').strip().lower()
 
-                if atomik_mode == 'template':
-                    return os.path.exists(templates_file)
-                elif atomik_mode == 'model':
+                if atomik_mode == 'model':
                     return os.path.exists(onnx_file)
                 else:
-                    # Auto — ONNX or templates
-                    return os.path.exists(onnx_file) or os.path.exists(templates_file)
+                    # template and auto both use templates
+                    return os.path.exists(templates_file)
             else:
                 return True
         else:
