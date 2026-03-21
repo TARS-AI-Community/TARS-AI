@@ -31,6 +31,62 @@ _tts_cancel_event = threading.Event()
 _tts_playing = threading.Event()  # Set while sd.play() is actively outputting audio
 _tts_needs_flush = threading.Event()  # Set after TTS finishes; cleared by STT after flushing
 
+# Output device discovery — resolved once on first playback
+_output_device = None
+_output_device_resolved = False
+
+
+def _resolve_output_device():
+    """Find and cache the audio output device. Runs once, no-op after.
+
+    Prefers real hardware (USB audio, headphones, I2S DACs) over virtual
+    ALSA devices like 'default' or 'dmix' which may route to HDMI/null.
+    """
+    global _output_device, _output_device_resolved
+    if _output_device_resolved:
+        return
+
+    _output_device_resolved = True
+
+    try:
+        devices = sd.query_devices()
+    except Exception:
+        queue_message("WARNING: Could not query audio devices — using system default")
+        _output_device = None
+        return
+
+    # Categorize output devices by priority
+    usb_devices = []      # USB audio — most likely the external speaker
+    hw_devices = []       # Hardware devices (headphones, I2S DACs, bcm2835)
+    virtual_devices = []  # Virtual/default ALSA devices
+
+    for i, dev in enumerate(devices):
+        if dev.get("max_output_channels", 0) < 1:
+            continue
+        name = dev.get("name", "").lower()
+        if "usb" in name:
+            usb_devices.append((i, dev))
+        elif "default" in name or "dmix" in name or "pulse" in name or "sysdefault" in name:
+            virtual_devices.append((i, dev))
+        else:
+            hw_devices.append((i, dev))
+
+    # Pick best device: USB > hardware > virtual
+    for label, candidates in [("USB", usb_devices), ("hardware", hw_devices), ("virtual", virtual_devices)]:
+        if candidates:
+            idx, dev = candidates[0]
+            _output_device = idx
+            queue_message(f"INFO: Audio output: {dev['name']} (device {idx}, {label})")
+            return
+
+    queue_message("WARNING: No audio output device found — using system default")
+    _output_device = None
+
+
+def init_audio_output():
+    """Resolve and log the audio output device at startup."""
+    _resolve_output_device()
+
 
 def stop_tts_playback():
     """Signal TTS to stop immediately. Safe to call from any thread."""
@@ -118,9 +174,10 @@ def update_tts_settings(ttsurl):
         queue_message(f"ERROR: TTS update failed: {e}")
 
 def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normalize=False):
+    _resolve_output_device()
     try:
         target_rate = 16000
-        with sd.OutputStream(samplerate=target_rate, channels=channels, dtype='int16', blocksize=4096) as stream:
+        with sd.OutputStream(samplerate=target_rate, channels=channels, dtype='int16', blocksize=4096, device=_output_device) as stream:
             for chunk in tts_stream:
                 if chunk:
                     audio_data = np.frombuffer(chunk, dtype='int16')
@@ -392,6 +449,7 @@ class SentenceTTSPipeline:
 
 
 async def play_audio_chunks(text, config, is_wakeword=False, emotion=None):
+    _resolve_output_device()
     if not is_wakeword:
         queue_message(f"DEBUG: TTS speaking (direct): {text}")
     _tts_cancel_event.clear()
@@ -471,7 +529,7 @@ async def play_audio_chunks(text, config, is_wakeword=False, emotion=None):
                 gain = 1.5
                 data = np.clip(data * gain, -1.0, 1.0)
 
-                sd.play(data, samplerate)
+                sd.play(data, samplerate, device=_output_device)
                 _tts_playing.set()
 
                 # Log time-to-first-audio on the first chunk

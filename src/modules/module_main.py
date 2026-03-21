@@ -130,7 +130,7 @@ def utterance_callback(message):
         user_text = message_dict['text'].strip()
 
         # Kick off memory embedding in background so it's ready by prompt-build time
-        if memory_manager and memory_manager.long_mem_use:
+        if memory_manager and memory_manager.long_mem_use and hasattr(memory_manager, 'prefetch_embedding'):
             memory_manager.prefetch_embedding(user_text)
 
         # Speaker ID: non-blocking at this stage. We record the start time and

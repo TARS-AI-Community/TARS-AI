@@ -22,7 +22,6 @@ DELAY=0.02
 PI_VERSION=""
 INSTALL_RETROPIE=false
 INSTALL_RASPOTIFY=false
-HAS_DEVICE_SECTION=false
 
 show_tars_boot() {
     clear
@@ -129,21 +128,14 @@ download_model() {
 select_pi_version() {
     local tars_data_dir="src/memory"
     local pi_version_file="$tars_data_dir/pi_version"
-    local config_file="src/config.ini"
-    local has_device_section=false
 
-    if [ -f "$config_file" ] && grep -q '^\[DEVICE\]' "$config_file"; then
-        has_device_section=true
-        HAS_DEVICE_SECTION=true
-    fi
-
-    if [ "$has_device_section" = true ]; then
-        # Already configured — read existing version from config
-        PI_VERSION=$(grep -A5 '^\[DEVICE\]' "$config_file" | grep '^raspberry_version' | sed 's/.*=\s*//' | tr -d '[:space:]')
-        if [ -n "$PI_VERSION" ]; then
-            tars_say "Device already configured: ${PI_VERSION^^} (from config.ini)" "info"
-            mkdir -p "$tars_data_dir"
-            echo "$PI_VERSION" > "$pi_version_file"
+    # Check for saved pi_version file from a previous install
+    if [ -f "$pi_version_file" ]; then
+        local saved_version
+        saved_version=$(cat "$pi_version_file" | tr -d '[:space:]')
+        if [ -n "$saved_version" ]; then
+            tars_say "Device profile: ${saved_version^^}" "info"
+            PI_VERSION="$saved_version"
             _display_profile_summary
             return
         fi
@@ -749,29 +741,6 @@ YOUTUBE
     echo ""
 }
 
-update_config_device() {
-    if [ "$HAS_DEVICE_SECTION" = false ]; then
-        tars_say "No [DEVICE] section in config — skipping device profile update." "info"
-        return 0
-    fi
-
-    local config_file="config.ini"
-    
-    if [ -f "$config_file" ]; then
-        tars_say "Updating config.ini with device profile..." "info"
-        
-        if grep -q "^\[DEVICE\]" "$config_file"; then
-            sed -i "s/^raspberry_version\s*=.*/raspberry_version = $PI_VERSION/" "$config_file"
-        else
-            sed -i "1i\\
-[DEVICE]\\
-raspberry_version = $PI_VERSION\\
-" "$config_file"
-        fi
-        
-        tars_say "Device profile set to: $PI_VERSION" "success"
-    fi
-}
 
 show_system_diagnostic() {
     echo "+===============================================================+"
@@ -1009,11 +978,6 @@ install_chromedriver() {
 }
 
 create_desktop_shortcut() {
-    if [[ "$PI_VERSION" == "pi3" || "$PI_VERSION" == "pizero2" ]]; then
-        tars_say "Skipping desktop shortcut (no UI for ${PI_VERSION^^})" "info"
-        return 0
-    fi
-
     tars_say "Creating desktop shortcut..." "info"
 
     local install_dir
@@ -1031,11 +995,8 @@ create_desktop_shortcut() {
     local desktop_file="${desktop_dir}/TARS"
     cat > "$desktop_file" << LAUNCHER
 #!/bin/bash
-echo "=== TARS Launcher ==="
-echo ""
 cd "${install_dir}" || { echo "ERROR: Could not cd to ${install_dir}"; read -p "Press Enter to close..."; exit 1; }
-source src/.venv/bin/activate || { echo "ERROR: Could not activate venv"; read -p "Press Enter to close..."; exit 1; }
-python App-Start.py
+./tars-launcher.sh
 echo ""
 read -p "Press Enter to close..."
 LAUNCHER
@@ -1180,7 +1141,7 @@ main() {
     chmod 664 config.ini
     echo "|  [OK] config.ini (writable, run: nano config.ini)"
 
-    update_config_device
+
 
     if [ ! -f "dashboard.ini" ]; then
         cp dashboard.template.ini dashboard.ini
