@@ -1106,8 +1106,8 @@ CONFIG_METADATA = {
         },
         'app': {
             'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
-            'options': ['terminal', 'dashboard', 'clock', 'eyes'],
-            'description': 'What shows on the TARS display when it first starts up. "terminal" shows a scrolling chat-style interface where you can read the conversation in real time. "dashboard" shows a system status overview with battery, CPU, memory, and other stats. "clock" shows a large clean clock display — good if TARS lives on a desk. "eyes" shows an animated eye display that reacts to TARS speaking. You can always switch between modes at runtime.'
+            'options': ['terminal', 'dashboard', 'clock', 'eyes', 'avatar'],
+            'description': 'What shows on the TARS display when it first starts up. "terminal" shows a scrolling chat-style interface where you can read the conversation in real time. "dashboard" shows a system status overview with battery, CPU, memory, and other stats. "clock" shows a large clean clock display — good if TARS lives on a desk. "eyes" shows an animated eye display that reacts to TARS speaking. "avatar" shows your character\'s animated sprite with blinking and talking animations. You can always switch between modes at runtime.'
         },
         'target_fps': {
             'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],

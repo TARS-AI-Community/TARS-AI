@@ -156,12 +156,14 @@ class AvatarApp:
             return
 
         img_w, img_h = surf.get_size()
-        scale = min(self.width / img_w, self.height / img_h)
+        bar_h = int(self.height * 0.06)
+        available_h = self.height - bar_h
+        scale = available_h / img_h
         new_w, new_h = int(img_w * scale), int(img_h * scale)
         scaled = pygame.transform.smoothscale(surf, (new_w, new_h))
         self._current_surf = scaled
         x = (self.width - new_w) // 2
-        y = (self.height - new_h) // 2
+        y = 0
         self._render_rect = scaled.get_rect(topleft=(x, y))
 
     # ------------------------------------------------------------------
