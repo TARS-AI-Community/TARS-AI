@@ -817,7 +817,7 @@ class STTManager:
     def _run_wake_gates(self, audio_float32: np.ndarray, transcript_verify_fn=None) -> bool:
         """Run post-detection gates synchronously after wake word is detected.
         Returns True if all enabled gates pass (or have no applicable speakers/faces enrolled).
-        transcript_verify_fn: optional callable(audio, rate)->str, only passed for atomik template mode.
+        transcript_verify_fn: optional callable(audio, rate)->str for transcript verification gate.
         """
         speaker_id_mgr, speaker_mode, speaker_threshold, presence_mode, identity_mgr = \
             self._build_wake_gates()
@@ -861,7 +861,7 @@ class STTManager:
             except Exception:
                 pass
 
-        # Transcript verify gate (atomik template mode only)
+        # Transcript verify gate
         if transcript_verify_fn is not None and audio_float32 is not None and len(audio_float32) > 0:
             try:
                 text = transcript_verify_fn(audio_float32, self.MODEL_RATE)
@@ -1355,6 +1355,12 @@ class STTManager:
         except Exception:
             pass
 
+        # Transcript verify gate
+        transcript_verify_fn = None
+        stt_cfg = CONFIG.get('STT', {})
+        if stt_cfg.get('vad_transcript_verify', 'False').strip() == 'True':
+            transcript_verify_fn = self._build_transcript_verify_fn()
+
         RATE = self.MODEL_RATE
         frames_per_chunk = int(RATE * 2.0)
         self.smart_turn_audio_buffer.clear()
@@ -1398,7 +1404,7 @@ class STTManager:
                     queue_message(f"DEBUG: FastRTC Wake Word Transcript: '{transcript}'")
 
                 if self.WAKE_WORD in transcript:
-                    if not self._run_wake_gates(audio_data):
+                    if not self._run_wake_gates(audio_data, transcript_verify_fn=transcript_verify_fn):
                         continue
                     self._handle_wake_detected()
                     return True
@@ -1423,12 +1429,11 @@ class STTManager:
             curve = norm ** 1.6
             threshold = round(max(0.40, min(0.80 - curve * 0.4, 0.80)), 2)
 
-        # Transcript verify: only meaningful for template mode (other engines already use transcription)
+        # Transcript verify gate
         transcript_verify_fn = None
-        if atomik_mode == 'template':
-            stt_cfg = CONFIG.get('STT', {})
-            if stt_cfg.get('vad_transcript_verify', 'False').strip() == 'True':
-                transcript_verify_fn = self._build_transcript_verify_fn()
+        stt_cfg = CONFIG.get('STT', {})
+        if stt_cfg.get('vad_transcript_verify', 'False').strip() == 'True':
+            transcript_verify_fn = self._build_transcript_verify_fn()
 
         detector = WakeWordSystem(self.WAKE_WORD, self.MODEL_RATE, threshold, debug=self.DEBUG, mode=mode)
         detector.createModel()
@@ -1449,6 +1454,12 @@ class STTManager:
             return False
 
         self._fire_and_forget_get(f"http://127.0.0.1:{self._webui_port}/stop_talking")
+
+        # Transcript verify gate
+        transcript_verify_fn = None
+        stt_cfg = CONFIG.get('STT', {})
+        if stt_cfg.get('vad_transcript_verify', 'False').strip() == 'True':
+            transcript_verify_fn = self._build_transcript_verify_fn()
 
         RATE = self.MODEL_RATE
         frames_per_chunk = int(RATE * 2.0)
@@ -1509,7 +1520,7 @@ class STTManager:
                     queue_message(f"DEBUG: Sherpa Wake Word Transcript: '{transcript}'")
 
                 if self.WAKE_WORD in transcript or self._fuzzy_wake_word_match(transcript, self.WAKE_WORD):
-                    if not self._run_wake_gates(transcode_data):
+                    if not self._run_wake_gates(transcode_data, transcript_verify_fn=transcript_verify_fn):
                         # Gate failed — roll buffer forward and keep listening
                         audio_buffer[:overlap_frames] = audio_buffer[-overlap_frames:]
                         buf, _ = mic.read_exact(read_frames)
