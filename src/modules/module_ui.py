@@ -72,7 +72,7 @@ BASE_HEIGHT = 600
 class UIManager(threading.Thread):
     def __init__(self, shutdown_event, battery_module, cpu_temp_module=None, use_camera_module=use_camera_module, show_mouse=show_mouse, 
                  width: int = screenWidth, height: int = screenHeight, rotation_value=rotation, 
-                 background_type='particles'):
+                 background_type='starfield'):
         super().__init__()
         self.shutdown_event = shutdown_event
         self.battery_module = battery_module
@@ -104,7 +104,7 @@ class UIManager(threading.Thread):
         from pathlib import Path
         self.settings_dir = Path(__file__).resolve().parent / "UI"
         self.settings_file = self.settings_dir / "ui_settings.json"
-        self.spectrum_style = 'bars'  
+        self.spectrum_style = 'sinewave'
 
         self._load_ui_settings()  
 
