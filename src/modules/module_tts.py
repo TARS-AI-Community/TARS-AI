@@ -31,6 +31,62 @@ _tts_cancel_event = threading.Event()
 _tts_playing = threading.Event()  # Set while sd.play() is actively outputting audio
 _tts_needs_flush = threading.Event()  # Set after TTS finishes; cleared by STT after flushing
 
+# Output device discovery — resolved once on first playback
+_output_device = None
+_output_device_resolved = False
+
+
+def _resolve_output_device():
+    """Find and cache the audio output device. Runs once, no-op after."""
+    global _output_device, _output_device_resolved
+    if _output_device_resolved:
+        return
+
+    _output_device_resolved = True
+
+    # 1. Try system default
+    try:
+        idx = sd.default.device[1]
+        if idx is not None and idx >= 0:
+            info = sd.query_devices(idx, kind="output")
+            if info.get("max_output_channels", 0) >= 1:
+                _output_device = idx
+                queue_message(f"INFO: Audio output: {info['name']} (device {idx})")
+                return
+    except Exception:
+        pass
+
+    # 2. Scan all devices
+    try:
+        devices = sd.query_devices()
+        for i, dev in enumerate(devices):
+            if dev.get("max_output_channels", 0) >= 1:
+                _output_device = i
+                queue_message(f"INFO: Audio output: {dev['name']} (device {i}, fallback scan)")
+                return
+    except Exception:
+        pass
+
+    # 3. PortAudio C-level fallback
+    try:
+        from sounddevice import _lib
+        pa_idx = _lib.Pa_GetDefaultOutputDevice()
+        if pa_idx >= 0:
+            info = sd.query_devices(pa_idx, kind="output")
+            _output_device = pa_idx
+            queue_message(f"INFO: Audio output: {info['name']} (device {pa_idx}, PortAudio fallback)")
+            return
+    except Exception:
+        pass
+
+    queue_message("WARNING: No audio output device found — using system default")
+    _output_device = None
+
+
+def init_audio_output():
+    """Resolve and log the audio output device at startup."""
+    _resolve_output_device()
+
 
 def stop_tts_playback():
     """Signal TTS to stop immediately. Safe to call from any thread."""
@@ -118,9 +174,10 @@ def update_tts_settings(ttsurl):
         queue_message(f"ERROR: TTS update failed: {e}")
 
 def play_audio_stream(tts_stream, samplerate=22050, channels=1, gain=1.0, normalize=False):
+    _resolve_output_device()
     try:
         target_rate = 16000
-        with sd.OutputStream(samplerate=target_rate, channels=channels, dtype='int16', blocksize=4096) as stream:
+        with sd.OutputStream(samplerate=target_rate, channels=channels, dtype='int16', blocksize=4096, device=_output_device) as stream:
             for chunk in tts_stream:
                 if chunk:
                     audio_data = np.frombuffer(chunk, dtype='int16')
@@ -392,6 +449,7 @@ class SentenceTTSPipeline:
 
 
 async def play_audio_chunks(text, config, is_wakeword=False, emotion=None):
+    _resolve_output_device()
     if not is_wakeword:
         queue_message(f"DEBUG: TTS speaking (direct): {text}")
     _tts_cancel_event.clear()
@@ -471,7 +529,7 @@ async def play_audio_chunks(text, config, is_wakeword=False, emotion=None):
                 gain = 1.5
                 data = np.clip(data * gain, -1.0, 1.0)
 
-                sd.play(data, samplerate)
+                sd.play(data, samplerate, device=_output_device)
                 _tts_playing.set()
 
                 # Log time-to-first-audio on the first chunk
