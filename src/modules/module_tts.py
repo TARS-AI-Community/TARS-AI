@@ -86,9 +86,52 @@ def _resolve_output_device():
     _output_device = None
 
 
+def _check_aec_status():
+    """Check if pipewire AEC is active and both input/output route through it."""
+    try:
+        import subprocess
+        # Check if pipewire echo-cancel module is loaded
+        result = subprocess.run(
+            ["pw-cli", "list-objects"],
+            capture_output=True, text=True, timeout=5
+        )
+        pw_output = result.stdout if result.returncode == 0 else ""
+        has_aec_module = "echo-cancel" in pw_output or "echo_cancel" in pw_output
+
+        if not has_aec_module:
+            # No AEC module loaded — nothing to check
+            return
+
+        # Get input device info
+        from modules.module_mic import get_device_info
+        input_idx, input_rate = get_device_info()
+        input_dev = sd.query_devices(input_idx) if input_idx is not None else {}
+        input_name = input_dev.get("name", "unknown")
+
+        output_dev = sd.query_devices(_output_device) if _output_device is not None else {}
+        output_name = output_dev.get("name", "unknown")
+
+        input_via_pipewire = "pipewire" in input_name.lower() or "echo_cancel" in input_name.lower()
+        output_via_pipewire = "pipewire" in output_name.lower() or "echo_cancel" in output_name.lower()
+
+        if input_via_pipewire and output_via_pipewire:
+            queue_message("INFO: AEC status: ACTIVE (input and output both route through pipewire)")
+        elif not input_via_pipewire and not output_via_pipewire:
+            queue_message("WARNING: AEC status: INACTIVE — pipewire echo-cancel module loaded but neither input nor output routes through pipewire")
+            queue_message(f"WARNING: AEC — input: {input_name}, output: {output_name}")
+        else:
+            broken_side = "input" if not input_via_pipewire else "output"
+            direct_name = input_name if not input_via_pipewire else output_name
+            queue_message(f"WARNING: AEC status: BROKEN — {broken_side} bypasses pipewire ({direct_name})")
+            queue_message(f"WARNING: AEC — input: {input_name}, output: {output_name}")
+    except Exception:
+        pass  # pw-cli not available or other issue — skip silently
+
+
 def init_audio_output():
     """Resolve and log the audio output device at startup."""
     _resolve_output_device()
+    _check_aec_status()
 
 
 def stop_tts_playback():

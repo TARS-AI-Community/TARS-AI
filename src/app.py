@@ -46,7 +46,7 @@ queue_message(f"LOAD: TARS-AI starting on {RASPBERRY_VERSION.upper()}")
 
 # === Import Modules ===
 from modules.module_character import CharacterManager
-from modules.module_tts import update_tts_settings
+from modules.module_tts import update_tts_settings, init_audio_output
 from modules.module_llm import initialize_manager_llm
 from modules.module_skills import initialize_skills
 from modules.module_stt import STTManager
@@ -256,6 +256,8 @@ def init_app():
     """Performs initial setup for the application."""
     queue_message(f"LOAD: Script running from: {BASE_DIR}")
     
+    init_audio_output()
+
     if CONFIG['TTS']['ttsoption'] == 'xttsv2':
         update_tts_settings(CONFIG['TTS']['ttsurl'])
 
