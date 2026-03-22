@@ -41,22 +41,34 @@ _device_lock = threading.Lock()
 
 
 def _find_input_device():
-    """Try to find a working input device. Returns (idx, rate) or raises."""
-    # 1. Try the system default
+    """Try to find a working input device. Returns (idx, rate) or raises.
+
+    Prefers pipewire (routes through AEC if configured) over raw ALSA devices.
+    """
+    devices = sd.query_devices()
+
+    # 1. Prefer pipewire — it routes through echo-cancel if configured
+    for i, dev in enumerate(devices):
+        if dev.get("max_input_channels", 0) < 1:
+            continue
+        name = dev.get("name", "").lower()
+        if "pipewire" in name or "echo_cancel" in name:
+            return i, int(dev.get("default_samplerate", MODEL_RATE))
+
+    # 2. Try the system default
     idx = sd.default.device[0]
     if idx is not None and idx >= 0:
         info = sd.query_devices(idx, kind="input")
         if info.get("max_input_channels", 0) >= 1:
             return idx, int(info.get("default_samplerate", MODEL_RATE))
 
-    # 2. Default failed — scan all devices
-    devices = sd.query_devices()
+    # 3. Default failed — scan all devices
     for i, dev in enumerate(devices):
         if dev.get("max_input_channels", 0) >= 1:
             rate = int(dev.get("default_samplerate", MODEL_RATE))
             return i, rate
 
-    # 3. Last resort: ask PortAudio C-level for the default input
+    # 4. Last resort: ask PortAudio C-level for the default input
     try:
         from sounddevice import _lib
         pa_idx = _lib.Pa_GetDefaultInputDevice()
