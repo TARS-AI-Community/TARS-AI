@@ -124,11 +124,14 @@ except Exception as e:
     queue_message(f"[TTS] Piper module failed to load: {e}")
     pass
 
-try:
-    from modules.module_silero import text_to_speech_with_pipelining_silero as _silero
-    text_to_speech_with_pipelining_silero = _silero
-except ImportError:
-    pass
+from modules.module_config import get_capabilities as _get_caps_tts
+_CAPS_TTS = _get_caps_tts()
+if _CAPS_TTS is None or "silero" in _CAPS_TTS.allowed_tts:
+    try:
+        from modules.module_silero import text_to_speech_with_pipelining_silero as _silero
+        text_to_speech_with_pipelining_silero = _silero
+    except ImportError:
+        pass
 
 try:
     from modules.module_espeak import text_to_speech_with_pipelining_espeak as _espeak
