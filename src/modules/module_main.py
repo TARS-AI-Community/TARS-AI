@@ -433,7 +433,7 @@ def utterance_callback(message):
         # After response finishes, return to LISTENING (waiting for next utterance in session)
         # Bot only goes to STANDBY after timeout in STT manager
         if was_interrupted:
-            time.sleep(0.3)
+            time.sleep(0.1)  # Brief pause; barge-in audio already captured
         set_tars_state(TarsState.LISTENING)
 
         # Push final reply to web UI (only if user is on webui)

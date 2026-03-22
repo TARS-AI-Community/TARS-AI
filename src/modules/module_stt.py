@@ -208,6 +208,9 @@ class STTManager:
         self._bargein_active = False
         self._bargein_thread = None
         self._bargein_tts_data = {'word_list': [], 'words_all': set()}  # shared with monitor thread
+        # Barge-in audio capture (full-duplex) — raw chunks fed as pre-roll into normal pipeline
+        self._bargein_audio_chunks = None
+        self._bargein_ready = threading.Event()
         self._bargein_enabled = CONFIG['STT'].get('enable_bargein', True)
         if isinstance(self._bargein_enabled, str):
             self._bargein_enabled = self._bargein_enabled.lower() in ('true', '1', 'yes')
@@ -592,11 +595,25 @@ class STTManager:
             try:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
-                    queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    mic.flush()
-                    clear_mic_flush()
+                    if not self._bargein_ready.is_set():
+                        queue_message("DEBUG: Flushing mic audio after TTS playback")
+                        mic.flush()
+                        clear_mic_flush()
+                    else:
+                        clear_mic_flush()
             except Exception:
                 pass
+
+            # Inject barge-in audio as pre-seeded speech chunks
+            if self._bargein_ready.is_set():
+                bargein_chunks = self._bargein_audio_chunks or []
+                self._bargein_audio_chunks = None
+                self._bargein_ready.clear()
+                if bargein_chunks:
+                    audio_chunks.extend(bargein_chunks)
+                    speech_frames = len(bargein_chunks)
+                    detected_speech = True
+                    queue_message(f"DEBUG: Injected {len(bargein_chunks)} barge-in chunks as pre-roll ({use_pre_roll=})")
 
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = mic.read(4000)
@@ -1175,14 +1192,27 @@ class STTManager:
             try:
                 from modules.module_tts import needs_mic_flush, clear_mic_flush
                 if needs_mic_flush():
-                    queue_message("DEBUG: Flushing mic audio after TTS playback")
-                    mic.flush()
-                    clear_mic_flush()
-                    # Wait briefly for speaker echo to die down
-                    time.sleep(0.3)
-                    mic.flush()
+                    if not self._bargein_ready.is_set():
+                        queue_message("DEBUG: Flushing mic audio after TTS playback")
+                        mic.flush()
+                        clear_mic_flush()
+                        time.sleep(0.3)
+                        mic.flush()
+                    else:
+                        clear_mic_flush()
             except Exception:
                 pass
+
+            # Inject barge-in audio as pre-seeded speech chunks
+            if self._bargein_ready.is_set():
+                bargein_chunks = self._bargein_audio_chunks or []
+                self._bargein_audio_chunks = None
+                self._bargein_ready.clear()
+                if bargein_chunks:
+                    audio_chunks.extend(bargein_chunks)
+                    speech_frames = len(bargein_chunks)
+                    detected_speech = True
+                    queue_message(f"DEBUG: Injected {len(bargein_chunks)} barge-in chunks as pre-roll into sherpa pipeline")
 
             for _ in range(self.MAX_RECORDING_FRAMES):
                 data, _ = mic.read(4000)
@@ -1847,26 +1877,35 @@ class STTManager:
 
         mode = self._bargein_mode
 
-        if mode == 'voiceprint':
-            # Voiceprint mode needs speaker ID
+        if mode in ('voiceprint', 'hybrid'):
+            # Voiceprint/hybrid mode needs speaker ID
             try:
                 from modules.module_speaker_id import get_speaker_id_manager
                 sid = get_speaker_id_manager()
                 if sid is None or sid._manager is None or sid._manager.num_speakers == 0:
-                    queue_message("WARN: Barge-in voiceprint mode requires Speaker ID with enrolled speakers, falling back to fuzzy")
+                    queue_message(f"WARN: Barge-in {mode} mode requires Speaker ID with enrolled speakers, falling back to fuzzy")
                     mode = 'fuzzy'
             except Exception as e:
                 queue_message(f"WARN: Speaker ID not available ({e}), falling back to fuzzy barge-in")
                 mode = 'fuzzy'
+
+        if mode == 'hybrid' and self.sherpa_recognizer is None and self.fastrtc_model is None:
+            queue_message("WARN: Barge-in hybrid mode requires sherpa-onnx or fastrtc for fuzzy check, falling back to voiceprint")
+            mode = 'voiceprint'
 
         if mode == 'fuzzy' and self.sherpa_recognizer is None and self.fastrtc_model is None:
             queue_message("WARN: Barge-in fuzzy mode requires sherpa-onnx or fastrtc, skipping")
             return
 
         self._bargein_active = True
+        # Clear any stale barge-in audio from previous round
+        self._bargein_audio_chunks = None
+        self._bargein_ready.clear()
 
         if mode == 'voiceprint':
             self._start_bargein_voiceprint()
+        elif mode == 'hybrid':
+            self._start_bargein_hybrid(tts_text)
         else:
             self._start_bargein_fuzzy(tts_text)
 
@@ -1890,6 +1929,7 @@ class STTManager:
         def _monitor():
             bargein_threshold = self.silence_threshold * self._bargein_rms_scale
             audio_buf = []
+            all_speech_chunks = []  # Accumulate ALL speech frames for final transcript
             TRANSCRIBE_EVERY = 8  # Transcribe every ~1s (8 x 125ms frames)
             frame_count = 0
             start_time = time.time()
@@ -1899,6 +1939,7 @@ class STTManager:
             no_novel_streak = 0     # Reset accumulator after 2 empty frames
             ECHO_GRACE_FRAMES = 2   # Skip ~250ms after TTS stops to let echo die
             grace_remaining = 0     # Countdown frames after TTS stops playing
+            bargein_fired = False
 
             try:
                 with ResamplingInputStream(dtype="int16") as mic:
@@ -1909,20 +1950,16 @@ class STTManager:
                         data, _ = mic.read(2000)  # ~125ms frame
                         frame_count += 1
 
-                        # Skip audio collection while TTS is playing to avoid
-                        # picking up the robot's own voice through the mic.
-                        if is_tts_playing():
-                            grace_remaining = ECHO_GRACE_FRAMES
-                            continue
-                        # After TTS stops, skip a few frames for residual echo
-                        if grace_remaining > 0:
-                            grace_remaining -= 1
-                            continue
+                        tts_active = is_tts_playing()
 
-                        # Collect audio with speech energy (only when TTS is silent)
+                        # Collect audio with speech energy
                         rms = self._compute_rms_fast(data)
                         if rms and rms > bargein_threshold:
                             audio_buf.append(data)
+                            # Only save for transcript when TTS is silent —
+                            # during playback, AEC residual contaminates the audio
+                            if not tts_active:
+                                all_speech_chunks.append(data)
 
                         # Periodically transcribe what we've collected
                         if frame_count % TRANSCRIBE_EVERY == 0:
@@ -1960,7 +1997,14 @@ class STTManager:
                                     if self.DEBUG:
                                         queue_message(f"DEBUG: Barge-in detected! Heard: '{transcript}' (novel: {accumulated_novel})")
                                     stop_tts_playback()
+                                    bargein_fired = True
                                     break
+
+                    # Save accumulated speech audio for the normal pipeline to use as pre-roll
+                    if bargein_fired and all_speech_chunks:
+                        self._bargein_audio_chunks = all_speech_chunks
+                        self._bargein_ready.set()
+
             except Exception as e:
                 queue_message(f"WARN: Barge-in monitor error: {e}")
 
@@ -1975,12 +2019,14 @@ class STTManager:
         def _monitor():
             bargein_threshold = self.silence_threshold * self._bargein_rms_scale
             speech_buf = []       # Rolling buffer of speech frames (kept across checks)
+            all_speech_chunks = []  # Accumulate ALL speech frames for final transcript
             MAX_BUF = 16          # Keep last ~2s of speech frames (16 x 125ms)
             CHECK_EVERY = 4       # Check every ~0.5s (4 x 125ms)
             MIN_SPEECH = 8        # Need >=8 speech frames (~1s) for usable embedding
             frame_count = 0
             ECHO_GRACE_FRAMES = 2   # Skip ~250ms after TTS stops to let echo die
             grace_remaining = 0     # Countdown frames after TTS stops playing
+            bargein_fired = False
 
             try:
                 with ResamplingInputStream(dtype="int16") as mic:
@@ -1991,18 +2037,15 @@ class STTManager:
                         data, _ = mic.read(2000)  # ~125ms frame
                         frame_count += 1
 
-                        # Skip audio while TTS is playing to avoid self-hearing
-                        if is_tts_playing():
-                            grace_remaining = ECHO_GRACE_FRAMES
-                            continue
-                        if grace_remaining > 0:
-                            grace_remaining -= 1
-                            continue
+                        tts_active = is_tts_playing()
 
-                        # Collect frames with speech energy into rolling buffer
+                        # Collect frames with speech energy
                         rms = self._compute_rms_fast(data)
                         if rms and rms > bargein_threshold:
                             speech_buf.append(data)
+                            # Only save for transcript when TTS is silent
+                            if not tts_active:
+                                all_speech_chunks.append(data)
                             if len(speech_buf) > MAX_BUF:
                                 speech_buf = speech_buf[-MAX_BUF:]
 
@@ -2057,9 +2100,170 @@ class STTManager:
                                 if self.DEBUG:
                                     queue_message(f"DEBUG: Barge-in detected! Voice matched '{name}' (confidence: {confidence:.2f}, margin: {margin:.3f})")
                                 stop_tts_playback()
+                                bargein_fired = True
                                 break
+
+                    # Save accumulated speech audio for the normal pipeline to use as pre-roll
+                    if bargein_fired and all_speech_chunks:
+                        self._bargein_audio_chunks = all_speech_chunks
+                        self._bargein_ready.set()
+
             except Exception as e:
                 queue_message(f"WARN: Barge-in voiceprint monitor error: {e}")
+
+        self._bargein_thread = threading.Thread(target=_monitor, daemon=True)
+        self._bargein_thread.start()
+
+    def _start_bargein_hybrid(self, tts_text):
+        """Hybrid barge-in: voiceprint + fuzzy word matching.
+
+        Combines both checks — requires voice match AND novel words for
+        robust detection that filters both AEC residual and background noise.
+        High-confidence voiceprint alone can also trigger (clear user speech).
+        """
+        from modules.module_tts import stop_tts_playback, is_tts_playing
+        from modules.module_speaker_id import get_speaker_id_manager
+
+        # Build TTS word list for fuzzy matching
+        if tts_text:
+            cleaned = _NON_ALNUM_SPACE_RE.sub('', tts_text.lower())
+            self._bargein_tts_data = {
+                'word_list': cleaned.split(),
+                'words_all': set(cleaned.split()),
+            }
+        else:
+            self._bargein_tts_data = {'word_list': [], 'words_all': set()}
+
+        tts_data = self._bargein_tts_data
+
+        def _monitor():
+            bargein_threshold = self.silence_threshold * self._bargein_rms_scale
+            speech_buf = []       # Rolling buffer for voiceprint
+            audio_buf = []        # Buffer for fuzzy transcription
+            all_speech_chunks = []
+            MAX_BUF = 16
+            CHECK_EVERY = 4       # Voiceprint check every ~0.5s
+            TRANSCRIBE_EVERY = 8  # Fuzzy transcribe every ~1s
+            MIN_SPEECH = 8
+            frame_count = 0
+            start_time = time.time()
+            WORDS_PER_SEC = 3.0
+            WINDOW_PAD = 4
+            bargein_fired = False
+
+            # Track both signals
+            voiceprint_matched = False
+            voiceprint_confidence = 0.0
+            fuzzy_novel_count = 0
+            accumulated_novel = []
+            no_novel_streak = 0
+
+            # High-confidence voiceprint threshold — triggers alone without fuzzy
+            HIGH_CONFIDENCE = 0.85
+
+            try:
+                with ResamplingInputStream(dtype="int16") as mic:
+                    mic.flush()
+
+                    while self._bargein_active:
+                        data, _ = mic.read(2000)
+                        frame_count += 1
+                        tts_active = is_tts_playing()
+
+                        rms = self._compute_rms_fast(data)
+                        if rms and rms > bargein_threshold:
+                            speech_buf.append(data)
+                            audio_buf.append(data)
+                            if not tts_active:
+                                all_speech_chunks.append(data)
+                            if len(speech_buf) > MAX_BUF:
+                                speech_buf = speech_buf[-MAX_BUF:]
+
+                        # --- Voiceprint check ---
+                        if frame_count % CHECK_EVERY == 0 and len(speech_buf) >= MIN_SPEECH:
+                            audio_int16 = np.concatenate(speech_buf[-MAX_BUF:])
+                            audio_float32 = audio_int16.astype(np.float32).flatten() / 32768.0
+                            sid = get_speaker_id_manager()
+                            if sid:
+                                embedding = sid.extract_embedding(audio_float32, 16000)
+                                if embedding is not None:
+                                    name, confidence = sid.identify_speaker(embedding, skip_margin=True)
+                                    if name and name.startswith("Unknown_"):
+                                        name = ""
+                                        confidence = 0.0
+
+                                    margin = 1.0
+                                    if name and confidence > 0:
+                                        enrolled = sid.get_enrolled_speakers()
+                                        if len(enrolled) > 1:
+                                            runner_up = max(
+                                                (sid._compute_best_score(embedding, spk) for spk in enrolled if spk != name),
+                                                default=0.0
+                                            )
+                                            margin = confidence - runner_up
+
+                                    voiceprint_matched = bool(name and confidence >= self._bargein_voiceprint_threshold and margin > 0.05)
+                                    voiceprint_confidence = confidence if name else 0.0
+
+                                    if self.DEBUG and name and confidence > 0.01:
+                                        queue_message(f"DEBUG: Hybrid voiceprint: speaker='{name}' conf={confidence:.2f} thr={self._bargein_voiceprint_threshold:.2f} margin={margin:.3f}")
+
+                                    # High-confidence voiceprint alone triggers immediately
+                                    if voiceprint_matched and confidence >= HIGH_CONFIDENCE:
+                                        if self.DEBUG:
+                                            queue_message(f"DEBUG: Hybrid barge-in (voiceprint only)! '{name}' conf={confidence:.2f}")
+                                        stop_tts_playback()
+                                        bargein_fired = True
+                                        break
+
+                        # --- Fuzzy word check ---
+                        if frame_count % TRANSCRIBE_EVERY == 0 and len(audio_buf) >= 2:
+                            transcript = self._bargein_transcribe(audio_buf)
+                            buf_len = len(audio_buf)
+                            audio_buf.clear()
+                            if transcript:
+                                tts_word_list = tts_data['word_list']
+                                tts_words_all = tts_data['words_all']
+                                elapsed = time.time() - start_time
+                                pos = int(elapsed * WORDS_PER_SEC)
+                                win_start = max(0, pos - WINDOW_PAD)
+                                win_end = min(len(tts_word_list), pos + WINDOW_PAD + 1)
+                                window_words = set(tts_word_list[win_start:win_end])
+
+                                novel = self._find_novel_words(transcript, tts_words_all, window_words)
+                                if novel:
+                                    accumulated_novel.extend(novel)
+                                    no_novel_streak = 0
+                                else:
+                                    no_novel_streak += 1
+                                    if no_novel_streak >= 2:
+                                        accumulated_novel.clear()
+
+                                if self.DEBUG:
+                                    queue_message(f"DEBUG: Hybrid fuzzy: '{transcript}' novel={novel} accumulated={accumulated_novel} vp={voiceprint_matched} (frames={buf_len})")
+
+                                # Combined trigger: voiceprint match + novel words
+                                if voiceprint_matched and len(accumulated_novel) >= 1:
+                                    if self.DEBUG:
+                                        queue_message(f"DEBUG: Hybrid barge-in (voice+words)! novel={accumulated_novel} conf={voiceprint_confidence:.2f}")
+                                    stop_tts_playback()
+                                    bargein_fired = True
+                                    break
+
+                                # Fuzzy alone with enough novel words (fallback)
+                                if len(accumulated_novel) >= self._bargein_min_novel:
+                                    if self.DEBUG:
+                                        queue_message(f"DEBUG: Hybrid barge-in (fuzzy only)! novel={accumulated_novel}")
+                                    stop_tts_playback()
+                                    bargein_fired = True
+                                    break
+
+                    if bargein_fired and all_speech_chunks:
+                        self._bargein_audio_chunks = all_speech_chunks
+                        self._bargein_ready.set()
+
+            except Exception as e:
+                queue_message(f"WARN: Barge-in hybrid monitor error: {e}")
 
         self._bargein_thread = threading.Thread(target=_monitor, daemon=True)
         self._bargein_thread.start()
@@ -2074,11 +2278,17 @@ class STTManager:
                 self.sherpa_recognizer.decode_stream(s)
                 transcript = _SENSEVOICE_TAG_RE.sub('', s.result.text.strip()).strip()
                 del s
-                return transcript or None
             elif self.fastrtc_model is not None:
                 transcript = self.fastrtc_model.stt((16000, audio_data)).strip()
-                return transcript or None
-            return None
+            else:
+                return None
+            if not transcript:
+                return None
+            # Filter out non-Latin hallucinations (SenseVoiceTiny outputs CJK on noise)
+            ascii_chars = sum(1 for c in transcript if c.isascii())
+            if ascii_chars < len(transcript) * 0.5:
+                return None
+            return transcript
         except Exception as e:
             queue_message(f"WARN: Barge-in transcribe error: {e}")
             return None
@@ -2152,7 +2362,11 @@ class STTManager:
         """Stop the barge-in monitor thread and wait for mic stream to close."""
         self._bargein_active = False
         if self._bargein_thread is not None:
-            self._bargein_thread.join(timeout=3)
+            self._bargein_thread.join(timeout=5)
             if self._bargein_thread.is_alive():
                 queue_message("WARN: Barge-in monitor thread did not exit cleanly")
             self._bargein_thread = None
+        # If no barge-in fired, clear state so normal pipeline isn't confused
+        if not self._bargein_ready.is_set():
+            self._bargein_audio_chunks = None
+            self._bargein_ready.clear()

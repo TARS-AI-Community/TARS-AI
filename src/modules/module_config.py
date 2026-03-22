@@ -830,9 +830,9 @@ CONFIG_METADATA = {
         'bargein_mode': {
             'group': 'bargein',
             'label': 'Barge-In Mode',
-            'options': ['fuzzy', 'voiceprint'],
+            'options': ['fuzzy', 'voiceprint', 'hybrid'],
             'depends_on': [{'field': 'enable_bargein', 'values': ['True', 'true']}],
-            'description': '"fuzzy" transcribes mic audio and checks if the words differ from what TARS is saying — works without any setup. "voiceprint" checks if the interrupting voice matches an enrolled speaker — best in noisy rooms with echo. Requires Speaker ID and at least one enrolled speaker.'
+            'description': '"fuzzy" transcribes mic audio and checks if the words differ from what TARS is saying — works without any setup. "voiceprint" checks if the interrupting voice matches an enrolled speaker — best with AEC. "hybrid" combines both — requires voice match AND novel words, most robust against false triggers. Requires Speaker ID for voiceprint/hybrid.'
         },
         'bargein_sensitivity': {
             'group': 'bargein',
