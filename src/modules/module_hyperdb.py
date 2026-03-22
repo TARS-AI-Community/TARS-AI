@@ -52,7 +52,9 @@ def _get_local_model():
 
 # Eagerly load and pre-warm the embedding model at import time so the first
 # real query doesn't pay the ~2s cold-start cost.
-if _EMBEDDING_SOURCE == 'local':
+from modules.module_config import get_capabilities as _get_caps_rag
+_CAPS_RAG = _get_caps_rag()
+if (_CAPS_RAG is None or _CAPS_RAG.can_use_embeddings) and _EMBEDDING_SOURCE == 'local':
     import threading as _threading
     def _eager_load_embedding():
         model = _get_local_model()

@@ -38,11 +38,12 @@ memory_manager = None
 _http_session = requests.Session()
 
 process_camera_image = None
-try:
-    from modules.module_vision import process_camera_image as _pci
-    process_camera_image = _pci
-except ImportError:
-    pass
+if CAPABILITIES is None or CAPABILITIES.can_use_vision:
+    try:
+        from modules.module_vision import process_camera_image as _pci
+        process_camera_image = _pci
+    except ImportError:
+        pass
 
 
 # Callback invoked with (text_chunk, is_first) as reply text streams from LLM.
