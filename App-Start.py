@@ -670,10 +670,10 @@ def create_touch_menu():
             stop_tars_ai()
             time.sleep(0.1)
             if ui_enabled:
-                print("[AUTO.LAUNCH] UI enabled — starting fullscreen mode.")
+                print("[AUTO.LAUNCH] UI enabled - starting fullscreen mode.")
                 run_tars_ai_fullscreen()
             else:
-                print("[AUTO.LAUNCH] UI disabled — starting terminal mode.")
+                print("[AUTO.LAUNCH] UI disabled - starting terminal mode.")
                 run_tars_ai_normal()
             return
 
