@@ -104,6 +104,8 @@ def get_device_info(retries=4, backoff=1.0):
 
                 idx, rate = _find_input_device()
                 _device_info = (idx, rate)
+                dev_name = sd.query_devices(idx).get("name", "unknown") if idx is not None else "system default"
+                print(f"INFO: Audio input: {dev_name} (device {idx}, {rate} Hz)")
                 return _device_info
             except Exception as e:
                 if attempt < retries - 1:
