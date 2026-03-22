@@ -46,7 +46,7 @@ OpenAI = None
 WakeWordSystem = None
 sherpa_onnx = None
 
-# Torch and related (Pi5 only for Silero VAD)
+# Torch and related (requires can_use_embeddings — Pi5 only)
 if CAPABILITIES is None or CAPABILITIES.can_use_embeddings:
     try:
         import torch as _torch

@@ -4,10 +4,11 @@ import threading
 from io import BytesIO
 import requests
 
-from modules.module_config import load_config, get_api_key
+from modules.module_config import load_config, get_api_key, get_capabilities
 from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
+_CAPS_VISION = get_capabilities()
 
 # Conditional imports for heavy dependencies
 Image = None
@@ -23,18 +24,20 @@ try:
 except ImportError:
     pass
 
-try:
-    from transformers import BlipProcessor as _BlipProcessor, BlipForConditionalGeneration as _BlipModel
-    BlipProcessor = _BlipProcessor
-    BlipForConditionalGeneration = _BlipModel
-except ImportError:
-    pass
+# torch / transformers only on devices that support vision (Pi5)
+if _CAPS_VISION is None or _CAPS_VISION.can_use_vision:
+    try:
+        from transformers import BlipProcessor as _BlipProcessor, BlipForConditionalGeneration as _BlipModel
+        BlipProcessor = _BlipProcessor
+        BlipForConditionalGeneration = _BlipModel
+    except ImportError:
+        pass
 
-try:
-    import torch as _torch
-    torch = _torch
-except ImportError:
-    pass
+    try:
+        import torch as _torch
+        torch = _torch
+    except ImportError:
+        pass
 
 try:
     import openai as _openai

@@ -55,14 +55,20 @@ from modules.module_messageQue import queue_message, get_recent_logs
 from modules.module_servoctl import *
 from modules.module_movement_registry import get_names, get_names_by_type, LEGS_ONLY, HAS_ARMS, MOVEMENTS
 
-# Vision is optional — only available if enabled and dependencies are installed
-try:
-    from modules.module_vision import process_image
-    VISION_AVAILABLE = True
-except ImportError:
+# Vision is optional — only available if device supports it and dependencies are installed
+from modules.module_config import get_capabilities as _get_caps_ui
+_CAPS_UI = _get_caps_ui()
+if _CAPS_UI is None or _CAPS_UI.can_use_vision:
+    try:
+        from modules.module_vision import process_image
+        VISION_AVAILABLE = True
+    except ImportError:
+        VISION_AVAILABLE = False
+        process_image = None
+        queue_message("ChatUI: Vision module not available — image captioning disabled")
+else:
     VISION_AVAILABLE = False
     process_image = None
-    queue_message("ChatUI: Vision module not available — image captioning disabled")
 
 # WiFi manager — background-initialised to avoid blocking boot
 try:
