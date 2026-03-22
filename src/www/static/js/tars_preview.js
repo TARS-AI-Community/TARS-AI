@@ -1,9 +1,32 @@
 // ── TARS 3D Preview for Builder ──────────────────────────────────────────────
+//
+// Physical model:
+//   TARS is 3 flat planks (right leg, body, left leg) side by side.
+//   The HEIGHT servos slide legs up/down relative to the body.
+//   The SWING servos rotate legs forward/back around the top axle.
+//   The body is PASSIVE — sandwiched between the legs, no motors.
+//
+//   Geometry (front view, neutral):
+//
+//       ┌─┐ ┌───┐ ┌─┐
+//       │R│ │   │ │L│     ← top axle (pivot for fwd/back swing)
+//       │ │ │ B │ │ │     ← height servos slide legs up/down
+//       │ │ │   │ │ │
+//       └─┘ └───┘ └─┘     ← feet on ground
+//      ─────────────────   ← ground (y = 0)
+//
+//   3D model approach:
+//     - Legs slide DOWN relative to body when height increases
+//     - Height difference tilts the entire assembly (tarsGroup rotation)
+//     - Swing rotates each leg around its top pivot (rotation.x)
+//     - Body forward/back swing = damped pendulum physics (gravity + inertia)
+//     - Ground constraint prevents any segment from clipping below y=0
+//
 (function () {
   'use strict';
 
-  var scene, camera, renderer, controls;
-  var tarsGroup, segments; // segments = [leftLeg, body, rightLeg]
+  var scene, camera, renderer;
+  var tarsGroup, segments; // segments = [rightLeg, body, leftLeg]
   var animationFrameId = null;
   var previewPlaying = false;
   var initialized = false;
@@ -13,7 +36,17 @@
   var SEG_DEPTH = 2.1;
   var GAP = 0.15;
 
-  // ── Build TARS geometry ────────────────────────────────────────────────────
+  // ── Physics state ──────────────────────────────────────────────────────
+  // The body is a damped pendulum hanging from the axle.
+  // When legs move, the axle shifts; the body swings to follow with delay.
+  var bodySwingAngle = 0;     // current body forward/back angle (radians)
+  var bodySwingVel = 0;       // angular velocity (rad/s)
+  var PENDULUM_LEN = 3.5;    // CoM distance below axle
+  var CONTACT_K = 15.0;      // spring stiffness toward leg angle
+  var SWING_DAMPING = 5.0;   // friction
+  var lastFrameTime = 0;
+
+  // ── Textures ───────────────────────────────────────────────────────────
 
   function createOuterTexture() {
     var canvas = document.createElement('canvas');
@@ -81,6 +114,10 @@
     return new THREE.CanvasTexture(canvas);
   }
 
+  // ── Build TARS geometry ────────────────────────────────────────────────
+  // Each segment's pivot is at the TOP of the mesh (the axle point).
+  // The mesh hangs downward from the pivot.
+
   function buildTars() {
     tarsGroup = new THREE.Group();
     segments = [];
@@ -92,6 +129,9 @@
     var legW = SEG_WIDTH;
     var bodyW = SEG_WIDTH * 2 + GAP;
 
+    // segments[0] = right leg (negative X)
+    // segments[1] = body (center)
+    // segments[2] = left leg (positive X)
     var configs = [
       { width: legW, mat: outerMat, x: -(bodyW / 2 + legW / 2 + GAP) },
       { width: bodyW, mat: centerMat, x: 0 },
@@ -103,10 +143,10 @@
       var mesh = new THREE.Mesh(geo, cfg.mat);
       mesh.castShadow = true;
 
-      var pivotY = SEG_HEIGHT - 0.2;
+      // Pivot at the very top of the mesh
       var pivot = new THREE.Group();
-      pivot.position.set(cfg.x, pivotY, 0);
-      mesh.position.y = (SEG_HEIGHT / 2) - pivotY;
+      pivot.position.set(cfg.x, SEG_HEIGHT, 0); // pivot at top
+      mesh.position.y = -SEG_HEIGHT / 2;         // mesh center hangs below pivot
       pivot.add(mesh);
 
       // Screen on center body
@@ -122,13 +162,13 @@
       }
 
       tarsGroup.add(pivot);
-      segments.push({ pivot: pivot, mesh: mesh, baseY: pivotY });
+      segments.push({ pivot: pivot, mesh: mesh });
     });
 
     scene.add(tarsGroup);
   }
 
-  // ── Scene setup ────────────────────────────────────────────────────────────
+  // ── Scene setup ────────────────────────────────────────────────────────
 
   function initScene() {
     if (initialized) return;
@@ -150,38 +190,31 @@
     renderer.shadowMap.enabled = true;
     container.appendChild(renderer.domElement);
 
-    // Lights
     scene.add(new THREE.AmbientLight(0xffffff, 0.4));
     var dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
     dirLight.position.set(5, 10, 5);
     dirLight.castShadow = true;
     scene.add(dirLight);
-    var rimLight = new THREE.PointLight(0x00aaff, 0.4, 20);
-    rimLight.position.set(-4, 6, -3);
-    scene.add(rimLight);
+    scene.add(new THREE.PointLight(0x00aaff, 0.4, 20).translateX(-4).translateY(6).translateZ(-3));
 
-    // Ground plane
-    var groundGeo = new THREE.PlaneGeometry(20, 20);
-    var groundMat = new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.9, metalness: 0.1 });
-    var ground = new THREE.Mesh(groundGeo, groundMat);
+    // Ground
+    var ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 20),
+      new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.9, metalness: 0.1 })
+    );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // Grid helper for reference
     var grid = new THREE.GridHelper(20, 20, 0x222233, 0x151522);
     grid.position.y = 0.01;
     scene.add(grid);
 
     buildTars();
-
-    // Orbit controls (manual since we can't use ES module import)
     setupOrbitControls(container);
-
     initialized = true;
     startRenderLoop();
 
-    // Resize observer
     var ro = new ResizeObserver(function () {
       var cw = container.clientWidth;
       var ch = container.clientHeight;
@@ -194,7 +227,7 @@
     ro.observe(container);
   }
 
-  // ── Simple orbit controls (no ES module dependency) ────────────────────────
+  // ── Orbit controls ────────────────────────────────────────────────────
 
   function setupOrbitControls(container) {
     var isDragging = false;
@@ -232,13 +265,11 @@
         updateCamera();
       }
       if (isPanning) {
-        var panSpeed = 0.02;
         var right = new THREE.Vector3();
-        var up = new THREE.Vector3(0, 1, 0);
         camera.getWorldDirection(right);
-        right.cross(up).normalize();
-        target.addScaledVector(right, -dx * panSpeed);
-        target.y += dy * panSpeed;
+        right.cross(new THREE.Vector3(0, 1, 0)).normalize();
+        target.addScaledVector(right, -dx * 0.02);
+        target.y += dy * 0.02;
         updateCamera();
       }
     });
@@ -250,7 +281,7 @@
       e.preventDefault();
     }, { passive: false });
 
-    // Touch support
+    // Touch
     var touchStartDist = 0;
     container.addEventListener('touchstart', function (e) {
       if (e.touches.length === 1) {
@@ -288,72 +319,189 @@
     container.addEventListener('touchend', function () { isDragging = false; });
   }
 
-  // ── Render loop ────────────────────────────────────────────────────────────
+  // ── Render loop with physics ───────────────────────────────────────────
 
   function startRenderLoop() {
-    function loop() {
+    lastFrameTime = performance.now();
+    function loop(now) {
       animationFrameId = requestAnimationFrame(loop);
+      if (!segments || segments.length < 3) {
+        if (renderer && scene && camera) renderer.render(scene, camera);
+        return;
+      }
+
+      var dt = Math.min((now - lastFrameTime) / 1000, 0.05);
+      lastFrameTime = now;
+
+      // ── Body pendulum physics ────────────────────────────────────────
+      // The body hangs from the axle.  The "target" angle is where
+      // the legs are pushing — the body swings toward it with inertia.
+      //
+      // Forces:
+      //   1. Gravity → pulls body toward vertical (angle = 0)
+      //   2. Leg contact → spring toward the average leg swing angle
+      //   3. Damping → friction
+      var rSwing = segments[0].targetSwing || 0;
+      var lSwing = segments[2].targetSwing || 0;
+      var legAngle = (rSwing + lSwing) / 2;
+
+      var gravityTorque = -(9.8 / PENDULUM_LEN) * Math.sin(bodySwingAngle);
+      var contactTorque = -CONTACT_K * (bodySwingAngle - legAngle);
+      var dampingTorque = -SWING_DAMPING * bodySwingVel;
+
+      bodySwingVel += (gravityTorque + contactTorque + dampingTorque) * dt;
+      bodySwingAngle += bodySwingVel * dt;
+
+      // Body can overshoot legs slightly but not wildly
+      var maxOvershoot = 0.15;
+      var lo = Math.min(0, legAngle) - maxOvershoot;
+      var hi = Math.max(0, legAngle) + maxOvershoot;
+      if (bodySwingAngle < lo) { bodySwingAngle = lo; bodySwingVel *= -0.2; }
+      if (bodySwingAngle > hi) { bodySwingAngle = hi; bodySwingVel *= -0.2; }
+
+      // Apply body rotation
+      segments[1].pivot.rotation.x = bodySwingAngle;
+
+      // ── Ground constraint ─────────────────────────────────────────
+      // applyPose sets tarsGroup position/rotation for height+tilt.
+      // Check if swing rotation pushes any foot below ground and
+      // add extra lift if needed (don't overwrite, just add).
+      var lowestWorld = Infinity;
+      for (var si = 0; si < 3; si++) {
+        var seg = segments[si].pivot;
+        var swAngle = seg.rotation.x;
+        // Local bottom Y (before tarsGroup transform)
+        var localBottomY = seg.position.y - SEG_HEIGHT * Math.cos(swAngle);
+        // Transform to world: rotate by tarsGroup.rotation.z, then translate
+        var localX = seg.position.x;
+        var worldY = tarsGroup.position.y
+          + localX * Math.sin(tarsGroup.rotation.z)
+          + localBottomY * Math.cos(tarsGroup.rotation.z);
+        if (worldY < lowestWorld) lowestWorld = worldY;
+      }
+      if (lowestWorld < 0) {
+        tarsGroup.position.y -= lowestWorld;
+      }
+
       if (renderer && scene && camera) renderer.render(scene, camera);
     }
-    loop();
+    loop(performance.now());
   }
 
-  // ── Map builder step values to TARS segment poses ──────────────────────────
-  // Builder values are 1-100, 50 = neutral.
-  // left_height/right_height: vertical offset of legs
-  // left_leg/right_leg: forward/back rotation of legs
+  // ── Map builder step values to TARS poses ──────────────────────────────
+  // Builder values: 1-100, 50 = neutral.
+  //   height 1 = fully retracted (up), 100 = fully extended (down/push)
+  //   leg    1 = fully forward,        100 = fully backward
 
   function mapStepToPose(step) {
-    var lhNorm = ((step.left_height || 50) - 50) / 50;   // -1 to 1
-    var rhNorm = ((step.right_height || 50) - 50) / 50;
-    var llNorm = ((step.left_leg || 50) - 50) / 50;
-    var rlNorm = ((step.right_leg || 50) - 50) / 50;
-
-    var maxHeight = 2.5;  // max vertical offset
-    var maxAngle = 0.5;   // max rotation in radians
+    // Normalize to -1..+1 range
+    var lh = ((step.left_height  || 50) - 50) / 50;
+    var rh = ((step.right_height || 50) - 50) / 50;
+    var ll = ((step.left_leg     || 50) - 50) / 50;
+    var rl = ((step.right_leg    || 50) - 50) / 50;
 
     return {
-      leftY: lhNorm * maxHeight,
-      rightY: rhNorm * maxHeight,
-      leftRot: llNorm * maxAngle,
-      rightRot: rlNorm * maxAngle,
-      bodyTilt: (lhNorm - rhNorm) * 0.1 // slight body tilt from uneven heights
+      leftHeight:  lh * 2.5,   // leg extension offset (units)
+      rightHeight: rh * 2.5,
+      leftSwing:   ll * 0.5,   // leg rotation (radians)
+      rightSwing:  rl * 0.5
     };
   }
 
+  // ── Apply a pose to the 3D model ──────────────────────────────────────
+  //
+  // Pose has 4 values (from builder sliders, normalized):
+  //   leftHeight / rightHeight  — leg extension (units, 0 = neutral)
+  //   leftSwing  / rightSwing   — leg fwd/back rotation (radians)
+  //
+  // What this function does:
+  //   1. Slides each leg's pivot DOWN by its height offset (body stays)
+  //   2. Applies swing rotation to each leg (rotation.x)
+  //   3. Tilts the entire tarsGroup based on height difference
+  //   4. Positions tarsGroup so the grounded foot stays at y=0
+  //   5. Body rotation.x is set by the physics loop (not here)
+
   function applyPose(pose) {
     if (!segments || segments.length < 3) return;
-    // Left leg
-    segments[0].pivot.position.y = segments[0].baseY + pose.leftY;
-    segments[0].pivot.rotation.x = pose.leftRot;
-    // Body
-    segments[1].pivot.rotation.z = pose.bodyTilt;
-    // Right leg
-    segments[2].pivot.position.y = segments[2].baseY + pose.rightY;
-    segments[2].pivot.rotation.x = pose.rightRot;
+
+    // ── Segment positioning ─────────────────────────────────────
+    // Legs slide DOWN relative to body (height extension).
+    // tarsGroup handles assembly tilt + lift so segments stay
+    // flush and don't clip through each other.
+
+    var baseY = SEG_HEIGHT;
+
+    // Legs SLIDE relative to body when height changes.
+    // Extended leg moves DOWN, body stays at base height.
+    segments[0].pivot.position.y = baseY - pose.rightHeight;  // right leg slides down
+    segments[2].pivot.position.y = baseY - pose.leftHeight;   // left leg slides down
+    segments[1].pivot.position.y = baseY;                     // body stays at axle
+
+    // No per-segment side tilt (they're sandwiched)
+    segments[1].pivot.rotation.z = 0;
+
+    // Leg swing
+    segments[0].pivot.rotation.x = pose.rightSwing;
+    segments[0].targetSwing = pose.rightSwing;
+    segments[2].pivot.rotation.x = pose.leftSwing;
+    segments[2].targetSwing = pose.leftSwing;
+
+    // ── Height → tarsGroup lift + tilt ───────────────────────────
+    // Both legs extending equally → pure lift (body rises)
+    // One leg extending more → assembly tips toward the shorter side
+    var lh = pose.leftHeight;
+    var rh = pose.rightHeight;
+
+    // The shorter leg's foot stays on ground.
+    // The common extension lifts the whole robot.
+    var commonLift = Math.min(lh, rh);
+    var heightDiff = rh - lh;  // positive = right (neg-X) extends more
+
+    // Tilt: rotate entire assembly around the grounded foot
+    // Right leg at negative-X, left leg at positive-X
+    var rightX = segments[0].pivot.position.x;  // negative
+    var leftX  = segments[2].pivot.position.x;  // positive
+    var span = leftX - rightX;  // total foot span
+
+    // Tilt angle: negative rotation.z → right side (neg-X) goes UP
+    var tiltAngle = -Math.atan2(heightDiff, span);
+    tarsGroup.rotation.z = tiltAngle;
+
+    // Position tarsGroup so the grounded foot stays at y = 0
+    // The grounded foot is on the shorter-leg side
+    var groundedX = (heightDiff >= 0) ? leftX : rightX;
+    // After rotation, the grounded foot's Y = groundedX * sin(tiltAngle)
+    // Compensate so it lands at y = 0, plus add common lift
+    tarsGroup.position.y = commonLift - groundedX * Math.sin(tiltAngle);
+    tarsGroup.position.x = groundedX * (1 - Math.cos(tiltAngle));
+
+    // rotation.x set by physics in render loop
   }
 
   function resetPose() {
-    applyPose({ leftY: 0, rightY: 0, leftRot: 0, rightRot: 0, bodyTilt: 0 });
+    bodySwingAngle = 0;
+    bodySwingVel = 0;
+    applyPose({ leftHeight: 0, rightHeight: 0, leftSwing: 0, rightSwing: 0 });
+    if (tarsGroup) {
+      tarsGroup.position.set(0, 0, 0);
+      tarsGroup.rotation.set(0, 0, 0);
+    }
   }
 
-  // ── Preview animation ─────────────────────────────────────────────────────
+  // ── Preview animation ─────────────────────────────────────────────────
 
   var animSteps = [];
   var animIndex = 0;
-  var animProgress = 0;
   var animTimerId = null;
 
   function playPreview() {
     if (!window._bldGetSteps) return;
     var rawSteps = window._bldGetSteps();
-    // Filter to position steps only (movement steps can't be previewed)
     animSteps = rawSteps.filter(function (s) { return !s.movement; });
     if (animSteps.length === 0) return;
 
     previewPlaying = true;
     animIndex = 0;
-    animProgress = 0;
 
     var playBtn = document.getElementById('bldPreview');
     var stopBtn = document.getElementById('bldPreviewStop');
@@ -384,16 +532,14 @@
     var targetPose = mapStepToPose(step);
     var speed = step.speed || 0.85;
     var holdTime = (step.hold_time || 0) * 1000;
-    var transitionMs = (1.1 - speed) * 800 + 100; // faster speed = shorter transition
+    var transitionMs = (1.1 - speed) * 800 + 100;
 
-    // Get current pose from segments
-    var startPose = {
-      leftY: segments[0].pivot.position.y - segments[0].baseY,
-      rightY: segments[2].pivot.position.y - segments[2].baseY,
-      leftRot: segments[0].pivot.rotation.x,
-      rightRot: segments[2].pivot.rotation.x,
-      bodyTilt: segments[1].pivot.rotation.z
-    };
+    var startPose;
+    if (animIndex > 0) {
+      startPose = mapStepToPose(animSteps[animIndex - 1]);
+    } else {
+      startPose = { leftHeight: 0, rightHeight: 0, leftSwing: 0, rightSwing: 0 };
+    }
 
     var startTime = performance.now();
 
@@ -401,21 +547,18 @@
       if (!previewPlaying) return;
       var elapsed = performance.now() - startTime;
       var t = Math.min(elapsed / transitionMs, 1);
-      // Smooth ease in-out
       t = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
       applyPose({
-        leftY: startPose.leftY + (targetPose.leftY - startPose.leftY) * t,
-        rightY: startPose.rightY + (targetPose.rightY - startPose.rightY) * t,
-        leftRot: startPose.leftRot + (targetPose.leftRot - startPose.leftRot) * t,
-        rightRot: startPose.rightRot + (targetPose.rightRot - startPose.rightRot) * t,
-        bodyTilt: startPose.bodyTilt + (targetPose.bodyTilt - startPose.bodyTilt) * t
+        leftHeight:  startPose.leftHeight  + (targetPose.leftHeight  - startPose.leftHeight)  * t,
+        rightHeight: startPose.rightHeight + (targetPose.rightHeight - startPose.rightHeight) * t,
+        leftSwing:   startPose.leftSwing   + (targetPose.leftSwing   - startPose.leftSwing)   * t,
+        rightSwing:  startPose.rightSwing  + (targetPose.rightSwing  - startPose.rightSwing)  * t
       });
 
       if (t < 1) {
         requestAnimationFrame(tweenStep);
       } else {
-        // Hold, then next step
         animTimerId = setTimeout(function () {
           animIndex++;
           animatePreviewStep();
@@ -426,7 +569,7 @@
     requestAnimationFrame(tweenStep);
   }
 
-  // ── Init on DOM ready ──────────────────────────────────────────────────────
+  // ── Init ───────────────────────────────────────────────────────────────
 
   function bindButtons() {
     var playBtn = document.getElementById('bldPreview');
@@ -438,15 +581,11 @@
     if (stopBtn) stopBtn.addEventListener('click', stopPreview);
   }
 
-  // Initialize scene when the builder tab becomes visible
   function watchForVisibility() {
     var viewport = document.getElementById('bldPreviewViewport');
     if (!viewport) return;
-
     var observer = new IntersectionObserver(function (entries) {
-      if (entries[0].isIntersecting && !initialized) {
-        initScene();
-      }
+      if (entries[0].isIntersecting && !initialized) initScene();
     }, { threshold: 0.1 });
     observer.observe(viewport);
   }
