@@ -790,6 +790,8 @@ def raw_complete_llm(user_prompt, istext=True):
     }
     llm_backend = CONFIG['LLM']['llm_backend']
     url, data = _prepare_request_data(llm_backend, user_prompt)
+    data["stream"] = False  # raw_complete_llm reads response as JSON, not SSE
+    data.pop("response_format", None)  # plain text response, not JSON mode
 
     try:
         response = _http_session.post(url, headers=headers, json=data)

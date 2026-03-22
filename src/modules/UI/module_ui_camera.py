@@ -19,6 +19,11 @@ class CameraModule:
             cls._instance._initialized = False
         return cls._instance
 
+    @classmethod
+    def get_instance(cls):
+        """Return existing singleton or None. Use this to avoid size-mismatch warnings."""
+        return cls._instance
+
     def __init__(self, width, height, use_camera_module=True):
         apply_corrections = True
 
