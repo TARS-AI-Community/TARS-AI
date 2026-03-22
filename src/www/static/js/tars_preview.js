@@ -1,9 +1,33 @@
 // ── TARS 3D Preview for Builder ──────────────────────────────────────────────
+//
+// Physical model:
+//   TARS is 3 flat planks (left leg, body, right leg) side by side.
+//   The HEIGHT servos slide legs up/down relative to the body.
+//   The SWING servos rotate legs forward/back around the top axle.
+//   The body is PASSIVE — sandwiched between the legs, no motors.
+//
+//   Geometry (front view, neutral):
+//
+//       ┌─┐ ┌───┐ ┌─┐
+//       │L│ │   │ │R│     ← top axle (pivot for fwd/back swing)
+//       │ │ │ B │ │ │     ← height servos slide legs up/down
+//       │ │ │   │ │ │
+//       └─┘ └───┘ └─┘     ← feet on ground
+//      ─────────────────   ← ground (y = 0)
+//
+//   Physics approach (constraint-based):
+//     - Legs are DRIVEN (servo values set their position directly)
+//     - Body is CONSTRAINED (sandwiched between legs, gravity pulls it vertical)
+//     - Body Y: geometric — rises when legs push against ground
+//     - Body lean: constrained between leg swing angles, biased toward vertical
+//     - Body sway: geometric tilt from leg height difference
+//     - All transitions smoothed with lerp (no spring-damper tuning needed)
+//
 (function () {
   'use strict';
 
-  var scene, camera, renderer, controls;
-  var tarsGroup, segments; // segments = [leftLeg, body, rightLeg]
+  var scene, camera, renderer;
+  var tarsGroup, segments; // segments[0]=left, segments[1]=body, segments[2]=right
   var animationFrameId = null;
   var previewPlaying = false;
   var initialized = false;
@@ -13,7 +37,24 @@
   var SEG_DEPTH = 2.1;
   var GAP = 0.15;
 
-  // ── Build TARS geometry ────────────────────────────────────────────────────
+  // ── Smooth state ─────────────────────────────────────────────────────
+  // All values lerp toward their geometric targets. No velocities needed.
+  var smoothBodyY = 0;       // current body height (lerps toward target)
+  var smoothLean  = 0;       // current torso forward/back angle
+  var smoothSway  = 0;       // current torso side-to-side angle
+  var smoothBodyZ = 0;       // accumulated forward position
+  var smoothTwist = 0;       // torso Y rotation (twist from leg swing diff)
+  var smoothYaw   = 0;       // accumulated tarsGroup Y rotation (turning)
+
+  var prevLeftSwing  = 0;    // for computing forward motion
+  var prevRightSwing = 0;
+
+  // Lerp speed: 0.0 = frozen, 1.0 = instant. ~0.12 feels smooth and natural.
+  var SMOOTH = 0.12;
+
+  var lastFrameTime = 0;
+
+  // ── Textures ───────────────────────────────────────────────────────────
 
   function createOuterTexture() {
     var canvas = document.createElement('canvas');
@@ -81,6 +122,8 @@
     return new THREE.CanvasTexture(canvas);
   }
 
+  // ── Build TARS geometry ────────────────────────────────────────────────
+
   function buildTars() {
     tarsGroup = new THREE.Group();
     segments = [];
@@ -92,6 +135,9 @@
     var legW = SEG_WIDTH;
     var bodyW = SEG_WIDTH * 2 + GAP;
 
+    // segments[0] = left leg  (negative X)
+    // segments[1] = body      (center)
+    // segments[2] = right leg (positive X)
     var configs = [
       { width: legW, mat: outerMat, x: -(bodyW / 2 + legW / 2 + GAP) },
       { width: bodyW, mat: centerMat, x: 0 },
@@ -103,10 +149,10 @@
       var mesh = new THREE.Mesh(geo, cfg.mat);
       mesh.castShadow = true;
 
-      var pivotY = SEG_HEIGHT - 0.2;
+      // Pivot at the very top of the mesh
       var pivot = new THREE.Group();
-      pivot.position.set(cfg.x, pivotY, 0);
-      mesh.position.y = (SEG_HEIGHT / 2) - pivotY;
+      pivot.position.set(cfg.x, SEG_HEIGHT, 0);
+      mesh.position.y = -SEG_HEIGHT / 2;
       pivot.add(mesh);
 
       // Screen on center body
@@ -122,13 +168,13 @@
       }
 
       tarsGroup.add(pivot);
-      segments.push({ pivot: pivot, mesh: mesh, baseY: pivotY });
+      segments.push({ pivot: pivot, mesh: mesh });
     });
 
     scene.add(tarsGroup);
   }
 
-  // ── Scene setup ────────────────────────────────────────────────────────────
+  // ── Scene setup ────────────────────────────────────────────────────────
 
   function initScene() {
     if (initialized) return;
@@ -150,38 +196,30 @@
     renderer.shadowMap.enabled = true;
     container.appendChild(renderer.domElement);
 
-    // Lights
     scene.add(new THREE.AmbientLight(0xffffff, 0.4));
     var dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
     dirLight.position.set(5, 10, 5);
     dirLight.castShadow = true;
     scene.add(dirLight);
-    var rimLight = new THREE.PointLight(0x00aaff, 0.4, 20);
-    rimLight.position.set(-4, 6, -3);
-    scene.add(rimLight);
+    scene.add(new THREE.PointLight(0x00aaff, 0.4, 20).translateX(-4).translateY(6).translateZ(-3));
 
-    // Ground plane
-    var groundGeo = new THREE.PlaneGeometry(20, 20);
-    var groundMat = new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.9, metalness: 0.1 });
-    var ground = new THREE.Mesh(groundGeo, groundMat);
+    var ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 20),
+      new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.9, metalness: 0.1 })
+    );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // Grid helper for reference
     var grid = new THREE.GridHelper(20, 20, 0x222233, 0x151522);
     grid.position.y = 0.01;
     scene.add(grid);
 
     buildTars();
-
-    // Orbit controls (manual since we can't use ES module import)
     setupOrbitControls(container);
-
     initialized = true;
     startRenderLoop();
 
-    // Resize observer
     var ro = new ResizeObserver(function () {
       var cw = container.clientWidth;
       var ch = container.clientHeight;
@@ -194,7 +232,7 @@
     ro.observe(container);
   }
 
-  // ── Simple orbit controls (no ES module dependency) ────────────────────────
+  // ── Orbit controls ────────────────────────────────────────────────────
 
   function setupOrbitControls(container) {
     var isDragging = false;
@@ -232,13 +270,11 @@
         updateCamera();
       }
       if (isPanning) {
-        var panSpeed = 0.02;
         var right = new THREE.Vector3();
-        var up = new THREE.Vector3(0, 1, 0);
         camera.getWorldDirection(right);
-        right.cross(up).normalize();
-        target.addScaledVector(right, -dx * panSpeed);
-        target.y += dy * panSpeed;
+        right.cross(new THREE.Vector3(0, 1, 0)).normalize();
+        target.addScaledVector(right, -dx * 0.02);
+        target.y += dy * 0.02;
         updateCamera();
       }
     });
@@ -250,7 +286,6 @@
       e.preventDefault();
     }, { passive: false });
 
-    // Touch support
     var touchStartDist = 0;
     container.addEventListener('touchstart', function (e) {
       if (e.touches.length === 1) {
@@ -288,72 +323,148 @@
     container.addEventListener('touchend', function () { isDragging = false; });
   }
 
-  // ── Render loop ────────────────────────────────────────────────────────────
+  // ── Render loop (constraint-based) ──────────────────────────────────
 
   function startRenderLoop() {
-    function loop() {
+    lastFrameTime = performance.now();
+    function loop(now) {
       animationFrameId = requestAnimationFrame(loop);
+      if (!segments || segments.length < 3) {
+        if (renderer && scene && camera) renderer.render(scene, camera);
+        return;
+      }
+
+      var dt = Math.min((now - lastFrameTime) / 1000, 0.05);
+      lastFrameTime = now;
+
+      // Read current leg state
+      var leftSwing  = segments[0].pivot.rotation.x;
+      var rightSwing = segments[2].pivot.rotation.x;
+      var leftPivotY  = segments[0].pivot.position.y;
+      var rightPivotY = segments[2].pivot.position.y;
+
+      // Leg heights relative to body (positive = extended down)
+      var leftHeight  = SEG_HEIGHT - leftPivotY;
+      var rightHeight = SEG_HEIGHT - rightPivotY;
+
+      // ── 1. Body Y: geometric ground constraint ─────────────────
+      // Body rises so no foot clips below ground.
+      var targetY = Math.max(leftHeight, rightHeight, 0);
+      smoothBodyY += (targetY - smoothBodyY) * SMOOTH;
+      tarsGroup.position.y = smoothBodyY;
+
+      // ── 2. Torso lean (rotation.x): follows leg swing ──────────
+      // The body is sandwiched — it follows the average leg swing
+      // direction. When both legs swing forward, torso leans forward.
+      var avgSwing = (leftSwing + rightSwing) / 2;
+      var targetLean = avgSwing * 3.0;  // body follows leg swing direction
+      smoothLean += (targetLean - smoothLean) * SMOOTH;
+      segments[1].pivot.rotation.x = smoothLean;
+
+      // ── 3. Torso twist (rotation.y): from leg swing difference ──
+      // When legs swing opposite directions (walking), the torso
+      // twists — right leg forward → torso twists left, like a human.
+      var targetTwist = (leftSwing - rightSwing) * 0.4;
+      smoothTwist += (targetTwist - smoothTwist) * SMOOTH;
+      segments[1].pivot.rotation.y = smoothTwist;
+      segments[1].pivot.rotation.z = 0;
+
+      // ── 4. Forward locomotion ──────────────────────────────────
+      // Grounded leg swinging backward pushes body forward.
+      // Only backward swing (delta < 0) drives motion — forward
+      // swing is repositioning, not pushing. This creates a
+      // ratchet effect so motion accumulates instead of canceling.
+      var leftDelta  = leftSwing  - prevLeftSwing;
+      var rightDelta = rightSwing - prevRightSwing;
+      if (leftPivotY <= rightPivotY) {
+        // Left leg grounded — backward swing = forward push
+        if (leftDelta < 0) smoothBodyZ -= leftDelta * 5.0;
+      } else {
+        if (rightDelta < 0) smoothBodyZ -= rightDelta * 5.0;
+      }
+      // ── 5. Turning locomotion ──────────────────────────────────
+      // Asymmetric swing (left forward, right backward) = turning.
+      // The difference in swing deltas drives yaw rotation.
+      var swingDiffDelta = leftDelta - rightDelta;
+      if (Math.abs(swingDiffDelta) > 0.001) {
+        smoothYaw += swingDiffDelta * 2.0;
+      }
+
+      prevLeftSwing  = leftSwing;
+      prevRightSwing = rightSwing;
+      tarsGroup.position.z = smoothBodyZ;
+      tarsGroup.rotation.set(0, smoothYaw, 0);
+
       if (renderer && scene && camera) renderer.render(scene, camera);
     }
-    loop();
+    loop(performance.now());
   }
 
-  // ── Map builder step values to TARS segment poses ──────────────────────────
-  // Builder values are 1-100, 50 = neutral.
-  // left_height/right_height: vertical offset of legs
-  // left_leg/right_leg: forward/back rotation of legs
+  // ── Map builder step values to TARS poses ──────────────────────────────
 
   function mapStepToPose(step) {
-    var lhNorm = ((step.left_height || 50) - 50) / 50;   // -1 to 1
-    var rhNorm = ((step.right_height || 50) - 50) / 50;
-    var llNorm = ((step.left_leg || 50) - 50) / 50;
-    var rlNorm = ((step.right_leg || 50) - 50) / 50;
-
-    var maxHeight = 2.5;  // max vertical offset
-    var maxAngle = 0.5;   // max rotation in radians
+    var lh = ((step.left_height  || 50) - 50) / 50;
+    var rh = ((step.right_height || 50) - 50) / 50;
+    var ll = ((step.left_leg     || 50) - 50) / 50;
+    var rl = ((step.right_leg    || 50) - 50) / 50;
 
     return {
-      leftY: lhNorm * maxHeight,
-      rightY: rhNorm * maxHeight,
-      leftRot: llNorm * maxAngle,
-      rightRot: rlNorm * maxAngle,
-      bodyTilt: (lhNorm - rhNorm) * 0.1 // slight body tilt from uneven heights
+      leftHeight:  lh * 0.5,
+      rightHeight: rh * 0.5,
+      leftSwing:   ll * 0.5,
+      rightSwing:  rl * 0.5
     };
   }
 
+  // ── Apply a pose to the 3D model ──────────────────────────────────────
+
   function applyPose(pose) {
     if (!segments || segments.length < 3) return;
-    // Left leg
-    segments[0].pivot.position.y = segments[0].baseY + pose.leftY;
-    segments[0].pivot.rotation.x = pose.leftRot;
-    // Body
-    segments[1].pivot.rotation.z = pose.bodyTilt;
-    // Right leg
-    segments[2].pivot.position.y = segments[2].baseY + pose.rightY;
-    segments[2].pivot.rotation.x = pose.rightRot;
+
+    var baseY = SEG_HEIGHT;
+
+    // Legs: directly driven by servo values
+    // segments[0] = negative X = robot's right, segments[2] = positive X = robot's left
+    segments[0].pivot.position.y = baseY - pose.rightHeight;
+    segments[1].pivot.position.y = baseY;
+    segments[2].pivot.position.y = baseY - pose.leftHeight;
+
+    segments[0].pivot.rotation.x = pose.rightSwing;
+    segments[2].pivot.rotation.x = pose.leftSwing;
+
+    // Body Y, lean, sway, and forward motion all handled in render loop
   }
 
   function resetPose() {
-    applyPose({ leftY: 0, rightY: 0, leftRot: 0, rightRot: 0, bodyTilt: 0 });
+    smoothBodyY = 0;
+    smoothLean  = 0;
+    smoothSway  = 0;
+    smoothBodyZ = 0;
+    smoothTwist = 0;
+    smoothYaw   = 0;
+    prevLeftSwing  = 0;
+    prevRightSwing = 0;
+    applyPose({ leftHeight: 0, rightHeight: 0, leftSwing: 0, rightSwing: 0 });
+    if (tarsGroup) {
+      tarsGroup.position.set(0, 0, 0);
+      tarsGroup.rotation.set(0, 0, 0);
+    }
   }
 
-  // ── Preview animation ─────────────────────────────────────────────────────
+  // ── Preview animation ─────────────────────────────────────────────────
 
   var animSteps = [];
   var animIndex = 0;
-  var animProgress = 0;
   var animTimerId = null;
 
   function playPreview() {
     if (!window._bldGetSteps) return;
     var rawSteps = window._bldGetSteps();
-    // Filter to position steps only (movement steps can't be previewed)
     animSteps = rawSteps.filter(function (s) { return !s.movement; });
     if (animSteps.length === 0) return;
 
     previewPlaying = true;
     animIndex = 0;
-    animProgress = 0;
 
     var playBtn = document.getElementById('bldPreview');
     var stopBtn = document.getElementById('bldPreviewStop');
@@ -384,16 +495,14 @@
     var targetPose = mapStepToPose(step);
     var speed = step.speed || 0.85;
     var holdTime = (step.hold_time || 0) * 1000;
-    var transitionMs = (1.1 - speed) * 800 + 100; // faster speed = shorter transition
+    var transitionMs = (1.1 - speed) * 800 + 100;
 
-    // Get current pose from segments
-    var startPose = {
-      leftY: segments[0].pivot.position.y - segments[0].baseY,
-      rightY: segments[2].pivot.position.y - segments[2].baseY,
-      leftRot: segments[0].pivot.rotation.x,
-      rightRot: segments[2].pivot.rotation.x,
-      bodyTilt: segments[1].pivot.rotation.z
-    };
+    var startPose;
+    if (animIndex > 0) {
+      startPose = mapStepToPose(animSteps[animIndex - 1]);
+    } else {
+      startPose = { leftHeight: 0, rightHeight: 0, leftSwing: 0, rightSwing: 0 };
+    }
 
     var startTime = performance.now();
 
@@ -401,21 +510,18 @@
       if (!previewPlaying) return;
       var elapsed = performance.now() - startTime;
       var t = Math.min(elapsed / transitionMs, 1);
-      // Smooth ease in-out
       t = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
       applyPose({
-        leftY: startPose.leftY + (targetPose.leftY - startPose.leftY) * t,
-        rightY: startPose.rightY + (targetPose.rightY - startPose.rightY) * t,
-        leftRot: startPose.leftRot + (targetPose.leftRot - startPose.leftRot) * t,
-        rightRot: startPose.rightRot + (targetPose.rightRot - startPose.rightRot) * t,
-        bodyTilt: startPose.bodyTilt + (targetPose.bodyTilt - startPose.bodyTilt) * t
+        leftHeight:  startPose.leftHeight  + (targetPose.leftHeight  - startPose.leftHeight)  * t,
+        rightHeight: startPose.rightHeight + (targetPose.rightHeight - startPose.rightHeight) * t,
+        leftSwing:   startPose.leftSwing   + (targetPose.leftSwing   - startPose.leftSwing)   * t,
+        rightSwing:  startPose.rightSwing  + (targetPose.rightSwing  - startPose.rightSwing)  * t
       });
 
       if (t < 1) {
         requestAnimationFrame(tweenStep);
       } else {
-        // Hold, then next step
         animTimerId = setTimeout(function () {
           animIndex++;
           animatePreviewStep();
@@ -426,7 +532,7 @@
     requestAnimationFrame(tweenStep);
   }
 
-  // ── Init on DOM ready ──────────────────────────────────────────────────────
+  // ── Init ───────────────────────────────────────────────────────────────
 
   function bindButtons() {
     var playBtn = document.getElementById('bldPreview');
@@ -438,15 +544,11 @@
     if (stopBtn) stopBtn.addEventListener('click', stopPreview);
   }
 
-  // Initialize scene when the builder tab becomes visible
   function watchForVisibility() {
     var viewport = document.getElementById('bldPreviewViewport');
     if (!viewport) return;
-
     var observer = new IntersectionObserver(function (entries) {
-      if (entries[0].isIntersecting && !initialized) {
-        initScene();
-      }
+      if (entries[0].isIntersecting && !initialized) initScene();
     }, { threshold: 0.1 });
     observer.observe(viewport);
   }

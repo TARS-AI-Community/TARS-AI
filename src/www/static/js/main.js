@@ -4743,10 +4743,9 @@ function $(id) { return document.getElementById(id); }
   // ── Init ──────────────────────────────────────────────────────────────────
 
   function init() {
-    fetch('/get_arms_status').then(function (r) { return r.json(); }).then(function (d) {
-      armsPresent = !!d.arms_present;
-      renderSteps();
-    }).catch(function () { renderSteps(); });
+    // Arms disabled in builder for now — too complex for the movement editor
+    armsPresent = false;
+    renderSteps();
 
     fetch('/get_movements').then(function (r) { return r.json(); }).then(function (d) {
       movements = (d.movements || [])
