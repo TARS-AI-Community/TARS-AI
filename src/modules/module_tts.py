@@ -40,50 +40,35 @@ def _resolve_output_device():
     """Find and cache the audio output device. Runs once, no-op after.
 
     Prefers pipewire (routes through AEC if configured), then falls back to
-    USB > hardware > virtual ALSA. Waits up to 5 seconds for pipewire at boot.
+    USB > hardware > virtual ALSA.
     """
     global _output_device, _output_device_resolved
     if _output_device_resolved:
         return
-
     _output_device_resolved = True
 
-    # Wait for pipewire to be ready — it may not be enumerated immediately at boot
-    import time as _time
-    for attempt in range(10):
-        try:
-            devices = sd.query_devices()
-        except Exception:
-            if attempt < 9:
-                _time.sleep(0.5)
-                continue
-            queue_message("WARNING: Could not query audio devices — using system default")
-            _output_device = None
+    # Use shared pipewire finder from module_mic
+    try:
+        from modules.module_mic import _find_pipewire_device
+        result = _find_pipewire_device("output")
+        if result:
+            idx, _ = result
+            dev = sd.query_devices(idx)
+            _output_device = idx
+            queue_message(f"INFO: Audio output: {dev['name']} (device {idx}, pipewire)")
             return
-
-        for i, dev in enumerate(devices):
-            if dev.get("max_output_channels", 0) < 1:
-                continue
-            name = dev.get("name", "").lower()
-            if "pipewire" in name or "echo_cancel" in name:
-                _output_device = i
-                queue_message(f"INFO: Audio output: {dev['name']} (device {i}, pipewire)")
-                return
-
-        if attempt < 9:
-            _time.sleep(0.5)
-            try:
-                sd._terminate()
-                sd._initialize()
-            except Exception:
-                pass
+    except Exception:
+        pass
 
     # Pipewire not available — fall back to USB > hardware > virtual
-    devices = sd.query_devices()
-    usb_devices = []
-    hw_devices = []
-    virtual_devices = []
+    try:
+        devices = sd.query_devices()
+    except Exception:
+        queue_message("WARNING: Could not query audio devices — using system default")
+        _output_device = None
+        return
 
+    categorized = {"USB": [], "hardware": [], "virtual": []}
     for i, dev in enumerate(devices):
         if dev.get("max_output_channels", 0) < 1:
             continue
@@ -91,15 +76,15 @@ def _resolve_output_device():
         if "hdmi" in name:
             continue
         if "usb" in name:
-            usb_devices.append((i, dev))
-        elif "default" in name or "dmix" in name or "pulse" in name or "sysdefault" in name:
-            virtual_devices.append((i, dev))
+            categorized["USB"].append((i, dev))
+        elif any(k in name for k in ("default", "dmix", "pulse", "sysdefault")):
+            categorized["virtual"].append((i, dev))
         else:
-            hw_devices.append((i, dev))
+            categorized["hardware"].append((i, dev))
 
-    for label, candidates in [("USB", usb_devices), ("hardware", hw_devices), ("virtual", virtual_devices)]:
-        if candidates:
-            idx, dev = candidates[0]
+    for label in ("USB", "hardware", "virtual"):
+        if categorized[label]:
+            idx, dev = categorized[label][0]
             _output_device = idx
             queue_message(f"INFO: Audio output: {dev['name']} (device {idx}, {label})")
             return
@@ -109,45 +94,27 @@ def _resolve_output_device():
 
 
 def _check_aec_status():
-    """Check if pipewire AEC is active and both input/output route through it."""
+    """Log whether pipewire AEC is active and both devices route through it."""
     try:
         import subprocess
-        # Check if pipewire echo-cancel module is loaded
-        result = subprocess.run(
-            ["pw-cli", "list-objects"],
-            capture_output=True, text=True, timeout=5
-        )
-        pw_output = result.stdout if result.returncode == 0 else ""
-        has_aec_module = "echo-cancel" in pw_output or "echo_cancel" in pw_output
+        result = subprocess.run(["pw-cli", "list-objects"], capture_output=True, text=True, timeout=5)
+        if result.returncode != 0 or "echo-cancel" not in result.stdout and "echo_cancel" not in result.stdout:
+            return  # No AEC module — nothing to check
 
-        if not has_aec_module:
-            # No AEC module loaded — nothing to check
-            return
-
-        # Get input device info
         from modules.module_mic import get_device_info
-        input_idx, input_rate = get_device_info()
-        input_dev = sd.query_devices(input_idx) if input_idx is not None else {}
-        input_name = input_dev.get("name", "unknown")
+        input_name = sd.query_devices(get_device_info()[0]).get("name", "unknown")
+        output_name = sd.query_devices(_output_device).get("name", "unknown") if _output_device is not None else "unknown"
 
-        output_dev = sd.query_devices(_output_device) if _output_device is not None else {}
-        output_name = output_dev.get("name", "unknown")
+        def _is_pw(name):
+            n = name.lower()
+            return "pipewire" in n or "echo_cancel" in n
 
-        input_via_pipewire = "pipewire" in input_name.lower() or "echo_cancel" in input_name.lower()
-        output_via_pipewire = "pipewire" in output_name.lower() or "echo_cancel" in output_name.lower()
-
-        if input_via_pipewire and output_via_pipewire:
+        if _is_pw(input_name) and _is_pw(output_name):
             queue_message("INFO: AEC status: ACTIVE (input and output both route through pipewire)")
-        elif not input_via_pipewire and not output_via_pipewire:
-            queue_message("WARNING: AEC status: INACTIVE — pipewire echo-cancel module loaded but neither input nor output routes through pipewire")
-            queue_message(f"WARNING: AEC — input: {input_name}, output: {output_name}")
         else:
-            broken_side = "input" if not input_via_pipewire else "output"
-            direct_name = input_name if not input_via_pipewire else output_name
-            queue_message(f"WARNING: AEC status: BROKEN — {broken_side} bypasses pipewire ({direct_name})")
-            queue_message(f"WARNING: AEC — input: {input_name}, output: {output_name}")
+            queue_message(f"WARNING: AEC status: BROKEN — input: {input_name}, output: {output_name}")
     except Exception:
-        pass  # pw-cli not available or other issue — skip silently
+        pass
 
 
 def init_audio_output():

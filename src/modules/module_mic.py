@@ -40,17 +40,12 @@ _device_info = None  # cached (device_idx, native_rate)
 _device_lock = threading.Lock()
 
 
-def _find_input_device():
-    """Try to find a working input device. Returns (idx, rate) or raises.
-
-    Prefers pipewire (routes through AEC if configured) over raw ALSA devices.
-    Waits up to 5 seconds for pipewire to appear at boot.
-    """
-    # Wait for pipewire to be ready — it may not be enumerated immediately at boot
+def _find_pipewire_device(direction="input"):
+    """Wait up to 5s for a pipewire device to appear. Returns (idx, rate) or None."""
+    ch_key = "max_input_channels" if direction == "input" else "max_output_channels"
     for attempt in range(10):
-        devices = sd.query_devices()
-        for i, dev in enumerate(devices):
-            if dev.get("max_input_channels", 0) < 1:
+        for i, dev in enumerate(sd.query_devices()):
+            if dev.get(ch_key, 0) < 1:
                 continue
             name = dev.get("name", "").lower()
             if "pipewire" in name or "echo_cancel" in name:
@@ -62,20 +57,24 @@ def _find_input_device():
                 sd._initialize()
             except Exception:
                 pass
+    return None
 
-    # Pipewire not available — fall back to system default
-    devices = sd.query_devices()
+
+def _find_input_device():
+    """Find best input device. Prefers pipewire for AEC, falls back to system default."""
+    result = _find_pipewire_device("input")
+    if result:
+        return result
+
     idx = sd.default.device[0]
     if idx is not None and idx >= 0:
         info = sd.query_devices(idx, kind="input")
         if info.get("max_input_channels", 0) >= 1:
             return idx, int(info.get("default_samplerate", MODEL_RATE))
 
-    # Scan all devices
-    for i, dev in enumerate(devices):
+    for i, dev in enumerate(sd.query_devices()):
         if dev.get("max_input_channels", 0) >= 1:
-            rate = int(dev.get("default_samplerate", MODEL_RATE))
-            return i, rate
+            return i, int(dev.get("default_samplerate", MODEL_RATE))
 
     raise RuntimeError("No input audio device found")
 
