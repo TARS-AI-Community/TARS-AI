@@ -940,7 +940,10 @@ def camera_feed():
     import cv2 as _cv2
     import numpy as _np
 
-    camera = CameraModule(1920, 1080)
+    camera = CameraModule.get_instance()
+    if camera is None:
+        from flask import abort
+        abort(503, "Camera not initialized")
 
     def generate():
         while True:

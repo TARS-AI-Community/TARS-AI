@@ -110,10 +110,27 @@ def _describe_blip(image_data, prompt):
         return "Error: BLIP model not available"
 
     img_bytes = _to_bytes(image_data)
+    debug = CONFIG.get('debug_mode', False)
+
+    # Diagnostic: check if image is mostly black before BLIP processes it
+    if debug:
+        try:
+            test_img = Image.open(BytesIO(img_bytes)).convert('RGB')
+            import numpy as _np
+            arr = _np.array(test_img)
+            mean_brightness = arr.mean()
+            queue_message(f"DEBUG VISION: Image size={arr.shape}, mean_brightness={mean_brightness:.1f}/255, bytes={len(img_bytes)}")
+            if mean_brightness < 10:
+                queue_message("DEBUG VISION: WARNING — image is nearly black! Camera may not be ready.")
+        except Exception as e:
+            queue_message(f"DEBUG VISION: Diagnostic failed: {e}")
+
     raw_image = Image.open(BytesIO(img_bytes)).convert('RGB')
     inputs = _processor(raw_image, return_tensors="pt").to(DEVICE)
     outputs = _model.generate(**inputs, max_new_tokens=100, num_beams=2)
     caption = _processor.decode(outputs[0], skip_special_tokens=True)
+    if debug:
+        queue_message(f"DEBUG VISION: BLIP caption: {caption}")
     return caption
 
 
@@ -272,7 +289,13 @@ def capture_camera_base64():
     if CameraModule is None:
         return None, "Error: Camera module not available"
     try:
-        camera = CameraModule(1920, 1080)
+        import time as _time
+        camera = CameraModule.get_instance()
+        if camera is None:
+            return None, "Error: Camera not initialized"
+        # Discard first capture and wait briefly for a fresh frame from the sensor
+        camera.capture_bytes()
+        _time.sleep(0.3)
         image_bytes = camera.capture_bytes()
         return _to_base64(image_bytes), None
     except Exception as e:
