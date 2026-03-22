@@ -39,8 +39,8 @@ _output_device_resolved = False
 def _resolve_output_device():
     """Find and cache the audio output device. Runs once, no-op after.
 
-    Prefers real hardware (USB audio, headphones, I2S DACs) over virtual
-    ALSA devices like 'default' or 'dmix' which may route to HDMI/null.
+    Prefers pipewire (routes through AEC if configured), then falls back to
+    USB > hardware > virtual ALSA. Waits up to 5 seconds for pipewire at boot.
     """
     global _output_device, _output_device_resolved
     if _output_device_resolved:
@@ -48,23 +48,46 @@ def _resolve_output_device():
 
     _output_device_resolved = True
 
-    try:
-        devices = sd.query_devices()
-    except Exception:
-        queue_message("WARNING: Could not query audio devices — using system default")
-        _output_device = None
-        return
+    # Wait for pipewire to be ready — it may not be enumerated immediately at boot
+    import time as _time
+    for attempt in range(10):
+        try:
+            devices = sd.query_devices()
+        except Exception:
+            if attempt < 9:
+                _time.sleep(0.5)
+                continue
+            queue_message("WARNING: Could not query audio devices — using system default")
+            _output_device = None
+            return
 
-    # Categorize output devices by priority
-    usb_devices = []      # USB audio — most likely the external speaker
-    hw_devices = []       # Hardware devices (headphones, I2S DACs, bcm2835)
-    virtual_devices = []  # Virtual/default ALSA devices
+        for i, dev in enumerate(devices):
+            if dev.get("max_output_channels", 0) < 1:
+                continue
+            name = dev.get("name", "").lower()
+            if "pipewire" in name or "echo_cancel" in name:
+                _output_device = i
+                queue_message(f"INFO: Audio output: {dev['name']} (device {i}, pipewire)")
+                return
+
+        if attempt < 9:
+            _time.sleep(0.5)
+            try:
+                sd._terminate()
+                sd._initialize()
+            except Exception:
+                pass
+
+    # Pipewire not available — fall back to USB > hardware > virtual
+    devices = sd.query_devices()
+    usb_devices = []
+    hw_devices = []
+    virtual_devices = []
 
     for i, dev in enumerate(devices):
         if dev.get("max_output_channels", 0) < 1:
             continue
         name = dev.get("name", "").lower()
-        # Skip HDMI outputs — they typically don't support standard PCM formats
         if "hdmi" in name:
             continue
         if "usb" in name:
@@ -74,7 +97,6 @@ def _resolve_output_device():
         else:
             hw_devices.append((i, dev))
 
-    # Pick best device: USB > hardware > virtual
     for label, candidates in [("USB", usb_devices), ("hardware", hw_devices), ("virtual", virtual_devices)]:
         if candidates:
             idx, dev = candidates[0]
