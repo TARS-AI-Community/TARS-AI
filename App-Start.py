@@ -670,10 +670,10 @@ def create_touch_menu():
             stop_tars_ai()
             time.sleep(0.1)
             if ui_enabled:
-                print("[AUTO.LAUNCH] UI enabled — starting fullscreen mode.")
+                print("[AUTO.LAUNCH] UI enabled - starting fullscreen mode.")
                 run_tars_ai_fullscreen()
             else:
-                print("[AUTO.LAUNCH] UI disabled — starting terminal mode.")
+                print("[AUTO.LAUNCH] UI disabled - starting terminal mode.")
                 run_tars_ai_normal()
             return
 
@@ -1001,10 +1001,10 @@ def check_aec_setup():
     """Run AEC auto-setup on first boot if not already configured.
 
     Flags:
-        aec=tune          — force a full AEC re-tune
-        aec=skip          — skip AEC entirely (run app without echo cancellation)
-        aec=remove        — remove AEC config and restore backup
-        aec=<config-name> — apply a specific config by name (e.g. aec=raw-max-all)
+        aec=tune          - force a full AEC re-tune
+        aec=skip          - skip AEC entirely (run app without echo cancellation)
+        aec=remove        - remove AEC config and restore backup
+        aec=<config-name> - apply a specific config by name (e.g. aec=raw-max-all)
     """
     # Extract the aec= value from argv
     aec_val = None
@@ -1022,37 +1022,37 @@ def check_aec_setup():
     config_name = aec_val if aec_val and not force and not remove and not skip else None
 
     if skip:
-        print("[AEC] aec=skip — skipping AEC setup")
+        print("[AEC] aec=skip - skipping AEC setup")
         return
 
     try:
         from aec import (is_aec_tuned, is_aec_configured, is_aec_disabled,
                          aec_module_installed, setup_aec, remove_aec, apply_named_config)
         if remove:
-            print("[AEC] aec=remove — removing AEC configuration...")
+            print("[AEC] aec=remove - removing AEC configuration...")
             remove_aec()
             return
         if config_name:
-            print(f"[AEC] aec={config_name} — applying config directly...")
+            print(f"[AEC] aec={config_name} - applying config directly...")
             apply_named_config(config_name)
             return
         if force:
-            print("[AEC] aec=tune — forcing AEC re-tune...")
+            print("[AEC] aec=tune - forcing AEC re-tune...")
             setup_aec(force=True)
             return
         if is_aec_configured():
-            return  # Already configured (tuned or default) — nothing to do
+            return  # Already configured (tuned or default) - nothing to do
         if is_aec_disabled():
-            return  # User explicitly removed AEC — don't re-install
-        # AEC not configured and not disabled — first boot, install default
+            return  # User explicitly removed AEC - don't re-install
+        # AEC not configured and not disabled - first boot, install default
         if not aec_module_installed():
-            print("[AEC] AEC module not available — skipping")
+            print("[AEC] AEC module not available - skipping")
             return
-        print("[AEC] First boot — installing default AEC config (raw-max-all)...")
+        print("[AEC] First boot - installing default AEC config (raw-max-all)...")
         print("[AEC]   Run with aec=tune to auto-tune for your specific hardware.")
         apply_named_config("raw-max-all")
     except ImportError:
-        print("[AEC] aec.py not found — skipping")
+        print("[AEC] aec.py not found - skipping")
     except Exception as e:
         print(f"[AEC] Auto-setup failed (non-fatal): {e}")
 
@@ -1068,12 +1068,12 @@ if __name__ == "__main__":
             _amode = 'auto'
 
         if _amode == 'template':
-            print("[FILE.CHECK] Wake word templates not found — launching terminal mode for recording.")
+            print("[FILE.CHECK] Wake word templates not found - launching terminal mode for recording.")
         elif _amode == 'model':
-            print("[FILE.CHECK] Wake word model (ONNX/CNN) not found — launching terminal mode for training.")
+            print("[FILE.CHECK] Wake word model (ONNX/CNN) not found - launching terminal mode for training.")
             print("[FILE.CHECK] For ONNX: use tools/wakeword-trainer on a PC, then copy hey_tars.onnx to src/tts/")
         else:
-            print("[FILE.CHECK] Wake word model not found — launching terminal mode for training.")
+            print("[FILE.CHECK] Wake word model not found - launching terminal mode for training.")
         run_tars_ai_normal()
     else:
         create_touch_menu()

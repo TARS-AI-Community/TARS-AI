@@ -10,7 +10,7 @@
 [CHAR]
 # Path to character JSON file (relative to src/)
 character_card_path = character/TARS/TARS.json
-# Your name — used in conversation
+# Your name - used in conversation
 user_name = Cooper
 # Brief description of yourself (e.g., "Species: Human. Gender: Male.")
 user_details = Species: Human. Gender: Male.
@@ -39,27 +39,27 @@ grok_model = grok-4-1-fast-non-reasoning
 other_model = meta-llama/Meta-Llama-3.1-8B-Instruct
 # System instructions prepended to every conversation (keep general; personality goes in character card)
 systemprompt = You are to responding naturally and helpfully within the scenario. Be informative and conversational while maintaining your personality.
-# Max conversation history in tokens (2000–8000, check model docs)
+# Max conversation history in tokens (2000-8000, check model docs)
 contextsize = 16000
-# Max tokens per LLM response (200–300 conversational, 500–1000 for detailed)
+# Max tokens per LLM response (200-300 conversational, 500-1000 for detailed)
 max_tokens = 1000
 # Random seed (-1 = unique each time, fixed number = reproducible)
 seed = -1
-# Creativity: 0.0–2.0 (0.7–0.9 recommended for conversation)
+# Creativity: 0.0-2.0 (0.7-0.9 recommended for conversation)
 temperature = 0.8
-# Token diversity: 0.0–1.0 (0.9 recommended, leave as-is)
+# Token diversity: 0.0-1.0 (0.9 recommended, leave as-is)
 top_p = 0.9
 # Force JSON output via API (True/False). Disable for backends that don't support response_format (e.g. LM Studio)
 json_mode = True
-# Token counting encoding — only change if token errors occur (cl100k_base works for most models)
+# Token counting encoding - only change if token errors occur (cl100k_base works for most models)
 override_encoding_model = cl100k_base
 
 [STT]
 # Spoken language (use openai stt_processor for non-English)
 language = english
-# Activation phrase — 2–3 syllables works best
+# Activation phrase - 2-3 syllables works best
 wake_word = hey tars
-# Wake word engine (independent of stt_processor — mix freely)
+# Wake word engine (independent of stt_processor - mix freely)
 #   Pi5: sherpa-onnx | atomik | fastrtc
 #   Pi4: sherpa-onnx | atomik
 #   Pi3: sherpa-onnx | atomik
@@ -67,15 +67,15 @@ wake_word = hey tars
 wake_word_processor = atomik
 # Atomik detection mode (atomik only) auto = use ONNX model if available, otherwise fall back to template, model = ONNX model only (trained with tools/wakeword-trainer), template = cosine similarity only (record wake word 5 times on device)
 atomik_mode = template
-# Wake word gates — apply to all wake word engines
+# Wake word gates - apply to all wake word engines
 # Transcript verify: only active when wake_word_processor = atomik AND atomik_mode = template
 vad_transcript_verify = False
 vad_speaker_verify = off
 vad_speaker_threshold = 0.60
 vad_presence_gate = off
-# Wake word strictness 1–10 (atomik only; 1 = lenient, 10 = strict)
+# Wake word strictness 1-10 (atomik only; 1 = lenient, 10 = strict)
 sensitivity = 7
-# Speech-to-text engine (independent of wake_word_processor — mix freely)
+# Speech-to-text engine (independent of wake_word_processor - mix freely)
 #   Pi5: sherpa-onnx | fastrtc | silero | openai | external
 #   Pi4: sherpa-onnx | openai | external
 #   Pi3: openai | external
@@ -85,7 +85,7 @@ stt_processor = sherpa-onnx
 use_indicators = True
 # External STT server URL (stt_processor = external only)
 external_url = http://192.168.1.100:5678
-# End-of-speech detection (independent of stt/wake — mix freely)
+# End-of-speech detection (independent of stt/wake - mix freely)
 #   Pi5: smart-turn | sherpa-onnx | silero | rms
 #   Pi4: smart-turn | sherpa-onnx | silero | rms
 #   Pi3: sherpa-onnx | rms
@@ -95,21 +95,21 @@ vad_method = smart-turn
 sherpa_onnx_denoise = False
 # Add punctuation to transcriptions (requires sherpa-onnx): True | False
 sherpa_onnx_punctuation = False
-# Enable barge-in detection — interrupt TARS by speaking while it talks: True | False
+# Enable barge-in detection - interrupt TARS by speaking while it talks: True | False
 enable_bargein = True
 # Barge-in detection mode: fuzzy (word matching) | voiceprint (speaker ID matching)
 bargein_mode = voiceprint
-# Barge-in sensitivity 1–10 (1 = hard to interrupt, 10 = very sensitive)
+# Barge-in sensitivity 1-10 (1 = hard to interrupt, 10 = very sensitive)
 bargein_sensitivity = 5
 # Silence before processing in tenths of a second (20 = 2s)
 speechdelay = 15
-# Speaker identification — passively identify who is speaking (Pi5/Pi4 only)
+# Speaker identification - passively identify who is speaking (Pi5/Pi4 only)
 speaker_id_enabled = True
-# Speaker ID cosine similarity threshold (0.0–1.0, higher = stricter matching)
+# Speaker ID cosine similarity threshold (0.0-1.0, higher = stricter matching)
 speaker_id_threshold = 0.75
-# Microphone amplification gain — multiplies raw mic input (higher = more sensitive, default 10.0)
+# Microphone amplification gain - multiplies raw mic input (higher = more sensitive, default 10.0)
 mic_amp_gain = 13.0
-# Silence margin — how many times above background noise counts as speech (lower = more sensitive, default 3.0)
+# Silence margin - how many times above background noise counts as speech (lower = more sensitive, default 3.0)
 silence_margin = 3.0
 
 [TTS]
@@ -127,7 +127,7 @@ elevenlabs_voice_id = JBFqnCBsd6RMkjVDRZzb
 elevenlabs_model = eleven_multilingual_v2
 # OpenAI TTS voice: alloy | echo | fable | onyx | nova | shimmer
 openai_voice = onyx
-# Enable multi-speaker Piper model — maps detected emotion to a speaker ID (True/False)
+# Enable multi-speaker Piper model - maps detected emotion to a speaker ID (True/False)
 piper_multispeaker = True
 # Speaker ID for each emotion (only used when piper_multispeaker = True)
 piper_speaker_joy = 0
@@ -182,7 +182,7 @@ strategy = hybrid
 context_window = 2
 # Top N memories that get context window expansion
 max_memories = 3
-# Number of memories to retrieve per query (3–7 recommended)
+# Number of memories to retrieve per query (3-7 recommended)
 top_k = 5
 # Boost memories within N days in results (0 = disabled)
 recency_boost_days = 7
@@ -202,7 +202,7 @@ webui_password = tarspassword
 webui_theme = default
 
 [UI]
-# On-device display width in pixels (3.5" = 480, 5–7" = 800)
+# On-device display width in pixels (3.5" = 480, 5-7" = 800)
 screen_width = 480
 # On-device display height in pixels (3.5" = 320, 5" = 480)
 screen_height = 320
@@ -224,7 +224,7 @@ ampm_format = True
 app = terminal
 # Display frame rate (30 = balanced; lower saves CPU)
 target_fps = 30
-# Display font size (3.5": 9–12, 5–7": 12–16, 10"+: 16–20)
+# Display font size (3.5": 9-12, 5-7": 12-16, 10"+: 16-20)
 font_size = 12
 # Seconds of inactivity before screensaver (0 = disabled)
 screensaver_timer = 300
