@@ -67,7 +67,7 @@ def _white(text):   return _c("97", text)
 
 
 VALID_PCM_RATES = {8000, 11025, 16000, 22050, 32000, 44100, 48000, 96000, 192000}
-APP_PLAYBACK_RATE = 16000  # what sd.play() sends — the rate PipeWire sees from the app
+APP_PLAYBACK_RATE = 16000  # what sd.play() sends - the rate PipeWire sees from the app
 
 # Lazy-detected: not available until detect_graph_rate() is called (after PipeWire starts)
 _graph_rate = None
@@ -140,7 +140,7 @@ def detect_graph_rate():
         pass
 
     # 3. Safe fallback
-    log.warning("Could not detect audio rate — defaulting to 48000Hz")
+    log.warning("Could not detect audio rate - defaulting to 48000Hz")
     _graph_rate = 48000
     return 48000
 
@@ -154,7 +154,7 @@ def get_graph_rate():
 # ── AEC parameter combinations to test ──────────────────────────────
 # Format: (echo_supp, noise_supp, gain_control, extended_filter, high_pass, delay_agnostic, name)
 CONFIGS = [
-    # AGC ON — WebRTC manages mic gain
+    # AGC ON - WebRTC manages mic gain
     (0, 0, True,  True,  False, False, "agc-baseline"),
     (1, 1, True,  True,  False, False, "agc-medium"),
     (2, 1, True,  True,  False, False, "agc-highsupp"),
@@ -162,7 +162,7 @@ CONFIGS = [
     (2, 2, True,  True,  True,  False, "agc-max-hpf"),
     (2, 2, True,  True,  True,  True,  "agc-max-all"),
     (2, 2, True,  True,  False, True,  "agc-max-delay"),
-    # AGC OFF — raw cancellation, app handles gain
+    # AGC OFF - raw cancellation, app handles gain
     (0, 0, False, True,  False, False, "raw-baseline"),
     (1, 1, False, True,  False, False, "raw-medium"),
     (2, 1, False, True,  False, False, "raw-highsupp"),
@@ -423,7 +423,7 @@ def _load_piper_voice():
         log.info("Loaded PiperVoice model: %s (rate=%dHz)", char_name, _piper_voice.config.sample_rate)
         return _piper_voice
     except ImportError:
-        log.warning("piper.voice not available — pip install piper-tts?")
+        log.warning("piper.voice not available - pip install piper-tts?")
         return None
     except Exception as e:
         log.warning("Failed to load PiperVoice: %s", e)
@@ -441,7 +441,7 @@ def _apply_tts_gain_chain(data, src_rate):
 
     We replicate steps 1-3 identically and output at 16kHz.  When pw-play
     sends this 16kHz audio to echo_cancel_sink, PipeWire does the same
-    resampling it would do in production — so the AEC sees the exact same
+    resampling it would do in production - so the AEC sees the exact same
     reference signal.  This is critical for accurate tuning.
     """
     import numpy as np
@@ -461,7 +461,7 @@ def _apply_tts_gain_chain(data, src_rate):
     # Step 3: Apply gain and clip (module_tts.py:452-453)
     data = np.clip(data * TTS_GAIN, -1.0, 1.0)
 
-    # NO upsample — output at 16kHz so PipeWire does the same resampling
+    # NO upsample - output at 16kHz so PipeWire does the same resampling
     # to graph rate as it does in production with sd.play(data, 16000)
     return data
 
@@ -470,7 +470,7 @@ def generate_tts_wav(phrase, outfile, tmpdir):
     """Generate a TTS wav file matching the exact TARS-AI pipeline.
 
     Uses PiperVoice (same Python lib as the real app), falls back to espeak-ng + sox.
-    Output: 16kHz mono wav — same rate the app sends via sd.play().
+    Output: 16kHz mono wav - same rate the app sends via sd.play().
     PipeWire will resample to graph rate (e.g. 48kHz), same as production.
     """
     import numpy as np
@@ -512,7 +512,7 @@ def generate_tts_wav(phrase, outfile, tmpdir):
             return True
 
         except Exception as e:
-            log.warning("PiperVoice synthesis failed: %s — falling back to espeak-ng", e)
+            log.warning("PiperVoice synthesis failed: %s - falling back to espeak-ng", e)
 
     # Fallback: espeak-ng + sox (won't match TARS voice but still tests AEC)
     raw_file = os.path.join(tmpdir, "raw_tts.wav")
@@ -631,7 +631,7 @@ def warmup_aec(phrase_files, recorder, tmpdir):
 
     WebRTC's AEC needs several seconds of reference audio to build
     an accurate echo path model.  One short phrase (~2s) often isn't
-    enough — play 2-3 to give it ~5-8s of training data.
+    enough - play 2-3 to give it ~5-8s of training data.
     """
     warmup_rec = os.path.join(tmpdir, "warmup.wav")
     recorder.start(warmup_rec)
@@ -689,7 +689,7 @@ def run_tuning():
                 log.warning("  [%d/%d] Failed to generate: %s", i + 1, len(TEST_PHRASES), phrase[:50])
 
         if not phrase_files:
-            log.error("No test phrases generated — cannot tune AEC")
+            log.error("No test phrases generated - cannot tune AEC")
             return None
 
         # Sanity check: verify mic can hear the speaker (no point testing if not)
@@ -705,7 +705,7 @@ def run_tuning():
             print(_red("  WARNING: Mic cannot hear the speaker (RMS too low)."))
             print(_red("  Check that your speaker and mic are connected and working."))
             print(_dim(f"  Measured RMS: {check_rms:.8f}"))
-            log.error("Speaker-to-mic sanity check failed — aborting")
+            log.error("Speaker-to-mic sanity check failed - aborting")
             return None
 
         # Record silence baseline
@@ -741,11 +741,11 @@ def run_tuning():
 
                 # Write config and restart PipeWire
                 if not write_aec_config(supp, noise, gc, ext, hpf, da):
-                    log.warning("  Failed to write config — skipping")
+                    log.warning("  Failed to write config - skipping")
                     continue
 
                 if not restart_pipewire():
-                    log.warning("  PipeWire failed to load config — skipping")
+                    log.warning("  PipeWire failed to load config - skipping")
                     results.append((name, float("inf"), supp, noise, gc, ext, hpf, da))
                     continue
 
@@ -842,8 +842,8 @@ def _prompt_user_ready():
         if resp.strip().lower() in ("n", "no"):
             return False
     except (EOFError, KeyboardInterrupt):
-        # Non-interactive (e.g. piped input or service) — proceed automatically
-        log.info("Non-interactive mode — proceeding automatically")
+        # Non-interactive (e.g. piped input or service) - proceed automatically
+        log.info("Non-interactive mode - proceeding automatically")
     return True
 
 
@@ -855,18 +855,18 @@ def setup_aec(force=False):
     if not aec_module_installed():
         log.info("AEC module not found, installing dependencies...")
         if not install_aec_dependencies():
-            log.error("Could not install AEC module — AEC not available on this system")
+            log.error("Could not install AEC module - AEC not available on this system")
             return False
 
     # Check if already configured
     if not force and is_aec_configured():
-        log.info("AEC is already configured — nothing to do")
+        log.info("AEC is already configured - nothing to do")
         log.info("  (use --force or aec=tune to re-tune)")
         return True
 
     if not force:
-        # No flag and not configured — just install raw-max default
-        log.info("AEC not configured — installing default config (raw-max-all)")
+        # No flag and not configured - just install raw-max default
+        log.info("AEC not configured - installing default config (raw-max-all)")
         apply_named_config("raw-max-all")
         return True
 
@@ -890,7 +890,7 @@ def setup_aec(force=False):
     ensure_pulse_defaults()
 
     if not restart_pipewire(timeout=15):
-        log.error("PipeWire could not start with AEC — check your audio hardware")
+        log.error("PipeWire could not start with AEC - check your audio hardware")
         return False
 
     # Detect graph rate now that PipeWire is confirmed running
@@ -905,7 +905,7 @@ def setup_aec(force=False):
     best = run_tuning()
 
     if best is None:
-        log.error("Tuning failed — applying safe default config")
+        log.error("Tuning failed - applying safe default config")
         write_aec_config(2, 2, False, True, True, True)
         ensure_pulse_defaults()
         restart_pipewire()
@@ -949,7 +949,7 @@ def is_aec_disabled():
 def apply_named_config(config_name):
     """Apply a specific AEC config by name (e.g. 'raw-max-all', 'agc-medium').
 
-    Skips the full tuning process — just writes the named config directly.
+    Skips the full tuning process - just writes the named config directly.
     Use this when you already know which config works best.
     """
     _clear_disabled_marker()
@@ -1009,10 +1009,10 @@ def remove_aec():
         run_sudo(f"rm {backup}")
         log.info("Backup restored")
     elif os.path.isfile(AEC_CONF):
-        log.info("No backup found — removing %s", AEC_CONF)
+        log.info("No backup found - removing %s", AEC_CONF)
         run_sudo(f"rm {AEC_CONF}")
     else:
-        log.info("No AEC config found — nothing to remove")
+        log.info("No AEC config found - nothing to remove")
 
     # Remove pulse defaults override
     home = _get_actual_home()
@@ -1024,16 +1024,16 @@ def remove_aec():
     # Drop marker so auto-setup doesn't re-install on next boot
     with open(AEC_DISABLED_MARKER, "w") as f:
         f.write("AEC explicitly removed by user. Delete this file to re-enable auto-setup.\n")
-    log.info("Created %s — AEC won't auto-install on next boot", AEC_DISABLED_MARKER)
+    log.info("Created %s - AEC won't auto-install on next boot", AEC_DISABLED_MARKER)
 
     # Restart PipeWire to apply
     run_cmd("systemctl --user restart pipewire pipewire-pulse", timeout=10, as_user=True)
     time.sleep(2)
 
     if pipewire_has_echo_source():
-        log.warning("echo_cancel_source still present — you may need to reboot")
+        log.warning("echo_cancel_source still present - you may need to reboot")
     else:
-        log.info("AEC removed — PipeWire running without echo cancellation")
+        log.info("AEC removed - PipeWire running without echo cancellation")
 
     return True
 
