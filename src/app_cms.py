@@ -297,7 +297,7 @@ class TarsConfigManager:
                             ))
 
         for section_name, existing_section in existing_sections.items():
-            # Never mark SKILL sections for removal — they have custom user-managed fields
+            # Never mark SKILL sections for removal - they have custom user-managed fields
             if section_name.startswith('SKILL:'):
                 continue
             if section_name not in template_sections:
