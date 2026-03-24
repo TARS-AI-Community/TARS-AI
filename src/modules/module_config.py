@@ -408,7 +408,6 @@ def load_config():
             "vad_transcript_verify": config.get('STT', 'vad_transcript_verify', fallback='False'),
             "vad_presence_gate": config.get('STT', 'vad_presence_gate', fallback='off'),
             "vad_speaker_verify": config.get('STT', 'vad_speaker_verify', fallback='off'),
-            "vad_speaker_threshold": config.get('STT', 'vad_speaker_threshold', fallback='0.60'),
             "enable_bargein": config.getboolean('STT', 'enable_bargein', fallback=True),
             "bargein_mode": config.get('STT', 'bargein_mode', fallback='fuzzy'),
             "bargein_sensitivity": config.getint('STT', 'bargein_sensitivity', fallback=5),
@@ -810,15 +809,15 @@ CONFIG_METADATA = {
             'options': ['off', 'any'],
             'description': 'Restrict who can trigger the wake word by voice. "off" = disabled. "any" = any enrolled named speaker. Select a specific name to allow only that person. Requires Speaker ID to be enabled. Skips automatically if no named speakers are enrolled yet.'
         },
-        'vad_speaker_threshold': {
+        'speaker_id_threshold': {
             'group': 'wake_gates',
-            'label': 'Speaker Match Threshold',
-            'depends_on': [{'field': 'vad_speaker_verify', 'not_values': ['off']}],
+            'label': 'Speaker ID Confidence',
+            'depends_on': [{'field': 'speaker_id_enabled', 'values': ['True', 'true']}],
             'type': 'slider',
-            'min': 0.3,
-            'max': 0.9,
-            'step': 0.05,
-            'description': 'How closely the voice must match an enrolled speaker. 0.60 is a good starting point. Raise it if strangers or the TV are triggering TARS; lower it if your own voice is being rejected.'
+            'min': 0.5,
+            'max': 0.95,
+            'step': 0.01,
+            'description': 'How confident TARS must be to identify a speaker. Used for all speaker recognition — wake word gating, barge-in, round logging, personalization. 0.75 is default. Lower to 0.70 if your voice keeps getting rejected; raise to 0.80+ if wrong speakers are matched.'
         },
 
         # ── Barge-In ──────────────────────────────────────────────────────────
