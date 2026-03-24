@@ -35,7 +35,7 @@ from modules.module_messageQue import queue_message
 
 # === Load Configuration ===
 CONFIG = load_config()
-VERSION = "6.0"
+VERSION = "Amelia"
 
 # Get device info
 DEVICE_INFO = CONFIG.get("_device", {})
@@ -403,8 +403,8 @@ if __name__ == "__main__":
 
     # === Main Loop ===
     try:
-        queue_message(f"LOAD: TARS-AI v{VERSION} running on {RASPBERRY_VERSION.upper()}")
-        ui_manager.update_data("System", f"TARS-AI v{VERSION} running", "SYSTEM")
+        queue_message(f"LOAD: TARS-AI OS: {VERSION} running on {RASPBERRY_VERSION.upper()}")
+        ui_manager.update_data("System", f"TARS-AI OS: {VERSION} running", "SYSTEM")
 
         register_stt_manager(stt_manager)
         stt_manager.start()

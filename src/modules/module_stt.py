@@ -46,7 +46,7 @@ OpenAI = None
 WakeWordSystem = None
 sherpa_onnx = None
 
-# Torch and related (Pi5 only for Silero VAD)
+# Torch and related (requires can_use_embeddings — Pi5 only)
 if CAPABILITIES is None or CAPABILITIES.can_use_embeddings:
     try:
         import torch as _torch
@@ -540,8 +540,10 @@ class STTManager:
 
     def play_wav(self, filename):
         try:
+            from modules.module_tts import _resolve_output_device, _output_device
+            _resolve_output_device()
             data, sr = sf.read(filename)
-            sd.play(data * 0.5, samplerate=sr)
+            sd.play(data * 0.5, samplerate=sr, device=_output_device)
             sd.wait()
         except Exception as e:
             queue_message(f"ERROR: Playing sound file failed: {e}")

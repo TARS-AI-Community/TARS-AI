@@ -38,11 +38,12 @@ memory_manager = None
 _http_session = requests.Session()
 
 process_camera_image = None
-try:
-    from modules.module_vision import process_camera_image as _pci
-    process_camera_image = _pci
-except ImportError:
-    pass
+if CAPABILITIES is None or CAPABILITIES.can_use_vision:
+    try:
+        from modules.module_vision import process_camera_image as _pci
+        process_camera_image = _pci
+    except ImportError:
+        pass
 
 
 # Callback invoked with (text_chunk, is_first) as reply text streams from LLM.
@@ -790,6 +791,8 @@ def raw_complete_llm(user_prompt, istext=True):
     }
     llm_backend = CONFIG['LLM']['llm_backend']
     url, data = _prepare_request_data(llm_backend, user_prompt)
+    data["stream"] = False  # raw_complete_llm reads response as JSON, not SSE
+    data.pop("response_format", None)  # plain text response, not JSON mode
 
     try:
         response = _http_session.post(url, headers=headers, json=data)

@@ -281,6 +281,8 @@ class MusicPlayer:
         return self._cancel.is_set() or self._skip.is_set()
 
     def _play_with_soundfile(self, path, gain):
+        from modules.module_tts import _resolve_output_device, _output_device
+        _resolve_output_device()
         with sf.SoundFile(path, "r") as audio:
             sr = audio.samplerate
             channels = audio.channels
@@ -289,6 +291,7 @@ class MusicPlayer:
             stream = sd.OutputStream(
                 samplerate=sr, channels=channels,
                 blocksize=blocksize, dtype="float32",
+                device=_output_device,
             )
             stream.start()
             try:
@@ -341,9 +344,12 @@ class MusicPlayer:
 
         channels = data.shape[1] if data.ndim > 1 else 1
         blocksize = 2048
+        from modules.module_tts import _resolve_output_device, _output_device
+        _resolve_output_device()
         stream = sd.OutputStream(
             samplerate=sr, channels=channels,
             blocksize=blocksize, dtype="float32",
+            device=_output_device,
         )
         stream.start()
         try:

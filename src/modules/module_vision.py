@@ -4,10 +4,11 @@ import threading
 from io import BytesIO
 import requests
 
-from modules.module_config import load_config, get_api_key
+from modules.module_config import load_config, get_api_key, get_capabilities
 from modules.module_messageQue import queue_message
 
 CONFIG = load_config()
+_CAPS_VISION = get_capabilities()
 
 # Conditional imports for heavy dependencies
 Image = None
@@ -23,18 +24,20 @@ try:
 except ImportError:
     pass
 
-try:
-    from transformers import BlipProcessor as _BlipProcessor, BlipForConditionalGeneration as _BlipModel
-    BlipProcessor = _BlipProcessor
-    BlipForConditionalGeneration = _BlipModel
-except ImportError:
-    pass
+# torch / transformers only on devices that support vision (Pi5)
+if _CAPS_VISION is None or _CAPS_VISION.can_use_vision:
+    try:
+        from transformers import BlipProcessor as _BlipProcessor, BlipForConditionalGeneration as _BlipModel
+        BlipProcessor = _BlipProcessor
+        BlipForConditionalGeneration = _BlipModel
+    except ImportError:
+        pass
 
-try:
-    import torch as _torch
-    torch = _torch
-except ImportError:
-    pass
+    try:
+        import torch as _torch
+        torch = _torch
+    except ImportError:
+        pass
 
 try:
     import openai as _openai
@@ -107,10 +110,27 @@ def _describe_blip(image_data, prompt):
         return "Error: BLIP model not available"
 
     img_bytes = _to_bytes(image_data)
+    debug = CONFIG.get('debug_mode', False)
+
+    # Diagnostic: check if image is mostly black before BLIP processes it
+    if debug:
+        try:
+            test_img = Image.open(BytesIO(img_bytes)).convert('RGB')
+            import numpy as _np
+            arr = _np.array(test_img)
+            mean_brightness = arr.mean()
+            queue_message(f"DEBUG VISION: Image size={arr.shape}, mean_brightness={mean_brightness:.1f}/255, bytes={len(img_bytes)}")
+            if mean_brightness < 10:
+                queue_message("DEBUG VISION: WARNING — image is nearly black! Camera may not be ready.")
+        except Exception as e:
+            queue_message(f"DEBUG VISION: Diagnostic failed: {e}")
+
     raw_image = Image.open(BytesIO(img_bytes)).convert('RGB')
     inputs = _processor(raw_image, return_tensors="pt").to(DEVICE)
     outputs = _model.generate(**inputs, max_new_tokens=100, num_beams=2)
     caption = _processor.decode(outputs[0], skip_special_tokens=True)
+    if debug:
+        queue_message(f"DEBUG VISION: BLIP caption: {caption}")
     return caption
 
 
@@ -269,7 +289,13 @@ def capture_camera_base64():
     if CameraModule is None:
         return None, "Error: Camera module not available"
     try:
-        camera = CameraModule(1920, 1080)
+        import time as _time
+        camera = CameraModule.get_instance()
+        if camera is None:
+            return None, "Error: Camera not initialized"
+        # Discard first capture and wait briefly for a fresh frame from the sensor
+        camera.capture_bytes()
+        _time.sleep(0.3)
         image_bytes = camera.capture_bytes()
         return _to_base64(image_bytes), None
     except Exception as e:
