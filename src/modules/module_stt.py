@@ -2174,8 +2174,7 @@ class STTManager:
                         if rms and rms > bargein_threshold:
                             speech_buf.append(data)
                             audio_buf.append(data)
-                            if not tts_active:
-                                all_speech_chunks.append(data)
+                            all_speech_chunks.append(data)
                             if len(speech_buf) > MAX_BUF:
                                 speech_buf = speech_buf[-MAX_BUF:]
 
