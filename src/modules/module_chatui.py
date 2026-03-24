@@ -3058,6 +3058,19 @@ def get_movement_steps(name):
         return jsonify({"error": f"Movement '{name}' not found"}), 404
 
     steps = _parse_movement_steps(src)
+
+    # If no move_legs found, the function may delegate to an _impl variant
+    if not steps:
+        import re as _re_impl
+        for impl_name in _re_impl.findall(r'(_\w+_impl)\(\)', src):
+            try:
+                impl_src = inspect.getsource(getattr(_mm, impl_name))
+                steps = _parse_movement_steps(impl_src)
+                if steps:
+                    break
+            except (AttributeError, OSError):
+                continue
+
     if not steps:
         return jsonify({"error": f"No move_legs calls found in '{name}'"}), 422
 

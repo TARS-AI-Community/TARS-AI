@@ -1,7 +1,7 @@
 // ── TARS 3D Preview for Builder ──────────────────────────────────────────────
 //
 // Physical model:
-//   TARS is 3 flat planks (right leg, body, left leg) side by side.
+//   TARS is 3 flat planks (left leg, body, right leg) side by side.
 //   The HEIGHT servos slide legs up/down relative to the body.
 //   The SWING servos rotate legs forward/back around the top axle.
 //   The body is PASSIVE — sandwiched between the legs, no motors.
@@ -9,24 +9,25 @@
 //   Geometry (front view, neutral):
 //
 //       ┌─┐ ┌───┐ ┌─┐
-//       │R│ │   │ │L│     ← top axle (pivot for fwd/back swing)
+//       │L│ │   │ │R│     ← top axle (pivot for fwd/back swing)
 //       │ │ │ B │ │ │     ← height servos slide legs up/down
 //       │ │ │   │ │ │
 //       └─┘ └───┘ └─┘     ← feet on ground
 //      ─────────────────   ← ground (y = 0)
 //
-//   3D model approach:
-//     - Legs slide DOWN relative to body when height increases
-//     - Height difference tilts the entire assembly (tarsGroup rotation)
-//     - Swing rotates each leg around its top pivot (rotation.x)
-//     - Body forward/back swing = damped pendulum physics (gravity + inertia)
-//     - Ground constraint prevents any segment from clipping below y=0
+//   Physics approach (constraint-based):
+//     - Legs are DRIVEN (servo values set their position directly)
+//     - Body is CONSTRAINED (sandwiched between legs, gravity pulls it vertical)
+//     - Body Y: geometric — rises when legs push against ground
+//     - Body lean: constrained between leg swing angles, biased toward vertical
+//     - Body sway: geometric tilt from leg height difference
+//     - All transitions smoothed with lerp (no spring-damper tuning needed)
 //
 (function () {
   'use strict';
 
   var scene, camera, renderer;
-  var tarsGroup, segments; // segments = [rightLeg, body, leftLeg]
+  var tarsGroup, segments; // segments[0]=left, segments[1]=body, segments[2]=right
   var animationFrameId = null;
   var previewPlaying = false;
   var initialized = false;
@@ -36,14 +37,21 @@
   var SEG_DEPTH = 2.1;
   var GAP = 0.15;
 
-  // ── Physics state ──────────────────────────────────────────────────────
-  // The body is a damped pendulum hanging from the axle.
-  // When legs move, the axle shifts; the body swings to follow with delay.
-  var bodySwingAngle = 0;     // current body forward/back angle (radians)
-  var bodySwingVel = 0;       // angular velocity (rad/s)
-  var PENDULUM_LEN = 3.5;    // CoM distance below axle
-  var CONTACT_K = 15.0;      // spring stiffness toward leg angle
-  var SWING_DAMPING = 5.0;   // friction
+  // ── Smooth state ─────────────────────────────────────────────────────
+  // All values lerp toward their geometric targets. No velocities needed.
+  var smoothBodyY = 0;       // current body height (lerps toward target)
+  var smoothLean  = 0;       // current torso forward/back angle
+  var smoothSway  = 0;       // current torso side-to-side angle
+  var smoothBodyZ = 0;       // accumulated forward position
+  var smoothTwist = 0;       // torso Y rotation (twist from leg swing diff)
+  var smoothYaw   = 0;       // accumulated tarsGroup Y rotation (turning)
+
+  var prevLeftSwing  = 0;    // for computing forward motion
+  var prevRightSwing = 0;
+
+  // Lerp speed: 0.0 = frozen, 1.0 = instant. ~0.12 feels smooth and natural.
+  var SMOOTH = 0.12;
+
   var lastFrameTime = 0;
 
   // ── Textures ───────────────────────────────────────────────────────────
@@ -115,8 +123,6 @@
   }
 
   // ── Build TARS geometry ────────────────────────────────────────────────
-  // Each segment's pivot is at the TOP of the mesh (the axle point).
-  // The mesh hangs downward from the pivot.
 
   function buildTars() {
     tarsGroup = new THREE.Group();
@@ -129,9 +135,9 @@
     var legW = SEG_WIDTH;
     var bodyW = SEG_WIDTH * 2 + GAP;
 
-    // segments[0] = right leg (negative X)
-    // segments[1] = body (center)
-    // segments[2] = left leg (positive X)
+    // segments[0] = left leg  (negative X)
+    // segments[1] = body      (center)
+    // segments[2] = right leg (positive X)
     var configs = [
       { width: legW, mat: outerMat, x: -(bodyW / 2 + legW / 2 + GAP) },
       { width: bodyW, mat: centerMat, x: 0 },
@@ -145,8 +151,8 @@
 
       // Pivot at the very top of the mesh
       var pivot = new THREE.Group();
-      pivot.position.set(cfg.x, SEG_HEIGHT, 0); // pivot at top
-      mesh.position.y = -SEG_HEIGHT / 2;         // mesh center hangs below pivot
+      pivot.position.set(cfg.x, SEG_HEIGHT, 0);
+      mesh.position.y = -SEG_HEIGHT / 2;
       pivot.add(mesh);
 
       // Screen on center body
@@ -197,7 +203,6 @@
     scene.add(dirLight);
     scene.add(new THREE.PointLight(0x00aaff, 0.4, 20).translateX(-4).translateY(6).translateZ(-3));
 
-    // Ground
     var ground = new THREE.Mesh(
       new THREE.PlaneGeometry(20, 20),
       new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.9, metalness: 0.1 })
@@ -281,7 +286,6 @@
       e.preventDefault();
     }, { passive: false });
 
-    // Touch
     var touchStartDist = 0;
     container.addEventListener('touchstart', function (e) {
       if (e.touches.length === 1) {
@@ -319,7 +323,7 @@
     container.addEventListener('touchend', function () { isDragging = false; });
   }
 
-  // ── Render loop with physics ───────────────────────────────────────────
+  // ── Render loop (constraint-based) ──────────────────────────────────
 
   function startRenderLoop() {
     lastFrameTime = performance.now();
@@ -333,55 +337,63 @@
       var dt = Math.min((now - lastFrameTime) / 1000, 0.05);
       lastFrameTime = now;
 
-      // ── Body pendulum physics ────────────────────────────────────────
-      // The body hangs from the axle.  The "target" angle is where
-      // the legs are pushing — the body swings toward it with inertia.
-      //
-      // Forces:
-      //   1. Gravity → pulls body toward vertical (angle = 0)
-      //   2. Leg contact → spring toward the average leg swing angle
-      //   3. Damping → friction
-      var rSwing = segments[0].targetSwing || 0;
-      var lSwing = segments[2].targetSwing || 0;
-      var legAngle = (rSwing + lSwing) / 2;
+      // Read current leg state
+      var leftSwing  = segments[0].pivot.rotation.x;
+      var rightSwing = segments[2].pivot.rotation.x;
+      var leftPivotY  = segments[0].pivot.position.y;
+      var rightPivotY = segments[2].pivot.position.y;
 
-      var gravityTorque = -(9.8 / PENDULUM_LEN) * Math.sin(bodySwingAngle);
-      var contactTorque = -CONTACT_K * (bodySwingAngle - legAngle);
-      var dampingTorque = -SWING_DAMPING * bodySwingVel;
+      // Leg heights relative to body (positive = extended down)
+      var leftHeight  = SEG_HEIGHT - leftPivotY;
+      var rightHeight = SEG_HEIGHT - rightPivotY;
 
-      bodySwingVel += (gravityTorque + contactTorque + dampingTorque) * dt;
-      bodySwingAngle += bodySwingVel * dt;
+      // ── 1. Body Y: geometric ground constraint ─────────────────
+      // Body rises so no foot clips below ground.
+      var targetY = Math.max(leftHeight, rightHeight, 0);
+      smoothBodyY += (targetY - smoothBodyY) * SMOOTH;
+      tarsGroup.position.y = smoothBodyY;
 
-      // Body can overshoot legs slightly but not wildly
-      var maxOvershoot = 0.15;
-      var lo = Math.min(0, legAngle) - maxOvershoot;
-      var hi = Math.max(0, legAngle) + maxOvershoot;
-      if (bodySwingAngle < lo) { bodySwingAngle = lo; bodySwingVel *= -0.2; }
-      if (bodySwingAngle > hi) { bodySwingAngle = hi; bodySwingVel *= -0.2; }
+      // ── 2. Torso lean (rotation.x): follows leg swing ──────────
+      // The body is sandwiched — it follows the average leg swing
+      // direction. When both legs swing forward, torso leans forward.
+      var avgSwing = (leftSwing + rightSwing) / 2;
+      var targetLean = avgSwing * 3.0;  // body follows leg swing direction
+      smoothLean += (targetLean - smoothLean) * SMOOTH;
+      segments[1].pivot.rotation.x = smoothLean;
 
-      // Apply body rotation
-      segments[1].pivot.rotation.x = bodySwingAngle;
+      // ── 3. Torso twist (rotation.y): from leg swing difference ──
+      // When legs swing opposite directions (walking), the torso
+      // twists — right leg forward → torso twists left, like a human.
+      var targetTwist = (leftSwing - rightSwing) * 0.4;
+      smoothTwist += (targetTwist - smoothTwist) * SMOOTH;
+      segments[1].pivot.rotation.y = smoothTwist;
+      segments[1].pivot.rotation.z = 0;
 
-      // ── Ground constraint ─────────────────────────────────────────
-      // applyPose sets tarsGroup position/rotation for height+tilt.
-      // Check if swing rotation pushes any foot below ground and
-      // add extra lift if needed (don't overwrite, just add).
-      var lowestWorld = Infinity;
-      for (var si = 0; si < 3; si++) {
-        var seg = segments[si].pivot;
-        var swAngle = seg.rotation.x;
-        // Local bottom Y (before tarsGroup transform)
-        var localBottomY = seg.position.y - SEG_HEIGHT * Math.cos(swAngle);
-        // Transform to world: rotate by tarsGroup.rotation.z, then translate
-        var localX = seg.position.x;
-        var worldY = tarsGroup.position.y
-          + localX * Math.sin(tarsGroup.rotation.z)
-          + localBottomY * Math.cos(tarsGroup.rotation.z);
-        if (worldY < lowestWorld) lowestWorld = worldY;
+      // ── 4. Forward locomotion ──────────────────────────────────
+      // Grounded leg swinging backward pushes body forward.
+      // Only backward swing (delta < 0) drives motion — forward
+      // swing is repositioning, not pushing. This creates a
+      // ratchet effect so motion accumulates instead of canceling.
+      var leftDelta  = leftSwing  - prevLeftSwing;
+      var rightDelta = rightSwing - prevRightSwing;
+      if (leftPivotY <= rightPivotY) {
+        // Left leg grounded — backward swing = forward push
+        if (leftDelta < 0) smoothBodyZ -= leftDelta * 5.0;
+      } else {
+        if (rightDelta < 0) smoothBodyZ -= rightDelta * 5.0;
       }
-      if (lowestWorld < 0) {
-        tarsGroup.position.y -= lowestWorld;
+      // ── 5. Turning locomotion ──────────────────────────────────
+      // Asymmetric swing (left forward, right backward) = turning.
+      // The difference in swing deltas drives yaw rotation.
+      var swingDiffDelta = leftDelta - rightDelta;
+      if (Math.abs(swingDiffDelta) > 0.001) {
+        smoothYaw += swingDiffDelta * 2.0;
       }
+
+      prevLeftSwing  = leftSwing;
+      prevRightSwing = rightSwing;
+      tarsGroup.position.z = smoothBodyZ;
+      tarsGroup.rotation.set(0, smoothYaw, 0);
 
       if (renderer && scene && camera) renderer.render(scene, camera);
     }
@@ -389,98 +401,49 @@
   }
 
   // ── Map builder step values to TARS poses ──────────────────────────────
-  // Builder values: 1-100, 50 = neutral.
-  //   height 1 = fully retracted (up), 100 = fully extended (down/push)
-  //   leg    1 = fully forward,        100 = fully backward
 
   function mapStepToPose(step) {
-    // Normalize to -1..+1 range
     var lh = ((step.left_height  || 50) - 50) / 50;
     var rh = ((step.right_height || 50) - 50) / 50;
     var ll = ((step.left_leg     || 50) - 50) / 50;
     var rl = ((step.right_leg    || 50) - 50) / 50;
 
     return {
-      leftHeight:  lh * 2.5,   // leg extension offset (units)
-      rightHeight: rh * 2.5,
-      leftSwing:   ll * 0.5,   // leg rotation (radians)
+      leftHeight:  lh * 0.5,
+      rightHeight: rh * 0.5,
+      leftSwing:   ll * 0.5,
       rightSwing:  rl * 0.5
     };
   }
 
   // ── Apply a pose to the 3D model ──────────────────────────────────────
-  //
-  // Pose has 4 values (from builder sliders, normalized):
-  //   leftHeight / rightHeight  — leg extension (units, 0 = neutral)
-  //   leftSwing  / rightSwing   — leg fwd/back rotation (radians)
-  //
-  // What this function does:
-  //   1. Slides each leg's pivot DOWN by its height offset (body stays)
-  //   2. Applies swing rotation to each leg (rotation.x)
-  //   3. Tilts the entire tarsGroup based on height difference
-  //   4. Positions tarsGroup so the grounded foot stays at y=0
-  //   5. Body rotation.x is set by the physics loop (not here)
 
   function applyPose(pose) {
     if (!segments || segments.length < 3) return;
 
-    // ── Segment positioning ─────────────────────────────────────
-    // Legs slide DOWN relative to body (height extension).
-    // tarsGroup handles assembly tilt + lift so segments stay
-    // flush and don't clip through each other.
-
     var baseY = SEG_HEIGHT;
 
-    // Legs SLIDE relative to body when height changes.
-    // Extended leg moves DOWN, body stays at base height.
-    segments[0].pivot.position.y = baseY - pose.rightHeight;  // right leg slides down
-    segments[2].pivot.position.y = baseY - pose.leftHeight;   // left leg slides down
-    segments[1].pivot.position.y = baseY;                     // body stays at axle
+    // Legs: directly driven by servo values
+    // segments[0] = negative X = robot's right, segments[2] = positive X = robot's left
+    segments[0].pivot.position.y = baseY - pose.rightHeight;
+    segments[1].pivot.position.y = baseY;
+    segments[2].pivot.position.y = baseY - pose.leftHeight;
 
-    // No per-segment side tilt (they're sandwiched)
-    segments[1].pivot.rotation.z = 0;
-
-    // Leg swing
     segments[0].pivot.rotation.x = pose.rightSwing;
-    segments[0].targetSwing = pose.rightSwing;
     segments[2].pivot.rotation.x = pose.leftSwing;
-    segments[2].targetSwing = pose.leftSwing;
 
-    // ── Height → tarsGroup lift + tilt ───────────────────────────
-    // Both legs extending equally → pure lift (body rises)
-    // One leg extending more → assembly tips toward the shorter side
-    var lh = pose.leftHeight;
-    var rh = pose.rightHeight;
-
-    // The shorter leg's foot stays on ground.
-    // The common extension lifts the whole robot.
-    var commonLift = Math.min(lh, rh);
-    var heightDiff = rh - lh;  // positive = right (neg-X) extends more
-
-    // Tilt: rotate entire assembly around the grounded foot
-    // Right leg at negative-X, left leg at positive-X
-    var rightX = segments[0].pivot.position.x;  // negative
-    var leftX  = segments[2].pivot.position.x;  // positive
-    var span = leftX - rightX;  // total foot span
-
-    // Tilt angle: negative rotation.z → right side (neg-X) goes UP
-    var tiltAngle = -Math.atan2(heightDiff, span);
-    tarsGroup.rotation.z = tiltAngle;
-
-    // Position tarsGroup so the grounded foot stays at y = 0
-    // The grounded foot is on the shorter-leg side
-    var groundedX = (heightDiff >= 0) ? leftX : rightX;
-    // After rotation, the grounded foot's Y = groundedX * sin(tiltAngle)
-    // Compensate so it lands at y = 0, plus add common lift
-    tarsGroup.position.y = commonLift - groundedX * Math.sin(tiltAngle);
-    tarsGroup.position.x = groundedX * (1 - Math.cos(tiltAngle));
-
-    // rotation.x set by physics in render loop
+    // Body Y, lean, sway, and forward motion all handled in render loop
   }
 
   function resetPose() {
-    bodySwingAngle = 0;
-    bodySwingVel = 0;
+    smoothBodyY = 0;
+    smoothLean  = 0;
+    smoothSway  = 0;
+    smoothBodyZ = 0;
+    smoothTwist = 0;
+    smoothYaw   = 0;
+    prevLeftSwing  = 0;
+    prevRightSwing = 0;
     applyPose({ leftHeight: 0, rightHeight: 0, leftSwing: 0, rightSwing: 0 });
     if (tarsGroup) {
       tarsGroup.position.set(0, 0, 0);
