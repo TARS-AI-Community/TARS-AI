@@ -806,7 +806,7 @@ class STTManager:
         stt_cfg = CONFIG.get('STT', {})
         speaker_id_mgr = None
         speaker_mode = 'any'
-        speaker_threshold = 0.60
+        speaker_threshold = float(stt_cfg.get('speaker_id_threshold', '0.75'))
         presence_mode = 'off'
         identity_mgr = None
 
@@ -816,7 +816,6 @@ class STTManager:
                 from modules.module_speaker_id import get_speaker_id_manager
                 speaker_id_mgr = get_speaker_id_manager()
                 speaker_mode = raw_speaker
-                speaker_threshold = float(stt_cfg.get('vad_speaker_threshold', '0.60'))
             except Exception:
                 pass
 
@@ -2141,6 +2140,9 @@ class STTManager:
             speech_buf = []       # Rolling buffer for voiceprint
             audio_buf = []        # Buffer for fuzzy transcription
             all_speech_chunks = []
+            pre_speech_buf = []   # Rolling buffer of frames before speech detected
+            PRE_SPEECH_MAX = 8    # ~1s of pre-speech audio to capture word onsets
+            speech_started = False
             MAX_BUF = 16
             CHECK_EVERY = 4       # Voiceprint check every ~0.5s
             TRANSCRIBE_EVERY = 8  # Fuzzy transcribe every ~1s
@@ -2174,9 +2176,21 @@ class STTManager:
                         if rms and rms > bargein_threshold:
                             speech_buf.append(data)
                             audio_buf.append(data)
+                            # On first speech frame, prepend the pre-speech buffer
+                            # so we capture the onset of the user's first word
+                            if not speech_started:
+                                speech_started = True
+                                all_speech_chunks.extend(pre_speech_buf)
+                                pre_speech_buf.clear()
                             all_speech_chunks.append(data)
                             if len(speech_buf) > MAX_BUF:
                                 speech_buf = speech_buf[-MAX_BUF:]
+                        else:
+                            # Keep a rolling buffer of recent frames before speech
+                            if not speech_started:
+                                pre_speech_buf.append(data)
+                                if len(pre_speech_buf) > PRE_SPEECH_MAX:
+                                    pre_speech_buf.pop(0)
 
                         # --- Voiceprint check ---
                         if frame_count % CHECK_EVERY == 0 and len(speech_buf) >= MIN_SPEECH:
