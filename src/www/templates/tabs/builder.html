@@ -21,6 +21,7 @@
     <div class="bld-section">
       <div class="section-label">ADD STEP</div>
       <button class="hud-btn hud-btn-secondary" id="bldAddPosition">+ Position Step</button>
+      <button class="hud-btn hud-btn-secondary" id="bldAddLoop">↺ Add Loop</button>
       <div class="bld-movement-add">
         <select id="bldMovementSelect" class="hud-select bld-movement-sel">
           <option value="">Loading…</option>
@@ -328,4 +329,44 @@
   border: 1px solid rgba(255,68,68,0.4);
   color: var(--red);
 }
+.bld-loop-block {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.bld-loop-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.06);
+}
+.bld-loop-repeat-input {
+  width: 44px;
+  text-align: center;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: inherit;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 0.8rem;
+  font-family: monospace;
+}
+.bld-loop-body {
+  padding: 6px 6px 6px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bld-loop-add {
+  width: 100%;
+  background: transparent;
+  border: 1px dashed rgba(255,255,255,0.15);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 3px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.bld-loop-add:hover { color: var(--cyan); border-color: var(--cyan); }
 </style>
