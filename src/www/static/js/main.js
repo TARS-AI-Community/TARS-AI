@@ -462,6 +462,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let _streamRow = null;
   let _streamText = null;
   let _streamActive = false;
+  let _typingTimeout = null;
 
   socket.on('bot_stream_start', () => {
     _dbg('[DEBUG] bot_stream_start received');
@@ -568,7 +569,15 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   socket.on('bot_message', d => {
-    _dbg('[DEBUG] bot_message | audio_streamed:', d.audio_streamed, '| hasStreamRow:', !!_streamRow, '| msgLen:', (d.message||'').length);
+    _dbg('[DEBUG] bot_message | audio_streamed:', d.audio_streamed, '| hasStreamRow:', !!_streamRow, '| msgLen:', (d.message||'').length, '| thinking:', !!d.thinking);
+    if (d.thinking) {
+      // Thinking response — show it but keep typing dots for the real reply
+      if (_typingTimeout) { clearTimeout(_typingTimeout); _typingTimeout = null; }
+      removeTypingMessage();
+      if (d.message) displayBotMessage(d.message, false, true);
+      displayBotMessage('', true);
+      return;
+    }
     removeTypingMessage();
     _streamActive = false;
     if (_streamRow) {
@@ -670,7 +679,8 @@ document.addEventListener('DOMContentLoaded', function () {
     $('imagePreviewContainer').style.display = 'none';
     $('imagePreview').src = '';
     updateMicSendButton();
-    setTimeout(() => displayBotMessage('', true), 1000);
+    if (_typingTimeout) clearTimeout(_typingTimeout);
+    _typingTimeout = setTimeout(() => { _typingTimeout = null; displayBotMessage('', true); }, 1000);
   }
 
   if (prompt) prompt.addEventListener('keyup', e => { if (e.key === 'Enter') sendMessage(); });
@@ -877,7 +887,8 @@ document.addEventListener('DOMContentLoaded', function () {
     voiceStatus.textContent = 'Processing...';
     displayUserMessage(text);
     sendUserMessage(text);
-    setTimeout(() => displayBotMessage('', true), 500);
+    if (_typingTimeout) clearTimeout(_typingTimeout);
+    _typingTimeout = setTimeout(() => { _typingTimeout = null; displayBotMessage('', true); }, 500);
   });
 
   function _sendAudioToServer(chunks) {

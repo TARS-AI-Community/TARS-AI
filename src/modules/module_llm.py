@@ -157,16 +157,8 @@ def _maybe_play_thinking_response():
         if not (thinking_text and isinstance(thinking_text, str) and thinking_text.strip()):
             return
 
-        queue_message(f"{thinking_text}")
-
-        def _play():
-            try:
-                from modules.module_tts import play_audio_chunks
-                asyncio.run(play_audio_chunks(thinking_text, CONFIG['TTS']['ttsoption'], is_wakeword=True))
-            except Exception as e:
-                queue_message(f"ERROR: Failed to play thinking response: {e}")
-
-        threading.Thread(target=_play, daemon=True).start()
+        from modules.module_router import send as router_send
+        router_send(thinking_text, thinking=True)
     except Exception:
         pass
 

@@ -11,6 +11,7 @@ so the router has zero knowledge of specific integrations.
 """
 
 import os
+import asyncio
 import threading
 import queue as _queue
 from modules.module_messageQue import queue_message
@@ -99,10 +100,10 @@ def get_active_route() -> dict:
 
 # ── Send to wherever the user is ─────────────────────────────────────────────
 
-def send(text: str):
+def send(text: str, thinking: bool = False):
     """Send a text message to wherever the user currently is."""
     route = get_active_route()
-    _deliver(text, route)
+    _deliver(text, route, thinking=thinking)
 
 
 def send_image(image, caption: str = ""):
@@ -132,7 +133,7 @@ def send_image(image, caption: str = ""):
 
 # ── Internal delivery ────────────────────────────────────────────────────────
 
-def _deliver(text: str, route: dict, image_path: str = None):
+def _deliver(text: str, route: dict, image_path: str = None, thinking: bool = False):
     """Deliver text and/or image to wherever the user last interacted."""
     source = route.get("source", "voice")
 
@@ -140,7 +141,7 @@ def _deliver(text: str, route: dict, image_path: str = None):
         if source == "voice":
             _send_voice(text, image_path)
         elif source == "webui":
-            _send_webui(text, image_path)
+            _send_webui(text, image_path, thinking=thinking)
         elif source in _custom_targets:
             _custom_targets[source](text, route, image_path)
         else:
@@ -169,18 +170,55 @@ def _send_voice(text: str, image_path: str = None):
     _voice_queue.put((text, image_path))
 
 
-def _send_webui(text: str, image_path: str = None):
-    """Send to the web UI via SocketIO."""
+def _send_webui(text: str, image_path: str = None, thinking: bool = False):
+    """Send to the web UI via SocketIO, including browser TTS audio.
+    Blocks until TTS audio is fully streamed so callers can safely send more audio after."""
     try:
         from modules.module_chatui import socketio
         if text:
-            socketio.emit('bot_message', {'message': text})
+            msg = {'message': text, 'audio_streamed': True}
+            if thinking:
+                msg['thinking'] = True
+            socketio.emit('bot_message', msg)
+            # Generate and stream TTS audio to the browser (blocking)
+            try:
+                import base64 as b64mod
+                from modules.module_tts import generate_tts_audio
+                from modules.module_config import load_config
+                config = load_config()
+
+                async def _stream():
+                    async for audio_chunk in generate_tts_audio(text, config['TTS']['ttsoption']):
+                        audio_chunk.seek(0)
+                        audio_bytes = audio_chunk.read()
+                        if audio_bytes:
+                            encoded = b64mod.b64encode(audio_bytes).decode('ascii')
+                            socketio.emit('bot_audio_chunk', {'data': encoded})
+
+                # Run in a new thread with its own event loop and wait for it to finish
+                done = threading.Event()
+                tts_err = [None]
+
+                def _tts_worker():
+                    try:
+                        asyncio.run(_stream())
+                    except Exception as e:
+                        tts_err[0] = e
+                    finally:
+                        done.set()
+
+                threading.Thread(target=_tts_worker, daemon=True, name="router-webui-tts").start()
+                done.wait()  # Block until thinking TTS is fully sent
+
+                if tts_err[0]:
+                    queue_message(f"ROUTER: WebUI TTS failed: {tts_err[0]}")
+            except Exception as e:
+                queue_message(f"ROUTER: WebUI TTS failed: {e}")
         if image_path:
             import base64
             with open(image_path, 'rb') as f:
                 img_b64 = base64.b64encode(f.read()).decode('utf-8')
             img_html = f'<img style="max-width:100%;border-radius:8px;" src="data:image/png;base64,{img_b64}">'
             socketio.emit('bot_message', {'message': img_html})
-        socketio.emit('bot_audio_done', {})
     except Exception as e:
         queue_message(f"ROUTER: WebUI send failed: {e}")
