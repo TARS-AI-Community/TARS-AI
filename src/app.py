@@ -279,6 +279,15 @@ if __name__ == "__main__":
     # === Skills System (auto-discover tool plugins) ===
     initialize_skills()
 
+    # === Skill Engine (pre-route skills before LLM) ===
+    try:
+        from modules.module_skill_engine import initialize_skill_engine
+        from modules.module_skills import get_skill_manager
+        skill_engine_type = CONFIG.get('SKILLS', {}).get('skill_engine', 'llm')
+        initialize_skill_engine(skill_engine_type, get_skill_manager())
+    except Exception as e:
+        queue_message(f"WARNING: Skill engine not available: {e}")
+
     # Shutdown event
     shutdown_event = threading.Event()
 

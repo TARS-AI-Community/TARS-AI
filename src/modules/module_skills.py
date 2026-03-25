@@ -127,7 +127,8 @@ class SkillManager:
         config.read(config_path)
 
         # Migrate any leftover [SKILLS] disabled= list from old format
-        needs_cleanup = False
+        # NOTE: [SKILLS] section now also stores skill_engine setting —
+        # only clean up the old 'disabled' key, do NOT remove the section.
         if config.has_section('SKILLS'):
             old_disabled = config.get('SKILLS', 'disabled', fallback='').strip()
             if old_disabled:
@@ -135,7 +136,8 @@ class SkillManager:
                     name = name.strip()
                     if name:
                         self._disabled.add(name)
-            needs_cleanup = True
+                # Remove only the 'disabled' key, not the whole section
+                self._remove_key_from_section('SKILLS', 'disabled')
 
         for section in config.sections():
             if not section.startswith('SKILL:'):
@@ -150,12 +152,34 @@ class SkillManager:
         # One-time migration: copy values from old legacy sections into [SKILL:*]
         migrated = self._migrate_legacy_sections(config)
 
-        # Single cleanup pass: remove [SKILLS] and write migrated sections
-        if needs_cleanup:
-            self._remove_section_from_file('SKILLS')
+        # Write migrated sections
         if migrated:
             for skill_name in self._skill_config:
                 self._save_skill_section(skill_name)
+
+    def _remove_key_from_section(self, section_name, key_name):
+        """Remove a single key from a section in config.ini, preserving the section."""
+        config_path = _get_config_path()
+        if not os.path.exists(config_path):
+            return
+        header = f'[{section_name}]'
+        lines = open(config_path, 'r').readlines()
+        new_lines = []
+        in_section = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped == header:
+                in_section = True
+                new_lines.append(line)
+                continue
+            elif in_section and stripped.startswith('[') and stripped.endswith(']'):
+                in_section = False
+            if in_section and stripped.startswith(f'{key_name} ') or in_section and stripped.startswith(f'{key_name}='):
+                continue  # skip this key
+            new_lines.append(line)
+        with open(config_path, 'w') as f:
+            f.writelines(new_lines)
+        queue_message(f"SKILLS: Removed legacy '{key_name}' from [{section_name}]")
 
     def _remove_section_from_file(self, section_name):
         """Remove a section and its fields from config.ini using line-level editing."""
@@ -358,6 +382,41 @@ class SkillManager:
                 if ex:
                     examples.append(ex)
         return "\n\n".join(examples)
+
+    # ── Filtered prompt building (for skill engine) ─────────
+
+    def get_prompt_text_for(self, skill_names):
+        """Generate prompt text for a specific subset of skills only."""
+        lines = []
+        for name in sorted(skill_names, key=lambda n: self._get_sort_key(n)):
+            if name in self._disabled:
+                continue
+            meta = self._skill_meta.get(name, {})
+            prompt = meta.get("prompt", "")
+            if prompt:
+                lines.append(prompt)
+                lines.append("")
+        return "\n".join(lines)
+
+    def get_examples_text_for(self, skill_names):
+        """Generate examples text for a specific subset of skills only."""
+        examples = []
+        for name in sorted(skill_names, key=lambda n: self._get_sort_key(n)):
+            if name in self._disabled:
+                continue
+            meta = self._skill_meta.get(name, {})
+            for ex in meta.get("examples", []):
+                if ex:
+                    examples.append(ex)
+        return "\n\n".join(examples)
+
+    def get_skill_descriptions(self):
+        """Return dict of {name: one-line description} for all enabled skills."""
+        return {
+            name: self._skill_meta[name].get("description", name)
+            for name in self._skills
+            if name not in self._disabled
+        }
 
     # ── Accessors ─────────────────────────────────────────────
 

@@ -765,6 +765,14 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
                 "config": CONFIG,
             }
             result = skills.execute(function_name, parameters, context)
+            # Track skill usage for the skill engine (context continuity)
+            try:
+                from modules.module_skill_engine import get_skill_engine
+                engine = get_skill_engine()
+                if engine:
+                    engine.record_skill_use(function_name)
+            except Exception:
+                pass
             # If skill returns a string, update the reply
             if result is not None:
                 if bot_response.get("_skill_replied"):
