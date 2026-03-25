@@ -31,6 +31,8 @@
   var animationFrameId = null;
   var previewPlaying = false;
   var initialized = false;
+  var allowLocomotion = false; // set true only for walk/turn/step movements
+  var locomotionDir   = 1;    // 1 = forward (+Z), -1 = backward (-Z)
 
   var SEG_WIDTH = 1.4;
   var SEG_HEIGHT = 7.0;
@@ -353,13 +355,7 @@
       smoothBodyY += (targetY - smoothBodyY) * SMOOTH;
       tarsGroup.position.y = smoothBodyY;
 
-      // ── 2. Torso lean (rotation.x): follows leg swing ──────────
-      // The body is sandwiched — it follows the average leg swing
-      // direction. When both legs swing forward, torso leans forward.
-      var avgSwing = (leftSwing + rightSwing) / 2;
-      var targetLean = avgSwing * 3.0;  // body follows leg swing direction
-      smoothLean += (targetLean - smoothLean) * SMOOTH;
-      segments[1].pivot.rotation.x = smoothLean;
+      segments[1].pivot.rotation.x = 0;
 
       // ── 3. Torso twist (rotation.y): from leg swing difference ──
       // When legs swing opposite directions (walking), the torso
@@ -367,27 +363,22 @@
       var targetTwist = (leftSwing - rightSwing) * 0.4;
       smoothTwist += (targetTwist - smoothTwist) * SMOOTH;
       segments[1].pivot.rotation.y = smoothTwist;
+
       segments[1].pivot.rotation.z = 0;
 
-      // ── 4. Forward locomotion ──────────────────────────────────
-      // Grounded leg swinging backward pushes body forward.
-      // Only backward swing (delta < 0) drives motion — forward
-      // swing is repositioning, not pushing. This creates a
-      // ratchet effect so motion accumulates instead of canceling.
+      // ── 4 & 5. Locomotion (only for walk/turn/step movements) ─────
       var leftDelta  = leftSwing  - prevLeftSwing;
       var rightDelta = rightSwing - prevRightSwing;
-      if (leftPivotY <= rightPivotY) {
-        // Left leg grounded — backward swing = forward push
-        if (leftDelta < 0) smoothBodyZ -= leftDelta * 5.0;
-      } else {
-        if (rightDelta < 0) smoothBodyZ -= rightDelta * 5.0;
-      }
-      // ── 5. Turning locomotion ──────────────────────────────────
-      // Asymmetric swing (left forward, right backward) = turning.
-      // The difference in swing deltas drives yaw rotation.
-      var swingDiffDelta = leftDelta - rightDelta;
-      if (Math.abs(swingDiffDelta) > 0.001) {
-        smoothYaw += swingDiffDelta * 2.0;
+      if (allowLocomotion) {
+        // Grounded leg swinging backward pushes body forward.
+        if (leftPivotY <= rightPivotY) {
+          if (leftDelta < 0) smoothBodyZ -= leftDelta * 5.0 * locomotionDir;
+        } else {
+          if (rightDelta < 0) smoothBodyZ -= rightDelta * 5.0 * locomotionDir;
+        }
+        // Asymmetric swing drives yaw (turning).
+        var swingDiffDelta = leftDelta - rightDelta;
+        if (Math.abs(swingDiffDelta) > 0.001) smoothYaw += swingDiffDelta * 2.0;
       }
 
       prevLeftSwing  = leftSwing;
@@ -411,8 +402,8 @@
     return {
       leftHeight:  lh * 0.5,
       rightHeight: rh * 0.5,
-      leftSwing:   ll * 0.5,
-      rightSwing:  rl * 0.5
+      leftSwing:  -ll * 0.5,   // negate: servo 1=forward → positive rotation → foot forward
+      rightSwing: -rl * 0.5
     };
   }
 
@@ -424,13 +415,15 @@
     var baseY = SEG_HEIGHT;
 
     // Legs: directly driven by servo values
-    // segments[0] = negative X = robot's right, segments[2] = positive X = robot's left
-    segments[0].pivot.position.y = baseY - pose.rightHeight;
+    // segments[0] = negative X = screen-left = robot's left
+    // segments[2] = positive X = screen-right = robot's right
+    // Lower pivot = leg extended further down = foot below ground = body must rise on that side.
+    segments[0].pivot.position.y = baseY - pose.leftHeight;
     segments[1].pivot.position.y = baseY;
-    segments[2].pivot.position.y = baseY - pose.leftHeight;
+    segments[2].pivot.position.y = baseY - pose.rightHeight;
 
-    segments[0].pivot.rotation.x = pose.rightSwing;
-    segments[2].pivot.rotation.x = pose.leftSwing;
+    segments[0].pivot.rotation.x = pose.leftSwing;
+    segments[2].pivot.rotation.x = pose.rightSwing;
 
     // Body Y, lean, sway, and forward motion all handled in render loop
   }
@@ -457,12 +450,42 @@
   var animIndex = 0;
   var animTimerId = null;
 
+  // Resolve 0 (= "unchanged") servo values by inheriting from the previous step.
+  // move_legs(0, 0, ...) means "keep current height" — the preview must do the same.
+  function flattenSteps(steps) {
+    var out = [];
+    steps.forEach(function (s) {
+      if (s.repeat !== undefined && s.steps) {
+        for (var r = 0; r < s.repeat; r++) {
+          flattenSteps(s.steps).forEach(function (inner) { out.push(inner); });
+        }
+      } else {
+        out.push(s);
+      }
+    });
+    return out;
+  }
+
+  function resolveSteps(steps) {
+    var prevLH = 50, prevRH = 50, prevLL = 50, prevRL = 50;
+    return steps.map(function (s) {
+      var lh = (s.left_height  && s.left_height  !== 0) ? s.left_height  : prevLH;
+      var rh = (s.right_height && s.right_height !== 0) ? s.right_height : prevRH;
+      var ll = (s.left_leg     && s.left_leg     !== 0) ? s.left_leg     : prevLL;
+      var rl = (s.right_leg    && s.right_leg    !== 0) ? s.right_leg    : prevRL;
+      prevLH = lh; prevRH = rh; prevLL = ll; prevRL = rl;
+      return Object.assign({}, s, { left_height: lh, right_height: rh, left_leg: ll, right_leg: rl });
+    });
+  }
+
   function playPreview() {
     if (!window._bldGetSteps) return;
     var rawSteps = window._bldGetSteps();
-    animSteps = rawSteps.filter(function (s) { return !s.movement; });
+    animSteps = resolveSteps(flattenSteps(rawSteps).filter(function (s) { return !s.movement; }));
     if (animSteps.length === 0) return;
 
+    allowLocomotion = !!window._bldLocomotion;
+    locomotionDir   = (window._bldLocomotionDir === -1) ? -1 : 1;
     previewPlaying = true;
     animIndex = 0;
 
@@ -476,6 +499,7 @@
 
   function stopPreview() {
     previewPlaying = false;
+    allowLocomotion = false;
     if (animTimerId) { clearTimeout(animTimerId); animTimerId = null; }
     resetPose();
 
