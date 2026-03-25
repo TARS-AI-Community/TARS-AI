@@ -3091,73 +3091,113 @@ def _parse_movement_steps(src):
         except (ValueError, TypeError):
             return default
 
-    def extract_steps(lines):
+    def collect_body(lines, i, parent_indent):
+        """Collect indented body lines after a block header at parent_indent."""
+        body = []
+        while i < len(lines):
+            bl = lines[i]
+            if bl.strip() == "":
+                i += 1
+                continue
+            if len(bl) - len(bl.lstrip()) > parent_indent:
+                body.append(bl)
+                i += 1
+            else:
+                break
+        return body, i
+
+    def skip_branches(lines, i, if_indent):
+        """Skip elif/else blocks at the same indent level."""
+        while i < len(lines):
+            bl = lines[i]
+            if bl.strip() == "":
+                i += 1
+                continue
+            if len(bl) - len(bl.lstrip()) == if_indent and _re.match(r"\s*(elif|else)\b", bl):
+                i += 1
+                while i < len(lines):
+                    inner = lines[i]
+                    if inner.strip() == "":
+                        i += 1
+                        continue
+                    if len(inner) - len(inner.lstrip()) > if_indent:
+                        i += 1
+                    else:
+                        break
+            else:
+                break
+        return i
+
+    def extract_steps(lines, ctx=None):
+        if ctx is None:
+            ctx = {}  # shared dict for named list variables
         result = []
         i = 0
         while i < len(lines):
             line = lines[i]
-            # if/elif/else — take only the first branch, skip the rest
-            if_m = _re.match(r"^(\s*)if\s+.+:\s*$", line)
+
+            # ── if/elif/else: take first branch only ──────────────────────────
+            if_m = _re.match(r"^\s*if\s+(.+):\s*$", line)
             if if_m:
                 if_indent = len(line) - len(line.lstrip())
-                body_lines = []
-                i += 1
-                while i < len(lines):
-                    bl = lines[i]
-                    if bl.strip() == "":
-                        i += 1
-                        continue
-                    bl_indent = len(bl) - len(bl.lstrip())
-                    if bl_indent > if_indent:
-                        body_lines.append(bl)
-                        i += 1
-                    else:
-                        break
-                result.extend(extract_steps(body_lines))
-                # skip any elif/else branches at same indent
-                while i < len(lines):
-                    bl = lines[i]
-                    if bl.strip() == "":
-                        i += 1
-                        continue
-                    bl_indent = len(bl) - len(bl.lstrip())
-                    if bl_indent == if_indent and _re.match(r"\s*(elif|else)\b", bl):
-                        i += 1
-                        while i < len(lines):
-                            inner = lines[i]
-                            if inner.strip() == "":
-                                i += 1
-                                continue
-                            if len(inner) - len(inner.lstrip()) > if_indent:
-                                i += 1
-                            else:
-                                break
-                    else:
-                        break
+                condition = if_m.group(1)
+                # Skip arms-present branch — always parse the no-arms path
+                if 'ARMS_PRESENT' in condition and 'not' not in condition:
+                    _, i = collect_body(lines, i + 1, if_indent)
+                    i = skip_branches(lines, i, if_indent)
+                    continue
+                body, i = collect_body(lines, i + 1, if_indent)
+                result.extend(extract_steps(body, ctx))
+                i = skip_branches(lines, i, if_indent)
                 continue
 
+            # ── list assignment: varname = [(a,b,c,d), ...] ───────────────────
+            list_m = _re.match(r"^\s*(\w+)\s*=\s*\[", line)
+            if list_m:
+                var_name = list_m.group(1)
+                text = line
+                depth = line.count("[") - line.count("]")
+                i += 1
+                while i < len(lines) and depth > 0:
+                    text += " " + lines[i].strip()
+                    depth += lines[i].count("[") - lines[i].count("]")
+                    i += 1
+                tuples = _re.findall(r"\(([^)]+)\)", text)
+                ctx[var_name] = [[parse_val(v.strip()) for v in t.split(",")] for t in tuples]
+                continue
+
+            # ── for VAR_TUPLE in SEQ or SEQ[:N]: iterate with substitution ───
+            for_seq_m = _re.match(r"^\s*for\s+(.+?)\s+in\s+(\w+)(\[:[^\]]*\])?\s*:", line)
+            if for_seq_m and for_seq_m.group(2) in ctx:
+                var_names = [v.strip() for v in for_seq_m.group(1).split(",")]
+                seq = ctx[for_seq_m.group(2)]
+                slice_m = _re.search(r":(\d+)", for_seq_m.group(3) or "")
+                if slice_m:
+                    seq = seq[:int(slice_m.group(1))]
+                for_indent = len(line) - len(line.lstrip())
+                body, i = collect_body(lines, i + 1, for_indent)
+                for tuple_vals in seq:
+                    subst = []
+                    for bl in body:
+                        for vi, vn in enumerate(var_names):
+                            if vi < len(tuple_vals):
+                                bl = _re.sub(r'\b' + _re.escape(vn) + r'\b', str(tuple_vals[vi]), bl)
+                        subst.append(bl)
+                    result.extend(extract_steps(subst, ctx))
+                continue
+
+            # ── for _ in range(N): loop block ─────────────────────────────────
             loop_m = _re.search(r"for\s+\w+\s+in\s+range\((\d+)\)\s*:", line)
             if loop_m:
                 repeat = int(loop_m.group(1))
                 loop_indent = len(line) - len(line.lstrip())
-                body_lines = []
-                i += 1
-                while i < len(lines):
-                    bl = lines[i]
-                    if bl.strip() == "":
-                        i += 1
-                        continue
-                    bl_indent = len(bl) - len(bl.lstrip())
-                    if bl_indent > loop_indent:
-                        body_lines.append(bl)
-                        i += 1
-                    else:
-                        break
-                inner_steps = extract_steps(body_lines)
-                if inner_steps:
-                    result.append({"repeat": repeat, "steps": inner_steps})
+                body, i = collect_body(lines, i + 1, loop_indent)
+                inner = extract_steps(body, ctx)
+                if inner:
+                    result.append({"repeat": repeat, "steps": inner})
                 continue
 
+            # ── move_legs call ─────────────────────────────────────────────────
             ml = _re.search(r"move_legs\(([^)]+)\)", line)
             if ml:
                 args = [a.strip() for a in ml.group(1).split(",")]
@@ -3173,7 +3213,6 @@ def _parse_movement_steps(src):
                         "speed": round(float(args[4]), 2) if len(args) > 4 and _re.match(r"[\d.]+", args[4]) else 0.85,
                         "hold_time": 0.0
                     }
-                    # check for time.sleep on next 1-2 lines
                     for j in range(i + 1, min(i + 3, len(lines))):
                         sl = _re.search(r"time\.sleep\(([^)]+)\)", lines[j])
                         if sl:
@@ -3184,6 +3223,7 @@ def _parse_movement_steps(src):
                             break
                     result.append(step)
 
+            # ── move_arm call ──────────────────────────────────────────────────
             arm_m = _re.search(r"move_arm\(([^)]+)\)", line)
             if arm_m and result:
                 args = [a.strip() for a in arm_m.group(1).split(",")]
