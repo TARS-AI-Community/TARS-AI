@@ -500,23 +500,25 @@
   }
 }
 .bld-loop-block {
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid rgba(var(--accent-rgb),0.22);
+  border-left: 3px solid rgba(var(--accent-rgb),0.55);
   border-radius: var(--radius-sm);
+  background: rgba(var(--accent-rgb),0.04);
   overflow: hidden;
 }
 .bld-loop-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  background: rgba(var(--accent-rgb),0.06);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding: 7px 10px;
+  background: rgba(var(--accent-rgb),0.10);
+  border-bottom: 1px solid rgba(var(--accent-rgb),0.14);
 }
 .bld-loop-repeat-input {
   width: 44px;
   text-align: center;
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.09);
+  border: 1px solid rgba(var(--accent-rgb),0.3);
   color: inherit;
   border-radius: 4px;
   padding: 2px 4px;
@@ -524,7 +526,7 @@
   font-family: var(--font-mono);
 }
 .bld-loop-body {
-  padding: 6px 6px 6px 18px;
+  padding: 8px 8px 8px 22px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -532,7 +534,7 @@
 .bld-loop-add {
   width: 100%;
   background: transparent;
-  border: 1px dashed rgba(255,255,255,0.1);
+  border: 1px dashed rgba(var(--accent-rgb),0.22);
   color: var(--text-dim);
   border-radius: var(--radius-sm);
   padding: 4px;
@@ -540,5 +542,5 @@
   cursor: pointer;
   transition: color 0.2s, border-color 0.2s;
 }
-.bld-loop-add:hover { color: var(--cyan); border-color: rgba(var(--accent-rgb),0.4); }
+.bld-loop-add:hover { color: var(--cyan); border-color: rgba(var(--accent-rgb),0.45); }
 </style>

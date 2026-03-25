@@ -3113,8 +3113,9 @@ def _parse_movement_steps(src):
                         i += 1
                     else:
                         break
-                for _ in range(repeat):
-                    result.extend(extract_steps(body_lines))
+                inner_steps = extract_steps(body_lines)
+                if inner_steps:
+                    result.append({"repeat": repeat, "steps": inner_steps})
                 continue
 
             ml = _re.search(r"move_legs\(([^)]+)\)", line)

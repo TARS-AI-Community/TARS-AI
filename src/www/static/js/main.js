@@ -4928,14 +4928,16 @@ function $(id) { return document.getElementById(id); }
 
     var icon = document.createElement('span');
     icon.textContent = '↺';
-    icon.style.opacity = '0.6';
+    icon.style.color = 'var(--cyan)';
     icon.style.fontSize = '0.9rem';
     header.appendChild(icon);
 
     var label = document.createElement('span');
-    label.textContent = 'Repeat';
+    label.textContent = 'Loop';
     label.style.fontSize = '0.75rem';
-    label.style.opacity = '0.6';
+    label.style.fontFamily = 'var(--font-hud)';
+    label.style.letterSpacing = '0.06em';
+    label.style.opacity = '0.8';
     header.appendChild(label);
 
     var repeatInput = document.createElement('input');
@@ -5309,7 +5311,7 @@ function $(id) { return document.getElementById(id); }
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (res.ok) {
-          steps = res.d.steps;
+          steps = res.d.steps.map(normalizeStep);
           var nameEl = el('bldSeqName');
           if (nameEl) nameEl.value = '';
           setFeedback('Imported "' + name + '" — edit then save under a new name');
