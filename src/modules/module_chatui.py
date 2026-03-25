@@ -3005,11 +3005,12 @@ def _execute_steps(steps):
     if _sc.MOVING:
         return jsonify({"error": "Robot is already moving"}), 409
 
-    _sc.MOVING = True
-    _sc._notify_movement_start()
-    try:
-        for step in steps:
-            if step.get('movement'):
+    def run_steps(step_list):
+        for step in step_list:
+            if step.get('repeat') is not None:
+                for _ in range(step['repeat']):
+                    run_steps(step.get('steps', []))
+            elif step.get('movement'):
                 name = step['movement']
                 if name in globals():
                     globals()[name]()
@@ -3037,6 +3038,10 @@ def _execute_steps(steps):
                 if hold and hold > 0:
                     _time.sleep(hold)
 
+    _sc.MOVING = True
+    _sc._notify_movement_start()
+    try:
+        run_steps(steps)
         move_legs(50, 50, 50, 50, 0.8)
         disable_all_servos()
         return jsonify({"success": True}), 200
