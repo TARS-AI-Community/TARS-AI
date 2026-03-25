@@ -24,6 +24,7 @@
           <div class="bld-step-list" id="bldStepList"></div>
           <div class="bld-add-bar">
             <button class="hud-btn hud-btn-secondary bld-add-btn" id="bldAddPosition"><i class="bi bi-plus"></i> Position</button>
+            <button class="hud-btn hud-btn-secondary bld-add-btn" id="bldAddLoop"><i class="bi bi-arrow-repeat"></i> Loop</button>
           </div>
         </div>
       </div>
@@ -498,4 +499,46 @@
     grid-template-columns: 1fr;
   }
 }
+.bld-loop-block {
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.bld-loop-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(var(--accent-rgb),0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.bld-loop-repeat-input {
+  width: 44px;
+  text-align: center;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: inherit;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+}
+.bld-loop-body {
+  padding: 6px 6px 6px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bld-loop-add {
+  width: 100%;
+  background: transparent;
+  border: 1px dashed rgba(255,255,255,0.1);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.bld-loop-add:hover { color: var(--cyan); border-color: rgba(var(--accent-rgb),0.4); }
 </style>
