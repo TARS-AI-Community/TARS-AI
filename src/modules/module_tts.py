@@ -101,17 +101,16 @@ def _check_aec_status():
         if result.returncode != 0 or "echo-cancel" not in result.stdout and "echo_cancel" not in result.stdout:
             return  # No AEC module — nothing to check
 
-        from modules.module_mic import get_device_info
-        input_name = sd.query_devices(get_device_info()[0]).get("name", "unknown")
-        output_name = sd.query_devices(_output_device).get("name", "unknown") if _output_device is not None else "unknown"
+        from modules.module_mic import _pw_default_is_aec
+        input_aec = _pw_default_is_aec("input")
+        output_aec = _pw_default_is_aec("output")
 
-        def _is_pw(name):
-            n = name.lower()
-            return "pipewire" in n or "echo_cancel" in n
-
-        if _is_pw(input_name) and _is_pw(output_name):
+        if input_aec and output_aec:
             queue_message("INFO: AEC status: ACTIVE (input and output both route through pipewire)")
         else:
+            from modules.module_mic import get_device_info
+            input_name = sd.query_devices(get_device_info()[0]).get("name", "unknown")
+            output_name = sd.query_devices(_output_device).get("name", "unknown") if _output_device is not None else "unknown"
             queue_message(f"WARNING: AEC status: BROKEN — input: {input_name}, output: {output_name}")
     except Exception:
         pass

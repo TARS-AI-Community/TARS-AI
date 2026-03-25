@@ -40,9 +40,40 @@ _device_info = None  # cached (device_idx, native_rate)
 _device_lock = threading.Lock()
 
 
+def _pw_default_is_aec(direction="input"):
+    """Check if PipeWire's default source/sink is the echo-cancel device."""
+    try:
+        import subprocess
+        key = "Default Source" if direction == "input" else "Default Sink"
+        result = subprocess.run(["pactl", "info"], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if line.strip().startswith(key):
+                    return "echo_cancel" in line.lower()
+    except Exception:
+        pass
+    return False
+
+
 def _find_pipewire_device(direction="input"):
-    """Wait up to 5s for a pipewire device to appear. Returns (idx, rate) or None."""
+    """Find a pipewire AEC device. Returns (idx, rate) or None.
+
+    First checks if PipeWire's default source/sink is the echo-cancel device.
+    If so, returns the 'default' or 'pulse' sounddevice entry (which routes
+    through PipeWire's default). Falls back to scanning device names.
+    """
     ch_key = "max_input_channels" if direction == "input" else "max_output_channels"
+
+    # If PipeWire default is the AEC device, use the 'default' or 'pulse' device
+    if _pw_default_is_aec(direction):
+        for i, dev in enumerate(sd.query_devices()):
+            if dev.get(ch_key, 0) < 1:
+                continue
+            name = dev.get("name", "").lower()
+            if name in ("default", "pulse"):
+                return i, int(dev.get("default_samplerate", MODEL_RATE))
+
+    # Fallback: scan for devices with pipewire/echo_cancel in the name
     for attempt in range(10):
         for i, dev in enumerate(sd.query_devices()):
             if dev.get(ch_key, 0) < 1:
