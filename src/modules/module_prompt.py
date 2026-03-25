@@ -16,6 +16,7 @@ requires a separate written license from Charles-Olivier Dion (AtomikSpace).
 
 This license applies only to this file and does not override licenses of other files in the repository.
 """
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import os
 import re
@@ -710,51 +711,67 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     shortterm_budget = int(available_tokens * 0.65)
     longterm_budget = available_tokens - shortterm_budget
 
-    if shortterm_budget > 0:
-        short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(shortterm_budget)
-        # Replace {user}/{char} placeholders with actual names so the LLM
-        # sees "Joe: hello" instead of "{user}: hello" in conversation history
+    # Run all three memory retrievals in parallel — they are independent.
+    # Wall-clock time becomes max(shortterm, summary, longterm) instead of sum.
+    def _fetch_shortterm():
+        if shortterm_budget <= 0:
+            return ""
+        return memory_manager.get_shortterm_memories_tokenlimit(shortterm_budget)
+
+    def _fetch_summary():
+        try:
+            return memory_manager.get_conversation_summary(lookback_hours=24) or ""
+        except Exception:
+            return ""
+
+    def _fetch_longterm():
+        return clean_text(memory_manager.get_longterm_memory(user_prompt))
+
+    with ThreadPoolExecutor(max_workers=3, thread_name_prefix="mem") as pool:
+        fut_short = pool.submit(_fetch_shortterm)
+        fut_summary = pool.submit(_fetch_summary)
+        fut_long = pool.submit(_fetch_longterm)
+        short_term_memory = fut_short.result()
+        conversation_summary = fut_summary.result()
+        raw_longterm = fut_long.result()
+
+    # Post-process short-term (placeholder replacement + budget rebalance)
+    if short_term_memory:
         active_user = _get_active_user_name(config['CHAR']['user_name'])
         short_term_memory = short_term_memory.replace("{user}", active_user).replace("{char}", character_manager.char_name)
         shortterm_used = memory_manager.token_count(short_term_memory).get('length', 0)
-        # Give any unused short-term budget back to long-term
         longterm_budget += (shortterm_budget - shortterm_used)
 
     # Episodic summary — deduct its tokens from longterm budget so it doesn't
     # silently push RAG/topics out of the context window.
-    if longterm_budget > 100:
-        try:
-            conversation_summary = memory_manager.get_conversation_summary(lookback_hours=24)
-            if conversation_summary:
-                # Fast approximation (~4 chars per token) — good enough for a summary
-                summary_tokens = len(conversation_summary) // 4
-                longterm_budget -= summary_tokens
-        except Exception:
-            pass
+    # Only use it when there's enough budget (matches original >100 guard).
+    if conversation_summary and longterm_budget > 100:
+        summary_tokens = len(conversation_summary) // 4
+        longterm_budget -= summary_tokens
+    else:
+        conversation_summary = ""
 
-    if longterm_budget > 0:
-        raw_longterm = clean_text(memory_manager.get_longterm_memory(user_prompt))
-        if raw_longterm:
-            lt_length = memory_manager.token_count(raw_longterm).get('length', 0)
-            if lt_length <= longterm_budget:
-                past_memory = raw_longterm
-            else:
-                # Truncate to fit — keep topic summary, trim RAG results.
-                # Use fast char/4 approximation per line to avoid expensive
-                # per-line tiktoken calls (was O(n) encoding calls).
-                lines = raw_longterm.split('\n')
-                truncated = []
-                running = 0
-                for line in lines:
-                    line_len = len(line) // 4  # fast approximation
-                    if running + line_len > longterm_budget:
-                        break
-                    truncated.append(line)
-                    running += line_len
-                past_memory = '\n'.join(truncated)
+    if longterm_budget > 0 and raw_longterm:
+        lt_length = memory_manager.token_count(raw_longterm).get('length', 0)
+        if lt_length <= longterm_budget:
+            past_memory = raw_longterm
+        else:
+            # Truncate to fit — keep topic summary, trim RAG results.
+            # Use fast char/4 approximation per line to avoid expensive
+            # per-line tiktoken calls (was O(n) encoding calls).
+            lines = raw_longterm.split('\n')
+            truncated = []
+            running = 0
+            for line in lines:
+                line_len = len(line) // 4  # fast approximation
+                if running + line_len > longterm_budget:
+                    break
+                truncated.append(line)
+                running += line_len
+            past_memory = '\n'.join(truncated)
         remaining_tokens = longterm_budget - (len(past_memory) // 4) if past_memory else longterm_budget
     else:
-        remaining_tokens = 0
+        remaining_tokens = longterm_budget if longterm_budget > 0 else 0
 
     if remaining_tokens > 0 and character_manager.example_dialogue:
         example_length = memory_manager.token_count(character_manager.example_dialogue).get('length', 0)
