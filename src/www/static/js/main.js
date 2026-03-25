@@ -4761,6 +4761,10 @@ function $(id) { return document.getElementById(id); }
     };
   };
 
+  var DEFAULT_LOOP = function () {
+    return { repeat: 2, steps: [DEFAULT_STEP()] };
+  };
+
   var steps = [DEFAULT_STEP()];
   var savedSequences = {};
   var movements = [];
@@ -4788,9 +4792,9 @@ function $(id) { return document.getElementById(id); }
     renderSteps();
 
     fetch('/get_movements').then(function (r) { return r.json(); }).then(function (d) {
-      movements = (d.movements || [])
+      movements = (d.legs_only || d.movements || [])
         .filter(function (m) { return m.id !== 'reset_positions'; })
-        .map(function (m) { return m.id; });
+        .map(function (m) { return m.id || m; });
       var sel = el('bldMovementSelect');
       if (sel) {
         sel.innerHTML = '';
@@ -4814,6 +4818,7 @@ function $(id) { return document.getElementById(id); }
       });
     }
     if (el('bldAddPosition')) el('bldAddPosition').addEventListener('click', addPositionStep);
+    if (el('bldAddLoop')) el('bldAddLoop').addEventListener('click', addLoop);
     if (el('bldAddMovement')) el('bldAddMovement').addEventListener('click', addMovementStep);
     if (el('bldImportMovement')) el('bldImportMovement').addEventListener('click', importMovement);
     if (el('bldPlay')) el('bldPlay').addEventListener('click', playSequence);
@@ -4826,6 +4831,11 @@ function $(id) { return document.getElementById(id); }
 
   function addPositionStep() {
     steps.push(DEFAULT_STEP());
+    renderSteps();
+  }
+
+  function addLoop() {
+    steps.push(DEFAULT_LOOP());
     renderSteps();
   }
 
@@ -4885,7 +4895,9 @@ function $(id) { return document.getElementById(id); }
       label.textContent = 'Step ' + (i + 1);
       wrapper.appendChild(label);
 
-      if (step.movement) {
+      if (step.repeat !== undefined) {
+        wrapper.appendChild(buildLoopBlock(step, i));
+      } else if (step.movement) {
         wrapper.appendChild(buildMovementRow(step, i));
       } else {
         wrapper.appendChild(buildPositionRow(step, i));
@@ -4940,6 +4952,87 @@ function $(id) { return document.getElementById(id); }
     });
   }
 
+  function buildLoopBlock(loop, i) {
+    var block = document.createElement('div');
+    block.className = 'bld-loop-block';
+
+    // Header
+    var header = document.createElement('div');
+    header.className = 'bld-loop-header';
+
+    var grip = document.createElement('span');
+    grip.className = 'bld-grip';
+    grip.textContent = '⠿';
+    addTouchDrag(grip, i);
+    header.appendChild(grip);
+
+    var icon = document.createElement('span');
+    icon.textContent = '↺';
+    icon.style.color = 'var(--cyan)';
+    icon.style.fontSize = '0.9rem';
+    header.appendChild(icon);
+
+    var label = document.createElement('span');
+    label.textContent = 'Loop';
+    label.style.fontSize = '0.75rem';
+    label.style.fontFamily = 'var(--font-hud)';
+    label.style.letterSpacing = '0.06em';
+    label.style.opacity = '0.8';
+    header.appendChild(label);
+
+    var repeatInput = document.createElement('input');
+    repeatInput.type = 'number';
+    repeatInput.min = 1;
+    repeatInput.max = 20;
+    repeatInput.value = loop.repeat;
+    repeatInput.className = 'bld-loop-repeat-input';
+    repeatInput.addEventListener('input', function () {
+      loop.repeat = Math.max(1, parseInt(this.value) || 1);
+    });
+    header.appendChild(repeatInput);
+
+    var timesLabel = document.createElement('span');
+    timesLabel.textContent = 'times';
+    timesLabel.style.fontSize = '0.75rem';
+    timesLabel.style.opacity = '0.6';
+    header.appendChild(timesLabel);
+
+    var del = document.createElement('button');
+    del.className = 'bld-del';
+    del.textContent = '×';
+    del.style.marginLeft = 'auto';
+    del.addEventListener('click', function () { deleteStep(i); });
+    header.appendChild(del);
+
+    block.appendChild(header);
+
+    // Body with inner steps
+    var body = document.createElement('div');
+    body.className = 'bld-loop-body';
+
+    loop.steps.forEach(function (innerStep, si) {
+      var innerRow = buildPositionRow(innerStep, si, function (field, value) {
+        loop.steps[si][field] = value;
+      }, function () {
+        loop.steps.splice(si, 1);
+        renderSteps();
+      });
+      body.appendChild(innerRow);
+    });
+
+    var addBtn = document.createElement('button');
+    addBtn.className = 'bld-loop-add';
+    addBtn.textContent = '+ step';
+    addBtn.addEventListener('click', function () {
+      loop.steps.push(DEFAULT_STEP());
+      renderSteps();
+    });
+    body.appendChild(addBtn);
+
+    block.appendChild(body);
+    return block;
+  }
+
   function buildMovementRow(step, i) {
     var row = document.createElement('div');
     row.className = 'bld-row bld-movement-row';
@@ -4969,14 +5062,14 @@ function $(id) { return document.getElementById(id); }
     return row;
   }
 
-  function buildPositionRow(step, i) {
+  function buildPositionRow(step, i, onUpdate, onDelete) {
     var row = document.createElement('div');
     row.className = 'bld-row bld-position-row';
 
     var grip = document.createElement('span');
     grip.className = 'bld-grip';
     grip.textContent = '⠿';
-    addTouchDrag(grip, i);
+    if (!onUpdate) addTouchDrag(grip, i);
     row.appendChild(grip);
 
     var sliders = document.createElement('div');
@@ -4992,7 +5085,7 @@ function $(id) { return document.getElementById(id); }
     ];
 
     legFields.forEach(function (cfg) {
-      sliders.appendChild(buildSlider(step, i, cfg, true));
+      sliders.appendChild(buildSlider(step, i, cfg, true, onUpdate));
     });
 
     if (armsPresent) {
@@ -5029,13 +5122,13 @@ function $(id) { return document.getElementById(id); }
     var del = document.createElement('button');
     del.className = 'bld-del';
     del.textContent = '×';
-    del.addEventListener('click', function () { deleteStep(i); });
+    del.addEventListener('click', function () { onDelete ? onDelete() : deleteStep(i); });
     row.appendChild(del);
 
     return row;
   }
 
-  function buildSlider(step, stepIndex, cfg, liveEnabled) {
+  function buildSlider(step, stepIndex, cfg, liveEnabled, onUpdate) {
     var wrap = document.createElement('div');
     wrap.className = 'bld-slider-wrap';
 
@@ -5069,7 +5162,11 @@ function $(id) { return document.getElementById(id); }
       var v = cfg.field === 'speed' || cfg.field === 'hold_time'
         ? parseFloat(this.value)
         : parseInt(this.value);
-      steps[stepIndex][cfg.field] = v;
+      if (onUpdate) {
+        onUpdate(cfg.field, v);
+      } else {
+        steps[stepIndex][cfg.field] = v;
+      }
       valEl.textContent = cfg.field === 'speed' ? v.toFixed(2)
         : cfg.field === 'hold_time' ? v.toFixed(1)
         : v;
@@ -5210,22 +5307,25 @@ function $(id) { return document.getElementById(id); }
     }).finally(function () { sequencePlaying = false; });
   }
 
+  function normalizeStep(s) {
+    if (s.repeat !== undefined) return { repeat: s.repeat, steps: (s.steps || []).map(normalizeStep) };
+    if (s.movement) return { movement: s.movement, hold_time: s.hold_time || 0 };
+    return {
+      movement: null,
+      left_height: s.left_height || 50, right_height: s.right_height || 50,
+      left_leg: s.left_leg || 50, right_leg: s.right_leg || 50,
+      left_main: s.left_main || null, left_forearm: s.left_forearm || null,
+      left_hand: s.left_hand || null, right_main: s.right_main || null,
+      right_forearm: s.right_forearm || null, right_hand: s.right_hand || null,
+      speed: s.speed || 0.85, hold_time: s.hold_time || 0
+    };
+  }
+
   function loadIntoEditor(name) {
     var entry = savedSequences[name];
     if (!entry) return;
     var raw = Array.isArray(entry) ? entry : (entry.steps || []);
-    steps = raw.map(function (s) {
-      if (s.movement) return { movement: s.movement, hold_time: s.hold_time || 0 };
-      return {
-        movement: null,
-        left_height: s.left_height || 50, right_height: s.right_height || 50,
-        left_leg: s.left_leg || 50, right_leg: s.right_leg || 50,
-        left_main: s.left_main || null, left_forearm: s.left_forearm || null,
-        left_hand: s.left_hand || null, right_main: s.right_main || null,
-        right_forearm: s.right_forearm || null, right_hand: s.right_hand || null,
-        speed: s.speed || 0.85, hold_time: s.hold_time || 0
-      };
-    });
+    steps = raw.map(normalizeStep);
     var nameEl = el('bldSeqName');
     if (nameEl) nameEl.value = name;
     var typeEl = el('bldSeqType');
@@ -5251,9 +5351,9 @@ function $(id) { return document.getElementById(id); }
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (res.ok) {
-          steps = res.d.steps;
+          steps = res.d.steps.map(normalizeStep);
           var nameEl = el('bldSeqName');
-          if (nameEl) nameEl.value = '';
+          if (nameEl) nameEl.value = name;
           setFeedback('Imported "' + name + '" — edit then save under a new name');
           renderSteps();
         } else {
@@ -5318,7 +5418,20 @@ function $(id) { return document.getElementById(id); }
   });
 
   // ── Expose steps for 3D preview ──────────────────────────────────────────
-  window._bldGetSteps = function () { return JSON.parse(JSON.stringify(steps)); };
+  var _LOCOMOTION_MOVEMENTS = {
+    walk_forward: 1, walk_backward: -1,
+    turn_left: 1, turn_right: 1,
+    turn_left_slow: 1, turn_right_slow: 1,
+    step_forward: 1, step_backward: -1,
+  };
+  window._bldGetSteps = function () {
+    var nameEl = el('bldSeqName');
+    var name = nameEl ? nameEl.value.trim() : '';
+    var dir = _LOCOMOTION_MOVEMENTS[name];
+    window._bldLocomotion    = !!dir;
+    window._bldLocomotionDir = dir || 1;
+    return JSON.parse(JSON.stringify(steps));
+  };
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', init);
