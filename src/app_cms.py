@@ -655,12 +655,21 @@ class TarsConfigManager:
             actions_taken = []
             
             for section_name, template_section in template_sections.items():
+                # SKILL:* sections are owned by the SkillManager.
+                # If a SKILL:* section was removed from config.ini (meaning the
+                # skill is enabled with no extra config), do NOT recreate it from
+                # the template — that would reset it to disabled.  Only preserve
+                # SKILL:* sections that already exist in the current config.
+                if section_name.startswith('SKILL:') and section_name not in existing_sections:
+                    actions_taken.append(f"Skipped [{section_name}] (managed by SkillManager)")
+                    continue
+
                 final_section = ConfigSection(
                     name=section_name,
                     inline_comment=template_section.inline_comment,
                     description_comments=template_section.description_comments.copy() if template_section.description_comments else []
                 )
-                
+
                 for field_name, template_field in template_section.fields.items():
                     if section_name in config_data and field_name in config_data[section_name]:
                         new_value = str(config_data[section_name][field_name])
@@ -672,14 +681,14 @@ class TarsConfigManager:
                     else:
                         new_value = template_field.value
                         actions_taken.append(f"Used template [{section_name}] {field_name}")
-                    
+
                     final_field = ConfigField(
                         name=field_name,
                         value=new_value,
                         inline_comment=template_field.inline_comment,
                         description_comments=template_field.description_comments.copy() if template_field.description_comments else []
                     )
-                    
+
                     final_section.fields[field_name] = final_field
 
                 # For SKILL:* sections, preserve extra fields not in the template
