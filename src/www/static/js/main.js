@@ -5376,7 +5376,19 @@ function $(id) { return document.getElementById(id); }
   });
 
   // ── Expose steps for 3D preview ──────────────────────────────────────────
-  window._bldGetSteps = function () { return JSON.parse(JSON.stringify(steps)); };
+  var _LOCOMOTION_MOVEMENTS = {
+    walk_forward: 1, walk_backward: -1,
+    turn_left: 1, turn_right: 1,
+    step_forward: 1, step_backward: -1,
+  };
+  window._bldGetSteps = function () {
+    var nameEl = el('bldSeqName');
+    var name = nameEl ? nameEl.value.trim() : '';
+    var dir = _LOCOMOTION_MOVEMENTS[name];
+    window._bldLocomotion    = !!dir;
+    window._bldLocomotionDir = dir || 1;
+    return JSON.parse(JSON.stringify(steps));
+  };
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', init);

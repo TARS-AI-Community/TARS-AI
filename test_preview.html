@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TARS Preview Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0a14; color: #ccc; font-family: monospace; display: flex; height: 100vh; }
+    #sidebar { width: 200px; flex-shrink: 0; padding: 12px; border-right: 1px solid #222; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+    h2 { color: #00aaff; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin: 8px 0 4px; }
+    h2:first-child { margin-top: 0; }
+    .mov-btn {
+      background: #111; border: 1px solid #292929; color: #888; padding: 6px 8px;
+      cursor: pointer; font-family: monospace; font-size: 11px; text-align: left;
+      border-radius: 2px; transition: border-color 0.1s, color 0.1s;
+    }
+    .mov-btn:hover { border-color: #00aaff; color: #ddd; }
+    .mov-btn.active { border-color: #00aaff; color: #00aaff; background: #0a1520; }
+    #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    #bldPreviewViewport { flex: 1; }
+    #controls { padding: 8px 14px; display: flex; gap: 10px; border-top: 1px solid #222; align-items: center; }
+    button { background: #1a2a3a; border: 1px solid #00aaff; color: #00aaff; padding: 5px 14px;
+             cursor: pointer; font-family: monospace; font-size: 12px; border-radius: 2px; }
+    button:hover { background: #00aaff; color: #000; }
+    #movName { color: #00aaff; font-size: 12px; margin-left: 6px; }
+  </style>
+</head>
+<body>
+<div id="sidebar">
+
+  <h2>Locomotion</h2>
+  <button class="mov-btn" data-mov="walk_forward" data-loco="1">walk_forward</button>
+  <button class="mov-btn" data-mov="walk_backward" data-loco="1" data-dir="-1">walk_backward</button>
+  <button class="mov-btn" data-mov="step_forward" data-loco="1">step_forward</button>
+  <button class="mov-btn" data-mov="step_backward" data-loco="1" data-dir="-1">step_backward</button>
+  <button class="mov-btn" data-mov="turn_right" data-loco="1">turn_right</button>
+  <button class="mov-btn" data-mov="turn_left" data-loco="1">turn_left</button>
+
+  <h2>Expressive</h2>
+  <button class="mov-btn" data-mov="wave_right">wave_right</button>
+  <button class="mov-btn" data-mov="wave_left">wave_left</button>
+  <button class="mov-btn" data-mov="swing_legs">swing_legs</button>
+  <button class="mov-btn" data-mov="tilt_right">tilt_right</button>
+  <button class="mov-btn" data-mov="tilt_left">tilt_left</button>
+  <button class="mov-btn" data-mov="side_side">side_side</button>
+  <button class="mov-btn" data-mov="laugh">laugh</button>
+  <button class="mov-btn" data-mov="excited">excited</button>
+  <button class="mov-btn" data-mov="bow">bow</button>
+  <button class="mov-btn" data-mov="pose">pose</button>
+  <button class="mov-btn" data-mov="monster">monster</button>
+
+  <h2>Utility</h2>
+  <button class="mov-btn" data-mov="neutral">neutral</button>
+
+</div>
+<div id="main">
+  <div id="bldPreviewViewport"></div>
+  <div id="controls">
+    <button id="bldPreview">&#9654; Play</button>
+    <button id="bldPreviewStop" style="display:none">&#9632; Stop</button>
+    <span id="movName">&#8592; select a movement</span>
+  </div>
+</div>
+
+<script>
+// Step data extracted from module_movements.py (leg servos only).
+// None/null → 0 (inherit from previous step). Arms ignored.
+var MOVEMENTS = {
+
+  // ── Locomotion ────────────────────────────────────────────────────────────
+
+  walk_forward: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.8 },
+    { lh:40, rh:70, ll:50, rl:50, sp:0.5 },
+    { lh:40, rh:70, ll:35, rl:50, sp:0.5 },
+    { lh:50, rh:50, ll:35, rl:50, sp:0.5 },
+    { lh:70, rh:40, ll:50, rl:50, sp:0.5 },
+    { lh:70, rh:40, ll:50, rl:35, sp:0.5 },
+    { lh:50, rh:50, ll:50, rl:35, sp:0.5 },
+    { lh:40, rh:70, ll:50, rl:50, sp:0.5 },
+    { lh:40, rh:70, ll:35, rl:50, sp:0.5 },
+    { lh:50, rh:50, ll:35, rl:50, sp:0.5 },
+    { lh:70, rh:40, ll:50, rl:50, sp:0.5 },
+    { lh:70, rh:40, ll:50, rl:35, sp:0.5 },
+    { lh:50, rh:50, ll:50, rl:35, sp:0.5 },
+    { lh:40, rh:70, ll:50, rl:50, sp:0.5 },
+    { lh:40, rh:70, ll:35, rl:50, sp:0.5 },
+    { lh:50, rh:50, ll:35, rl:50, sp:0.5 },
+    { lh:70, rh:40, ll:35, rl:50, sp:0.5 },
+    { lh:70, rh:40, ll:50, rl:50, sp:0.5 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.8 },
+  ],
+
+  walk_backward: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.8 },
+    { lh:50, rh:65, ll:50, rl:50, sp:0.5 },
+    { lh:50, rh:65, ll:50, rl:75, sp:0.5 },
+    { lh:50, rh:50, ll:50, rl:75, sp:0.5 },
+    { lh:65, rh:50, ll:50, rl:50, sp:0.5 },
+    { lh:65, rh:50, ll:75, rl:50, sp:0.5 },
+    { lh:50, rh:50, ll:75, rl:50, sp:0.5 },
+    { lh:50, rh:65, ll:50, rl:50, sp:0.5 },
+    { lh:50, rh:65, ll:50, rl:75, sp:0.5 },
+    { lh:50, rh:50, ll:50, rl:75, sp:0.5 },
+    { lh:65, rh:50, ll:50, rl:50, sp:0.5 },
+    { lh:65, rh:50, ll:75, rl:50, sp:0.5 },
+    { lh:50, rh:50, ll:75, rl:50, sp:0.5 },
+    { lh:50, rh:65, ll:50, rl:75, sp:0.5 },
+    { lh:50, rh:65, ll:50, rl:50, sp:0.5 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.8 },
+  ],
+
+  step_forward: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+    { lh:42, rh:42, ll:40, rl:40, sp:0.9 },
+    { lh:70, rh:70, ll:23, rl:23, sp:0.9 },
+    { lh:30, rh:30, ll:30, rl:30, sp:0.8 },
+    { lh:70, rh:70, ll:35, rl:35, sp:0.9 },
+    { lh:60, rh:60, ll:50, rl:50, sp:0.9 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+  ],
+
+  step_backward: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+    { lh:30, rh:30, ll:55, rl:55, sp:0.8 },
+    { lh:68, rh:68, ll:82, rl:82, sp:0.8 },
+    { lh:30, rh:30, ll:70, rl:70, sp:0.8 },
+    { lh:50, rh:50, ll:62, rl:62, sp:0.9 },
+    { lh:65, rh:65, ll:50, rl:50, sp:0.9 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+  ],
+
+  turn_right: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+    { lh:70, rh:70, ll:50, rl:50, sp:0.9 },
+    { lh:70, rh:70, ll:65, rl:35, sp:0.9 },
+    { lh:45, rh:45, ll:65, rl:35, sp:0.9 },
+    { lh:52, rh:52, ll:50, rl:50, sp:0.8 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.8 },
+  ],
+
+  turn_left: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+    { lh:70, rh:70, ll:50, rl:50, sp:0.9 },
+    { lh:70, rh:70, ll:35, rl:65, sp:0.9 },
+    { lh:45, rh:45, ll:35, rl:65, sp:0.9 },
+    { lh:52, rh:52, ll:50, rl:50, sp:0.8 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.8 },
+  ],
+
+  // ── Expressive ────────────────────────────────────────────────────────────
+
+  wave_right: [
+    { lh:50, rh:50,  ll:50, rl:50,  sp:0.8 },
+    { lh:50, rh:90,  ll:50, rl:50,  sp:0.9 },
+    { lh:20, rh:90,  ll:50, rl:100, sp:0.9 },
+    { lh:20, rh:90,  ll:50, rl:70,  sp:0.9 },
+    { lh:20, rh:90,  ll:50, rl:100, sp:0.9 },
+    { lh:20, rh:90,  ll:50, rl:70,  sp:0.9 },
+    { lh:50, rh:90,  ll:50, rl:100, sp:0.9 },
+    { lh:50, rh:90,  ll:50, rl:70,  sp:0.9 },
+    { lh:50, rh:90,  ll:50, rl:100, sp:0.9 },
+    { lh:50, rh:90,  ll:50, rl:70,  sp:0.9 },
+    { lh:20, rh:90,  ll:50, rl:100, sp:0.9 },
+    { lh:20, rh:90,  ll:50, rl:70,  sp:0.9 },
+    { lh:20, rh:90,  ll:50, rl:100, sp:0.9 },
+    { lh:20, rh:90,  ll:50, rl:70,  sp:0.9 },
+    { lh:50, rh:50,  ll:50, rl:50,  sp:0.8 },
+  ],
+
+  wave_left: [
+    { lh:50, rh:50,  ll:50,  rl:50, sp:0.8 },
+    { lh:90, rh:50,  ll:50,  rl:50, sp:0.9 },
+    { lh:90, rh:20,  ll:100, rl:50, sp:0.9 },
+    { lh:90, rh:20,  ll:70,  rl:50, sp:0.9 },
+    { lh:90, rh:20,  ll:100, rl:50, sp:0.9 },
+    { lh:90, rh:20,  ll:70,  rl:50, sp:0.9 },
+    { lh:90, rh:50,  ll:100, rl:50, sp:0.9 },
+    { lh:90, rh:50,  ll:70,  rl:50, sp:0.9 },
+    { lh:90, rh:50,  ll:100, rl:50, sp:0.9 },
+    { lh:90, rh:50,  ll:70,  rl:50, sp:0.9 },
+    { lh:90, rh:20,  ll:100, rl:50, sp:0.9 },
+    { lh:90, rh:20,  ll:70,  rl:50, sp:0.9 },
+    { lh:90, rh:20,  ll:100, rl:50, sp:0.9 },
+    { lh:90, rh:20,  ll:70,  rl:50, sp:0.9 },
+    { lh:50, rh:50,  ll:50,  rl:50, sp:0.8 },
+  ],
+
+  swing_legs: [
+    { lh:50,  rh:50,  ll:50, rl:50, sp:1.0 },
+    { lh:100, rh:100, ll:50, rl:50, sp:1.0 },
+    { lh:0,   rh:0,   ll:20, rl:80, sp:0.6 },
+    { lh:0,   rh:0,   ll:80, rl:20, sp:0.6 },
+    { lh:0,   rh:0,   ll:20, rl:80, sp:0.6 },
+    { lh:0,   rh:0,   ll:80, rl:20, sp:0.6 },
+    { lh:0,   rh:0,   ll:20, rl:80, sp:0.6 },
+    { lh:0,   rh:0,   ll:80, rl:20, sp:0.6 },
+    { lh:0,   rh:0,   ll:50, rl:50, sp:0.6 },
+    { lh:50,  rh:50,  ll:50, rl:50, sp:0.7 },
+  ],
+
+  tilt_right: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+    { lh:20, rh:80, ll:50, rl:50, sp:0.9, ht:3 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+  ],
+
+  tilt_left: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+    { lh:80, rh:20, ll:50, rl:50, sp:0.9, ht:3 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+  ],
+
+  side_side: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.8 },
+    { lh:10, rh:90, ll:50, rl:50, sp:0.9 },
+    { lh:90, rh:10, ll:50, rl:50, sp:0.9 },
+    { lh:10, rh:90, ll:50, rl:50, sp:0.9 },
+    { lh:90, rh:10, ll:50, rl:50, sp:0.9 },
+    { lh:10, rh:90, ll:50, rl:50, sp:0.9 },
+    { lh:90, rh:10, ll:50, rl:50, sp:0.9 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+  ],
+
+  laugh: [
+    { lh:50, rh:50, ll:50, rl:50, sp:1.0 },
+    { lh:1,  rh:1,  ll:50, rl:50, sp:1.0 },
+    { lh:50, rh:50, ll:50, rl:50, sp:1.0 },
+    { lh:1,  rh:1,  ll:50, rl:50, sp:1.0 },
+    { lh:50, rh:50, ll:50, rl:50, sp:1.0 },
+    { lh:1,  rh:1,  ll:50, rl:50, sp:1.0 },
+    { lh:50, rh:50, ll:50, rl:50, sp:1.0 },
+    { lh:1,  rh:1,  ll:50, rl:50, sp:1.0 },
+    { lh:50, rh:50, ll:50, rl:50, sp:1.0 },
+    { lh:1,  rh:1,  ll:50, rl:50, sp:1.0 },
+    { lh:50, rh:50, ll:50, rl:50, sp:1.0 },
+  ],
+
+  excited: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+    { lh:40, rh:60, ll:45, rl:50, sp:0.95 },
+    { lh:60, rh:40, ll:50, rl:45, sp:0.95 },
+    { lh:40, rh:60, ll:45, rl:50, sp:0.95 },
+    { lh:60, rh:40, ll:50, rl:45, sp:0.95 },
+    { lh:40, rh:60, ll:45, rl:50, sp:0.95 },
+    { lh:60, rh:40, ll:50, rl:45, sp:0.95 },
+    { lh:40, rh:60, ll:45, rl:50, sp:0.95 },
+    { lh:60, rh:40, ll:50, rl:45, sp:0.95 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.9 },
+  ],
+
+  bow: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.4 },
+    { lh:15, rh:15, ll:50, rl:50, sp:0.7 },
+    { lh:15, rh:15, ll:70, rl:70, sp:0.7 },
+    { lh:60, rh:60, ll:70, rl:70, sp:0.7 },
+    { lh:95, rh:95, ll:65, rl:65, sp:0.7, ht:3 },
+    { lh:15, rh:15, ll:65, rl:65, sp:0.7 },
+    { lh:15, rh:15, ll:50, rl:50, sp:0.7 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.4 },
+  ],
+
+  pose: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.6 },
+    { lh:30, rh:30, ll:40, rl:40, sp:0.6 },
+    { lh:80, rh:80, ll:30, rl:30, sp:0.6, ht:3 },
+    { lh:80, rh:80, ll:30, rl:30, sp:0.8 },
+    { lh:30, rh:30, ll:30, rl:30, sp:0.8 },
+    { lh:30, rh:30, ll:40, rl:40, sp:0.6 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.6 },
+  ],
+
+  monster: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.4 },
+    { lh:80, rh:80, ll:50, rl:50, sp:0.5 },
+    { lh:80, rh:80, ll:65, rl:65, sp:0.5 },
+    { lh:80, rh:80, ll:50, rl:50, sp:0.5 },
+    { lh:50, rh:50, ll:50, rl:50, sp:0.4 },
+  ],
+
+  // ── Utility ────────────────────────────────────────────────────────────────
+
+  neutral: [
+    { lh:50, rh:50, ll:50, rl:50, sp:0.8 },
+  ],
+};
+
+// Normalise shorthand keys to the field names tars_preview.js expects
+function normalise(steps) {
+  return steps.map(function(s) {
+    return {
+      left_height:  s.lh !== undefined ? s.lh : (s.left_height  || 0),
+      right_height: s.rh !== undefined ? s.rh : (s.right_height || 0),
+      left_leg:     s.ll !== undefined ? s.ll : (s.left_leg     || 0),
+      right_leg:    s.rl !== undefined ? s.rl : (s.right_leg    || 0),
+      speed:        s.sp !== undefined ? s.sp : (s.speed || 0.85),
+      hold_time:    s.ht !== undefined ? s.ht : (s.hold_time || 0),
+    };
+  });
+}
+
+var currentMovement = null;
+
+document.querySelectorAll('.mov-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.mov-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    currentMovement = btn.dataset.mov;
+    window._bldLocomotion    = btn.dataset.loco === '1';
+    window._bldLocomotionDir = btn.dataset.dir === '-1' ? -1 : 1;
+    document.getElementById('movName').textContent = currentMovement;
+  });
+});
+
+window._bldGetSteps = function() {
+  if (!currentMovement || !MOVEMENTS[currentMovement]) return [];
+  return normalise(JSON.parse(JSON.stringify(MOVEMENTS[currentMovement])));
+};
+</script>
+<script src="src/www/static/js/tars_preview.js"></script>
+</body>
+</html>
