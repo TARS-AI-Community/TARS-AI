@@ -3067,7 +3067,7 @@ def get_movement_steps(name):
     # If no move_legs found, the function may delegate to an _impl variant
     if not steps:
         import re as _re_impl
-        for impl_name in _re_impl.findall(r'(_\w+_impl)\(\)', src):
+        for impl_name in reversed(_re_impl.findall(r'(_\w+_impl)\(\)', src)):
             try:
                 impl_src = inspect.getsource(getattr(_mm, impl_name))
                 steps = _parse_movement_steps(impl_src)

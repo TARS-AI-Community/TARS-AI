@@ -452,6 +452,20 @@
 
   // Resolve 0 (= "unchanged") servo values by inheriting from the previous step.
   // move_legs(0, 0, ...) means "keep current height" — the preview must do the same.
+  function flattenSteps(steps) {
+    var out = [];
+    steps.forEach(function (s) {
+      if (s.repeat !== undefined && s.steps) {
+        for (var r = 0; r < s.repeat; r++) {
+          flattenSteps(s.steps).forEach(function (inner) { out.push(inner); });
+        }
+      } else {
+        out.push(s);
+      }
+    });
+    return out;
+  }
+
   function resolveSteps(steps) {
     var prevLH = 50, prevRH = 50, prevLL = 50, prevRL = 50;
     return steps.map(function (s) {
@@ -467,7 +481,7 @@
   function playPreview() {
     if (!window._bldGetSteps) return;
     var rawSteps = window._bldGetSteps();
-    animSteps = resolveSteps(rawSteps.filter(function (s) { return !s.movement; }));
+    animSteps = resolveSteps(flattenSteps(rawSteps).filter(function (s) { return !s.movement; }));
     if (animSteps.length === 0) return;
 
     allowLocomotion = !!window._bldLocomotion;
