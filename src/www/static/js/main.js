@@ -4752,9 +4752,9 @@ function $(id) { return document.getElementById(id); }
     renderSteps();
 
     fetch('/get_movements').then(function (r) { return r.json(); }).then(function (d) {
-      movements = (d.movements || [])
+      movements = (d.legs_only || d.movements || [])
         .filter(function (m) { return m.id !== 'reset_positions'; })
-        .map(function (m) { return m.id; });
+        .map(function (m) { return m.id || m; });
       var sel = el('bldMovementSelect');
       if (sel) {
         sel.innerHTML = '';
