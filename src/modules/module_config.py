@@ -1123,8 +1123,8 @@ CONFIG_METADATA = {
         },
         'app': {
             'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
-            'options': ['terminal', 'dashboard', 'clock', 'eyes', 'avatar'],
-            'description': 'What shows on the TARS display when it first starts up. "terminal" shows a scrolling chat-style interface where you can read the conversation in real time. "dashboard" shows a system status overview with battery, CPU, memory, and other stats. "clock" shows a large clean clock display — good if TARS lives on a desk. "eyes" shows an animated eye display that reacts to TARS speaking. "avatar" shows your character\'s animated sprite with blinking and talking animations. You can always switch between modes at runtime.'
+            'options': ['terminal', 'dashboard', 'clock', 'eyes', 'avatar', 'audio', 'remote'],
+            'description': 'What shows on the TARS display when it first starts up. "terminal" shows a scrolling chat-style interface where you can read the conversation in real time. "dashboard" shows a system status overview with battery, CPU, memory, and other stats. "clock" shows a large clean clock display — good if TARS lives on a desk. "eyes" shows an animated eye display that reacts to TARS speaking. "avatar" shows your character\'s animated sprite with blinking and talking animations. "audio" shows a real-time audio waveform/timeline visualization. "remote" shows a remote control interface. You can always switch between modes at runtime.'
         },
         'target_fps': {
             'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
@@ -1145,7 +1145,7 @@ CONFIG_METADATA = {
         'screensaver_list': {
             'depends_on': [{'field': 'UI_enabled', 'values': ['True', 'true']}],
             'type': 'screensaver_select',
-            'options': ['random', 'blackhole', 'waves', 'matrix', 'starfield', 'hyperspace', 'terminal', 'face', 'fractal', 'pacman', 'nebulas', 'pictures', 'dashboard', 'defrag', 'bounce', 'endurance', 'dream'],
+            'options': ['random', 'blackhole', 'waves', 'matrix', 'starfield', 'hyperspace', 'terminal', 'face', 'fractal', 'pacman', 'nebulas', 'pictures', 'dashboard', 'defrag', 'bounce', 'endurance', 'dream', 'toasters', 'aquarium'],
             'description': 'Pick which screensaver animations play on the TARS display when idle. Select "random" to cycle through all of them, or pick specific ones you like. "dream" visualizes recent memories as abstract neural patterns driven by TARS\' emotional state.'
         },
     },
