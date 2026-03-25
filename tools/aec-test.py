@@ -673,6 +673,7 @@ def main():
             silence_rms = test_silence_floor(tmpdir, recorder)
             avg_rms = test_echo_bleed(tmpdir, recorder)
             test_latency(tmpdir, recorder)
+            test_compare(tmpdir)
 
             # Summary
             print(f"\n{_bold(_cyan('SUMMARY'))}")
