@@ -1487,7 +1487,7 @@ def get_config():
                         field_options[field_key]['depends_on'] = field_def['depends_on']
                     if 'label' in field_def:
                         field_options[field_key]['label'] = field_def['label']
-                    for k in ('min', 'max', 'step', 'group', 'group_label'):
+                    for k in ('min', 'max', 'step', 'group', 'group_label', 'option_labels'):
                         if k in field_def:
                             field_options[field_key][k] = field_def[k]
         
@@ -1661,6 +1661,19 @@ def save_skill_config():
     except Exception as e:
         queue_message(f"ERROR: Failed to save skill config: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@flask_app.route('/skill_engine_status', methods=['GET'])
+def skill_engine_status():
+    """Return the current skill engine status."""
+    try:
+        from modules.module_skill_engine import get_skill_engine
+        engine = get_skill_engine()
+        if engine:
+            return jsonify(engine.get_status())
+        return jsonify({"engine_type": "llm", "loaded": True})
+    except Exception as e:
+        return jsonify({"engine_type": "llm", "loaded": True, "error": str(e)})
 
 
 @flask_app.route('/boot_id', methods=['GET'])

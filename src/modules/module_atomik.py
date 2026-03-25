@@ -478,7 +478,7 @@ class WakeWordSystem:
         recording = []
         speech_started = False
         silence_count = 0
-        max_silence_frames = 15
+        max_silence_frames = 30  # ~960ms — enough for natural pause between words
 
         def callback(audio_chunk, frames, time_info, status):
             nonlocal speech_started, silence_count

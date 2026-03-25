@@ -462,6 +462,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let _streamRow = null;
   let _streamText = null;
   let _streamActive = false;
+  let _typingTimeout = null;
 
   socket.on('bot_stream_start', () => {
     _dbg('[DEBUG] bot_stream_start received');
@@ -568,7 +569,15 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   socket.on('bot_message', d => {
-    _dbg('[DEBUG] bot_message | audio_streamed:', d.audio_streamed, '| hasStreamRow:', !!_streamRow, '| msgLen:', (d.message||'').length);
+    _dbg('[DEBUG] bot_message | audio_streamed:', d.audio_streamed, '| hasStreamRow:', !!_streamRow, '| msgLen:', (d.message||'').length, '| thinking:', !!d.thinking);
+    if (d.thinking) {
+      // Thinking response — show it but keep typing dots for the real reply
+      if (_typingTimeout) { clearTimeout(_typingTimeout); _typingTimeout = null; }
+      removeTypingMessage();
+      if (d.message) displayBotMessage(d.message, false, true);
+      displayBotMessage('', true);
+      return;
+    }
     removeTypingMessage();
     _streamActive = false;
     if (_streamRow) {
@@ -670,7 +679,8 @@ document.addEventListener('DOMContentLoaded', function () {
     $('imagePreviewContainer').style.display = 'none';
     $('imagePreview').src = '';
     updateMicSendButton();
-    setTimeout(() => displayBotMessage('', true), 1000);
+    if (_typingTimeout) clearTimeout(_typingTimeout);
+    _typingTimeout = setTimeout(() => { _typingTimeout = null; displayBotMessage('', true); }, 1000);
   }
 
   if (prompt) prompt.addEventListener('keyup', e => { if (e.key === 'Enter') sendMessage(); });
@@ -877,7 +887,8 @@ document.addEventListener('DOMContentLoaded', function () {
     voiceStatus.textContent = 'Processing...';
     displayUserMessage(text);
     sendUserMessage(text);
-    setTimeout(() => displayBotMessage('', true), 500);
+    if (_typingTimeout) clearTimeout(_typingTimeout);
+    _typingTimeout = setTimeout(() => { _typingTimeout = null; displayBotMessage('', true); }, 500);
   });
 
   function _sendAudioToServer(chunks) {
@@ -1478,13 +1489,36 @@ function executeAction() {
     const grid = document.getElementById('skillsGrid');
     if (!grid) return;
     grid.innerHTML = '<div class="config-loading"><div class="hud-spinner"></div><span>Loading skills…</span></div>';
-    fetch('/get_skills').then(r => r.json()).then(data => {
+    // Fetch both skills and fresh config in parallel
+    Promise.all([
+      fetch('/get_skills').then(r => r.json()),
+      fetch('/get_config').then(r => r.json())
+    ]).then(([data, cfgData]) => {
       if (!data.skills || !data.skills.length) {
         grid.innerHTML = '<div class="text-center p-3 text-muted">No skills discovered</div>';
         return;
       }
       // Skill toggle cards in a grid — each skill card followed by its own config panel
       let html = '<div class="row g-2">';
+
+      // Skill Engine selector as the first card — read fresh value from config
+      const seInfo = cfgData.field_options ? cfgData.field_options['SKILLS.skill_engine'] : (window._skillEngineData && window._skillEngineData.info);
+      const seVal = (cfgData.config && cfgData.config.SKILLS && cfgData.config.SKILLS.skill_engine) || 'llm';
+      if (seInfo) {
+        const opts = seInfo.options || ['llm', 'keyword'];
+        const optLabels = seInfo.option_labels || {};
+        html += `<div class="col-md-6 col-lg-4"><div class="field-wrapper skill-card">`;
+        html += `<label class="form-label d-flex align-items-center gap-1">${seInfo.label || 'Skill Router'}`;
+        if (seInfo.description) html += ` <span class="config-tooltip-wrap" data-tip="${esc(seInfo.description)}"><i class="bi bi-info-circle config-tooltip-icon"></i></span>`;
+        html += `</label>`;
+        html += `<select class="form-select form-select-sm config-input" id="cfg_SKILLS_skill_engine" data-section="SKILLS" data-key="skill_engine">`;
+        for (const o of opts) {
+          const lbl = optLabels[o] || o;
+          html += `<option value="${o}" ${o === seVal ? 'selected' : ''}>${lbl}</option>`;
+        }
+        html += `</select></div></div>`;
+      }
+
       for (const skill of data.skills) {
         const chk = skill.enabled ? 'checked' : '';
         const label = skill.name.replace(/_/g, ' ');
@@ -1666,13 +1700,19 @@ function executeAction() {
             </div>
           </div>`;
 
-        // Skills section: dynamic skill toggles loaded from API
+        // Skills section: skill engine dropdown + dynamic skill toggles
         if (section === 'SKILLS') {
+          // Store skill engine data for injection into the skills grid
           html += `<div class="config-panel-body">
             <div class="skills-grid" id="skillsGrid">
               <div class="config-loading"><div class="hud-spinner"></div><span>Loading skills…</span></div>
             </div>
           </div></div>`;
+          // Stash config data so loadSkillsPanel can render skill_engine as the first card
+          window._skillEngineData = {
+            value: (data.config && data.config.SKILLS && data.config.SKILLS.skill_engine) || 'llm',
+            info: data.field_options ? data.field_options['SKILLS.skill_engine'] : null
+          };
           continue;
         }
 
@@ -2272,8 +2312,8 @@ function executeAction() {
   }
 
   const BACKEND_URLS = {
-    'openai':    'https://api.openai.com/v1',
-    'grok':      'https://api.x.ai/v1',
+    'openai':    'https://api.openai.com/',
+    'grok':      'https://api.x.ai/',
     'deepinfra': 'https://api.deepinfra.com/v1/openai',
   };
 

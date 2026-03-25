@@ -408,7 +408,6 @@ def load_config():
             "vad_transcript_verify": config.get('STT', 'vad_transcript_verify', fallback='False'),
             "vad_presence_gate": config.get('STT', 'vad_presence_gate', fallback='off'),
             "vad_speaker_verify": config.get('STT', 'vad_speaker_verify', fallback='off'),
-            "vad_speaker_threshold": config.get('STT', 'vad_speaker_threshold', fallback='0.60'),
             "enable_bargein": config.getboolean('STT', 'enable_bargein', fallback=True),
             "bargein_mode": config.get('STT', 'bargein_mode', fallback='fuzzy'),
             "bargein_sensitivity": config.getint('STT', 'bargein_sensitivity', fallback=5),
@@ -496,6 +495,9 @@ def load_config():
             "recency_boost_days": config.getint('RAG', 'recency_boost_days', fallback=7),
             "embedding_source": config.get('RAG', 'embedding_source', fallback='local'),
             "embedding_url": config.get('RAG', 'embedding_url', fallback=''),
+        },
+        "SKILLS": {
+            "skill_engine": config.get('SKILLS', 'skill_engine', fallback='llm'),
         },
         "SERVO": {
             "arms_present": config.getboolean('SERVO', 'arms_present'),
@@ -782,13 +784,13 @@ CONFIG_METADATA = {
         },
         'sensitivity': {
             'group': 'wake_word',
-            'label': 'Wake Word Strictness',
+            'label': 'Wake Word Sensitivity',
             'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],
             'type': 'slider',
             'min': 1,
             'max': 10,
             'step': 1,
-            'description': 'How strictly TARS matches the wake word (atomik only). 1 = very lenient, triggers easily. 10 = very strict, requires a clear and precise match. Start at 5. Raise it if TARS activates randomly; lower it if TARS stops hearing you.'
+            'description': 'How sensitive TARS is to the wake word (atomik only). 1 = very strict, requires a clear match. 10 = very sensitive, triggers easily. Start at 5. Lower it if TARS activates randomly; raise it if TARS stops hearing you.'
         },
 
         # ── Wake Word Gates ───────────────────────────────────────────────────
@@ -810,15 +812,15 @@ CONFIG_METADATA = {
             'options': ['off', 'any'],
             'description': 'Restrict who can trigger the wake word by voice. "off" = disabled. "any" = any enrolled named speaker. Select a specific name to allow only that person. Requires Speaker ID to be enabled. Skips automatically if no named speakers are enrolled yet.'
         },
-        'vad_speaker_threshold': {
+        'speaker_id_threshold': {
             'group': 'wake_gates',
-            'label': 'Speaker Match Threshold',
-            'depends_on': [{'field': 'vad_speaker_verify', 'not_values': ['off']}],
+            'label': 'Speaker ID Confidence',
+            'depends_on': [{'field': 'speaker_id_enabled', 'values': ['True', 'true']}],
             'type': 'slider',
-            'min': 0.3,
-            'max': 0.9,
-            'step': 0.05,
-            'description': 'How closely the voice must match an enrolled speaker. 0.60 is a good starting point. Raise it if strangers or the TV are triggering TARS; lower it if your own voice is being rejected.'
+            'min': 0.5,
+            'max': 0.95,
+            'step': 0.01,
+            'description': 'How confident TARS must be to identify a speaker. Used for all speaker recognition — wake word gating, barge-in, round logging, personalization. 0.75 is default. Lower to 0.70 if your voice keeps getting rejected; raise to 0.80+ if wrong speakers are matched.'
         },
 
         # ── Barge-In ──────────────────────────────────────────────────────────
@@ -830,9 +832,9 @@ CONFIG_METADATA = {
         'bargein_mode': {
             'group': 'bargein',
             'label': 'Barge-In Mode',
-            'options': ['fuzzy', 'voiceprint'],
+            'options': ['fuzzy', 'voiceprint', 'hybrid'],
             'depends_on': [{'field': 'enable_bargein', 'values': ['True', 'true']}],
-            'description': '"fuzzy" transcribes mic audio and checks if the words differ from what TARS is saying — works without any setup. "voiceprint" checks if the interrupting voice matches an enrolled speaker — best in noisy rooms with echo. Requires Speaker ID and at least one enrolled speaker.'
+            'description': '"fuzzy" transcribes mic audio and checks if the words differ from what TARS is saying — works without any setup. "voiceprint" checks if the interrupting voice matches an enrolled speaker — best with AEC. "hybrid" combines both — requires voice match AND novel words, most robust against false triggers. Requires Speaker ID for voiceprint/hybrid.'
         },
         'bargein_sensitivity': {
             'group': 'bargein',
@@ -999,6 +1001,21 @@ CONFIG_METADATA = {
             'label': 'Vision Max Tokens',
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm', 'external']}],
             'description': 'Maximum number of tokens in the vision response. Higher values give more detailed descriptions but cost more.'
+        },
+    },
+    'SKILLS': {
+        '__description__': 'Configure which skills (tools/functions) TARS can use and how they are routed',
+        'skill_engine': {
+            'label': 'Skill Router',
+            'options': ['llm', 'keyword'],
+            'option_labels': {
+                'llm': 'LLM (all skills in prompt)',
+                'keyword': 'Keyword (instant, recommended)',
+            },
+            'description': 'How TARS decides which skills to include in each prompt. '
+                           '"LLM" sends all enabled skills every time (most compatible, largest prompt). '
+                           '"Keyword" uses instant pattern matching to detect which skills are needed — no model, no delay, recommended for most setups. '
+                           'Recently used skills are always included so follow-up commands like "next one" still work.',
         },
     },
     'RAG': {

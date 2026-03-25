@@ -39,15 +39,28 @@ _output_device_resolved = False
 def _resolve_output_device():
     """Find and cache the audio output device. Runs once, no-op after.
 
-    Prefers real hardware (USB audio, headphones, I2S DACs) over virtual
-    ALSA devices like 'default' or 'dmix' which may route to HDMI/null.
+    Prefers pipewire (routes through AEC if configured), then falls back to
+    USB > hardware > virtual ALSA.
     """
     global _output_device, _output_device_resolved
     if _output_device_resolved:
         return
-
     _output_device_resolved = True
 
+    # Use shared pipewire finder from module_mic
+    try:
+        from modules.module_mic import _find_pipewire_device
+        result = _find_pipewire_device("output")
+        if result:
+            idx, _ = result
+            dev = sd.query_devices(idx)
+            _output_device = idx
+            queue_message(f"INFO: Audio output: {dev['name']} (device {idx}, pipewire)")
+            return
+    except Exception:
+        pass
+
+    # Pipewire not available — fall back to USB > hardware > virtual
     try:
         devices = sd.query_devices()
     except Exception:
@@ -55,29 +68,23 @@ def _resolve_output_device():
         _output_device = None
         return
 
-    # Categorize output devices by priority
-    usb_devices = []      # USB audio — most likely the external speaker
-    hw_devices = []       # Hardware devices (headphones, I2S DACs, bcm2835)
-    virtual_devices = []  # Virtual/default ALSA devices
-
+    categorized = {"USB": [], "hardware": [], "virtual": []}
     for i, dev in enumerate(devices):
         if dev.get("max_output_channels", 0) < 1:
             continue
         name = dev.get("name", "").lower()
-        # Skip HDMI outputs — they typically don't support standard PCM formats
         if "hdmi" in name:
             continue
         if "usb" in name:
-            usb_devices.append((i, dev))
-        elif "default" in name or "dmix" in name or "pulse" in name or "sysdefault" in name:
-            virtual_devices.append((i, dev))
+            categorized["USB"].append((i, dev))
+        elif any(k in name for k in ("default", "dmix", "pulse", "sysdefault")):
+            categorized["virtual"].append((i, dev))
         else:
-            hw_devices.append((i, dev))
+            categorized["hardware"].append((i, dev))
 
-    # Pick best device: USB > hardware > virtual
-    for label, candidates in [("USB", usb_devices), ("hardware", hw_devices), ("virtual", virtual_devices)]:
-        if candidates:
-            idx, dev = candidates[0]
+    for label in ("USB", "hardware", "virtual"):
+        if categorized[label]:
+            idx, dev = categorized[label][0]
             _output_device = idx
             queue_message(f"INFO: Audio output: {dev['name']} (device {idx}, {label})")
             return
@@ -86,9 +93,34 @@ def _resolve_output_device():
     _output_device = None
 
 
+def _check_aec_status():
+    """Log whether pipewire AEC is active and both devices route through it."""
+    try:
+        import subprocess
+        result = subprocess.run(["pw-cli", "list-objects"], capture_output=True, text=True, timeout=5)
+        if result.returncode != 0 or "echo-cancel" not in result.stdout and "echo_cancel" not in result.stdout:
+            return  # No AEC module — nothing to check
+
+        from modules.module_mic import get_device_info
+        input_name = sd.query_devices(get_device_info()[0]).get("name", "unknown")
+        output_name = sd.query_devices(_output_device).get("name", "unknown") if _output_device is not None else "unknown"
+
+        def _is_pw(name):
+            n = name.lower()
+            return "pipewire" in n or "echo_cancel" in n
+
+        if _is_pw(input_name) and _is_pw(output_name):
+            queue_message("INFO: AEC status: ACTIVE (input and output both route through pipewire)")
+        else:
+            queue_message(f"WARNING: AEC status: BROKEN — input: {input_name}, output: {output_name}")
+    except Exception:
+        pass
+
+
 def init_audio_output():
     """Resolve and log the audio output device at startup."""
     _resolve_output_device()
+    _check_aec_status()
 
 
 def stop_tts_playback():

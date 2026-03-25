@@ -71,7 +71,6 @@ atomik_mode = template
 # Transcript verify: only active when wake_word_processor = atomik AND atomik_mode = template
 vad_transcript_verify = False
 vad_speaker_verify = off
-vad_speaker_threshold = 0.60
 vad_presence_gate = off
 # Wake word strictness 1–10 (atomik only; 1 = lenient, 10 = strict)
 sensitivity = 7
@@ -97,8 +96,8 @@ sherpa_onnx_denoise = False
 sherpa_onnx_punctuation = False
 # Enable barge-in detection — interrupt TARS by speaking while it talks: True | False
 enable_bargein = True
-# Barge-in detection mode: fuzzy (word matching) | voiceprint (speaker ID matching)
-bargein_mode = voiceprint
+# Barge-in detection mode: fuzzy (word matching) | voiceprint (speaker ID) | hybrid (both)
+bargein_mode = hybrid
 # Barge-in sensitivity 1–10 (1 = hard to interrupt, 10 = very sensitive)
 bargein_sensitivity = 5
 # Silence before processing in tenths of a second (20 = 2s)
@@ -298,6 +297,12 @@ rightForearmOffset = 0
 rightHandMin = 300
 rightHandMax = 420
 rightHandOffset = 0
+
+[SKILLS]
+# Skill routing engine: llm | keyword
+# llm = all skills in every prompt (most compatible)
+# keyword = instant pattern matching (recommended)
+skill_engine = keyword
 
 [SKILL:discord]
 disabled = true

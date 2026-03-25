@@ -433,7 +433,10 @@ def utterance_callback(message):
         # After response finishes, return to LISTENING (waiting for next utterance in session)
         # Bot only goes to STANDBY after timeout in STT manager
         if was_interrupted:
-            time.sleep(0.3)
+            # Play a short apology — gives the user time to finish their
+            # interruption phrase and feels more natural than dead silence.
+            # Pre-roll audio is kept so the next round captures what the user said.
+            asyncio.run(play_audio_chunks("Oh, sorry.", CONFIG['TTS']['ttsoption']))
         set_tars_state(TarsState.LISTENING)
 
         # Push final reply to web UI (only if user is on webui)
