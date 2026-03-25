@@ -5313,7 +5313,7 @@ function $(id) { return document.getElementById(id); }
         if (res.ok) {
           steps = res.d.steps.map(normalizeStep);
           var nameEl = el('bldSeqName');
-          if (nameEl) nameEl.value = '';
+          if (nameEl) nameEl.value = name;
           setFeedback('Imported "' + name + '" — edit then save under a new name');
           renderSteps();
         } else {
