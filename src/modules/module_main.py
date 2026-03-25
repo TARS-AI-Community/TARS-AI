@@ -435,8 +435,14 @@ def utterance_callback(message):
         if was_interrupted:
             # Play a short apology — gives the user time to finish their
             # interruption phrase and feels more natural than dead silence.
-            # Pre-roll audio is kept so the next round captures what the user said.
             asyncio.run(play_audio_chunks("Oh, sorry.", CONFIG['TTS']['ttsoption']))
+            # Flush mode: discard barge-in pre-roll so the next round starts fresh —
+            # the interrupt words won't be sent to the LLM.
+            # Keep mode (default): pre-roll is kept so the user's interrupt words
+            # are included in the next transcription for context.
+            if CONFIG['STT'].get('bargein_flush', False):
+                stt_manager._bargein_audio_chunks = None
+                stt_manager._bargein_ready.clear()
         set_tars_state(TarsState.LISTENING)
 
         # Push final reply to web UI (only if user is on webui)
