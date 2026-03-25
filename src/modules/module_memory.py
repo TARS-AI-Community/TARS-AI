@@ -64,6 +64,7 @@ class MemoryManager:
         self._dirty = False  # True when in-memory state has unflushed changes
         self._flush_lock = threading.Lock()
         self._prefetch_future = None  # Background embedding prefetch
+        self._prefetch_memories_future = None  # Background full-query prefetch
         self._prefetch_query = None
         self._identity_manager = None  # cached identity manager (False = tried and unavailable)
         self._speaker_id_manager = None
@@ -513,23 +514,27 @@ class MemoryManager:
             return 1.0   # No boost
 
     def prefetch_embedding(self, query: str):
-        """Start computing the query embedding in a background thread.
+        """Start computing related memories in a background thread.
 
         Call this as early as possible (e.g. right after STT returns) so the
-        embedding is ready by the time get_longterm_memory() needs it.
+        full hybrid search (embedding + BM25 + rerank) is ready by the time
+        get_longterm_memory() needs it.
         """
         self._prefetch_query = query
-        future = Future()
+        self._prefetch_future = None  # clear old embedding-only future
 
-        def _compute():
+        # Prefetch the full related-memories result (not just the embedding)
+        memories_future = Future()
+
+        def _compute_memories():
             try:
-                vec = self.hyper_db.embedding_function([query])[0]
-                future.set_result(vec)
+                result = self._get_related_memories_impl(query, include_context=True)
+                memories_future.set_result(result)
             except Exception as e:
-                future.set_exception(e)
+                memories_future.set_exception(e)
 
-        self._prefetch_future = future
-        threading.Thread(target=_compute, daemon=True).start()
+        self._prefetch_memories_future = memories_future
+        threading.Thread(target=_compute_memories, daemon=True, name="memory-prefetch").start()
 
     def _get_query_vector(self, query: str):
         """Return query embedding, using prefetched result if available."""
@@ -548,6 +553,26 @@ class MemoryManager:
     def get_related_memories(self, query: str, include_context: bool = True) -> List[Dict[str, Any]]:
         self.ui_manager.think()
 
+        # Use prefetched full result if available (computed in background after STT)
+        if (hasattr(self, '_prefetch_memories_future')
+                and self._prefetch_memories_future is not None
+                and self._prefetch_query == query):
+            try:
+                result = self._prefetch_memories_future.result(timeout=10)
+                self._prefetch_memories_future = None
+                self._prefetch_query = None
+                return result
+            except Exception:
+                pass  # fall through to synchronous path
+
+        return self._get_related_memories_impl(query, include_context)
+
+    def _get_related_memories_impl(self, query: str, include_context: bool = True) -> List[Dict[str, Any]]:
+        """Core memory retrieval logic (embedding + search + scoring).
+
+        Separated from get_related_memories() so it can run in a background
+        thread via prefetch_embedding() without touching UI state.
+        """
         try:
             documents = self.hyper_db.documents
             if not documents:

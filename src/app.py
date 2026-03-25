@@ -46,7 +46,7 @@ queue_message(f"LOAD: TARS-AI starting on {RASPBERRY_VERSION.upper()}")
 
 # === Import Modules ===
 from modules.module_character import CharacterManager
-from modules.module_tts import update_tts_settings
+from modules.module_tts import update_tts_settings, init_audio_output
 from modules.module_llm import initialize_manager_llm
 from modules.module_skills import initialize_skills
 from modules.module_stt import STTManager
@@ -256,6 +256,8 @@ def init_app():
     """Performs initial setup for the application."""
     queue_message(f"LOAD: Script running from: {BASE_DIR}")
     
+    init_audio_output()
+
     if CONFIG['TTS']['ttsoption'] == 'xttsv2':
         update_tts_settings(CONFIG['TTS']['ttsurl'])
 
@@ -276,6 +278,15 @@ if __name__ == "__main__":
 
     # === Skills System (auto-discover tool plugins) ===
     initialize_skills()
+
+    # === Skill Engine (pre-route skills before LLM) ===
+    try:
+        from modules.module_skill_engine import initialize_skill_engine
+        from modules.module_skills import get_skill_manager
+        skill_engine_type = CONFIG.get('SKILLS', {}).get('skill_engine', 'llm')
+        initialize_skill_engine(skill_engine_type, get_skill_manager())
+    except Exception as e:
+        queue_message(f"WARNING: Skill engine not available: {e}")
 
     # Shutdown event
     shutdown_event = threading.Event()

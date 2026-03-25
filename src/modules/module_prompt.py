@@ -16,6 +16,7 @@ requires a separate written license from Charles-Olivier Dion (AtomikSpace).
 
 This license applies only to this file and does not override licenses of other files in the repository.
 """
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import os
 import re
@@ -26,13 +27,31 @@ _LOCATION_CACHE_TTL = 86400  # 24 hours — re-resolve if user moves
 _location_cache = {"lat": None, "lon": None, "name": None, "cached_at": 0.0}
 
 
-def _get_skills_prompt_text():
-    """Get tool definitions from the skills system for LLM prompt injection."""
+def _get_skills_prompt_text(user_message=None):
+    """Get tool definitions from the skills system for LLM prompt injection.
+
+    When a skill engine is active (keyword), only returns
+    definitions for skills the engine classified as relevant — dramatically
+    reducing prompt size for the main LLM.
+    """
     try:
         from modules.module_skills import get_skill_manager
         skills = get_skill_manager()
-        if skills:
-            return skills.get_prompt_text()
+        if not skills:
+            return "(No skills loaded)"
+
+        # Try skill engine filtering first
+        if user_message:
+            try:
+                from modules.module_skill_engine import get_skill_engine
+                engine = get_skill_engine()
+                if engine and engine.is_active():
+                    return engine.get_filtered_prompt_text(skills, user_message)
+            except Exception:
+                pass
+
+        # Fallback: all enabled skills (LLM mode or engine not ready)
+        return skills.get_prompt_text()
     except Exception:
         pass
     return "(No skills loaded)"
@@ -63,13 +82,29 @@ def _get_emotion_prompt_instruction(config):
     return ""
 
 
-def _get_skills_examples_text():
-    """Get skill-specific examples from the skills system for LLM prompt injection."""
+def _get_skills_examples_text(user_message=None):
+    """Get skill-specific examples from the skills system for LLM prompt injection.
+
+    When a skill engine is active, only returns examples for relevant skills.
+    """
     try:
         from modules.module_skills import get_skill_manager
         skills = get_skill_manager()
-        if skills:
-            return skills.get_examples_text()
+        if not skills:
+            return ""
+
+        # Try skill engine filtering first
+        if user_message:
+            try:
+                from modules.module_skill_engine import get_skill_engine
+                engine = get_skill_engine()
+                if engine and engine.is_active():
+                    return engine.get_filtered_examples_text(skills, user_message)
+            except Exception:
+                pass
+
+        # Fallback: all enabled skills
+        return skills.get_examples_text()
     except Exception:
         pass
     return ""
@@ -318,7 +353,7 @@ Schema:
 
 When user requests match these patterns, you MUST call the function:
 
-{_get_skills_prompt_text()}
+{_get_skills_prompt_text(user_prompt)}
 
    new_memories (REQUIRED field)
    Extract ONLY high-level, persistent facts about the user from this conversation
@@ -436,7 +471,7 @@ Before you write your reply, scan your last 5-6 responses above and ask yourself
 === EXAMPLES ===
 
 === Skill-Specific Examples (auto-generated from skills) ===
-{_get_skills_examples_text()}
+{_get_skills_examples_text(user_prompt)}
 
 === General Behavior Examples ===
 
@@ -676,51 +711,67 @@ def append_memory_and_examples(base_prompt, user_prompt, memory_manager, config,
     shortterm_budget = int(available_tokens * 0.65)
     longterm_budget = available_tokens - shortterm_budget
 
-    if shortterm_budget > 0:
-        short_term_memory = memory_manager.get_shortterm_memories_tokenlimit(shortterm_budget)
-        # Replace {user}/{char} placeholders with actual names so the LLM
-        # sees "Joe: hello" instead of "{user}: hello" in conversation history
+    # Run all three memory retrievals in parallel — they are independent.
+    # Wall-clock time becomes max(shortterm, summary, longterm) instead of sum.
+    def _fetch_shortterm():
+        if shortterm_budget <= 0:
+            return ""
+        return memory_manager.get_shortterm_memories_tokenlimit(shortterm_budget)
+
+    def _fetch_summary():
+        try:
+            return memory_manager.get_conversation_summary(lookback_hours=24) or ""
+        except Exception:
+            return ""
+
+    def _fetch_longterm():
+        return clean_text(memory_manager.get_longterm_memory(user_prompt))
+
+    with ThreadPoolExecutor(max_workers=3, thread_name_prefix="mem") as pool:
+        fut_short = pool.submit(_fetch_shortterm)
+        fut_summary = pool.submit(_fetch_summary)
+        fut_long = pool.submit(_fetch_longterm)
+        short_term_memory = fut_short.result()
+        conversation_summary = fut_summary.result()
+        raw_longterm = fut_long.result()
+
+    # Post-process short-term (placeholder replacement + budget rebalance)
+    if short_term_memory:
         active_user = _get_active_user_name(config['CHAR']['user_name'])
         short_term_memory = short_term_memory.replace("{user}", active_user).replace("{char}", character_manager.char_name)
         shortterm_used = memory_manager.token_count(short_term_memory).get('length', 0)
-        # Give any unused short-term budget back to long-term
         longterm_budget += (shortterm_budget - shortterm_used)
 
     # Episodic summary — deduct its tokens from longterm budget so it doesn't
     # silently push RAG/topics out of the context window.
-    if longterm_budget > 100:
-        try:
-            conversation_summary = memory_manager.get_conversation_summary(lookback_hours=24)
-            if conversation_summary:
-                # Fast approximation (~4 chars per token) — good enough for a summary
-                summary_tokens = len(conversation_summary) // 4
-                longterm_budget -= summary_tokens
-        except Exception:
-            pass
+    # Only use it when there's enough budget (matches original >100 guard).
+    if conversation_summary and longterm_budget > 100:
+        summary_tokens = len(conversation_summary) // 4
+        longterm_budget -= summary_tokens
+    else:
+        conversation_summary = ""
 
-    if longterm_budget > 0:
-        raw_longterm = clean_text(memory_manager.get_longterm_memory(user_prompt))
-        if raw_longterm:
-            lt_length = memory_manager.token_count(raw_longterm).get('length', 0)
-            if lt_length <= longterm_budget:
-                past_memory = raw_longterm
-            else:
-                # Truncate to fit — keep topic summary, trim RAG results.
-                # Use fast char/4 approximation per line to avoid expensive
-                # per-line tiktoken calls (was O(n) encoding calls).
-                lines = raw_longterm.split('\n')
-                truncated = []
-                running = 0
-                for line in lines:
-                    line_len = len(line) // 4  # fast approximation
-                    if running + line_len > longterm_budget:
-                        break
-                    truncated.append(line)
-                    running += line_len
-                past_memory = '\n'.join(truncated)
+    if longterm_budget > 0 and raw_longterm:
+        lt_length = memory_manager.token_count(raw_longterm).get('length', 0)
+        if lt_length <= longterm_budget:
+            past_memory = raw_longterm
+        else:
+            # Truncate to fit — keep topic summary, trim RAG results.
+            # Use fast char/4 approximation per line to avoid expensive
+            # per-line tiktoken calls (was O(n) encoding calls).
+            lines = raw_longterm.split('\n')
+            truncated = []
+            running = 0
+            for line in lines:
+                line_len = len(line) // 4  # fast approximation
+                if running + line_len > longterm_budget:
+                    break
+                truncated.append(line)
+                running += line_len
+            past_memory = '\n'.join(truncated)
         remaining_tokens = longterm_budget - (len(past_memory) // 4) if past_memory else longterm_budget
     else:
-        remaining_tokens = 0
+        remaining_tokens = longterm_budget if longterm_budget > 0 else 0
 
     if remaining_tokens > 0 and character_manager.example_dialogue:
         example_length = memory_manager.token_count(character_manager.example_dialogue).get('length', 0)

@@ -40,31 +40,41 @@ _device_info = None  # cached (device_idx, native_rate)
 _device_lock = threading.Lock()
 
 
+def _find_pipewire_device(direction="input"):
+    """Wait up to 5s for a pipewire device to appear. Returns (idx, rate) or None."""
+    ch_key = "max_input_channels" if direction == "input" else "max_output_channels"
+    for attempt in range(10):
+        for i, dev in enumerate(sd.query_devices()):
+            if dev.get(ch_key, 0) < 1:
+                continue
+            name = dev.get("name", "").lower()
+            if "pipewire" in name or "echo_cancel" in name:
+                return i, int(dev.get("default_samplerate", MODEL_RATE))
+        if attempt < 9:
+            time.sleep(0.5)
+            try:
+                sd._terminate()
+                sd._initialize()
+            except Exception:
+                pass
+    return None
+
+
 def _find_input_device():
-    """Try to find a working input device. Returns (idx, rate) or raises."""
-    # 1. Try the system default
+    """Find best input device. Prefers pipewire for AEC, falls back to system default."""
+    result = _find_pipewire_device("input")
+    if result:
+        return result
+
     idx = sd.default.device[0]
     if idx is not None and idx >= 0:
         info = sd.query_devices(idx, kind="input")
         if info.get("max_input_channels", 0) >= 1:
             return idx, int(info.get("default_samplerate", MODEL_RATE))
 
-    # 2. Default failed — scan all devices
-    devices = sd.query_devices()
-    for i, dev in enumerate(devices):
+    for i, dev in enumerate(sd.query_devices()):
         if dev.get("max_input_channels", 0) >= 1:
-            rate = int(dev.get("default_samplerate", MODEL_RATE))
-            return i, rate
-
-    # 3. Last resort: ask PortAudio C-level for the default input
-    try:
-        from sounddevice import _lib
-        pa_idx = _lib.Pa_GetDefaultInputDevice()
-        if pa_idx >= 0:
-            info = sd.query_devices(pa_idx, kind="input")
-            return pa_idx, int(info.get("default_samplerate", MODEL_RATE))
-    except Exception:
-        pass
+            return i, int(dev.get("default_samplerate", MODEL_RATE))
 
     raise RuntimeError("No input audio device found")
 
@@ -92,6 +102,8 @@ def get_device_info(retries=4, backoff=1.0):
 
                 idx, rate = _find_input_device()
                 _device_info = (idx, rate)
+                dev_name = sd.query_devices(idx).get("name", "unknown") if idx is not None else "system default"
+                print(f"INFO: Audio input: {dev_name} (device {idx}, {rate} Hz)")
                 return _device_info
             except Exception as e:
                 if attempt < retries - 1:

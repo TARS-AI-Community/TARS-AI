@@ -157,16 +157,8 @@ def _maybe_play_thinking_response():
         if not (thinking_text and isinstance(thinking_text, str) and thinking_text.strip()):
             return
 
-        queue_message(f"{thinking_text}")
-
-        def _play():
-            try:
-                from modules.module_tts import play_audio_chunks
-                asyncio.run(play_audio_chunks(thinking_text, CONFIG['TTS']['ttsoption'], is_wakeword=True))
-            except Exception as e:
-                queue_message(f"ERROR: Failed to play thinking response: {e}")
-
-        threading.Thread(target=_play, daemon=True).start()
+        from modules.module_router import send as router_send
+        router_send(thinking_text, thinking=True)
     except Exception:
         pass
 
@@ -765,6 +757,14 @@ def execute_function_call(func_call, bot_response, user_input, source="voice", h
                 "config": CONFIG,
             }
             result = skills.execute(function_name, parameters, context)
+            # Track skill usage for the skill engine (context continuity)
+            try:
+                from modules.module_skill_engine import get_skill_engine
+                engine = get_skill_engine()
+                if engine:
+                    engine.record_skill_use(function_name)
+            except Exception:
+                pass
             # If skill returns a string, update the reply
             if result is not None:
                 if bot_response.get("_skill_replied"):
