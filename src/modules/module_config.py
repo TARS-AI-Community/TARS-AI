@@ -411,6 +411,7 @@ def load_config():
             "enable_bargein": config.getboolean('STT', 'enable_bargein', fallback=True),
             "bargein_mode": config.get('STT', 'bargein_mode', fallback='fuzzy'),
             "bargein_sensitivity": config.getint('STT', 'bargein_sensitivity', fallback=5),
+            "bargein_flush": config.getboolean('STT', 'bargein_flush', fallback=False),
             "vad_method": config['STT']['vad_method'],
             "speechdelay": int(config['STT']['speechdelay']),
             "speaker_id_enabled": config.get('STT', 'speaker_id_enabled', fallback='False'),
@@ -845,6 +846,12 @@ CONFIG_METADATA = {
             'step': 1,
             'depends_on': [{'field': 'enable_bargein', 'values': ['True', 'true']}],
             'description': 'How easy it is to interrupt TARS. 1 = very hard to interrupt. 10 = interrupts at the slightest sound. Start at 5. Lower if TARS gets falsely interrupted by background noise or its own speaker.'
+        },
+        'bargein_flush': {
+            'group': 'bargein',
+            'label': 'Flush Mode',
+            'depends_on': [{'field': 'enable_bargein', 'values': ['True', 'true']}],
+            'description': 'When ON, discards the audio captured during the interruption after barge-in. The next recording round starts fresh — only what you say after TARS stops talking is sent to the LLM. When OFF (default), the interrupt words are kept and included in the next transcription for context.'
         },
 
         # ── End-of-Speech Detection ───────────────────────────────────────────
