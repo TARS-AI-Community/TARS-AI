@@ -5381,6 +5381,7 @@ function $(id) { return document.getElementById(id); }
   var _LOCOMOTION_MOVEMENTS = {
     walk_forward: 1, walk_backward: -1,
     turn_left: 1, turn_right: 1,
+    turn_left_slow: 1, turn_right_slow: 1,
     step_forward: 1, step_backward: -1,
   };
   window._bldGetSteps = function () {
