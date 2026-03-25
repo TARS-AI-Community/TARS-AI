@@ -784,13 +784,13 @@ CONFIG_METADATA = {
         },
         'sensitivity': {
             'group': 'wake_word',
-            'label': 'Wake Word Strictness',
+            'label': 'Wake Word Sensitivity',
             'depends_on': [{'field': 'wake_word_processor', 'values': ['atomik']}],
             'type': 'slider',
             'min': 1,
             'max': 10,
             'step': 1,
-            'description': 'How strictly TARS matches the wake word (atomik only). 1 = very lenient, triggers easily. 10 = very strict, requires a clear and precise match. Start at 5. Raise it if TARS activates randomly; lower it if TARS stops hearing you.'
+            'description': 'How sensitive TARS is to the wake word (atomik only). 1 = very strict, requires a clear match. 10 = very sensitive, triggers easily. Start at 5. Lower it if TARS activates randomly; raise it if TARS stops hearing you.'
         },
 
         # ── Wake Word Gates ───────────────────────────────────────────────────
