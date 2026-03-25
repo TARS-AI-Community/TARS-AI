@@ -273,7 +273,12 @@ def aec_module_installed():
 def install_aec_dependencies():
     """Install PipeWire AEC dependencies."""
     log.info("Installing AEC dependencies...")
-    r = run_sudo("apt-get install -y pipewire libspa-0.2-modules libwebrtc-audio-processing1 sox", timeout=120)
+    # Detect correct webrtc package name (varies by OS version)
+    webrtc_pkg = "libwebrtc-audio-processing1"
+    r_check = run_cmd("apt-cache show libwebrtc-audio-processing-1-3 2>/dev/null", timeout=10)
+    if r_check.returncode == 0:
+        webrtc_pkg = "libwebrtc-audio-processing-1-3"
+    r = run_sudo(f"apt-get install -y pipewire-pulse pipewire libspa-0.2-modules {webrtc_pkg} sox", timeout=120)
     if r.returncode != 0:
         log.error("Failed to install dependencies: %s", r.stderr)
         return False
@@ -310,7 +315,7 @@ context.modules = [
         args = {{
             audio.rate = {get_graph_rate()}
             audio.channels = 1
-            aec.method = webrtc
+            library.name = aec/libspa-aec-webrtc
             aec.args = {{
                 webrtc.echo_suppression_level = {supp}
                 webrtc.noise_suppression_level = {noise}
