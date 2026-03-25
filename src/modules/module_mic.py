@@ -42,14 +42,24 @@ _device_lock = threading.Lock()
 
 def _pw_default_is_aec(direction="input"):
     """Check if PipeWire's default source/sink is the echo-cancel device."""
+    import subprocess
+    # Try pactl first (available when pipewire-pulse is installed)
     try:
-        import subprocess
         key = "Default Source" if direction == "input" else "Default Sink"
         result = subprocess.run(["pactl", "info"], capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             for line in result.stdout.splitlines():
                 if line.strip().startswith(key):
                     return "echo_cancel" in line.lower()
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+    # Fallback: check pw-cli for echo_cancel nodes
+    try:
+        result = subprocess.run(["pw-cli", "list-objects"], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and "echo_cancel" in result.stdout:
+            return True
     except Exception:
         pass
     return False
