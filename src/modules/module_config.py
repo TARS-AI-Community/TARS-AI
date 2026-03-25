@@ -496,6 +496,9 @@ def load_config():
             "embedding_source": config.get('RAG', 'embedding_source', fallback='local'),
             "embedding_url": config.get('RAG', 'embedding_url', fallback=''),
         },
+        "SKILLS": {
+            "skill_engine": config.get('SKILLS', 'skill_engine', fallback='llm'),
+        },
         "SERVO": {
             "arms_present": config.getboolean('SERVO', 'arms_present'),
             "leftMainMin": config['SERVO']['leftMainMin'],
@@ -998,6 +1001,21 @@ CONFIG_METADATA = {
             'label': 'Vision Max Tokens',
             'depends_on': [{'field': 'enabled', 'values': ['True', 'true']}, {'field': 'vision_processor', 'values': ['openai', 'llm', 'external']}],
             'description': 'Maximum number of tokens in the vision response. Higher values give more detailed descriptions but cost more.'
+        },
+    },
+    'SKILLS': {
+        '__description__': 'Configure which skills (tools/functions) TARS can use and how they are routed',
+        'skill_engine': {
+            'label': 'Skill Router',
+            'options': ['llm', 'keyword'],
+            'option_labels': {
+                'llm': 'LLM (all skills in prompt)',
+                'keyword': 'Keyword (instant, recommended)',
+            },
+            'description': 'How TARS decides which skills to include in each prompt. '
+                           '"LLM" sends all enabled skills every time (most compatible, largest prompt). '
+                           '"Keyword" uses instant pattern matching to detect which skills are needed — no model, no delay, recommended for most setups. '
+                           'Recently used skills are always included so follow-up commands like "next one" still work.',
         },
     },
     'RAG': {

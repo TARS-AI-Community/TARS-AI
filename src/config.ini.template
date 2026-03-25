@@ -298,6 +298,12 @@ rightHandMin = 300
 rightHandMax = 420
 rightHandOffset = 0
 
+[SKILLS]
+# Skill routing engine: llm | keyword
+# llm = all skills in every prompt (most compatible)
+# keyword = instant pattern matching (recommended)
+skill_engine = keyword
+
 [SKILL:discord]
 disabled = true
 

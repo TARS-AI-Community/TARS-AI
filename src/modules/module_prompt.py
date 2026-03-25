@@ -26,13 +26,31 @@ _LOCATION_CACHE_TTL = 86400  # 24 hours — re-resolve if user moves
 _location_cache = {"lat": None, "lon": None, "name": None, "cached_at": 0.0}
 
 
-def _get_skills_prompt_text():
-    """Get tool definitions from the skills system for LLM prompt injection."""
+def _get_skills_prompt_text(user_message=None):
+    """Get tool definitions from the skills system for LLM prompt injection.
+
+    When a skill engine is active (keyword), only returns
+    definitions for skills the engine classified as relevant — dramatically
+    reducing prompt size for the main LLM.
+    """
     try:
         from modules.module_skills import get_skill_manager
         skills = get_skill_manager()
-        if skills:
-            return skills.get_prompt_text()
+        if not skills:
+            return "(No skills loaded)"
+
+        # Try skill engine filtering first
+        if user_message:
+            try:
+                from modules.module_skill_engine import get_skill_engine
+                engine = get_skill_engine()
+                if engine and engine.is_active():
+                    return engine.get_filtered_prompt_text(skills, user_message)
+            except Exception:
+                pass
+
+        # Fallback: all enabled skills (LLM mode or engine not ready)
+        return skills.get_prompt_text()
     except Exception:
         pass
     return "(No skills loaded)"
@@ -63,13 +81,29 @@ def _get_emotion_prompt_instruction(config):
     return ""
 
 
-def _get_skills_examples_text():
-    """Get skill-specific examples from the skills system for LLM prompt injection."""
+def _get_skills_examples_text(user_message=None):
+    """Get skill-specific examples from the skills system for LLM prompt injection.
+
+    When a skill engine is active, only returns examples for relevant skills.
+    """
     try:
         from modules.module_skills import get_skill_manager
         skills = get_skill_manager()
-        if skills:
-            return skills.get_examples_text()
+        if not skills:
+            return ""
+
+        # Try skill engine filtering first
+        if user_message:
+            try:
+                from modules.module_skill_engine import get_skill_engine
+                engine = get_skill_engine()
+                if engine and engine.is_active():
+                    return engine.get_filtered_examples_text(skills, user_message)
+            except Exception:
+                pass
+
+        # Fallback: all enabled skills
+        return skills.get_examples_text()
     except Exception:
         pass
     return ""
@@ -318,7 +352,7 @@ Schema:
 
 When user requests match these patterns, you MUST call the function:
 
-{_get_skills_prompt_text()}
+{_get_skills_prompt_text(user_prompt)}
 
    new_memories (REQUIRED field)
    Extract ONLY high-level, persistent facts about the user from this conversation
@@ -436,7 +470,7 @@ Before you write your reply, scan your last 5-6 responses above and ask yourself
 === EXAMPLES ===
 
 === Skill-Specific Examples (auto-generated from skills) ===
-{_get_skills_examples_text()}
+{_get_skills_examples_text(user_prompt)}
 
 === General Behavior Examples ===
 
