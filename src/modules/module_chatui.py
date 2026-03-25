@@ -3096,6 +3096,46 @@ def _parse_movement_steps(src):
         i = 0
         while i < len(lines):
             line = lines[i]
+            # if/elif/else — take only the first branch, skip the rest
+            if_m = _re.match(r"^(\s*)if\s+.+:\s*$", line)
+            if if_m:
+                if_indent = len(line) - len(line.lstrip())
+                body_lines = []
+                i += 1
+                while i < len(lines):
+                    bl = lines[i]
+                    if bl.strip() == "":
+                        i += 1
+                        continue
+                    bl_indent = len(bl) - len(bl.lstrip())
+                    if bl_indent > if_indent:
+                        body_lines.append(bl)
+                        i += 1
+                    else:
+                        break
+                result.extend(extract_steps(body_lines))
+                # skip any elif/else branches at same indent
+                while i < len(lines):
+                    bl = lines[i]
+                    if bl.strip() == "":
+                        i += 1
+                        continue
+                    bl_indent = len(bl) - len(bl.lstrip())
+                    if bl_indent == if_indent and _re.match(r"\s*(elif|else)\b", bl):
+                        i += 1
+                        while i < len(lines):
+                            inner = lines[i]
+                            if inner.strip() == "":
+                                i += 1
+                                continue
+                            if len(inner) - len(inner.lstrip()) > if_indent:
+                                i += 1
+                            else:
+                                break
+                    else:
+                        break
+                continue
+
             loop_m = _re.search(r"for\s+\w+\s+in\s+range\((\d+)\)\s*:", line)
             if loop_m:
                 repeat = int(loop_m.group(1))
