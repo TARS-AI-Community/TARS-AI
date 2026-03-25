@@ -25,6 +25,7 @@ from adafruit_pca9685 import PCA9685
 import os
 
 from modules.module_config import load_config
+import modules.module_config as module_config
 import modules.module_servoctl as servoctl
 from modules.module_servoctl import *
 from modules.module_movement_registry import get_names, get_names_by_type, LEGS_ONLY, HAS_ARMS
@@ -213,6 +214,8 @@ def save_offset_to_config(offset_name, value):
 
     with open(config_path, 'w') as f:
         f.writelines(lines)
+
+    module_config._config_cache = None
 
     return True
 
