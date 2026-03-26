@@ -1055,6 +1055,74 @@ main() {
         fi
     fi
 
+    # ── PipeWire AEC Setup ──────────────────────────────────────────────
+    tars_say "Setting up PipeWire for echo cancellation..." "info"
+
+    # Detect correct webrtc package name (varies by OS version)
+    WEBRTC_PKG="libwebrtc-audio-processing1"
+    if apt-cache show libwebrtc-audio-processing-1-3 >/dev/null 2>&1; then
+        WEBRTC_PKG="libwebrtc-audio-processing-1-3"
+    fi
+
+    sudo apt install -y pipewire pipewire-pulse libspa-0.2-modules $WEBRTC_PKG 2>&1 | tail -10
+
+    # Create echo-cancel config if it doesn't exist
+    AEC_CONF="/etc/pipewire/pipewire.conf.d/echo-cancel.conf"
+    if [ ! -f "$AEC_CONF" ]; then
+        sudo mkdir -p /etc/pipewire/pipewire.conf.d
+        sudo tee "$AEC_CONF" > /dev/null << 'AECEOF'
+# TARS-AI AEC Config (default)
+context.modules = [
+    {
+        name = libpipewire-module-echo-cancel
+        args = {
+            audio.rate = 48000
+            audio.channels = 1
+            library.name = aec/libspa-aec-webrtc
+            aec.args = {
+                webrtc.echo_suppression_level = 2
+                webrtc.noise_suppression_level = 2
+                webrtc.gain_control = false
+                webrtc.extended_filter = true
+                webrtc.high_pass_filter = true
+                webrtc.delay_agnostic = true
+            }
+            capture.props = {
+                node.name = "echo_cancel_capture"
+            }
+            source.props = {
+                node.name = "echo_cancel_source"
+                node.description = "TARS Mic (Echo Cancelled)"
+                media.class = "Audio/Source"
+                priority.driver = 2000
+                priority.session = 2000
+            }
+            playback.props = {
+                node.name = "echo_cancel_playback"
+            }
+            sink.props = {
+                node.name = "echo_cancel_sink"
+                node.description = "TARS Speaker (Echo Cancel)"
+                media.class = "Audio/Sink"
+                priority.driver = 2000
+                priority.session = 2000
+            }
+        }
+    }
+]
+AECEOF
+        tars_say "AEC echo-cancel config created." "success"
+    else
+        tars_say "AEC config already exists, keeping current settings." "info"
+    fi
+
+    # Restart PipeWire to load AEC module
+    if [ -n "$SUDO_USER" ]; then
+        sudo -u "$SUDO_USER" XDG_RUNTIME_DIR="/run/user/$(id -u $SUDO_USER)" systemctl --user restart pipewire pipewire-pulse 2>/dev/null || true
+    fi
+
+    tars_say "PipeWire AEC setup complete. Run 'sudo python3 aec.py' to fine-tune." "success"
+
     tars_say "Initializing Python virtual environment..." "info"
     
     cd src
