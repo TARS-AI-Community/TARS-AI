@@ -671,7 +671,19 @@ class TarsConfigManager:
                 )
 
                 for field_name, template_field in template_section.fields.items():
-                    if section_name in config_data and field_name in config_data[section_name]:
+                    # For SKILL sections, the "disabled" field is managed by SkillManager.
+                    # When a skill is enabled, SkillManager removes the "disabled" key entirely.
+                    # Do NOT fall back to the template default (disabled = true) or we will
+                    # re-disable skills that the user has enabled.
+                    if section_name.startswith('SKILL:') and field_name == 'disabled':
+                        if section_name in existing_sections and field_name in existing_sections[section_name].fields:
+                            new_value = existing_sections[section_name].fields[field_name].value
+                            actions_taken.append(f"Preserved [{section_name}] {field_name}")
+                        else:
+                            # disabled key absent means skill is enabled — skip it
+                            actions_taken.append(f"Skipped [{section_name}] disabled (managed by SkillManager)")
+                            continue
+                    elif section_name in config_data and field_name in config_data[section_name]:
                         new_value = str(config_data[section_name][field_name])
                         actions_taken.append(f"Updated [{section_name}] {field_name}")
                     elif section_name in existing_sections and field_name in existing_sections[section_name].fields:
