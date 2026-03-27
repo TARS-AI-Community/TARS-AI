@@ -80,8 +80,8 @@ def initialize_blip():
             return
         queue_message("INFO: Initializing BLIP model...")
         _processor = BlipProcessor.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR), use_fast=False)
-        _model = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR)).to(DEVICE)
-        _model = torch.quantization.quantize_dynamic(_model, {torch.nn.Linear}, dtype=torch.qint8)
+        _model = BlipForConditionalGeneration.from_pretrained(MODEL_NAME, cache_dir=str(CACHE_DIR), torch_dtype=torch.float16 if DEVICE != "cpu" else torch.float32).to(DEVICE)
+        _model.eval()
         queue_message("INFO: BLIP model initialized.")
 
 
