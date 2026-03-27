@@ -28,9 +28,9 @@ thinking_responses = ["Let me think...","soooo.....","soo....","Let's seeee...",
 
 [LLM]
 # AI backend: openai | grok | deepinfra | other
-llm_backend = other
+llm_backend = openai
 # API endpoint URL (used when llm_backend = other)
-base_url = https://api.featherless.ai
+base_url = https://api.openai.com
 # Model name for openai / deepinfra backend (e.g., gpt-4o-mini)
 openai_model = gpt-4o-mini
 # Model name for grok backend
