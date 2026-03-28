@@ -6,6 +6,7 @@ import wave
 import re
 import os
 import ctypes
+from urllib.request import urlretrieve
 
 # === Custom Modules ===
 from modules.module_config import load_config
@@ -35,6 +36,33 @@ asound = ctypes.cdll.LoadLibrary('libasound.so')
 script_dir = os.path.dirname(__file__)
 model_path = os.path.join(script_dir, '..', f'character/{character_name}/voice/{character_name}.onnx')
 
+HF_BASE_URL = "https://huggingface.co/olivierdion007/TARS-AI/resolve/main"
+
+def _download_voice_model(character, dest_path):
+    """Download Piper voice model (.onnx and .onnx.json) from Hugging Face.
+
+    Returns True if model is available after download, False on failure.
+    """
+    voice_dir = os.path.dirname(dest_path)
+    os.makedirs(voice_dir, exist_ok=True)
+
+    for ext in [".onnx", ".onnx.json"]:
+        url = f"{HF_BASE_URL}/{character}{ext}"
+        local = dest_path if ext == ".onnx" else dest_path + ".json"
+        if os.path.isfile(local) and not _is_lfs_pointer(local):
+            continue
+        queue_message(f"[Piper] Downloading {character}{ext} from Hugging Face...")
+        try:
+            urlretrieve(url, local)
+            size_mb = os.path.getsize(local) / (1024 * 1024)
+            queue_message(f"[Piper] Downloaded {character}{ext} ({size_mb:.1f} MB)")
+        except Exception as e:
+            queue_message(f"[Piper] Failed to download {character}{ext}: {e}")
+            if os.path.exists(local):
+                os.remove(local)
+            return False
+    return True
+
 def _is_lfs_pointer(filepath):
     """Check if a file is a Git LFS pointer instead of actual content."""
     try:
@@ -46,13 +74,14 @@ def _is_lfs_pointer(filepath):
 
 voice = None
 if CONFIG['TTS']['ttsoption'] == 'piper':
-    if not os.path.isfile(model_path):
-        queue_message(f"[Piper] Voice model not found: {model_path}")
-        queue_message("[Piper] Please place a valid .onnx voice model in the character voice folder.")
-    elif _is_lfs_pointer(model_path):
-        queue_message(f"[Piper] Voice model is a Git LFS pointer, not the actual file: {model_path}")
-        queue_message("[Piper] Run 'git lfs install && git lfs pull' to download the real model file.")
-    else:
+    # Auto-download from Hugging Face if missing or is a Git LFS pointer
+    if not os.path.isfile(model_path) or _is_lfs_pointer(model_path):
+        queue_message(f"[Piper] Voice model missing or incomplete, attempting download from Hugging Face...")
+        if not _download_voice_model(character_name, model_path):
+            queue_message("[Piper] Auto-download failed. Please manually place a valid .onnx voice model in the character voice folder.")
+
+    # Load the model if it now exists
+    if os.path.isfile(model_path) and not _is_lfs_pointer(model_path):
         try:
             voice = PiperVoice.load(model_path)
             # Warmup: run a dummy synthesis to trigger ONNX runtime JIT

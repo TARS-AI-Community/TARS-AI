@@ -1038,12 +1038,8 @@ main() {
         sudo apt install -y python3-pip python3-venv python3-dev portaudio19-dev espeak-ng git 2>&1 | tail -10
     fi
     
-    # Ensure Git LFS is installed and pull any LFS files (e.g. .onnx voice models)
-    tars_say "Setting up Git LFS for large files (voice models)..." "info"
-    sudo apt install -y git-lfs 2>&1 | tail -5
-    git lfs install 2>&1 | tail -5
-    git lfs pull 2>&1 | tail -5
-    tars_say "Git LFS setup complete." "success"
+    # Voice models (.onnx) are now auto-downloaded from Hugging Face at runtime.
+    # Git LFS is no longer required for this project.
 
     if [[ "$PI_VERSION" == "pi5" ]]; then
         local multiarch_lib="/usr/lib/aarch64-linux-gnu"
