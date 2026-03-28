@@ -190,15 +190,9 @@ todo*.md
 /src/modules/UI/pictures/*
 dashboard.ini
 
-# ONNX Models (Ignore all except specific character models)
+# ONNX Models (hosted on Hugging Face)
 *.onnx
 *.onnx.json
-!TARS.onnx*
-!CASE.onnx*
-!KIPP.onnx*
-!PLEX.onnx*
-!Bishop.onnx*
-!hey_tars.onnx
 
 # Speech-to-text (STT) Folder
 stt/
