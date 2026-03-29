@@ -16,6 +16,7 @@ Run this script directly to start the application.
 import os
 import sys
 import threading
+import urllib.request
 from datetime import datetime
 
 # === Custom Modules ===
@@ -39,6 +40,33 @@ sys.path.append(os.getcwd())
 CONFIG = load_config()
 
 # === Helper Functions ===
+def ensure_tars_onnx():
+    """
+    Checks that src/tts/TARS.onnx exists. If not, downloads it from HuggingFace.
+    """
+    onnx_path = os.path.join(BASE_DIR, "src", "tts", "TARS.onnx")
+    onnx_url = "https://huggingface.co/olivierdion007/TARS-AI/resolve/main/TARS.onnx"
+
+    if os.path.isfile(onnx_path):
+        queue_message(f"LOAD: TARS.onnx found at {onnx_path}")
+        return
+
+    queue_message(f"LOAD: TARS.onnx not found. Downloading from HuggingFace...")
+    os.makedirs(os.path.dirname(onnx_path), exist_ok=True)
+
+    try:
+        def _progress(block_num, block_size, total_size):
+            if total_size > 0:
+                pct = min(block_num * block_size / total_size * 100, 100)
+                print(f"\r  Downloading TARS.onnx: {pct:.1f}%", end="", flush=True)
+
+        urllib.request.urlretrieve(onnx_url, onnx_path, reporthook=_progress)
+        print()  # newline after progress
+        queue_message(f"LOAD: TARS.onnx downloaded successfully to {onnx_path}")
+    except Exception as e:
+        queue_message(f"ERROR: Failed to download TARS.onnx: {e}")
+        raise
+
 def init_app():
     """
     Performs initial setup for the application
@@ -51,6 +79,9 @@ def init_app():
     CONFIG = load_config()
     if CONFIG['TTS']['ttsoption'] == 'xttsv2':
         update_tts_settings(CONFIG['TTS']['ttsurl'])
+
+    # Ensure TARS voice model is present
+    ensure_tars_onnx()
 
 def start_discord_in_thread():
     """
