@@ -45,7 +45,7 @@ from modules.module_config import load_config
 CONFIG = load_config()
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-SRC_DIR = os.path.dirname(os.path.dirname(MODULE_DIR))
+SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(MODULE_DIR)))
 INI_PATH = os.path.join(SRC_DIR, "dashboard.ini")
 
 def load_ini_config():
