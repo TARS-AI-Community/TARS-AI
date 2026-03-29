@@ -214,6 +214,8 @@ src/character/**
 !src/character/PLEX/**
 !src/character/Bishop/
 !src/character/Bishop/**
+# Re-ignore voice models (downloaded from HuggingFace at runtime)
+src/character/*/voice/*.onnx
 
 tarsdiscordbot/
 src/memory/prompt_history/
