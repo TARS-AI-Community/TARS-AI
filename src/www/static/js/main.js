@@ -2272,8 +2272,8 @@ function executeAction() {
   }
 
   const BACKEND_URLS = {
-    'openai':    'https://api.openai.com/v1',
-    'grok':      'https://api.x.ai/v1',
+    'openai':    'https://api.openai.com/',
+    'grok':      'https://api.x.ai/',
     'deepinfra': 'https://api.deepinfra.com/v1/openai',
   };
 
