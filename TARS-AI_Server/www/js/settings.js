@@ -28,6 +28,13 @@ async function loadSettings(){
     setSelect('s-llm-cache-type',d.llm.cache_type_k||'q8_0');
     document.getElementById('s-llm-kvs').value=d.llm.kv_cache_sessions;
     document.getElementById('s-llm-kvt').value=d.llm.kv_cache_ttl;
+    document.getElementById('s-llm-temp').value=d.llm.temperature||'0.7';
+    document.getElementById('s-llm-topp').value=d.llm.top_p||'0.95';
+    document.getElementById('s-llm-minp').value=d.llm.min_p||'0.0';
+    document.getElementById('s-llm-topk').value=d.llm.top_k||'0';
+    document.getElementById('s-llm-repeat').value=d.llm.repeat_penalty||'1.0';
+    document.getElementById('s-llm-freqpen').value=d.llm.frequency_penalty||'0.0';
+    document.getElementById('s-llm-prespen').value=d.llm.presence_penalty||'0.0';
     window._ttsVoicesDir=d.tts.voices_dir||'';
     document.getElementById('s-tts-cache').value=d.tts.cache_size;
     try{const vr=await fetch('/tts/voices');const vd=await vr.json();const sel=document.getElementById('s-tts-voice');sel.innerHTML='';(vd.voices||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.text=v;sel.add(o)});if(d.tts.default_voice)setSelect('s-tts-voice',d.tts.default_voice)}catch(e){document.getElementById('s-tts-voice').innerHTML='<option value="">TTS not loaded</option>'}
@@ -83,7 +90,7 @@ async function saveSettings(){
     server:{port:document.getElementById('s-port').value,api_key:document.getElementById('s-apikey').value},
     services:{stt:document.getElementById('svc-stt').checked?'true':'false',tts:document.getElementById('svc-tts').checked?'true':'false',llm:document.getElementById('svc-llm').checked?'true':'false',vision:document.getElementById('svc-vision').checked?'true':'false',imagegen:document.getElementById('svc-imagegen').checked?'true':'false',musicgen:document.getElementById('svc-musicgen').checked?'true':'false',embeddings:document.getElementById('svc-embeddings').checked?'true':'false'},
     stt:{whisper_model:document.getElementById('s-stt-model').value,compute_type:document.getElementById('s-stt-compute').value,vad_filter:document.getElementById('s-stt-vad').checked?'true':'false',device:document.getElementById('dev-stt').value,engine:document.getElementById('s-stt-engine').value},
-    llm:{model:document.getElementById('s-llm-model').value,backend:'llamacpp',n_ctx:document.getElementById('s-llm-nctx').value,n_gpu_layers:document.getElementById('s-llm-ngpu').value,cache_type_k:document.getElementById('s-llm-cache-type').value,cache_type_v:document.getElementById('s-llm-cache-type').value,kv_cache_sessions:document.getElementById('s-llm-kvs').value,kv_cache_ttl:document.getElementById('s-llm-kvt').value,device:document.getElementById('dev-llm').value},
+    llm:{model:document.getElementById('s-llm-model').value,backend:'llamacpp',n_ctx:document.getElementById('s-llm-nctx').value,n_gpu_layers:document.getElementById('s-llm-ngpu').value,cache_type_k:document.getElementById('s-llm-cache-type').value,cache_type_v:document.getElementById('s-llm-cache-type').value,kv_cache_sessions:document.getElementById('s-llm-kvs').value,kv_cache_ttl:document.getElementById('s-llm-kvt').value,device:document.getElementById('dev-llm').value,temperature:document.getElementById('s-llm-temp').value,top_p:document.getElementById('s-llm-topp').value,min_p:document.getElementById('s-llm-minp').value,top_k:document.getElementById('s-llm-topk').value,repeat_penalty:document.getElementById('s-llm-repeat').value,frequency_penalty:document.getElementById('s-llm-freqpen').value,presence_penalty:document.getElementById('s-llm-prespen').value},
     tts:{default_voice:document.getElementById('s-tts-voice').value,voices_dir:window._ttsVoicesDir||'',cache_size:document.getElementById('s-tts-cache').value},
     vision:{model:(document.getElementById('s-vision-preset').value==='custom'?document.getElementById('s-vision-model').value:document.getElementById('s-vision-preset').value),device:document.getElementById('dev-vision').value},
     imagegen:{model:(document.getElementById('s-imagegen-preset').value==='custom'?document.getElementById('s-imagegen-model').value:document.getElementById('s-imagegen-preset').value),default_steps:document.getElementById('s-imagegen-steps').value,default_cfg:document.getElementById('s-imagegen-cfg').value,device:document.getElementById('dev-imagegen').value},

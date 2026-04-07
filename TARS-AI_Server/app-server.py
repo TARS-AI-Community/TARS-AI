@@ -579,7 +579,10 @@ _CONFIG_DEFAULTS = {
                    "backend": "llamacpp",
                    "n_ctx": "16384", "n_gpu_layers": "-1",
                    "n_batch": "4096", "flash_attn": "true", "cache_type_k": "q8_0", "cache_type_v": "q8_0",
-                   "kv_cache_sessions": "2", "kv_cache_ttl": "300", "device": "auto"},
+                   "kv_cache_sessions": "2", "kv_cache_ttl": "300", "device": "auto",
+                   "temperature": "0.7", "top_p": "0.95",
+                   "top_k": "0", "min_p": "0.0", "repeat_penalty": "1.0",
+                   "frequency_penalty": "0.0", "presence_penalty": "0.0"},
     "tts":        {"voices_dir": "", "default_voice": "", "cache_size": "100"},
     "vision":     {"model": "Salesforce/blip-image-captioning-base", "device": "auto"},
     "imagegen":   {"model": "Lykon/dreamshaper-8", "default_steps": "15", "default_cfg": "7.0", "device": "auto"},
@@ -1681,7 +1684,7 @@ class LLMService:
         ).strip()
 
     def chat(self, messages, max_tokens=512, temperature=0.7, top_p=0.95,
-             stream=False, session_id=None):
+             stream=False, session_id=None, **kwargs):
         if stream:
             return self._stream_chat(messages, max_tokens, temperature, top_p, session_id)
         else:
@@ -1993,6 +1996,17 @@ class LlamaCppService:
                 "  HuggingFace: use  owner/repo  or  owner/repo::filename.gguf"
             )
 
+        # Prompt prefix cache — automatically reuses KV states for matching token
+        # prefixes (e.g. the system prompt). After the first request, subsequent
+        # requests with the same system prompt skip re-processing those tokens.
+        # 512MB allows caching 2-4 prefix states for typical models.
+        try:
+            from llama_cpp import LlamaRAMCache
+            self._llm.set_cache(LlamaRAMCache(capacity_bytes=512 * 1024 * 1024))
+            log.info("llama.cpp prompt cache enabled (LlamaRAMCache, 512MB)")
+        except Exception as e:
+            log.debug(f"llama.cpp prompt cache not available: {e}")
+
         # Warmup: single short inference to pre-allocate CUDA scratch buffers.
         try:
             t0 = time.perf_counter()
@@ -2007,26 +2021,27 @@ class LlamaCppService:
         log.info(f"llama.cpp model loaded: {self.model_name}")
 
     def chat(self, messages, max_tokens=512, temperature=0.7, top_p=0.95,
-             stream=False, session_id=None):  # noqa: ARG002
+             stream=False, session_id=None, **kwargs):  # noqa: ARG002
         if stream:
-            return self._stream_chat(messages, max_tokens, temperature, top_p)
-        return self._batch_chat(messages, max_tokens, temperature, top_p)
+            return self._stream_chat(messages, max_tokens, temperature, top_p, **kwargs)
+        return self._batch_chat(messages, max_tokens, temperature, top_p, **kwargs)
 
-    def _batch_chat(self, messages, max_tokens, temperature, top_p) -> dict:
+    def _batch_chat(self, messages, max_tokens, temperature, top_p, **kwargs) -> dict:
         do_sample = temperature > 0
+        sampler_kwargs = self._build_sampler_kwargs(do_sample, temperature, top_p, kwargs)
         output = self._llm.create_chat_completion(
             messages=messages,
             max_tokens=max_tokens,
-            temperature=max(temperature, 0.01) if do_sample else 0.0,
-            top_p=top_p if do_sample else 1.0,
             stream=False,
+            **sampler_kwargs,
         )
         text = output["choices"][0]["message"]["content"] or ""
         usage = output.get("usage", {})
         return self._format_response(text, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
 
-    def _stream_chat(self, messages, max_tokens, temperature, top_p):
+    def _stream_chat(self, messages, max_tokens, temperature, top_p, **kwargs):
         do_sample = temperature > 0
+        sampler_kwargs = self._build_sampler_kwargs(do_sample, temperature, top_p, kwargs)
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         created = int(time.time())
 
@@ -2040,9 +2055,8 @@ class LlamaCppService:
             for chunk in self._llm.create_chat_completion(
                 messages=messages,
                 max_tokens=max_tokens,
-                temperature=max(temperature, 0.01) if do_sample else 0.0,
-                top_p=top_p if do_sample else 1.0,
                 stream=True,
+                **sampler_kwargs,
             ):
                 choice = chunk["choices"][0]
                 token_text = choice.get("delta", {}).get("content", "")
@@ -2085,6 +2099,36 @@ class LlamaCppService:
             yield "data: [DONE]\n\n"
 
         return generate()
+
+    @staticmethod
+    def _build_sampler_kwargs(do_sample: bool, temperature: float, top_p: float, extra: dict) -> dict:
+        """Build the sampling kwargs dict for create_chat_completion."""
+        kw = {
+            "temperature": max(temperature, 0.01) if do_sample else 0.0,
+            "top_p": top_p if do_sample else 1.0,
+        }
+        # top_k (0 = disabled)
+        if "top_k" in extra:
+            kw["top_k"] = int(extra["top_k"])
+        # min_p — dynamic nucleus cutoff (better than top_k for most models)
+        if "min_p" in extra:
+            kw["min_p"] = float(extra["min_p"])
+        # Repetition / frequency / presence penalties
+        if "repeat_penalty" in extra:
+            kw["repeat_penalty"] = float(extra["repeat_penalty"])
+        if "frequency_penalty" in extra:
+            kw["frequency_penalty"] = float(extra["frequency_penalty"])
+        if "presence_penalty" in extra:
+            kw["presence_penalty"] = float(extra["presence_penalty"])
+        # Mirostat adaptive sampling
+        if "mirostat_mode" in extra:
+            kw["mirostat_mode"] = int(extra["mirostat_mode"])
+            kw["mirostat_tau"] = float(extra.get("mirostat_tau", 5.0))
+            kw["mirostat_eta"] = float(extra.get("mirostat_eta", 0.1))
+        # Stop sequences
+        if "stop" in extra:
+            kw["stop"] = extra["stop"] if isinstance(extra["stop"], list) else [extra["stop"]]
+        return kw
 
     def _format_response(self, text: str, prompt_tokens: int = 0, completion_tokens: int = 0) -> dict:
         return {
@@ -2912,10 +2956,22 @@ async def llm_chat(request: Request):
             raise HTTPException(400, "messages is required")
 
         max_tokens = body.get("max_tokens", 512)
-        temperature = body.get("temperature", 0.7)
-        top_p = body.get("top_p", 0.95)
         stream = body.get("stream", False)
         session_id = request.headers.get("x-session-id")
+
+        # Sampling parameters — request body overrides config defaults
+        cfg = _active_config or load_config()
+        temperature = body.get("temperature", cfg.getfloat("llm", "temperature", fallback=0.7))
+        top_p = body.get("top_p", cfg.getfloat("llm", "top_p", fallback=0.95))
+        extra = {}
+        for key in ("top_k", "min_p", "repeat_penalty", "frequency_penalty",
+                     "presence_penalty"):
+            val = body.get(key, cfg.getfloat("llm", key, fallback=None))
+            if val is not None:
+                extra[key] = val
+        for key in ("mirostat_mode", "mirostat_tau", "mirostat_eta", "stop"):
+            if key in body:
+                extra[key] = body[key]
 
         # Apply named prompt template if requested (injects system prompt + default params)
         template_name = body.get("template")
@@ -2930,7 +2986,7 @@ async def llm_chat(request: Request):
 
         if stream:
             generator = SERVICES["llm"].chat(
-                messages, max_tokens, temperature, top_p, stream=True, session_id=session_id
+                messages, max_tokens, temperature, top_p, stream=True, session_id=session_id, **extra
             )
             # Wrap generator to hold semaphore until streaming is done.
             _stream_started = False
@@ -2966,7 +3022,7 @@ async def llm_chat(request: Request):
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 _INFERENCE_POOL, lambda: SERVICES["llm"].chat(
-                    messages, max_tokens, temperature, top_p, stream=False, session_id=session_id
+                    messages, max_tokens, temperature, top_p, stream=False, session_id=session_id, **extra
                 ))
             return JSONResponse(result)
     except HTTPException:
@@ -4179,13 +4235,13 @@ async def api_save_settings(request: Request):
     _ALL_SERVICES = ["stt", "tts", "llm", "vision", "imagegen", "musicgen", "embeddings"]
     old_enabled = {s: old_cfg.getboolean("services", s, fallback=False) for s in _ALL_SERVICES}
 
-    # Save new config
+    # Save new config (merge body over defaults so unspecified keys are kept)
     cfg = configparser.ConfigParser()
     for section in _CONFIG_DEFAULTS:
+        merged = dict(_CONFIG_DEFAULTS[section])
         if section in body:
-            cfg[section] = {k: str(v) for k, v in body[section].items()}
-        else:
-            cfg[section] = dict(_CONFIG_DEFAULTS[section])
+            merged.update({k: str(v) for k, v in body[section].items()})
+        cfg[section] = merged
     save_config(cfg)
     load_config()
 
