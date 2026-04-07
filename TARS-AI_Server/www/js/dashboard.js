@@ -14,17 +14,32 @@ function connect(){
     if(d.gpu&&d.gpu.shared_percent!==undefined){bars+=mkBar('Shared GPU',d.gpu.shared_percent,d.gpu.shared_used_gb.toFixed(1)+' / '+d.gpu.shared_total_gb.toFixed(1)+' GB ('+d.gpu.shared_percent+'%)');}
     ss.innerHTML=bars;
     const tb=document.getElementById('svc-table');let rows='';
+    const vramTotal=d.gpu&&d.gpu.vram_total_gb?d.gpu.vram_total_gb:12;
     for(const[n,s]of Object.entries(d.services)){
       const lat=d.latency[n]?d.latency[n].avg_latency_ms.toFixed(0)+'ms <span style="color:var(--text-dim)">('+d.latency[n].requests+')</span>':'<span style="color:var(--text-dim)">-</span>';
       const det=s.model||(n==='tts'?'Piper':'ready');
-      rows+='<tr><td class="svc-name">'+n.toUpperCase()+'</td><td class="status-ready">Online</td><td style="color:var(--text-dim)">'+det+'</td><td>'+lat+'</td></tr>';
+      let status;
+      if(s.vram_gb!==undefined&&s.vram_gb>0){
+        const pct=Math.min(100,s.vram_gb/vramTotal*100);
+        const c=pct<30?'var(--cyan)':pct<60?'var(--orange)':'var(--red)';
+        status='<div style="display:flex;align-items:center;gap:8px"><span class="status-ready" style="flex-shrink:0"></span>'
+          +'<div style="flex:1;min-width:80px;height:18px;background:rgba(0,229,255,0.06);border:1px solid var(--border);border-radius:4px;position:relative;overflow:hidden">'
+          +'<div style="height:100%;width:'+pct.toFixed(0)+'%;background:linear-gradient(90deg,'+c+',rgba(180,77,255,0.4));border-radius:3px"></div>'
+          +'<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-hud);font-size:9px;letter-spacing:.05em;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.7)">'+s.vram_gb.toFixed(1)+' GB</span>'
+          +'</div></div>';
+      }else{
+        status='<span class="status-ready">Online</span>';
+      }
+      rows+='<tr><td class="svc-name">'+n.toUpperCase()+'</td><td>'+status+'</td><td style="color:var(--text-dim)">'+det+'</td><td>'+lat+'</td></tr>';
     }
     tb.innerHTML=rows||'<tr><td colspan="4" style="color:var(--text-dim)">No services loaded</td></tr>';
     const la=document.getElementById('log-area');
     if(d.recent_logs&&d.recent_logs.length){
       la.innerHTML=d.recent_logs.map(l=>{
         const sc=l.status<400?'s2':l.status<500?'s4':'s5';
-        return '<div class="log-entry"><span class="le-time">'+l.time+'</span><span class="le-method">'+l.method+'</span><span class="le-path">'+l.endpoint+'</span><span class="le-status '+sc+'">'+l.status+'</span><span class="le-ms">'+l.latency_ms+'ms</span></div>';
+        let llm='';
+        if(l.llm){const m=l.llm;const ttft=m.ttft_ms>0?(m.ttft_ms<1000?m.ttft_ms+'ms':((m.ttft_ms/1000).toFixed(1))+'s'):'--';llm='<span class="le-llm">'+m.tokens_per_sec+' t/s | '+m.completion_tokens+' tok | '+ttft+' ttft</span>';}
+        return '<div class="log-entry"><span class="le-time">'+l.time+'</span><span class="le-method">'+l.method+'</span><span class="le-path">'+l.endpoint+'</span>'+llm+'<span class="le-status '+sc+'">'+l.status+'</span><span class="le-ms">'+l.latency_ms+'ms</span></div>';
       }).join('');
       la.scrollTop=la.scrollHeight;
     }

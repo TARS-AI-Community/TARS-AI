@@ -128,9 +128,9 @@ if !errorlevel! == 0 (
 :: ---------------------------------------------------------------------------
 echo  [....] Checking PyTorch...
 
-"%VENV_PYTHON%" -c "import torch" >nul 2>&1
+call "%VENV_PYTHON%" -c "import torch" >nul 2>&1
 if !errorlevel! == 0 (
-    for /f %%V in ('"%VENV_PYTHON%" -c "import torch; print(torch.__version__)"') do (
+    for /f %%V in ('call "%VENV_PYTHON%" -c "import torch; print(torch.__version__)"') do (
         echo  [ OK ] PyTorch %%V already installed - skipping.
     )
 ) else (

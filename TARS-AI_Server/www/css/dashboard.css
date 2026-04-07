@@ -37,6 +37,7 @@ td{border-bottom:1px solid rgba(0,229,255,0.06);color:var(--text)}
 .bar-fg::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);animation:shimmer 2s ease-in-out infinite}
 @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 .bar-label{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-hud);font-size:10px;letter-spacing:.1em;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,0.5)}
+.le-llm{color:var(--cyan);font-size:11px;flex:1;text-align:right;white-space:nowrap}
 .log-area{max-height:320px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(0,229,255,0.2) transparent}
 .log-entry{font-size:12px;color:var(--text-dim);padding:5px 0;border-bottom:1px solid rgba(0,229,255,0.04);display:flex;gap:10px}
 .log-entry .le-time{color:rgba(0,229,255,0.4);min-width:60px}

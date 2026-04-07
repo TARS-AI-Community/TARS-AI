@@ -175,7 +175,8 @@ log = logging.getLogger("tars-server")
 
 # Silence noisy third-party libraries (tied-weights warnings, generation flags, etc.)
 for _lib in (
-    "transformers", "diffusers", "huggingface_hub", "sentence_transformers",
+    "transformers", "diffusers", "huggingface_hub", "huggingface_hub.utils",
+    "huggingface_hub.file_download", "sentence_transformers", "accelerate",
     "filelock", "urllib3", "httpx", "torch", "ctranslate2", "safetensors",
     "uvicorn", "uvicorn.error", "uvicorn.protocols", "websockets", "asyncio",
 ):
@@ -185,6 +186,31 @@ for _lib in (
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+# Tell HuggingFace Hub to stay quiet
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+
+@contextlib.contextmanager
+def _mute_output():
+    """Suppress stdout/stderr at both Python and C/fd level during noisy model loading."""
+    null_fd = os.open(os.devnull, os.O_WRONLY)
+    saved_out, saved_err = os.dup(1), os.dup(2)
+    os.dup2(null_fd, 1)
+    os.dup2(null_fd, 2)
+    os.close(null_fd)
+    old_out, old_err = sys.stdout, sys.stderr
+    sys.stdout = sys.stderr = open(os.devnull, "w")
+    try:
+        yield
+    finally:
+        sys.stdout.close()
+        sys.stdout, sys.stderr = old_out, old_err
+        os.dup2(saved_out, 1)
+        os.dup2(saved_err, 2)
+        os.close(saved_out)
+        os.close(saved_err)
 
 # Silence ACE-Step loguru INFO spam (save_path, GPU memory, model loaded, etc.)
 try:
@@ -231,22 +257,60 @@ except Exception:
     _SHARED_TOTAL_GB = 0
 
 
+_smi_cache = {"result": None, "ts": 0.0}
+
+def _nvidia_smi_vram():
+    """Query nvidia-smi for VRAM usage. Returns (used_gb, free_gb) or None.
+    Cached for 3 seconds to avoid subprocess overhead on dashboard polling."""
+    now = time.time()
+    if _smi_cache["result"] is not None and now - _smi_cache["ts"] < 3.0:
+        return _smi_cache["result"]
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used,memory.free",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            parts = result.stdout.strip().split(",")
+            used_mb, free_mb = float(parts[0].strip()), float(parts[1].strip())
+            val = (used_mb / 1024, free_mb / 1024)
+            _smi_cache["result"] = val
+            _smi_cache["ts"] = now
+            return val
+    except Exception:
+        pass
+    return None
+
+
 def get_gpu_stats() -> dict:
     if DEVICE != "cuda":
         return {}
     try:
-        allocated = torch.cuda.memory_allocated(0) / 1024**3
-        reserved = torch.cuda.memory_reserved(0) / 1024**3
+        # Always prefer nvidia-smi — it sees ALL GPU consumers (torch + llama.cpp + others).
+        # torch.cuda.memory_allocated only reports PyTorch's own allocations, missing
+        # llama.cpp and other libraries that use CUDA directly.
+        smi = _nvidia_smi_vram()
+        if smi is not None:
+            allocated = smi[0]      # total used GB from nvidia-smi
+            vram_free = smi[1]      # total free GB from nvidia-smi
+            reserved = allocated    # no separate concept in nvidia-smi
+        else:
+            allocated = torch.cuda.memory_allocated(0) / 1024**3
+            reserved = torch.cuda.memory_reserved(0) / 1024**3
+            vram_free = max(_VRAM_TOTAL_GB - reserved, 0)
+
         ded_pct = allocated / _VRAM_TOTAL_GB * 100 if _VRAM_TOTAL_GB > 0 else 0
         # Shared GPU memory (Windows WDDM: overflow from VRAM into system RAM)
-        shared_used = max(0, reserved - _VRAM_TOTAL_GB)
+        shared_used = max(0, allocated - _VRAM_TOTAL_GB)
         shared_pct = shared_used / _SHARED_TOTAL_GB * 100 if _SHARED_TOTAL_GB > 0 else 0
         return {
             "name": _GPU_NAME,
             "vram_total_gb": round(_VRAM_TOTAL_GB, 2),
             "vram_allocated_gb": round(allocated, 2),
             "vram_reserved_gb": round(reserved, 2),
-            "vram_free_gb": round(max(_VRAM_TOTAL_GB - reserved, 0), 2),
+            "vram_free_gb": round(vram_free, 2),
             "vram_percent": round(min(ded_pct, 100), 1),
             "shared_total_gb": round(_SHARED_TOTAL_GB, 2),
             "shared_used_gb": round(shared_used, 2),
@@ -272,60 +336,121 @@ def get_system_stats() -> dict:
 
 
 
+_LLAMACPP_MIN_VERSION = "0.3.8"  # Gemma 4 support requires ≥0.3.8
+
+
 def _ensure_llamacpp():
-    """Install llama-cpp-python using pre-built wheels only — no compiler required.
+    """Install llama-cpp-python with GPU support.
 
     Strategy:
-      1. Already installed with GPU support → do nothing.
-      2. CUDA available → try matching CUDA pre-built wheel (--prefer-binary).
-      3. Fall back to CPU pre-built wheel (--prefer-binary).
-      4. Never attempt a source build — avoids Visual Studio / compiler requirements.
+      1. Already installed with GPU support AND meets min version → do nothing.
+      2. Try bundled wheels in wheels/ directory (ships with the project).
+      3. Try pre-built CUDA wheels from abetlen's index.
+      4. Fall back to CPU pre-built wheel.
+      No source builds — everything is pre-compiled.
 
     Uses a stamp file so a failed install isn't retried on every startup.
     Delete .llamacpp_install_failed to force a retry.
     """
     import importlib
     import subprocess
+    from packaging.version import Version
 
-    # Already installed — check for GPU support if on CUDA
-    try:
-        importlib.invalidate_caches()
-        from llama_cpp import llama_supports_gpu_offload  # type: ignore[import]
-        if DEVICE != "cuda" or llama_supports_gpu_offload():
+    def _get_installed_version():
+        try:
+            importlib.invalidate_caches()
+            import llama_cpp  # noqa: F401
+            return getattr(llama_cpp, "__version__", None)
+        except ImportError:
+            return None
+
+    def _has_gpu_support():
+        try:
+            from llama_cpp import llama_supports_gpu_offload
+            return llama_supports_gpu_offload()
+        except (ImportError, Exception):
+            return False
+
+    # Check current install
+    ver = _get_installed_version()
+    if ver:
+        meets_version = Version(ver) >= Version(_LLAMACPP_MIN_VERSION)
+        has_gpu = _has_gpu_support()
+        if meets_version and (DEVICE != "cuda" or has_gpu):
             return  # Good to go
-        # Installed but CPU-only and we have a GPU — fall through to reinstall
-        log.info("llama-cpp-python installed but CPU-only — attempting GPU wheel upgrade...")
-    except ImportError:
-        log.info("llama-cpp-python not found — installing pre-built wheel...")
+        if not meets_version:
+            log.info(f"llama-cpp-python {ver} is too old (need >={_LLAMACPP_MIN_VERSION}) — upgrading...")
+        elif not has_gpu:
+            log.info("llama-cpp-python installed but CPU-only — attempting GPU upgrade...")
+    else:
+        log.info("llama-cpp-python not found — installing...")
 
     stamp = Path(__file__).parent / ".llamacpp_install_failed"
     if stamp.exists():
         log.warning(
-            "llama-cpp-python pre-built wheel install previously failed — skipping.\n"
+            "llama-cpp-python install previously failed — skipping.\n"
             "  Delete .llamacpp_install_failed to retry.\n"
             "  GGUF models will not be available."
         )
         return
 
-    def _try_wheel(label: str, index_url: str) -> bool:
+    def _uninstall():
+        subprocess.call([sys.executable, "-m", "pip", "uninstall", "llama-cpp-python", "-y", "--quiet"])
+        # Remove stale files that pip sometimes leaves behind on Windows
+        import site, shutil
+        for site_dir in site.getsitepackages():
+            sp = Path(site_dir)
+            if not sp.exists():
+                continue
+            for pattern in ("llama_cpp", "llama_cpp_python*"):
+                for p in sp.glob(pattern):
+                    shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
+
+    def _try_local_wheels():
+        """Install from bundled wheels in the wheels/ directory."""
+        wheels_dir = Path(__file__).parent / "wheels"
+        if not wheels_dir.exists():
+            return False
+
+        # Find matching wheel for this platform
+        import platform
+        py_ver = f"cp{sys.version_info.major}{sys.version_info.minor}"  # e.g. "cp311"
+        plat = "win_amd64" if sys.platform == "win32" else "linux_x86_64"
+        if platform.machine() == "aarch64":
+            plat = "linux_aarch64"
+
+        # Prefer CUDA wheels, then any wheel matching platform
+        candidates = []
+        for whl in sorted(wheels_dir.glob("llama_cpp_python-*.whl"), reverse=True):
+            name = whl.name
+            # Check Python version compatibility (py3-none or cpXYY)
+            py_compat = (f"-{py_ver}-" in name or "-py3-none-" in name)
+            plat_compat = plat in name
+            if py_compat and plat_compat:
+                candidates.append(whl)
+
+        for whl in candidates:
+            log.info(f"llama-cpp-python: installing bundled wheel {whl.name}...")
+            rc = subprocess.call([
+                sys.executable, "-m", "pip", "install", str(whl),
+                "--force-reinstall", "--quiet",
+            ])
+            if rc == 0:
+                return True
+        return False
+
+    def _try_remote_wheel(label, index_url, min_ver=None):
         log.info(f"llama-cpp-python: trying {label} pre-built wheel...")
+        pkg = f"llama-cpp-python>={min_ver}" if min_ver else "llama-cpp-python"
         rc = subprocess.call([
-            sys.executable, "-m", "pip", "install", "llama-cpp-python",
+            sys.executable, "-m", "pip", "install", pkg,
             "--extra-index-url", index_url,
-            "--prefer-binary",          # never compile from source
+            "--only-binary", ":all:",   # never compile from source
             "--force-reinstall",
             "--no-cache-dir",
             "--quiet",
         ])
-        if rc != 0:
-            return False
-        # Verify the install actually worked
-        try:
-            importlib.invalidate_caches()
-            import llama_cpp  # noqa: F401
-            return True
-        except ImportError:
-            return False
+        return rc == 0
 
     # Detect CUDA version from torch so we pick the right wheel index
     cuda_ver = None
@@ -336,34 +461,41 @@ def _ensure_llamacpp():
         except Exception:
             pass
 
+    _uninstall()
     installed = False
 
-    if cuda_ver:
+    # Step 1: Try bundled wheels (fastest, no network, no compiler)
+    installed = _try_local_wheels()
+
+    # Step 2: Try pre-built CUDA wheels from abetlen's index
+    if not installed and cuda_ver:
         gpu_index = f"https://abetlen.github.io/llama-cpp-python/whl/{cuda_ver}"
-        installed = _try_wheel(f"CUDA {torch.version.cuda}", gpu_index)
+        installed = _try_remote_wheel(f"CUDA {torch.version.cuda}", gpu_index, _LLAMACPP_MIN_VERSION)
         if not installed:
-            # Try adjacent CUDA versions (wheels aren't published for every minor)
-            for fallback in ("cu125", "cu123", "cu122"):
+            installed = _try_remote_wheel(f"CUDA {torch.version.cuda} (any version)", gpu_index)
+        if not installed:
+            for fallback in ("cu128", "cu125", "cu124", "cu123", "cu122"):
                 if fallback != cuda_ver:
                     fb_index = f"https://abetlen.github.io/llama-cpp-python/whl/{fallback}"
-                    installed = _try_wheel(f"CUDA fallback ({fallback})", fb_index)
+                    installed = _try_remote_wheel(f"CUDA fallback ({fallback})", fb_index)
                     if installed:
                         break
 
+    # Step 3: Fall back to CPU wheel
     if not installed:
-        installed = _try_wheel("CPU", "https://abetlen.github.io/llama-cpp-python/whl/cpu")
+        _uninstall()
+        installed = _try_remote_wheel("CPU", "https://abetlen.github.io/llama-cpp-python/whl/cpu")
 
     if installed:
-        log.info("llama-cpp-python installed successfully. Restarting...")
+        ver = _get_installed_version()
+        log.info(f"llama-cpp-python {ver} installed successfully. Restarting...")
         _restart_self()
     else:
-        stamp.write_text("Pre-built wheel install failed — delete this file to retry.\n")
+        stamp.write_text("Install failed — delete this file to retry.\n")
         log.warning(
-            "llama-cpp-python could not be installed from pre-built wheels.\n"
+            "llama-cpp-python could not be installed.\n"
             "  GGUF models will not be available.\n"
-            "  Delete .llamacpp_install_failed to retry on next startup.\n"
-            "  Manual install: pip install llama-cpp-python --prefer-binary "
-            "--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu"
+            "  Delete .llamacpp_install_failed to retry on next startup."
         )
 
 # _ensure_llamacpp() is called on-demand when LLM backend is "llamacpp"
@@ -390,18 +522,19 @@ CONFIG_FILE = Path(__file__).parent / "config-server.ini"
 _CONFIG_DEFAULTS = {
     "server":     {"port": "5678", "api_key": ""},
     "services":   {"stt": "true", "tts": "true", "llm": "true", "vision": "true",
-                   "imagegen": "false", "musicgen": "false", "embeddings": "false"},
-    "stt":        {"whisper_model": "large-v3", "compute_type": "auto", "vad_filter": "true", "device": "auto"},
-    "llm":        {"model": "Qwen/Qwen3-4B",
-                   "dtype": "auto", "quantize": "none", "backend": "auto",
-                   "n_ctx": "4096", "n_gpu_layers": "-1",
-                   "n_batch": "2048", "flash_attn": "true",
+                   "imagegen": "true", "musicgen": "false", "embeddings": "true"},
+    "stt":        {"whisper_model": "large-v3", "compute_type": "auto", "vad_filter": "true", "device": "auto", "engine": "auto"},
+    "llm":        {"model": "unsloth/gemma-4-E4B-it-GGUF",
+                   "dtype": "auto", "quantize": "none", "kv_cache_quant_bits": "4",
+                   "backend": "llamacpp",
+                   "n_ctx": "16384", "n_gpu_layers": "-1",
+                   "n_batch": "4096", "flash_attn": "true", "cache_type_k": "q8_0", "cache_type_v": "q8_0",
                    "kv_cache_sessions": "2", "kv_cache_ttl": "300", "device": "auto"},
     "tts":        {"voices_dir": "", "default_voice": "", "cache_size": "100"},
     "vision":     {"model": "Salesforce/blip-image-captioning-base", "device": "auto"},
-    "imagegen":   {"model": "stabilityai/stable-diffusion-xl-base-1.0", "default_steps": "20", "default_cfg": "7.0", "device": "auto"},
+    "imagegen":   {"model": "Lykon/dreamshaper-8", "default_steps": "15", "default_cfg": "7.0", "device": "auto"},
     "musicgen":   {"model": "ACE-Step/ACE-Step-v1-3.5B", "default_duration": "60", "default_steps": "60", "default_cfg": "15.0", "default_scheduler": "euler", "default_cfg_type": "apg", "default_omega_scale": "10.0", "default_guidance_interval": "0.5", "default_min_guidance": "3.0", "device": "auto"},
-    "embeddings": {"model": "all-MiniLM-L6-v2", "device": "auto"},
+    "embeddings": {"model": "all-MiniLM-L6-v2", "device": "cpu"},
 }
 
 _active_config: configparser.ConfigParser = None
@@ -440,7 +573,8 @@ class RequestTracker:
         self._service_stats: dict = {}  # service -> {"count": int, "total_ms": float}
         self._lock = Lock()
 
-    def record(self, endpoint: str, method: str, status: int, latency_ms: float, service: str = None):
+    def record(self, endpoint: str, method: str, status: int, latency_ms: float,
+               service: str = None, llm_info: dict = None):
         entry = {
             "time": datetime.now().strftime("%H:%M:%S"),
             "method": method,
@@ -448,6 +582,8 @@ class RequestTracker:
             "status": status,
             "latency_ms": round(latency_ms, 1),
         }
+        if llm_info:
+            entry["llm"] = llm_info
         with self._lock:
             self.history.append(entry)
             if service:
@@ -467,12 +603,82 @@ class RequestTracker:
                 }
             return result
 
+    def update_last_llm_info(self, llm_info: dict):
+        """Attach LLM metrics to the most recent LLM entry that has none yet."""
+        with self._lock:
+            for entry in reversed(self.history):
+                if "/v1/chat/completions" in entry.get("endpoint", "") and "llm" not in entry:
+                    entry["llm"] = llm_info
+                    break
+
     def get_recent(self, n: int = 50) -> list:
         with self._lock:
             return list(self.history)[-n:]
 
 
 TRACKER = RequestTracker()
+
+
+class LLMMetrics:
+    """Tracks LLM inference metrics (tokens/sec, TTFT, request counts)."""
+
+    def __init__(self, max_samples: int = 100):
+        self._lock = Lock()
+        self._samples: collections.deque = collections.deque(maxlen=max_samples)
+        self._total_requests = 0
+        self._total_prompt_tokens = 0
+        self._total_completion_tokens = 0
+        self._errors = 0
+        self._last = None
+
+    def pop_last(self):
+        """Return and clear the last recorded LLM info (for attaching to request log)."""
+        with self._lock:
+            info = self._last
+            self._last = None
+            return info
+
+    def record(self, prompt_tokens: int, completion_tokens: int, decode_ms: float, ttft_ms: float = 0):
+        tps = completion_tokens / (decode_ms / 1000) if decode_ms > 0 else 0
+        info = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "decode_ms": round(decode_ms, 1),
+            "ttft_ms": round(ttft_ms, 1),
+            "tokens_per_sec": round(tps, 1),
+        }
+        with self._lock:
+            self._samples.append({"time": datetime.now().strftime("%H:%M:%S"), **info})
+            self._total_requests += 1
+            self._total_prompt_tokens += prompt_tokens
+            self._total_completion_tokens += completion_tokens
+            self._last = info
+
+    def record_error(self):
+        with self._lock:
+            self._errors += 1
+
+    def get_stats(self) -> dict:
+        with self._lock:
+            if not self._samples:
+                return {"requests": 0}
+            recent = list(self._samples)
+            tps_vals = [s["tokens_per_sec"] for s in recent if s["tokens_per_sec"] > 0]
+            ttft_vals = [s["ttft_ms"] for s in recent if s["ttft_ms"] > 0]
+            return {
+                "requests": self._total_requests,
+                "errors": self._errors,
+                "total_prompt_tokens": self._total_prompt_tokens,
+                "total_completion_tokens": self._total_completion_tokens,
+                "avg_tokens_per_sec": round(sum(tps_vals) / len(tps_vals), 1) if tps_vals else 0,
+                "p50_tokens_per_sec": round(sorted(tps_vals)[len(tps_vals) // 2], 1) if tps_vals else 0,
+                "avg_ttft_ms": round(sum(ttft_vals) / len(ttft_vals), 1) if ttft_vals else 0,
+                "p50_ttft_ms": round(sorted(ttft_vals)[len(ttft_vals) // 2], 1) if ttft_vals else 0,
+                "last_10": recent[-10:],
+            }
+
+
+LLM_METRICS = LLMMetrics()
 
 # Map endpoint prefixes to service names for latency tracking
 _ENDPOINT_SERVICE = {
@@ -493,14 +699,12 @@ def _endpoint_to_service(path: str) -> Optional[str]:
             return svc
     return None
 
-# Pre-compute the sorted prefix list once (longest first for correct matching)
-_ENDPOINT_SERVICE_SORTED = sorted(_ENDPOINT_SERVICE.items(), key=lambda x: len(x[0]), reverse=True)
-
 
 # ---------------------------------------------------------------------------
 # Service registry
 # ---------------------------------------------------------------------------
 SERVICES: dict = {}
+_SERVICE_VRAM: dict = {}  # service_name -> vram_gb (measured delta at load time)
 START_TIME = time.time()
 _LAUNCH_ARGS = None
 _LLM_SEMAPHORE: asyncio.Semaphore = None  # initialized at startup
@@ -510,19 +714,154 @@ from concurrent.futures import ThreadPoolExecutor
 _INFERENCE_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tars-inference")
 
 # ===================================================================
-# STT Service (faster-whisper + Silero VAD)
+# STT Service (sherpa-onnx preferred, faster-whisper fallback + Silero VAD)
 # ===================================================================
+
+_SENSEVOICE_MODEL_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2"
+_SENSEVOICE_DIR_NAME = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
+_SILERO_VAD_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
+
+import re as _re
+_SENSEVOICE_TAG_RE = _re.compile(r"<\|[^|]*\|>")
+
+
 class STTService:
     def __init__(self, model_size: str = "large-v3", compute_type: str = "auto",
-                 vad_filter: bool = True, device: str = None):
+                 vad_filter: bool = True, device: str = None, engine: str = "auto"):
+        device = device or DEVICE
+        self.model_name = model_size
+        self._engine = self._resolve_engine(engine)
+        log.info(f"STT engine: {self._engine}")
+
+        self.model = None
+        self._recognizer = None
+        self._vad_model = None
+        self._vad_utils = None
+
+        if self._engine == "llm":
+            # No separate STT model — transcription routed to LLM at request time
+            self.model_name = "via LLM"
+            log.info("STT: using LLM for transcription (no separate STT model loaded)")
+        elif self._engine == "sherpa-onnx":
+            self._init_sherpa()
+        else:
+            self._init_faster_whisper(model_size, compute_type, device)
+
+        # Silero VAD for pre-filtering
+        if vad_filter and self._engine != "llm":
+            if self._engine == "sherpa-onnx":
+                self._load_sherpa_vad()
+            else:
+                self._load_vad()
+
+    @staticmethod
+    def _resolve_engine(engine: str) -> str:
+        if engine == "llm":
+            return "llm"
+        if engine == "sherpa-onnx":
+            return "sherpa-onnx"
+        if engine in ("faster-whisper", "faster_whisper"):
+            return "faster-whisper"
+        # auto: prefer sherpa-onnx (cross-platform, no CTranslate2), fall back to faster-whisper
+        try:
+            import sherpa_onnx  # noqa: F401
+            return "sherpa-onnx"
+        except ImportError:
+            pass
+        try:
+            from faster_whisper import WhisperModel  # noqa: F401
+            return "faster-whisper"
+        except ImportError:
+            pass
+        # Neither installed — try sherpa-onnx first
+        import subprocess as _sp
+        log.info("STT: installing sherpa-onnx...")
+        rc = _sp.call([sys.executable, "-m", "pip", "install", "sherpa-onnx", "--quiet"])
+        if rc == 0:
+            return "sherpa-onnx"
+        return "faster-whisper"
+
+    # -- sherpa-onnx init (SenseVoiceTiny — same as TARS client) -----------
+
+    def _init_sherpa(self):
+        import sherpa_onnx
+
+        stt_dir = MODELS_DIR / "stt"
+        stt_dir.mkdir(exist_ok=True)
+        model_dir = stt_dir / _SENSEVOICE_DIR_NAME
+
+        # Auto-download SenseVoiceTiny if not present
+        if not model_dir.exists() or not (model_dir / "model.int8.onnx").exists():
+            self._download_sensevoice(stt_dir)
+
+        model_file = str(model_dir / "model.int8.onnx")
+        tokens_file = str(model_dir / "tokens.txt")
+
+        if not os.path.isfile(model_file):
+            raise RuntimeError(f"SenseVoice model not found: {model_file}")
+
+        num_threads = min(4, os.cpu_count() or 2)
+        log.info(f"Loading sherpa-onnx SenseVoiceTiny (threads={num_threads})...")
+
+        self._recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
+            model=model_file,
+            tokens=tokens_file,
+            num_threads=num_threads,
+            use_itn=True,
+            debug=False,
+        )
+        self.model = self._recognizer
+        self.model_name = "SenseVoiceTiny"
+        log.info("sherpa-onnx SenseVoiceTiny loaded.")
+
+    def _download_sensevoice(self, stt_dir: Path):
+        """Download and extract SenseVoiceTiny model."""
+        import urllib.request, tarfile
+        archive_path = stt_dir / "sensevoice.tar.bz2"
+        log.info("Downloading SenseVoiceTiny model (~1GB)...")
+        try:
+            urllib.request.urlretrieve(_SENSEVOICE_MODEL_URL, str(archive_path))
+            log.info("Extracting SenseVoiceTiny...")
+            with tarfile.open(str(archive_path), "r:bz2") as tar:
+                tar.extractall(path=str(stt_dir))
+            archive_path.unlink(missing_ok=True)
+            log.info("SenseVoiceTiny model installed.")
+        except Exception as e:
+            archive_path.unlink(missing_ok=True)
+            raise RuntimeError(f"Failed to download SenseVoiceTiny: {e}")
+
+    def _load_sherpa_vad(self):
+        """Load Silero VAD via sherpa-onnx's native implementation."""
+        try:
+            import sherpa_onnx
+            vad_path = MODELS_DIR / "stt" / "silero_vad.onnx"
+            if not vad_path.exists():
+                import urllib.request
+                log.info("Downloading Silero VAD for sherpa-onnx...")
+                urllib.request.urlretrieve(_SILERO_VAD_URL, str(vad_path))
+
+            vad_config = sherpa_onnx.VadModelConfig()
+            vad_config.silero_vad.model = str(vad_path)
+            vad_config.silero_vad.threshold = 0.3
+            vad_config.silero_vad.min_speech_duration = 0.1
+            vad_config.silero_vad.min_silence_duration = 0.3
+            vad_config.sample_rate = 16000
+
+            self._sherpa_vad = sherpa_onnx.VoiceActivityDetector(vad_config, buffer_size_in_seconds=30)
+            log.info("Silero VAD loaded (sherpa-onnx native)")
+        except Exception as e:
+            self._sherpa_vad = None
+            log.warning(f"sherpa-onnx VAD not available ({e}), skipping pre-filter")
+
+    # -- faster-whisper init -----------------------------------------------
+
+    def _init_faster_whisper(self, model_size: str, compute_type: str, device: str):
         from faster_whisper import WhisperModel
 
-        device = device or DEVICE
         if compute_type == "auto":
             compute_type = "float16" if device == "cuda" else "int8"
 
         log.info(f"Loading Whisper model: {model_size} (compute: {compute_type}, device: {device})...")
-        self.model_name = model_size
         whisper_dir = MODELS_DIR / "whisper"
         whisper_dir.mkdir(exist_ok=True)
         self.model = WhisperModel(
@@ -531,13 +870,10 @@ class STTService:
             compute_type=compute_type,
             download_root=str(whisper_dir),
         )
+        self._recognizer = None
         log.info("Whisper model loaded.")
 
-        # Silero VAD for pre-filtering
-        self._vad_model = None
-        self._vad_utils = None
-        if vad_filter:
-            self._load_vad()
+    # -- VAD ---------------------------------------------------------------
 
     def _load_vad(self):
         try:
@@ -556,6 +892,25 @@ class STTService:
 
     def has_speech(self, audio_bytes: BytesIO) -> bool:
         """Check if audio contains speech using Silero VAD."""
+        if self._engine == "llm":
+            return True  # let the LLM decide
+        # sherpa-onnx native VAD
+        if self._engine == "sherpa-onnx" and getattr(self, "_sherpa_vad", None):
+            try:
+                samples = self._wav_to_float32(audio_bytes)
+                if samples is None:
+                    return True
+                self._sherpa_vad.accept_waveform(samples)
+                self._sherpa_vad.flush()
+                has = not self._sherpa_vad.empty()
+                # Drain all segments
+                while not self._sherpa_vad.empty():
+                    self._sherpa_vad.pop()
+                self._sherpa_vad.reset()
+                return has
+            except Exception:
+                return True
+        # torch-based Silero VAD (for faster-whisper engine)
         if not self._vad_model:
             return True
         try:
@@ -564,14 +919,56 @@ class STTService:
             wav_tensor = self._wav_bytes_to_tensor(audio_bytes)
             if wav_tensor is None:
                 return True
-            # Low threshold — this is a pre-filter to skip silence, not a gate.
-            # False negatives (missing speech) are far worse than false positives.
             timestamps = get_speech_ts(wav_tensor, self._vad_model,
                                        sampling_rate=16000, threshold=0.3,
                                        min_speech_duration_ms=100)
             return len(timestamps) > 0
         except Exception:
-            return True  # On error, proceed with transcription
+            return True
+
+    @staticmethod
+    def _wav_to_float32(audio_bytes: BytesIO):
+        """Convert audio BytesIO (any format) to float32 numpy array at 16kHz."""
+        import numpy as np
+        audio_bytes.seek(0)
+        # Try WAV first (fast, no ffmpeg dependency)
+        try:
+            with wave.open(audio_bytes, "rb") as wf:
+                sr = wf.getframerate()
+                n_frames = wf.getnframes()
+                n_channels = wf.getnchannels()
+                sampwidth = wf.getsampwidth()
+                raw = wf.readframes(n_frames)
+            if n_frames > 0 and raw and sampwidth in (1, 2, 4):
+                if sampwidth == 2:
+                    samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+                elif sampwidth == 4:
+                    samples = np.frombuffer(raw, dtype=np.int32).astype(np.float32) / 2147483648.0
+                else:
+                    samples = (np.frombuffer(raw, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+                if n_channels > 1:
+                    samples = samples[::n_channels]
+                if sr != 16000:
+                    new_len = int(len(samples) * 16000 / sr)
+                    if new_len < 1:
+                        return None
+                    indices = np.linspace(0, len(samples) - 1, new_len)
+                    samples = np.interp(indices, np.arange(len(samples)), samples).astype(np.float32)
+                audio_bytes.seek(0)
+                return samples
+        except Exception:
+            pass
+        # Fallback: use faster-whisper's ffmpeg-based decoder (handles WebM, Opus, etc.)
+        audio_bytes.seek(0)
+        try:
+            from faster_whisper.audio import decode_audio
+            samples = decode_audio(audio_bytes)
+            audio_bytes.seek(0)
+            return samples
+        except Exception:
+            pass
+        audio_bytes.seek(0)
+        return None
 
     def _wav_bytes_to_tensor(self, audio_bytes: BytesIO) -> Optional[torch.Tensor]:
         """Convert WAV BytesIO to a float32 tensor at 16kHz."""
@@ -586,7 +983,6 @@ class STTService:
             if n_frames == 0 or not raw:
                 return None
             n_samples = n_frames * n_channels
-            # Decode based on sample width (handles 8/16/24/32-bit WAV)
             if sampwidth == 1:
                 samples = struct.unpack(f"<{n_samples}B", raw)
                 tensor = (torch.FloatTensor(samples) - 128.0) / 128.0
@@ -602,7 +998,6 @@ class STTService:
                 i32[i32 >= 0x800000] -= 0x1000000
                 tensor = torch.from_numpy(i32.astype(np.float32)) / 8388608.0
             elif sampwidth == 4:
-                # 32-bit float (Audacity, modern DAWs) or 32-bit int
                 samples = struct.unpack(f"<{n_samples}f", raw)
                 tensor = torch.FloatTensor(samples)
                 if tensor.isnan().any() or tensor.isinf().any() or tensor.abs().max() > 2.0:
@@ -611,8 +1006,7 @@ class STTService:
             else:
                 return None
             if n_channels > 1:
-                tensor = tensor[::n_channels]  # take first channel
-            # Resample to 16kHz if needed
+                tensor = tensor[::n_channels]
             if sr != 16000:
                 import numpy as np
                 ratio = 16000 / sr
@@ -629,8 +1023,72 @@ class STTService:
             audio_bytes.seek(0)
             return None
 
-    def transcribe(self, audio_bytes: BytesIO, language: str = None) -> tuple[list[dict], object]:
-        kwargs = {"beam_size": 1}  # greedy decoding — ~3x faster, negligible quality loss for speech
+    # -- Transcription dispatch --------------------------------------------
+
+    def transcribe(self, audio_bytes: BytesIO, language: str = None):
+        if self._engine == "sherpa-onnx":
+            return self._transcribe_sherpa(audio_bytes, language)
+        return self._transcribe_faster_whisper(audio_bytes, language)
+
+    def _transcribe_llm(self, audio_bytes: BytesIO, language: str = None):
+        """Transcribe using the loaded LLM. Returns (results, info).
+
+        Delegates to llm.transcribe_audio() — the implementation varies by backend:
+          - LLMService (transformers): direct audio-to-text via AutoProcessor
+          - LlamaCppService: two-stage pipeline (sherpa-onnx raw STT → LLM cleanup)
+        """
+        if "llm" not in SERVICES:
+            return [], _SherpaInfo("", 0.0)
+        llm = SERVICES["llm"]
+        if not hasattr(llm, "transcribe_audio"):
+            raise RuntimeError(
+                "STT is set to 'Use LLM' but the loaded LLM backend has no transcribe_audio method."
+            )
+        text = llm.transcribe_audio(audio_bytes, language)
+        if not text:
+            return [], _SherpaInfo("", 0.0)
+        # Estimate duration from audio
+        samples = self._wav_to_float32(audio_bytes)
+        duration = len(samples) / 16000.0 if samples is not None else 0.0
+        segments = [{"text": text, "start": 0.0, "end": round(duration, 3)}]
+        return segments, _SherpaInfo(language or "en", 1.0)
+
+    def _transcribe_sherpa(self, audio_bytes: BytesIO, language: str = None):
+        """Transcribe using sherpa-onnx SenseVoice. Returns (results, info) matching faster-whisper interface."""
+        samples = self._wav_to_float32(audio_bytes)
+        if samples is None:
+            log.warning("sherpa-onnx STT: _wav_to_float32 returned None")
+            return [], _SherpaInfo("", 0.0)
+
+        log.info(f"sherpa-onnx STT: {len(samples)} samples ({len(samples)/16000:.1f}s), "
+                 f"dtype={samples.dtype}, range=[{samples.min():.3f}, {samples.max():.3f}]")
+
+        s = self._recognizer.create_stream()
+        s.accept_waveform(16000, samples)
+        self._recognizer.decode_stream(s)
+
+        raw_text = s.result.text.strip()
+        log.info(f"sherpa-onnx STT raw: [{raw_text}]")
+        del s  # free native stream
+
+        # Detect language from SenseVoice tags like <|en|>, <|HAPPY|>, <|Speech|>
+        detected_lang = ""
+        lang_match = _re.search(r"<\|(\w{2})\|>", raw_text)
+        if lang_match:
+            detected_lang = lang_match.group(1)
+
+        # Strip all SenseVoice tags
+        text = _SENSEVOICE_TAG_RE.sub("", raw_text).strip()
+
+        if not text:
+            return [], _SherpaInfo("", 0.0)
+
+        duration = len(samples) / 16000.0
+        segments = [{"text": text, "start": 0.0, "end": round(duration, 3)}]
+        return segments, _SherpaInfo(detected_lang or "en", 1.0 if detected_lang else 0.5)
+
+    def _transcribe_faster_whisper(self, audio_bytes: BytesIO, language: str = None):
+        kwargs = {"beam_size": 1}
         if language:
             kwargs["language"] = language
         segments, info = self.model.transcribe(audio_bytes, **kwargs)
@@ -641,9 +1099,19 @@ class STTService:
         return results, info
 
     def unload(self):
-        del self.model
         self.model = None
+        self._recognizer = None
         self._vad_model = None
+        self._vad_utils = None
+        if hasattr(self, "_sherpa_vad"):
+            self._sherpa_vad = None
+
+
+class _SherpaInfo:
+    """Minimal info object matching faster-whisper's transcription info interface."""
+    def __init__(self, language: str, language_probability: float):
+        self.language = language
+        self.language_probability = language_probability
 
 
 # ===================================================================
@@ -655,13 +1123,14 @@ class TTSService:
         "TARS.onnx.json": "https://github.com/TARS-AI-Community/TARS-AI/raw/refs/heads/V3/src/character/TARS/voice/TARS.onnx.json",
     }
 
-    def __init__(self, voices_dir: str = None, cache_size: int = 100):
-        self.voices_dir = Path(voices_dir) if voices_dir else Path(__file__).parent / "tts"
+    def __init__(self, voices_dir: str = None, cache_size: int = 100, engine: str = "auto"):
+        self.voices_dir = Path(voices_dir) if voices_dir else Path(__file__).parent / "models" / "tts"
         self.voices_dir.mkdir(parents=True, exist_ok=True)
         self._voices: dict = {}
-        self._loaded_voices: dict = {}  # name -> PiperVoice (kept in memory)
+        self._loaded_voices: dict = {}
         self._cache: collections.OrderedDict = collections.OrderedDict()
         self._cache_max = cache_size
+        self.engine = "piper"
         self._ensure_default_voice()
         self._scan_voices()
 
@@ -686,11 +1155,24 @@ class TTSService:
 
     def _scan_voices(self):
         self._voices = {}
-        for onnx_file in self.voices_dir.rglob("*.onnx"):
-            json_file = onnx_file.with_suffix(".onnx.json")
-            if json_file.exists():
+
+        # Collect all directories to scan: primary voices_dir + src/character/*/voice/
+        scan_dirs = [self.voices_dir]
+        char_root = Path(__file__).parent.parent / "src" / "character"
+        if char_root.exists():
+            for voice_dir in sorted(char_root.glob("*/voice")):
+                if voice_dir.is_dir():
+                    scan_dirs.append(voice_dir)
+
+        for scan_dir in scan_dirs:
+            for json_file in scan_dir.glob("*.onnx.json"):
+                onnx_file = json_file.parent / json_file.name[:-5]  # "Name.onnx.json" -> "Name.onnx"
+                if not onnx_file.exists():
+                    continue  # .onnx not present — skip silently
                 name = onnx_file.stem
-                self._voices[name] = {"model": str(onnx_file), "config": str(json_file)}
+                if name not in self._voices:
+                    self._voices[name] = {"model": str(onnx_file), "config": str(json_file)}
+
         log.info(f"Found {len(self._voices)} Piper voice(s): {list(self._voices.keys())}")
 
     def list_voices(self) -> list[str]:
@@ -765,11 +1247,24 @@ class TTSService:
 # ===================================================================
 class LLMService:
     def __init__(self, model_name: str = "Qwen/Qwen3-4B", dtype: str = "auto",
-                 quantize: str = "none",
+                 quantize: str = "none", kv_cache_quant_bits: int = 4,
                  kv_cache_sessions: int = 2, kv_cache_ttl: int = 300, device: str = None):
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
+        # Parse combined quantize modes: "turbo", "turbo+4bit", "turbo+8bit", "4bit", "8bit", "none"
+        use_turboquant = False
+        weight_quant = "none"
+        if "turbo" in quantize:
+            use_turboquant = True
+            if "4bit" in quantize:
+                weight_quant = "4bit"
+            elif "8bit" in quantize:
+                weight_quant = "8bit"
+        elif quantize in ("4bit", "8bit"):
+            weight_quant = quantize
+
         device = device or DEVICE
+
         if dtype == "auto":
             # Prefer bfloat16 on Ampere+ (RTX 30xx/40xx) for better numerics at same speed
             if device == "cuda" and torch.cuda.is_bf16_supported():
@@ -785,7 +1280,8 @@ class LLMService:
         else:
             dtype = torch.float32
 
-        log.info(f"Loading LLM: {model_name} (dtype: {dtype}, device: {device}, quantize: {quantize})...")
+        log.info(f"Loading LLM: {model_name} (dtype: {dtype}, device: {device}, quantize: {quantize}"
+                 f"{f', kv_cache_quant_bits: {kv_cache_quant_bits}' if use_turboquant else ''})...")
         self.model_name = model_name
         self._dtype = dtype
         llm_dir = MODELS_DIR / "llm"
@@ -799,6 +1295,8 @@ class LLMService:
             device = "cpu"
             dtype = torch.float32
             quantize = "none"
+            use_turboquant = False
+            weight_quant = "none"
 
         # Only use device_map="auto" for quantized models (BnB requires it).
         # For non-quantized, use explicit .to(device) — avoids accelerate dispatch overhead.
@@ -807,11 +1305,11 @@ class LLMService:
             trust_remote_code=True, cache_dir=str(llm_dir),
         )
 
-        # Quantization (requires: pip install bitsandbytes)
-        if quantize in ("4bit", "8bit") and device == "cuda":
+        # Weight quantization (requires: pip install bitsandbytes)
+        if weight_quant in ("4bit", "8bit") and device == "cuda":
             try:
                 from transformers import BitsAndBytesConfig
-                if quantize == "4bit":
+                if weight_quant == "4bit":
                     load_kwargs["quantization_config"] = BitsAndBytesConfig(
                         load_in_4bit=True,
                         bnb_4bit_compute_dtype=dtype,
@@ -822,12 +1320,13 @@ class LLMService:
                     load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
                 load_kwargs["device_map"] = "auto"  # Required for BnB
                 _use_device_map = True
-                log.info(f"LLM quantization: {quantize}")
+                log.info(f"LLM weight quantization: {weight_quant}")
             except ImportError:
                 log.warning("bitsandbytes not installed — quantization skipped. pip install bitsandbytes")
                 load_kwargs["dtype"] = dtype
         else:
             load_kwargs["dtype"] = dtype
+
 
         # Try attention backends from fastest to most compatible
         attn_impls = (["flash_attention_2", "sdpa"] if device == "cuda" else ["sdpa"])
@@ -865,7 +1364,7 @@ class LLMService:
         # torch.compile + static KV cache for CUDA graphs (2-3x speedup on non-quantized)
         # Skipped on Windows: inductor backend requires Triton which is Linux-only
         self._compiled = False
-        if device == "cuda" and quantize in ("none", "") and sys.platform != "win32":
+        if device == "cuda" and weight_quant in ("none", "") and sys.platform != "win32":
             try:
                 _orig_model = self.model
                 self.model.generation_config.cache_implementation = "static"
@@ -893,16 +1392,44 @@ class LLMService:
             except Exception as e:
                 log.debug(f"Warmup issue: {e}")
 
+        # TurboQuant KV cache compression (reduces VRAM for long-context models)
+        self._turboquant_active = False
+        self._turboquant_bits = kv_cache_quant_bits
+        if use_turboquant and device == "cuda":
+            try:
+                # NumPy 2.0 removed np.trapz → np.trapezoid; turboquant still uses the old name
+                import numpy as _np
+                if not hasattr(_np, "trapz") and hasattr(_np, "trapezoid"):
+                    _np.trapz = _np.trapezoid
+                from turboquant import TurboQuantCache
+                # Test that we can create a cache (validates install)
+                _test = TurboQuantCache(bits=kv_cache_quant_bits)
+                del _test
+                self._turboquant_active = True
+                log.info(f"TurboQuant KV cache compression enabled ({kv_cache_quant_bits}-bit)")
+            except ImportError:
+                log.warning("turboquant not installed — KV cache compression skipped. "
+                            "pip install turboquant")
+            except Exception as e:
+                log.warning(f"TurboQuant init failed: {e}")
+
         # KV cache for prompt reuse
         self._kv_cache: dict = {}  # session_id -> (token_count, past_kv, timestamp)
         self._kv_max_sessions = kv_cache_sessions
         self._kv_ttl = kv_cache_ttl
 
-        # Vision detection
+        # Multimodal detection
         self.supports_vision = self._check_vision_support()
         if self.supports_vision:
             log.info("LLM has vision capability")
         log.info(f"LLM loaded: {model_name}")
+
+    def _make_turboquant_cache(self):
+        """Create a fresh TurboQuantCache if turbo mode is active."""
+        if not self._turboquant_active:
+            return None
+        from turboquant import TurboQuantCache
+        return TurboQuantCache(bits=self._turboquant_bits)
 
     def _check_vision_support(self) -> bool:
         model_lower = self.model_name.lower()
@@ -914,7 +1441,8 @@ class LLMService:
             return True
         return False
 
-    def caption_image(self, image_bytes: bytes, prompt: str = "Describe this image.") -> str:
+    def caption_image(self, image_bytes: bytes, prompt: str = None) -> str:
+        prompt = prompt or "Describe this image."
         if not self.supports_vision:
             raise RuntimeError("This LLM does not support vision")
         from PIL import Image
@@ -933,6 +1461,62 @@ class LLMService:
             output_ids = self.model.generate(**inputs, max_new_tokens=200)
         output_ids = output_ids[:, inputs.input_ids.shape[1]:]
         return processor.decode(output_ids[0], skip_special_tokens=True)
+
+    def transcribe_audio(self, audio_bytes: BytesIO, language: str = None) -> str:
+        """Audio transcription via Gemma4 transformers (native audio encoder).
+
+        Uses apply_chat_template with tokenize=True to process audio embeddings
+        directly — Gemma4's processor handles audio within the chat template,
+        NOT via a separate processor(audios=...) call.
+        """
+        # Lazy-load and cache processor (avoid reloading on every call)
+        if not hasattr(self, "_audio_processor"):
+            from transformers import AutoProcessor
+            log.info(f"Loading audio processor for {self.model_name}...")
+            self._audio_processor = AutoProcessor.from_pretrained(
+                self.model_name, trust_remote_code=True, cache_dir=str(MODELS_DIR / "llm"),
+            )
+
+        # Load audio as mono float32 @ 16kHz (required by Gemma4 audio encoder)
+        import librosa
+        audio_bytes.seek(0)
+        audio_array, _ = librosa.load(audio_bytes, sr=16000, mono=True)
+
+        # Gemma4 best-practice prompt for ASR (from model card)
+        # Audio BEFORE text for optimal performance
+        lang = language or "English"
+        messages = [{"role": "user", "content": [
+            {"type": "audio", "audio": audio_array},
+            {"type": "text", "text": (
+                f"Transcribe the following speech segment in {lang} into {lang} text.\n\n"
+                "Follow these specific instructions for formatting the answer:\n"
+                "* Only output the transcription, with no newlines.\n"
+                "* When transcribing numbers, write the digits, i.e. write 1.7 and not "
+                "one point seven, and write 3 instead of three."
+            )},
+        ]}]
+
+        # apply_chat_template with tokenize=True handles audio embedding directly
+        inputs = self._audio_processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+        input_len = inputs["input_ids"].shape[-1]
+
+        with torch.inference_mode():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=256,
+                do_sample=False,
+            )
+
+        return self._audio_processor.decode(
+            output_ids[0][input_len:], skip_special_tokens=True
+        ).strip()
 
     def chat(self, messages, max_tokens=512, temperature=0.7, top_p=0.95,
              stream=False, session_id=None):
@@ -971,6 +1555,8 @@ class LLMService:
                 gen_kwargs["top_p"] = top_p
             if past_kv is not None:
                 gen_kwargs["past_key_values"] = past_kv
+            elif self._turboquant_active:
+                gen_kwargs["past_key_values"] = self._make_turboquant_cache()
             outputs = self.model.generate(**gen_kwargs)
 
         # Save KV cache for this session
@@ -1019,12 +1605,15 @@ class LLMService:
             gen_kwargs["top_p"] = top_p
         if past_kv is not None:
             gen_kwargs["past_key_values"] = past_kv
+        elif self._turboquant_active:
+            gen_kwargs["past_key_values"] = self._make_turboquant_cache()
 
         thread = Thread(target=self.model.generate, kwargs=gen_kwargs)
         thread.start()
 
         completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         created = int(time.time())
+        gen_start = time.perf_counter()
         output_text = []
         decode_start = None  # set on first token — excludes prefill
 
@@ -1061,6 +1650,9 @@ class LLMService:
                     "elapsed_ms": elapsed_ms,
                 },
             }
+            ttft_ms = int((decode_start - gen_start) * 1000) if decode_start else 0
+            LLM_METRICS.record(prompt_tokens, completion_tokens, elapsed_ms, ttft_ms)
+            TRACKER.update_last_llm_info(LLM_METRICS.pop_last())
             yield f"data: {json.dumps(final)}\n\n"
             yield "data: [DONE]\n\n"
 
@@ -1119,8 +1711,12 @@ class LLMService:
 class LlamaCppService:
     """Fast LLM inference via llama.cpp using GGUF models (same engine as LM Studio)."""
 
+    # GGML type enum values for KV cache quantization
+    _GGML_TYPES = {"f16": 1, "q8_0": 8, "q5_0": 6, "q5_1": 7, "q4_0": 2, "q4_1": 3}
+
     def __init__(self, model_path: str, n_ctx: int = 4096, n_gpu_layers: int = -1,
                  n_batch: int = 2048, flash_attn: bool = True,
+                 cache_type_k: str = "q8_0", cache_type_v: str = "q8_0",
                  kv_cache_sessions: int = 2, kv_cache_ttl: int = 300):  # noqa: ARG002
         try:
             from llama_cpp import Llama
@@ -1129,7 +1725,18 @@ class LlamaCppService:
                 "llama-cpp-python not installed. Run: pip install llama-cpp-python"
             )
 
-        self.supports_vision = False
+
+        # Common kwargs for all load paths
+        type_k = self._GGML_TYPES.get(cache_type_k, 8)
+        type_v = self._GGML_TYPES.get(cache_type_v, 8)
+        log.info(f"KV cache type: keys={cache_type_k}({type_k}), values={cache_type_v}({type_v})")
+        llama_kwargs = dict(
+            n_gpu_layers=n_gpu_layers, n_ctx=n_ctx,
+            n_batch=n_batch, flash_attn=flash_attn,
+            verbose=False,
+            type_k=type_k,
+            type_v=type_v,
+        )
 
         # Determine load method:
         #   Local file:          C:\path\to\model.gguf  or  /path/to/model.gguf
@@ -1138,38 +1745,74 @@ class LlamaCppService:
         if os.path.isfile(model_path):
             self.model_name = os.path.basename(model_path)
             log.info(f"Loading llama.cpp model: {self.model_name} (n_gpu_layers={n_gpu_layers}, n_ctx={n_ctx})...")
-            self._llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers,
-                              n_ctx=n_ctx, n_batch=n_batch, flash_attn=flash_attn,
-                              verbose=False)
+            with _mute_output():
+                self._llm = Llama(model_path=model_path, **llama_kwargs)
         elif "::" in model_path:
             repo_id, filename = model_path.split("::", 1)
             self.model_name = filename
             log.info(f"Downloading GGUF from HuggingFace: {repo_id} / {filename} ...")
-            self._llm = Llama.from_pretrained(repo_id=repo_id, filename=filename,
-                                              n_gpu_layers=n_gpu_layers, n_ctx=n_ctx,
-                                              n_batch=n_batch, flash_attn=flash_attn,
-                                              verbose=False)
+            llm_dir = MODELS_DIR / "llm"
+            llm_dir.mkdir(exist_ok=True)
+            with _mute_output():
+                self._llm = Llama.from_pretrained(repo_id=repo_id, filename=filename,
+                                                  cache_dir=str(llm_dir),
+                                                  **llama_kwargs)
         elif "/" in model_path and not model_path.startswith(("C:", "D:", "/")):
             # HuggingFace repo ID — auto-pick best available GGUF (prefer Q4_K_M)
+            # List repo files first, then pick the single best match to avoid downloading extras
             self.model_name = model_path.split("/")[-1]
-            log.info(f"Downloading GGUF from HuggingFace: {model_path} (searching for Q4_K_M.gguf) ...")
-            for pattern in ("*Q4_K_M.gguf", "*Q4_K_S.gguf", "*Q5_K_M.gguf", "*.gguf"):
-                try:
-                    self._llm = Llama.from_pretrained(repo_id=model_path, filename=pattern,
-                                                      n_gpu_layers=n_gpu_layers, n_ctx=n_ctx,
-                                                      n_batch=n_batch, flash_attn=flash_attn,
-                                                      verbose=False)
+            log.info(f"Downloading GGUF from HuggingFace: {model_path} (searching for Q4_K_M) ...")
+            from huggingface_hub import list_repo_files
+            try:
+                all_files = [f for f in list_repo_files(model_path) if f.endswith(".gguf")]
+            except Exception:
+                all_files = []
+            chosen = None
+            for suffix in ("Q4_K_M.gguf", "Q4_K_S.gguf", "Q5_K_M.gguf"):
+                matches = [f for f in all_files if f.endswith(suffix)]
+                if matches:
+                    chosen = matches[0]
                     break
-                except Exception:
-                    continue
-            else:
+            if not chosen and all_files:
+                chosen = all_files[0]
+            if not chosen:
                 raise FileNotFoundError(f"No GGUF file found in HuggingFace repo: {model_path}")
+            log.info(f"Selected GGUF: {chosen}")
+            llm_dir = MODELS_DIR / "llm"
+            llm_dir.mkdir(exist_ok=True)
+            with _mute_output():
+                self._llm = Llama.from_pretrained(repo_id=model_path, filename=chosen,
+                                                  cache_dir=str(llm_dir),
+                                                  **llama_kwargs)
         else:
             raise FileNotFoundError(
                 f"GGUF model not found: {model_path}\n"
                 "  Local file: use full path ending in .gguf\n"
                 "  HuggingFace: use  owner/repo  or  owner/repo::filename.gguf"
             )
+
+        # Warmup: run a multi-step inference to fully pre-warm CUDA kernels,
+        # allocate scratch buffers, and exercise both prefill + decode paths.
+        # Without this, the first real request pays a cold-start penalty.
+        try:
+            t0 = time.perf_counter()
+            # Step 1: warm prefill with a substantial prompt (~200 tokens)
+            warmup_sys = " ".join(["You are a helpful AI assistant."] * 20)
+            self._llm.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": warmup_sys},
+                    {"role": "user", "content": "Respond with exactly: warmup complete"},
+                ],
+                max_tokens=16, temperature=0, stream=False,
+            )
+            # Step 2: run again with a short prompt to warm the "cached prefix" path
+            self._llm.create_chat_completion(
+                messages=[{"role": "user", "content": "hi"}],
+                max_tokens=4, temperature=0, stream=False,
+            )
+            log.info(f"llama.cpp warmup complete ({time.perf_counter() - t0:.1f}s)")
+        except Exception as e:
+            log.debug(f"llama.cpp warmup issue: {e}")
 
         log.info(f"llama.cpp model loaded: {self.model_name}")
 
@@ -1198,6 +1841,7 @@ class LlamaCppService:
         created = int(time.time())
 
         def generate():
+            gen_start = time.perf_counter()
             decode_start = None
             output_text = []
             prompt_tokens = 0
@@ -1227,12 +1871,15 @@ class LlamaCppService:
                     break
 
             elapsed_ms = max(1, int((time.perf_counter() - (decode_start or time.perf_counter())) * 1000))
+            ttft_ms = int((decode_start - gen_start) * 1000) if decode_start else 0
             if not completion_tokens:
                 try:
                     completion_tokens = len(self._llm.tokenize("".join(output_text).encode()))
                 except Exception:
                     completion_tokens = len(output_text)
 
+            LLM_METRICS.record(prompt_tokens, completion_tokens, elapsed_ms, ttft_ms)
+            TRACKER.update_last_llm_info(LLM_METRICS.pop_last())
             final = {
                 "id": completion_id, "object": "chat.completion.chunk",
                 "created": created, "model": self.model_name,
@@ -1284,7 +1931,8 @@ class VisionService:
         loader = {"blip": self._load_blip, "blip2": self._load_blip2,
                   "moondream": self._load_moondream, "florence": self._load_florence,
                   "generic": self._load_generic}
-        loader[self.backend]()
+        with _mute_output():
+            loader[self.backend]()
         log.info(f"Vision model loaded ({self.backend}).")
 
     @staticmethod
@@ -1406,6 +2054,9 @@ _SCHEDULER_MAP = {
 class ImageGenService:
     _progress = {}  # {task_id: {"step": int, "total": int}}
 
+    # SD 1.5 models default to 512x512, SDXL models to 1024x1024
+    _SD15_INDICATORS = ("v1-5", "v1.5", "dreamshaper-8", "sd-1", "stable-diffusion-v1")
+
     def __init__(self, model_name: str = "stabilityai/stable-diffusion-xl-base-1.0", device: str = None):
         device = device or DEVICE
         self._device = device
@@ -1413,30 +2064,34 @@ class ImageGenService:
         self.model_name = model_name
         cache_dir = MODELS_DIR / "imagegen"
         cache_dir.mkdir(exist_ok=True)
+
+        # Detect if this is an SD 1.5 model (512x512) vs SDXL (1024x1024)
+        model_lower = model_name.lower()
+        self.is_sd15 = any(ind in model_lower for ind in self._SD15_INDICATORS)
+        self.default_size = 512 if self.is_sd15 else 1024
+
         from diffusers import AutoPipelineForText2Image
         dtype = torch.float16 if device == "cuda" else torch.float32
-        self.pipe = AutoPipelineForText2Image.from_pretrained(
-            model_name, torch_dtype=dtype, cache_dir=str(cache_dir),
-        )
+        load_kwargs = dict(torch_dtype=dtype, cache_dir=str(cache_dir))
+        # Disable safety checker for faster inference (adds ~200ms per image)
+        load_kwargs["safety_checker"] = None
+        load_kwargs["requires_safety_checker"] = False
+        with _mute_output():
+            self.pipe = AutoPipelineForText2Image.from_pretrained(model_name, **load_kwargs)
         if device == "cuda":
-            self.pipe.to("cuda")
-            # Free speedups for SDXL / any diffusers pipeline on GPU
-            self.pipe.enable_vae_slicing()        # Process VAE in slices (saves VRAM, same speed)
-            self.pipe.enable_vae_tiling()          # Tile large images (prevents OOM on high-res)
+            # CPU offload: weights stay in RAM, each component moves to GPU only during its
+            # forward pass. Uses near-zero idle VRAM (~0 GB) vs ~2+ GB with .to("cuda").
+            # Slightly slower per-image (~1-2s overhead) but frees VRAM for LLM/other services.
+            self.pipe.enable_model_cpu_offload()
+            self.pipe.enable_vae_slicing()
+            self.pipe.enable_vae_tiling()
             try:
                 self.pipe.enable_xformers_memory_efficient_attention()
                 log.info("ImageGen: xformers memory-efficient attention enabled")
             except Exception:
-                pass  # xformers not installed — PyTorch SDPA is used automatically
-            # Compile UNet for ~20-30% faster inference (first run is slow, subsequent are fast)
-            if sys.platform != "win32":
-                try:
-                    self.pipe.unet = torch.compile(self.pipe.unet, mode="reduce-overhead", fullgraph=True)
-                    log.info("ImageGen: UNet torch.compile enabled")
-                except Exception as e:
-                    log.debug(f"ImageGen torch.compile skipped: {e}")
+                pass
         self._default_scheduler_config = self.pipe.scheduler.config
-        log.info(f"Image generation model loaded: {model_name}")
+        log.info(f"Image generation model loaded: {model_name} ({'SD 1.5' if self.is_sd15 else 'SDXL'}, {self.default_size}x{self.default_size})")
 
     def _set_scheduler(self, name: str):
         if not name or name not in _SCHEDULER_MAP:
@@ -1493,7 +2148,8 @@ class EmbeddingsService:
         cache_dir.mkdir(exist_ok=True)
         from sentence_transformers import SentenceTransformer
         self.model_name = model_name
-        self.model = SentenceTransformer(model_name, cache_folder=str(cache_dir), device=device)
+        with _mute_output():
+            self.model = SentenceTransformer(model_name, cache_folder=str(cache_dir), device=device)
         log.info(f"Embeddings model loaded: {model_name}")
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -1520,11 +2176,13 @@ class MusicGenService:
         cache_dir.mkdir(exist_ok=True)
         from acestep.pipeline_ace_step import ACEStepPipeline
         device_id = 0 if device == "cuda" else -1
+        # Always enable cpu_offload — ACE-Step is 6+ GB and would starve other services.
+        # With cpu_offload, weights live in RAM and are moved to GPU only during generation.
         self.pipe = ACEStepPipeline(
             checkpoint_dir=str(cache_dir),
             device_id=device_id if device == "cuda" else 0,
             dtype="bfloat16" if device == "cuda" else "float32",
-            cpu_offload=(device != "cuda"),
+            cpu_offload=True,
         )
         # ACEStepPipeline.__init__ only configures — weights are lazy-loaded on first
         # __call__ which re-scans HuggingFace cache every time. Pre-load them now so
@@ -1681,7 +2339,7 @@ def _read_www(filename: str, **replacements) -> str:
 _WEB_PAGES = {"/", "/ui", "/playground"}
 # API paths callable from the web UI — accept session cookie OR Bearer token
 _WEB_API_PATHS = {
-    "/api/tunnel", "/api/settings",
+    "/api/tunnel", "/api/settings", "/models",
     "/v1",           # LLM chat completions + embeddings
     "/tts",          # TTS generate + voices
     "/save_audio", "/transcribe",  # STT
@@ -1786,7 +2444,8 @@ class TrackingMiddleware(BaseHTTPMiddleware):
         latency_ms = (time.time() - start) * 1000
         path = request.url.path
         service = _endpoint_to_service(path)
-        TRACKER.record(path, request.method, response.status_code, latency_ms, service)
+        llm_info = LLM_METRICS.pop_last() if service == "llm" else None
+        TRACKER.record(path, request.method, response.status_code, latency_ms, service, llm_info)
         return response
 
 
@@ -1805,13 +2464,14 @@ async def health():
         info = {"status": "ready"}
         if hasattr(svc, "model_name"):
             info["model"] = svc.model_name
-        if name == "llm" and hasattr(svc, "supports_vision"):
-            info["supports_vision"] = svc.supports_vision
+        if name in _SERVICE_VRAM:
+            info["vram_gb"] = _SERVICE_VRAM[name]
         svc_info[name] = info
     return {
         "status": "ok", "uptime_seconds": uptime, "device": DEVICE,
         "gpu": gpu, "services": svc_info,
         "latency": TRACKER.get_latency_stats(),
+        "llm_metrics": LLM_METRICS.get_stats(),
     }
 
 
@@ -1840,11 +2500,14 @@ async def ws_dashboard(ws: WebSocket):
                 info = {"status": "ready"}
                 if hasattr(svc, "model_name"):
                     info["model"] = svc.model_name
+                if name in _SERVICE_VRAM:
+                    info["vram_gb"] = _SERVICE_VRAM[name]
                 svc_info[name] = info
             data = {
                 "uptime": uptime, "gpu": gpu, "system": get_system_stats(),
                 "services": svc_info,
                 "latency": TRACKER.get_latency_stats(),
+                "llm_metrics": LLM_METRICS.get_stats(),
                 "recent_logs": TRACKER.get_recent(20),
             }
             try:
@@ -1875,7 +2538,7 @@ async def stt_transcribe(audio: UploadFile = File(...)):
     if "stt" not in SERVICES:
         raise HTTPException(503, "STT service not loaded")
     audio_bytes = BytesIO(await audio.read())
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         has_speech = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"].has_speech, audio_bytes)
         if not has_speech:
@@ -1886,6 +2549,9 @@ async def stt_transcribe(audio: UploadFile = File(...)):
         full_text = " ".join(t["text"] for t in transcription).strip()
         log.info(f"STT: \"{full_text}\" (lang={info.language}, prob={info.language_probability:.2f})")
         return {"transcription": transcription}
+    except RuntimeError as e:
+        log.warning(f"STT: {e}")
+        raise HTTPException(400, str(e))
     except Exception as e:
         log.error(f"STT error: {traceback.format_exc()}")
         raise HTTPException(500, str(e))
@@ -1896,19 +2562,22 @@ async def stt_transcribe_v2(audio: UploadFile = File(...), language: Optional[st
     if "stt" not in SERVICES:
         raise HTTPException(503, "STT service not loaded")
     audio_bytes = BytesIO(await audio.read())
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         has_speech = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"].has_speech, audio_bytes)
         if not has_speech:
             return {"text": "", "segments": [], "language": None, "language_probability": 0}
         audio_bytes.seek(0)
         transcription, info = await loop.run_in_executor(
-            None, lambda: SERVICES["stt"].transcribe(audio_bytes, language=language)
+            _INFERENCE_POOL, lambda: SERVICES["stt"].transcribe(audio_bytes, language=language)
         )
         full_text = " ".join(t["text"] for t in transcription).strip()
         log.info(f"STT: \"{full_text}\"")
         return {"text": full_text, "segments": transcription,
                 "language": info.language, "language_probability": round(info.language_probability, 3)}
+    except RuntimeError as e:
+        log.warning(f"STT: {e}")
+        raise HTTPException(400, str(e))
     except Exception as e:
         log.error(f"STT error: {traceback.format_exc()}")
         raise HTTPException(500, str(e))
@@ -1973,6 +2642,7 @@ async def llm_chat(request: Request):
     except asyncio.TimeoutError:
         raise HTTPException(429, "LLM busy — too many concurrent requests")
 
+    released = False
     try:
         body = await request.json()
         messages = body.get("messages", [])
@@ -1989,31 +2659,54 @@ async def llm_chat(request: Request):
             generator = SERVICES["llm"].chat(
                 messages, max_tokens, temperature, top_p, stream=True, session_id=session_id
             )
+            # Wrap generator to hold semaphore until streaming is done
+            def _guarded_stream(gen):
+                try:
+                    yield from gen
+                finally:
+                    _LLM_SEMAPHORE.release()
+            released = True  # the wrapper will release it
             return StreamingResponse(
-                generator, media_type="text/event-stream",
+                _guarded_stream(generator), media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
         else:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
-                None, lambda: SERVICES["llm"].chat(
+                _INFERENCE_POOL, lambda: SERVICES["llm"].chat(
                     messages, max_tokens, temperature, top_p, stream=False, session_id=session_id
                 ))
             return JSONResponse(result)
     except HTTPException:
         raise
-    except torch.cuda.OutOfMemoryError:
-        gc.collect()
-        torch.cuda.empty_cache()
-        log.error("LLM: GPU out of memory during inference. Freed cache. "
-                   "Try shorter prompts, lower max_tokens, or enable quantization.")
-        raise HTTPException(503, "GPU out of memory — request too large. "
-                                 "Try shorter input or reduce max_tokens.")
+    except (torch.cuda.OutOfMemoryError, RuntimeError) as e:
+        is_oom = isinstance(e, torch.cuda.OutOfMemoryError) or "out of memory" in str(e).lower()
+        if is_oom:
+            LLM_METRICS.record_error()
+            log.error("LLM: GPU out of memory — restarting LLM service...")
+            gc.collect()
+            torch.cuda.empty_cache()
+            # Auto-restart: unload and reload the LLM service in a background task
+            try:
+                if "llm" in SERVICES:
+                    SERVICES["llm"].unload()
+                    del SERVICES["llm"]
+                    _SERVICE_VRAM.pop("llm", None)
+                gc.collect()
+                torch.cuda.empty_cache()
+                _load_single_service("llm", _LAUNCH_ARGS)
+                log.info("LLM service restarted after OOM")
+            except Exception as reload_err:
+                log.error(f"LLM service restart failed: {reload_err}")
+            raise HTTPException(503, "GPU out of memory — LLM service restarted. Please retry.")
+        raise  # re-raise non-OOM RuntimeErrors
     except Exception as e:
+        LLM_METRICS.record_error()
         log.error(f"LLM error: {traceback.format_exc()}")
         raise HTTPException(500, str(e))
     finally:
-        _LLM_SEMAPHORE.release()
+        if not released:
+            _LLM_SEMAPHORE.release()
 
 
 @app.get("/v1/models")
@@ -2040,11 +2733,12 @@ async def tts_generate(request: Request):
     voice = body.get("voice", None)
     speed = float(body.get("speed", 1.0))
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         wav_bytes = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["tts"].synthesize(text, voice=voice, speed=speed))
         log.info(f"TTS: \"{text[:60]}\" voice={voice}")
         return StreamingResponse(BytesIO(wav_bytes), media_type="audio/wav",
-                                 headers={"Content-Disposition": "attachment; filename=speech.wav"})
+                                 headers={"Content-Disposition": "attachment; filename=speech.wav",
+                                          "Content-Length": str(len(wav_bytes))})
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:
@@ -2066,7 +2760,7 @@ async def tts_voices():
 @app.post("/caption")
 async def vision_caption(image: UploadFile = File(...), prompt: str = Form(None)):
     image_bytes = await image.read()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     if "vision" in SERVICES:
         try:
             svc = SERVICES["vision"]
@@ -2080,18 +2774,6 @@ async def vision_caption(image: UploadFile = File(...), prompt: str = Form(None)
             raise HTTPException(503, "GPU out of memory — try a smaller image or lighter vision model.")
         except Exception:
             log.error(f"Vision error: {traceback.format_exc()}")
-    if "llm" in SERVICES and getattr(SERVICES["llm"], "supports_vision", False):
-        try:
-            caption = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["llm"].caption_image(image_bytes, prompt=prompt or None))
-            log.info(f"Vision (VLM): \"{caption}\"")
-            return {"caption": caption}
-        except torch.cuda.OutOfMemoryError:
-            gc.collect()
-            torch.cuda.empty_cache()
-            log.error("VLM: GPU out of memory during captioning")
-            raise HTTPException(503, "GPU out of memory — try a smaller image.")
-        except Exception:
-            log.error(f"VLM error: {traceback.format_exc()}")
     if "vision" not in SERVICES:
         raise HTTPException(503, "Vision service not loaded")
     raise HTTPException(500, "Vision captioning failed")
@@ -2111,11 +2793,12 @@ async def sdapi_txt2img(request: Request):
     if not prompt:
         raise HTTPException(400, "prompt is required")
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
+        dsz = SERVICES["imagegen"].default_size
         gen_kwargs = dict(
             prompt=prompt, negative_prompt=body.get("negative_prompt", ""),
             steps=int(body.get("steps", 20)), cfg_scale=float(body.get("cfg_scale", 7.0)),
-            width=int(body.get("width", 1024)), height=int(body.get("height", 1024)),
+            width=int(body.get("width", dsz)), height=int(body.get("height", dsz)),
             seed=int(body.get("seed", -1)), sampler_name=body.get("sampler_name"),
         )
         image_bytes = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
@@ -2144,11 +2827,12 @@ async def generate_image_simple(request: Request):
         raise HTTPException(400, "prompt is required")
     try:
         task_id = body.get("task_id")
-        loop = asyncio.get_event_loop()
+        dsz = SERVICES["imagegen"].default_size
+        loop = asyncio.get_running_loop()
         gen_kwargs = dict(
             prompt=prompt, negative_prompt=body.get("negative_prompt", ""),
             steps=int(body.get("steps", 20)), cfg_scale=float(body.get("cfg_scale", 7.0)),
-            width=int(body.get("width", 1024)), height=int(body.get("height", 1024)),
+            width=int(body.get("width", dsz)), height=int(body.get("height", dsz)),
             seed=int(body.get("seed", -1)), sampler_name=body.get("sampler_name"),
             task_id=task_id,
         )
@@ -2256,7 +2940,7 @@ async def generate_music(request: Request):
     try:
         task_id = body.get("task_id")
         lyrics = body.get("lyrics", "")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         batch_size = max(1, min(16, int(body.get("batch_size", 1))))
         gen_kwargs = dict(
             prompt=prompt,
@@ -2401,7 +3085,7 @@ async def embeddings(request: Request):
     if not inp:
         raise HTTPException(400, "input is required")
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         vectors = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["embeddings"].embed, inp)
         data = [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(vectors)]
         return {"object": "list", "data": data, "model": SERVICES["embeddings"].model_name,
@@ -2421,8 +3105,6 @@ async def models_status():
         info = {"status": "loaded"}
         if hasattr(svc, "model_name"):
             info["model"] = svc.model_name
-        if name == "llm" and hasattr(svc, "supports_vision"):
-            info["supports_vision"] = svc.supports_vision
         if name == "tts" and hasattr(svc, "list_voices"):
             info["voices"] = svc.list_voices()
         models[name] = info
@@ -2438,6 +3120,7 @@ async def unload_model(service: str):
     if hasattr(svc, "unload"):
         svc.unload()
     del SERVICES[service]
+    _SERVICE_VRAM.pop(service, None)
     gc.collect()
     if DEVICE == "cuda":
         torch.cuda.empty_cache()
@@ -2454,13 +3137,12 @@ async def reload_model(service: str):
         if hasattr(svc, "unload"):
             svc.unload()
         del SERVICES[service]
+        _SERVICE_VRAM.pop(service, None)
         gc.collect()
         if DEVICE == "cuda":
             torch.cuda.empty_cache()
-    try:
-        _load_single_service(service, _LAUNCH_ARGS)
-    except Exception:
-        log.error(f"Failed to reload {service.upper()}:\n{traceback.format_exc()}")
+    _load_service_safe(service, _LAUNCH_ARGS)
+    if service not in SERVICES:
         raise HTTPException(500, f"Failed to reload {service}")
     log.info(f"Reloaded {service.upper()}")
     return {"status": "loaded", "service": service, "gpu": get_gpu_stats()}
@@ -2480,7 +3162,6 @@ async def config_reload():
 
 import subprocess as _sp
 import shutil
-import re as _re
 import platform as _platform
 
 # Pre-compiled regex for gallery filename validation (used on every gallery request)
@@ -2764,6 +3445,7 @@ async def api_save_settings(request: Request):
                     if hasattr(s, "unload"):
                         s.unload()
                     del SERVICES[svc]
+                    _SERVICE_VRAM.pop(svc, None)
                     gc.collect()
                     if DEVICE == "cuda":
                         torch.cuda.empty_cache()
@@ -2805,10 +3487,48 @@ async def api_save_settings(request: Request):
     if not parts:
         parts.append("Settings saved")
 
-    # Check if any model config changed (not just enable/disable) for loaded services
+    # Auto-reload services whose model config changed (not just enable/disable)
+    _RELOAD_KEYS = {
+        "llm": ("model", "backend", "dtype", "quantize", "n_ctx", "cache_type_k", "cache_type_v"),
+        "stt": ("whisper_model", "compute_type", "engine"),
+        "vision": ("model",),
+        "imagegen": ("model",),
+        "musicgen": ("model",),
+        "embeddings": ("model",),
+    }
+    reloaded = []
+    for svc, keys in _RELOAD_KEYS.items():
+        if svc in SERVICES and new_enabled.get(svc) and _LAUNCH_ARGS:
+            changed = any(
+                old_cfg.get(svc, k, fallback="") != cfg.get(svc, k, fallback="")
+                for k in keys
+            )
+            if changed:
+                try:
+                    old_svc = SERVICES[svc]
+                    if hasattr(old_svc, "unload"):
+                        old_svc.unload()
+                    del SERVICES[svc]
+                    _SERVICE_VRAM.pop(svc, None)
+                    gc.collect()
+                    if DEVICE == "cuda":
+                        torch.cuda.empty_cache()
+                    _load_service_safe(svc, _LAUNCH_ARGS)
+                    if svc in SERVICES:
+                        reloaded.append(svc.upper())
+                        log.info(f"Settings: reloaded {svc.upper()} (config changed)")
+                    else:
+                        load_errors.append(f"{svc.upper()} (reload failed)")
+                except Exception as e:
+                    load_errors.append(f"{svc.upper()} (reload error)")
+                    log.error(f"Settings: failed to reload {svc.upper()}: {e}")
+
+    if reloaded:
+        parts.append(f"Reloaded: {', '.join(reloaded)}")
+
     msg = ". ".join(parts) + "."
     return {"status": "saved", "message": msg, "unloaded": unloaded, "loaded": loaded,
-            "errors": load_errors, "gpu": get_gpu_stats()}
+            "reloaded": reloaded, "errors": load_errors, "gpu": get_gpu_stats()}
 
 
 @app.get("/ui", response_class=HTMLResponse)
@@ -2899,8 +3619,8 @@ def _detect_llm_backend(model_path: str) -> str:
     # BnB / quantization format indicators -> needs transformers
     if any(hint in model_lower for hint in ("bnb", "4bit", "8bit", "gptq", "awq")):
         return "transformers"
-    # Default: transformers (handles the widest range of HF models)
-    return "transformers"
+    # Default: llamacpp (fastest for most models — auto-downloads GGUF from HF repos)
+    return "llamacpp"
 
 
 def _load_single_service(name: str, args):
@@ -2908,8 +3628,9 @@ def _load_single_service(name: str, args):
     if name == "stt":
         vad = cfg.getboolean("stt", "vad_filter", fallback=True)
         dev = resolve_service_device(cfg.get("stt", "device", fallback="auto"))
+        stt_engine = cfg.get("stt", "engine", fallback="auto")
         SERVICES["stt"] = STTService(model_size=args.whisper_model, compute_type=args.whisper_compute,
-                                     vad_filter=vad, device=dev)
+                                     vad_filter=vad, device=dev, engine=stt_engine)
     elif name == "tts":
         cache_size = cfg.getint("tts", "cache_size", fallback=100)
         SERVICES["tts"] = TTSService(voices_dir=args.voices_dir, cache_size=cache_size)
@@ -2923,23 +3644,20 @@ def _load_single_service(name: str, args):
         n_batch = cfg.getint("llm", "n_batch", fallback=2048)
         flash_attn = cfg.getboolean("llm", "flash_attn", fallback=True)
 
-        if backend == "auto":
-            backend = _detect_llm_backend(args.llm_model)
-            log.info(f"LLM backend auto-detected: {backend}")
-
-        if backend == "llamacpp":
-            _ensure_llamacpp()
-            SERVICES["llm"] = LlamaCppService(
-                model_path=args.llm_model, n_ctx=n_ctx, n_gpu_layers=n_gpu,
-                n_batch=n_batch, flash_attn=flash_attn,
-                kv_cache_sessions=kvs, kv_cache_ttl=kvt)
-        else:
-            quant = cfg.get("llm", "quantize", fallback="none")
-            SERVICES["llm"] = LLMService(model_name=args.llm_model, dtype=args.llm_dtype,
-                                          quantize=quant, kv_cache_sessions=kvs, kv_cache_ttl=kvt, device=dev)
+        _ensure_llamacpp()
+        ctk = cfg.get("llm", "cache_type_k", fallback="q8_0")
+        ctv = cfg.get("llm", "cache_type_v", fallback="q8_0")
+        SERVICES["llm"] = LlamaCppService(
+            model_path=args.llm_model, n_ctx=n_ctx, n_gpu_layers=n_gpu,
+            n_batch=n_batch, flash_attn=flash_attn,
+            cache_type_k=ctk, cache_type_v=ctv,
+            kv_cache_sessions=kvs, kv_cache_ttl=kvt)
     elif name == "vision":
+        vision_model = cfg.get("vision", "model", fallback=args.vision_model)
+        if vision_model == "llm":
+            vision_model = "Salesforce/blip-image-captioning-base"
         dev = resolve_service_device(cfg.get("vision", "device", fallback="auto"))
-        SERVICES["vision"] = VisionService(model_name=args.vision_model, device=dev)
+        SERVICES["vision"] = VisionService(model_name=vision_model, device=dev)
     elif name == "imagegen":
         dev = resolve_service_device(cfg.get("imagegen", "device", fallback="auto"))
         SERVICES["imagegen"] = ImageGenService(model_name=args.imagegen_model, device=dev)
@@ -2952,7 +3670,7 @@ def _load_single_service(name: str, args):
 
 
 _SERVICE_PACKAGES = {
-    "stt":        ["faster-whisper>=1.0.0"],
+    "stt":        ["sherpa-onnx", "huggingface_hub"],
     "tts":        ["piper-tts>=1.2.0"],
     "imagegen":   ["diffusers>=0.27.0"],
     "musicgen":    [
@@ -3044,6 +3762,7 @@ def _try_install_service_deps(name: str) -> bool:
 
 def _cleanup_failed_service(name: str):
     """Clean up GPU memory after a failed service load."""
+    _SERVICE_VRAM.pop(name, None)
     if name in SERVICES:
         try:
             svc = SERVICES[name]
@@ -3057,8 +3776,21 @@ def _cleanup_failed_service(name: str):
         torch.cuda.empty_cache()
 
 
+def _get_vram_used_gb():
+    """Get current VRAM usage in GB (for measuring per-service deltas)."""
+    smi = _nvidia_smi_vram()
+    if smi is not None:
+        return smi[0]
+    if DEVICE == "cuda":
+        return torch.cuda.memory_allocated(0) / 1024**3
+    return 0.0
+
+
 def _load_service_safe(name: str, args):
     """Load a single service with error handling, OOM recovery, and auto-install retry."""
+    # Snapshot VRAM before loading (invalidate cache for fresh reading)
+    _smi_cache["ts"] = 0.0
+    vram_before = _get_vram_used_gb() if DEVICE == "cuda" else 0.0
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             _load_single_service(name, args)
@@ -3067,28 +3799,39 @@ def _load_service_safe(name: str, args):
             try:
                 with contextlib.redirect_stdout(io.StringIO()):
                     _load_single_service(name, args)
-                return
             except (ImportError, ModuleNotFoundError) as retry_exc:
-                # Package installed but still not importable
                 _cleanup_stale_pip_dirs()
                 missing_mod = getattr(retry_exc, 'name', None) or str(retry_exc)
                 log.warning(f"{name.upper()}: missing module '{missing_mod}' after install — install it manually and restart")
                 import importlib
                 importlib.invalidate_caches()
                 _cleanup_failed_service(name)
+                return
             except Exception:
                 _cleanup_failed_service(name)
-        log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
-        log.warning(f"Continuing without {name.upper()}")
+                return
+        else:
+            log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
+            log.warning(f"Continuing without {name.upper()}")
+            return
     except torch.cuda.OutOfMemoryError:
         _cleanup_failed_service(name)
         log.error(f"GPU out of memory loading {name.upper()} — skipping. "
                    f"Free VRAM by disabling other services or using quantization.")
         log.warning(f"Continuing without {name.upper()}")
+        return
     except Exception:
         _cleanup_failed_service(name)
         log.error(f"Failed to load {name.upper()}:\n{traceback.format_exc()}")
         log.warning(f"Continuing without {name.upper()}")
+        return
+    # Success — measure VRAM used by this service
+    if DEVICE == "cuda" and name in SERVICES:
+        _smi_cache["ts"] = 0.0  # invalidate cache for fresh reading
+        vram_after = _get_vram_used_gb()
+        delta = round(vram_after - vram_before, 2)
+        if delta > 0.01:
+            _SERVICE_VRAM[name] = delta
 
 
 def load_services(args):
