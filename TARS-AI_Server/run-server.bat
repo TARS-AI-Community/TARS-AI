@@ -104,7 +104,7 @@ if "!NEED_VENV!"=="1" (
 :: Step 3 — Upgrade pip
 :: ---------------------------------------------------------------------------
 echo  [....] Upgrading pip...
-"%VENV_PYTHON%" -m pip install --upgrade pip setuptools wheel
+"%VENV_PYTHON%" -m pip install --upgrade pip setuptools wheel -q
 if !errorlevel! neq 0 (
     echo  [ !! ] pip upgrade failed - continuing anyway...
 ) else (
