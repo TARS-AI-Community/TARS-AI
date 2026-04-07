@@ -72,10 +72,12 @@ def _has_nvidia_gpu() -> bool:
 def _restart_self():
     """Restart the current script (cross-platform)."""
     if sys.platform == "win32":
-        # os.execv on Windows spawns a new process but the parent continues — use subprocess + exit
+        # os.execv on Windows spawns a new process but the parent continues.
+        # Use subprocess.call (blocking) so the parent holds the port until the
+        # child finishes startup, then exit cleanly.
         import subprocess
-        subprocess.Popen([sys.executable] + sys.argv)
-        sys.exit(0)
+        rc = subprocess.call([sys.executable] + sys.argv)
+        sys.exit(rc)
     else:
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
@@ -163,7 +165,7 @@ LOG_DIR.mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
+    datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stderr),
         logging.handlers.RotatingFileHandler(
@@ -195,22 +197,33 @@ os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 @contextlib.contextmanager
 def _mute_output():
     """Suppress stdout/stderr at both Python and C/fd level during noisy model loading."""
-    null_fd = os.open(os.devnull, os.O_WRONLY)
-    saved_out, saved_err = os.dup(1), os.dup(2)
-    os.dup2(null_fd, 1)
-    os.dup2(null_fd, 2)
-    os.close(null_fd)
+    null_fd = -1
+    saved_out = saved_err = -1
+    devnull_py = None
     old_out, old_err = sys.stdout, sys.stderr
-    sys.stdout = sys.stderr = open(os.devnull, "w")
     try:
+        null_fd = os.open(os.devnull, os.O_WRONLY)
+        saved_out = os.dup(1)
+        saved_err = os.dup(2)
+        os.dup2(null_fd, 1)
+        os.dup2(null_fd, 2)
+        os.close(null_fd)
+        null_fd = -1
+        devnull_py = open(os.devnull, "w")
+        sys.stdout = sys.stderr = devnull_py
         yield
     finally:
-        sys.stdout.close()
+        if devnull_py is not None:
+            devnull_py.close()
         sys.stdout, sys.stderr = old_out, old_err
-        os.dup2(saved_out, 1)
-        os.dup2(saved_err, 2)
-        os.close(saved_out)
-        os.close(saved_err)
+        if saved_out >= 0:
+            os.dup2(saved_out, 1)
+            os.close(saved_out)
+        if saved_err >= 0:
+            os.dup2(saved_err, 2)
+            os.close(saved_err)
+        if null_fd >= 0:
+            os.close(null_fd)
 
 # Silence ACE-Step loguru INFO spam (save_path, GPU memory, model loaded, etc.)
 try:
@@ -257,11 +270,37 @@ except Exception:
     _SHARED_TOTAL_GB = 0
 
 
+_pynvml_handle = None
+
+def _init_pynvml():
+    """Initialize pynvml for fast GPU queries (no subprocess). Falls back to nvidia-smi."""
+    global _pynvml_handle
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+        _pynvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        log.info("pynvml initialized for GPU monitoring")
+    except Exception:
+        _pynvml_handle = None
+
+if DEVICE == "cuda":
+    _init_pynvml()
+
 _smi_cache = {"result": None, "ts": 0.0}
 
-def _nvidia_smi_vram():
-    """Query nvidia-smi for VRAM usage. Returns (used_gb, free_gb) or None.
-    Cached for 3 seconds to avoid subprocess overhead on dashboard polling."""
+def _gpu_vram():
+    """Query GPU VRAM usage. Returns (used_gb, free_gb) or None.
+    Prefers pynvml (direct driver query, ~100x faster than nvidia-smi subprocess).
+    Falls back to nvidia-smi, cached for 3s."""
+    # Fast path: pynvml
+    if _pynvml_handle is not None:
+        try:
+            import pynvml
+            info = pynvml.nvmlDeviceGetMemoryInfo(_pynvml_handle)
+            return (info.used / 1024**3, info.free / 1024**3)
+        except Exception:
+            pass
+    # Fallback: nvidia-smi subprocess (cached)
     now = time.time()
     if _smi_cache["result"] is not None and now - _smi_cache["ts"] < 3.0:
         return _smi_cache["result"]
@@ -288,14 +327,13 @@ def get_gpu_stats() -> dict:
     if DEVICE != "cuda":
         return {}
     try:
-        # Always prefer nvidia-smi — it sees ALL GPU consumers (torch + llama.cpp + others).
-        # torch.cuda.memory_allocated only reports PyTorch's own allocations, missing
-        # llama.cpp and other libraries that use CUDA directly.
-        smi = _nvidia_smi_vram()
-        if smi is not None:
-            allocated = smi[0]      # total used GB from nvidia-smi
-            vram_free = smi[1]      # total free GB from nvidia-smi
-            reserved = allocated    # no separate concept in nvidia-smi
+        # pynvml / nvidia-smi sees ALL GPU consumers (torch + llama.cpp + others).
+        # torch.cuda.memory_allocated only reports PyTorch's own allocations.
+        vram = _gpu_vram()
+        if vram is not None:
+            allocated = vram[0]
+            vram_free = vram[1]
+            reserved = allocated
         else:
             allocated = torch.cuda.memory_allocated(0) / 1024**3
             reserved = torch.cuda.memory_reserved(0) / 1024**3
@@ -502,9 +540,21 @@ def _ensure_llamacpp():
 
 
 def resolve_service_device(cfg_value: str) -> str:
-    """Resolve per-service device. 'auto' uses the globally detected device."""
+    """Resolve per-service device. 'auto' uses the globally detected device.
+    Supports 'cuda:0', 'cuda:1', etc. for multi-GPU setups."""
     if cfg_value in ("auto", ""):
         return DEVICE
+    # Validate cuda:N device exists
+    if cfg_value.startswith("cuda:"):
+        try:
+            idx = int(cfg_value.split(":")[1])
+            if torch.cuda.is_available() and idx < torch.cuda.device_count():
+                return cfg_value
+            else:
+                log.warning(f"Device {cfg_value} not available (have {torch.cuda.device_count()} GPUs), falling back to {DEVICE}")
+                return DEVICE
+        except (ValueError, IndexError):
+            pass
     return cfg_value
 
 
@@ -613,7 +663,9 @@ class RequestTracker:
 
     def get_recent(self, n: int = 50) -> list:
         with self._lock:
-            return list(self.history)[-n:]
+            if n >= len(self.history):
+                return list(self.history)
+            return [self.history[i] for i in range(len(self.history) - n, len(self.history))]
 
 
 TRACKER = RequestTracker()
@@ -737,6 +789,7 @@ class STTService:
         self._recognizer = None
         self._vad_model = None
         self._vad_utils = None
+        self._vad_lock = Lock()
 
         if self._engine == "llm":
             # No separate STT model — transcription routed to LLM at request time
@@ -890,23 +943,26 @@ class STTService:
         except Exception as e:
             log.warning(f"Silero VAD not available ({e}), skipping pre-filter")
 
-    def has_speech(self, audio_bytes: BytesIO) -> bool:
-        """Check if audio contains speech using Silero VAD."""
+    def has_speech(self, audio_bytes: BytesIO, samples=None) -> bool:
+        """Check if audio contains speech using Silero VAD.
+        If `samples` (float32 numpy array at 16kHz) is provided, skip re-decoding.
+        """
         if self._engine == "llm":
             return True  # let the LLM decide
-        # sherpa-onnx native VAD
+        # sherpa-onnx native VAD (locked — not thread-safe)
         if self._engine == "sherpa-onnx" and getattr(self, "_sherpa_vad", None):
             try:
-                samples = self._wav_to_float32(audio_bytes)
+                if samples is None:
+                    samples = self._wav_to_float32(audio_bytes)
                 if samples is None:
                     return True
-                self._sherpa_vad.accept_waveform(samples)
-                self._sherpa_vad.flush()
-                has = not self._sherpa_vad.empty()
-                # Drain all segments
-                while not self._sherpa_vad.empty():
-                    self._sherpa_vad.pop()
-                self._sherpa_vad.reset()
+                with self._vad_lock:
+                    self._sherpa_vad.accept_waveform(samples)
+                    self._sherpa_vad.flush()
+                    has = not self._sherpa_vad.empty()
+                    while not self._sherpa_vad.empty():
+                        self._sherpa_vad.pop()
+                    self._sherpa_vad.reset()
                 return has
             except Exception:
                 return True
@@ -915,8 +971,11 @@ class STTService:
             return True
         try:
             get_speech_ts = self._vad_utils[0]
-            audio_bytes.seek(0)
-            wav_tensor = self._wav_bytes_to_tensor(audio_bytes)
+            if samples is not None:
+                wav_tensor = torch.from_numpy(samples)
+            else:
+                audio_bytes.seek(0)
+                wav_tensor = self._wav_bytes_to_tensor(audio_bytes)
             if wav_tensor is None:
                 return True
             timestamps = get_speech_ts(wav_tensor, self._vad_model,
@@ -1025,9 +1084,9 @@ class STTService:
 
     # -- Transcription dispatch --------------------------------------------
 
-    def transcribe(self, audio_bytes: BytesIO, language: str = None):
+    def transcribe(self, audio_bytes: BytesIO, language: str = None, samples=None):
         if self._engine == "sherpa-onnx":
-            return self._transcribe_sherpa(audio_bytes, language)
+            return self._transcribe_sherpa(audio_bytes, language, samples=samples)
         return self._transcribe_faster_whisper(audio_bytes, language)
 
     def _transcribe_llm(self, audio_bytes: BytesIO, language: str = None):
@@ -1053,9 +1112,10 @@ class STTService:
         segments = [{"text": text, "start": 0.0, "end": round(duration, 3)}]
         return segments, _SherpaInfo(language or "en", 1.0)
 
-    def _transcribe_sherpa(self, audio_bytes: BytesIO, language: str = None):
+    def _transcribe_sherpa(self, audio_bytes: BytesIO, language: str = None, samples=None):
         """Transcribe using sherpa-onnx SenseVoice. Returns (results, info) matching faster-whisper interface."""
-        samples = self._wav_to_float32(audio_bytes)
+        if samples is None:
+            samples = self._wav_to_float32(audio_bytes)
         if samples is None:
             log.warning("sherpa-onnx STT: _wav_to_float32 returned None")
             return [], _SherpaInfo("", 0.0)
@@ -1133,6 +1193,14 @@ class TTSService:
         self.engine = "piper"
         self._ensure_default_voice()
         self._scan_voices()
+        # Pre-load the default voice so first TTS request is fast
+        if self._voices:
+            default = list(self._voices.keys())[0]
+            try:
+                self._get_piper_voice(default)
+                log.info(f"Pre-loaded default Piper voice: {default}")
+            except Exception as e:
+                log.warning(f"Failed to pre-load default voice: {e}")
 
     def _ensure_default_voice(self):
         """Download the default TARS Piper voice if no .onnx files exist yet."""
@@ -1179,7 +1247,7 @@ class TTSService:
         return list(self._voices.keys())
 
     def synthesize(self, text: str, voice: str = None, speed: float = 1.0) -> bytes:
-        cache_key = hashlib.md5(f"{text}|{voice}|{speed}".encode()).hexdigest()
+        cache_key = hashlib.sha256(f"{text}|{voice}|{speed}".encode()).hexdigest()
         if cache_key in self._cache:
             self._cache.move_to_end(cache_key)
             return self._cache[cache_key]
@@ -1561,13 +1629,17 @@ class LLMService:
 
         # Save KV cache for this session
         if session_id and hasattr(outputs, "past_key_values") and outputs.past_key_values:
-            self._save_kv(session_id, full_ids.shape[-1], outputs.past_key_values)
+            self._save_kv(session_id, full_ids.shape[-1], outputs.past_key_values, full_ids)
 
         prompt_tokens = full_ids.shape[-1]
         gen_sequence = outputs.sequences[0]
         new_tokens = gen_sequence[prompt_tokens:]
+        completion_tokens = len(new_tokens)
         text = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
-        return self._format_response(text, prompt_tokens, len(new_tokens))
+        # Record metrics for non-streaming requests (streaming records in generator)
+        LLM_METRICS.record(prompt_tokens, completion_tokens, 0, 0)
+        TRACKER.update_last_llm_info(LLM_METRICS.pop_last())
+        return self._format_response(text, prompt_tokens, completion_tokens)
 
     def _stream_chat(self, messages, max_tokens, temperature, top_p, session_id=None):
         from transformers import TextIteratorStreamer
@@ -1663,21 +1735,24 @@ class LLMService:
         if not session_id or session_id not in self._kv_cache:
             return full_ids, None
 
-        cached_len, cached_kv, ts = self._kv_cache[session_id]
+        cached_len, cached_kv, ts, cached_prefix = self._kv_cache[session_id]
         if time.time() - ts > self._kv_ttl:
             del self._kv_cache[session_id]
             return full_ids, None
 
-        # New input must be longer and start with the cached prefix
+        # New input must be longer and the prefix tokens must match exactly
         if full_ids.shape[-1] > cached_len:
-            return full_ids[:, cached_len:], cached_kv
+            current_prefix = full_ids[0, :cached_len].tolist()
+            if current_prefix == cached_prefix:
+                return full_ids[:, cached_len:], cached_kv
 
-        # Input changed (shorter or different), start fresh
+        # Input changed (shorter, different prefix, or same length), start fresh
         del self._kv_cache[session_id]
         return full_ids, None
 
-    def _save_kv(self, session_id: str, prompt_len: int, past_kv):
-        self._kv_cache[session_id] = (prompt_len, past_kv, time.time())
+    def _save_kv(self, session_id: str, prompt_len: int, past_kv, full_ids: torch.Tensor = None):
+        prefix = full_ids[0, :prompt_len].tolist() if full_ids is not None else []
+        self._kv_cache[session_id] = (prompt_len, past_kv, time.time(), prefix)
         # Evict oldest if over limit
         while len(self._kv_cache) > self._kv_max_sessions:
             oldest = min(self._kv_cache, key=lambda k: self._kv_cache[k][2])
@@ -1791,21 +1866,9 @@ class LlamaCppService:
                 "  HuggingFace: use  owner/repo  or  owner/repo::filename.gguf"
             )
 
-        # Warmup: run a multi-step inference to fully pre-warm CUDA kernels,
-        # allocate scratch buffers, and exercise both prefill + decode paths.
-        # Without this, the first real request pays a cold-start penalty.
+        # Warmup: single short inference to pre-allocate CUDA scratch buffers.
         try:
             t0 = time.perf_counter()
-            # Step 1: warm prefill with a substantial prompt (~200 tokens)
-            warmup_sys = " ".join(["You are a helpful AI assistant."] * 20)
-            self._llm.create_chat_completion(
-                messages=[
-                    {"role": "system", "content": warmup_sys},
-                    {"role": "user", "content": "Respond with exactly: warmup complete"},
-                ],
-                max_tokens=16, temperature=0, stream=False,
-            )
-            # Step 2: run again with a short prompt to warm the "cached prefix" path
             self._llm.create_chat_completion(
                 messages=[{"role": "user", "content": "hi"}],
                 max_tokens=4, temperature=0, stream=False,
@@ -2031,10 +2094,10 @@ class VisionService:
         return self.processor.batch_decode(ids, skip_special_tokens=True)[0].strip()
 
     def unload(self):
-        for attr in ("model", "processor", "tokenizer"):
-            if hasattr(self, attr):
-                delattr(self, attr)
-        self.model = self.processor = None
+        self.model = None
+        self.processor = None
+        if hasattr(self, "tokenizer"):
+            self.tokenizer = None
 
 
 # ===================================================================
@@ -2076,6 +2139,15 @@ class ImageGenService:
         # Disable safety checker for faster inference (adds ~200ms per image)
         load_kwargs["safety_checker"] = None
         load_kwargs["requires_safety_checker"] = False
+        # Patch any cached preprocessor_config.json files that still reference the
+        # deprecated CLIPFeatureExtractor name (triggers a warning on every load).
+        for _cfg in cache_dir.rglob("preprocessor_config.json"):
+            try:
+                _txt = _cfg.read_text(encoding="utf-8")
+                if "CLIPFeatureExtractor" in _txt:
+                    _cfg.write_text(_txt.replace("CLIPFeatureExtractor", "CLIPImageProcessor"), encoding="utf-8")
+            except Exception:
+                pass
         with _mute_output():
             self.pipe = AutoPipelineForText2Image.from_pretrained(model_name, **load_kwargs)
         if device == "cuda":
@@ -2152,9 +2224,19 @@ class EmbeddingsService:
             self.model = SentenceTransformer(model_name, cache_folder=str(cache_dir), device=device)
         log.info(f"Embeddings model loaded: {model_name}")
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        embeddings = self.model.encode(texts, normalize_embeddings=True)
-        return embeddings.tolist()
+    def embed(self, texts: list[str], batch_size: int = 64) -> list[list[float]]:
+        """Encode texts with automatic batching to avoid OOM on large inputs."""
+        if len(texts) <= batch_size:
+            embeddings = self.model.encode(texts, normalize_embeddings=True)
+            return embeddings.tolist()
+        # Process in chunks
+        import numpy as np
+        all_embeddings = []
+        for i in range(0, len(texts), batch_size):
+            chunk = texts[i:i + batch_size]
+            batch_emb = self.model.encode(chunk, normalize_embeddings=True)
+            all_embeddings.append(batch_emb)
+        return np.vstack(all_embeddings).tolist()
 
     def unload(self):
         del self.model
@@ -2417,7 +2499,7 @@ async def login_post(request: Request, next: str = "/"):
     api_key = _active_config.get("server", "api_key", fallback="") if _active_config else ""
     if password == api_key:
         token = _session_token(api_key)
-        response = RedirectResponse(url="/", status_code=302)
+        response = RedirectResponse(url=next_url, status_code=302)
         response.set_cookie("tars_session", token, httponly=True, samesite="lax", max_age=86400 * 30)
         return response
     html = _read_www("login.html", NEXT=next_url, ERROR="Invalid API key.")
@@ -2438,9 +2520,11 @@ class TrackingMiddleware(BaseHTTPMiddleware):
         start = time.time()
         try:
             response = await call_next(request)
-        except RuntimeError:
-            # "No response returned" — inner middleware chain didn't produce a response
-            response = JSONResponse({"error": "Internal Server Error"}, status_code=500)
+        except RuntimeError as e:
+            if "no response returned" in str(e).lower():
+                response = JSONResponse({"error": "Internal Server Error"}, status_code=500)
+            else:
+                raise
         latency_ms = (time.time() - start) * 1000
         path = request.url.path
         service = _endpoint_to_service(path)
@@ -2491,6 +2575,7 @@ async def dashboard():
 @app.websocket("/ws/dashboard")
 async def ws_dashboard(ws: WebSocket):
     await ws.accept()
+    _last_hash = None
     try:
         while True:
             uptime = int(time.time() - START_TIME)
@@ -2510,10 +2595,15 @@ async def ws_dashboard(ws: WebSocket):
                 "llm_metrics": LLM_METRICS.get_stats(),
                 "recent_logs": TRACKER.get_recent(20),
             }
-            try:
-                await ws.send_json(data)
-            except Exception:
-                break
+            # Skip sending if nothing changed (saves bandwidth for multi-tab users)
+            payload = json.dumps(data, sort_keys=True)
+            payload_hash = hash(payload)
+            if payload_hash != _last_hash:
+                _last_hash = payload_hash
+                try:
+                    await ws.send_text(payload)
+                except Exception:
+                    break
             await asyncio.sleep(2)
     except (WebSocketDisconnect, Exception):
         pass
@@ -2540,12 +2630,14 @@ async def stt_transcribe(audio: UploadFile = File(...)):
     audio_bytes = BytesIO(await audio.read())
     loop = asyncio.get_running_loop()
     try:
-        has_speech = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"].has_speech, audio_bytes)
+        # Decode once, pass samples to both VAD and transcription
+        samples = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"]._wav_to_float32, audio_bytes)
+        has_speech = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["stt"].has_speech(audio_bytes, samples=samples))
         if not has_speech:
             log.info("STT: VAD filtered (no speech detected)")
             return {"transcription": []}
         audio_bytes.seek(0)
-        transcription, info = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"].transcribe, audio_bytes)
+        transcription, info = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["stt"].transcribe(audio_bytes, samples=samples))
         full_text = " ".join(t["text"] for t in transcription).strip()
         log.info(f"STT: \"{full_text}\" (lang={info.language}, prob={info.language_probability:.2f})")
         return {"transcription": transcription}
@@ -2564,12 +2656,14 @@ async def stt_transcribe_v2(audio: UploadFile = File(...), language: Optional[st
     audio_bytes = BytesIO(await audio.read())
     loop = asyncio.get_running_loop()
     try:
-        has_speech = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"].has_speech, audio_bytes)
+        # Decode once, pass samples to both VAD and transcription
+        samples = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"]._wav_to_float32, audio_bytes)
+        has_speech = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["stt"].has_speech(audio_bytes, samples=samples))
         if not has_speech:
             return {"text": "", "segments": [], "language": None, "language_probability": 0}
         audio_bytes.seek(0)
         transcription, info = await loop.run_in_executor(
-            _INFERENCE_POOL, lambda: SERVICES["stt"].transcribe(audio_bytes, language=language)
+            _INFERENCE_POOL, lambda: SERVICES["stt"].transcribe(audio_bytes, language=language, samples=samples)
         )
         full_text = " ".join(t["text"] for t in transcription).strip()
         log.info(f"STT: \"{full_text}\"")
@@ -2659,17 +2753,32 @@ async def llm_chat(request: Request):
             generator = SERVICES["llm"].chat(
                 messages, max_tokens, temperature, top_p, stream=True, session_id=session_id
             )
-            # Wrap generator to hold semaphore until streaming is done
+            # Wrap generator to hold semaphore until streaming is done.
+            # Track whether iteration started — if not, finally still releases.
+            _stream_started = False
             def _guarded_stream(gen):
+                nonlocal _stream_started
+                _stream_started = True
                 try:
                     yield from gen
                 finally:
                     _LLM_SEMAPHORE.release()
             released = True  # the wrapper will release it
-            return StreamingResponse(
+            resp = StreamingResponse(
                 _guarded_stream(generator), media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
+            # Safety: if the response is discarded without iterating, release semaphore
+            _original_del = getattr(resp, "__del__", None)
+            def _safety_release(self_ref=resp):
+                if not _stream_started:
+                    try:
+                        _LLM_SEMAPHORE.release()
+                    except Exception:
+                        pass
+            import weakref
+            weakref.finalize(resp, _safety_release)
+            return resp
         else:
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
@@ -2857,7 +2966,7 @@ async def generate_image_simple(request: Request):
             "height": str(gen_kwargs["height"]),
             "seed": str(gen_kwargs["seed"]),
         }
-        with open(str(fpath).replace(".png", ".json"), "w") as f:
+        with open(str(fpath.with_suffix(".json")), "w") as f:
             json.dump(meta, f)
         return StreamingResponse(BytesIO(image_bytes), media_type="image/png",
                                  headers={"X-Image-Filename": fname})
@@ -2880,7 +2989,7 @@ async def imagegen_gallery_list():
     results = []
     for f in files:
         meta = {}
-        json_path = str(f).replace(".png", ".json")
+        json_path = str(f.with_suffix(".json"))
         if os.path.exists(json_path):
             try:
                 with open(json_path) as jf:
@@ -2910,9 +3019,9 @@ async def imagegen_gallery_delete(filename: str):
     if not fpath.exists():
         raise HTTPException(404, "File not found")
     fpath.unlink()
-    json_path = str(fpath).replace(".png", ".json")
-    if os.path.exists(json_path):
-        os.unlink(json_path)
+    json_path = fpath.with_suffix(".json")
+    if json_path.exists():
+        json_path.unlink()
     return {"ok": True}
 
 
@@ -2985,7 +3094,7 @@ async def generate_music(request: Request):
             with open(str(fpath), "wb") as f:
                 f.write(audio_bytes)
             meta = {**meta_base, "batch_index": i}
-            with open(str(fpath).replace(".ogg", ".json"), "w") as f:
+            with open(str(fpath.with_suffix(".json")), "w") as f:
                 json.dump(meta, f)
             filenames.append(fname)
         # For batch=1, return audio stream directly (backwards compatible)
@@ -3015,7 +3124,7 @@ async def musicgen_gallery_list():
     results = []
     for f in files:
         meta = {}
-        json_path = str(f).rsplit(".", 1)[0] + ".json"
+        json_path = str(f.with_suffix(".json"))
         if os.path.exists(json_path):
             try:
                 with open(json_path) as jf:
@@ -3055,9 +3164,9 @@ async def musicgen_gallery_delete(filename: str):
             if _attempt == 4:
                 raise HTTPException(423, "File is locked — try again in a moment")
             _time.sleep(0.3)
-    json_path = str(fpath).rsplit(".", 1)[0] + ".json"
-    if os.path.exists(json_path):
-        os.unlink(json_path)
+    json_path = fpath.with_suffix(".json")
+    if json_path.exists():
+        json_path.unlink()
     return {"ok": True}
 
 
@@ -3088,8 +3197,10 @@ async def embeddings(request: Request):
         loop = asyncio.get_running_loop()
         vectors = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["embeddings"].embed, inp)
         data = [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(vectors)]
+        # Estimate token count: ~1.3 tokens per word (closer to BPE reality than raw word count)
+        est_tokens = int(sum(len(t.split()) for t in inp) * 1.3)
         return {"object": "list", "data": data, "model": SERVICES["embeddings"].model_name,
-                "usage": {"prompt_tokens": sum(len(t.split()) for t in inp), "total_tokens": sum(len(t.split()) for t in inp)}}
+                "usage": {"prompt_tokens": est_tokens, "total_tokens": est_tokens}}
     except Exception as e:
         log.error(f"Embeddings error: {traceback.format_exc()}")
         raise HTTPException(500, str(e))
@@ -3392,6 +3503,404 @@ async def playground():
 
 
 
+# -- Per-service health endpoints (Feature 1) -------------------------
+
+@app.get("/health/{service}")
+async def service_health(service: str):
+    """Per-service health check with model info, VRAM, and latency."""
+    if service not in SERVICES:
+        # Check if it's a known service that's just disabled
+        all_svcs = ["stt", "tts", "llm", "vision", "imagegen", "musicgen", "embeddings"]
+        if service in all_svcs:
+            return JSONResponse({"status": "disabled", "service": service}, status_code=200)
+        raise HTTPException(404, f"Unknown service: {service}")
+    svc = SERVICES[service]
+    info = {"status": "ready", "service": service}
+    if hasattr(svc, "model_name"):
+        info["model"] = svc.model_name
+    if service in _SERVICE_VRAM:
+        info["vram_gb"] = _SERVICE_VRAM[service]
+    latency = TRACKER.get_latency_stats()
+    if service in latency:
+        info["latency"] = latency[service]
+    return info
+
+
+# -- TTS Streaming endpoint (Feature 2) -------------------------------
+
+@app.post("/tts/stream")
+async def tts_stream(request: Request):
+    """Stream TTS audio sentence-by-sentence for lower time-to-first-audio."""
+    if "tts" not in SERVICES:
+        raise HTTPException(503, "TTS service not loaded")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "text is required")
+    voice = body.get("voice", None)
+    speed = float(body.get("speed", 1.0))
+
+    # Split into sentences for chunked streaming
+    import re as _sentence_re
+    sentences = _sentence_re.split(r'(?<=[.!?])\s+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    if not sentences:
+        sentences = [text]
+
+    loop = asyncio.get_running_loop()
+
+    async def _stream_sentences():
+        for sentence in sentences:
+            try:
+                wav_bytes = await loop.run_in_executor(
+                    _INFERENCE_POOL,
+                    lambda s=sentence: SERVICES["tts"].synthesize(s, voice=voice, speed=speed)
+                )
+                # Send length-prefixed WAV chunks so the client knows boundaries
+                yield struct.pack("<I", len(wav_bytes)) + wav_bytes
+            except Exception as e:
+                log.error(f"TTS stream error on sentence: {e}")
+                break
+
+    log.info(f"TTS stream: \"{text[:60]}\" ({len(sentences)} chunks) voice={voice}")
+    return StreamingResponse(
+        _stream_sentences(),
+        media_type="application/octet-stream",
+        headers={"X-TTS-Chunks": str(len(sentences))},
+    )
+
+
+# -- Model download progress (Feature 3) ------------------------------
+
+_download_progress: dict = {}  # task_id -> {"status": str, "pct": int, "speed_mbps": float, "file": str}
+
+
+@app.get("/models/download-progress")
+async def model_download_progress():
+    """SSE endpoint streaming download progress for active model downloads."""
+    async def _event_stream():
+        while True:
+            if _download_progress:
+                for task_id, info in list(_download_progress.items()):
+                    yield f"data: {json.dumps({'task_id': task_id, **info})}\n\n"
+            else:
+                yield f"data: {json.dumps({'status': 'idle'})}\n\n"
+            await asyncio.sleep(1)
+    return StreamingResponse(_event_stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/models/download-progress/{task_id}")
+async def model_download_progress_single(task_id: str):
+    """Poll-based download progress for a specific task."""
+    info = _download_progress.get(task_id)
+    if info is None:
+        return {"status": "idle", "pct": 0, "active": False}
+    return {**info, "active": True}
+
+
+# -- Multi-GPU device listing (Feature 4) -----------------------------
+
+@app.get("/api/devices")
+async def list_devices():
+    """List available compute devices (for multi-GPU selection in settings)."""
+    devices = [{"id": "cpu", "name": "CPU", "type": "cpu"}]
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            props = torch.cuda.get_device_properties(i)
+            devices.append({
+                "id": f"cuda:{i}",
+                "name": props.name,
+                "type": "cuda",
+                "vram_gb": round(props.total_memory / 1024**3, 2),
+            })
+    return {"devices": devices}
+
+
+# -- Batch embeddings with chunking (Feature 6) -----------------------
+# (Integrated into existing /v1/embeddings — see EmbeddingsService.embed_batched below)
+
+
+# -- Webhook/callback for async tasks (Feature 7) --------------------
+
+_async_tasks: dict = {}  # task_id -> {"status": str, "result": any, "created": float}
+
+
+@app.post("/tasks/submit")
+async def submit_async_task(request: Request):
+    """Submit a long-running task (musicgen, imagegen) with optional callback_url.
+    Returns immediately with a task_id for polling or webhook delivery."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+    task_type = body.get("type", "")
+    callback_url = body.get("callback_url", None)
+    task_id = f"task-{uuid.uuid4().hex[:12]}"
+    _async_tasks[task_id] = {"status": "queued", "result": None, "created": time.time()}
+
+    async def _run_task():
+        try:
+            _async_tasks[task_id]["status"] = "running"
+            loop = asyncio.get_running_loop()
+            if task_type == "imagegen" and "imagegen" in SERVICES:
+                dsz = SERVICES["imagegen"].default_size
+                gen_kwargs = dict(
+                    prompt=body.get("prompt", ""),
+                    negative_prompt=body.get("negative_prompt", ""),
+                    steps=int(body.get("steps", 20)),
+                    cfg_scale=float(body.get("cfg_scale", 7.0)),
+                    width=int(body.get("width", dsz)),
+                    height=int(body.get("height", dsz)),
+                    seed=int(body.get("seed", -1)),
+                    task_id=task_id,
+                )
+                image_bytes = await loop.run_in_executor(
+                    _INFERENCE_POOL, lambda: SERVICES["imagegen"].generate(**gen_kwargs))
+                result_b64 = base64.b64encode(image_bytes).decode()
+                _async_tasks[task_id] = {"status": "done", "result": {"image_b64": result_b64}, "created": _async_tasks[task_id]["created"]}
+            elif task_type == "musicgen" and "musicgen" in SERVICES:
+                gen_kwargs = dict(
+                    prompt=body.get("prompt", ""),
+                    lyrics=body.get("lyrics", ""),
+                    duration_sec=float(body.get("duration", 30)),
+                    infer_steps=int(body.get("steps", 60)),
+                    guidance_scale=float(body.get("guidance_scale", 15.0)),
+                    seed=int(body.get("seed", -1)),
+                    task_id=task_id,
+                )
+                ogg_list = await loop.run_in_executor(
+                    _INFERENCE_POOL, lambda: SERVICES["musicgen"].generate(**gen_kwargs))
+                result_b64 = [base64.b64encode(o).decode() for o in ogg_list]
+                _async_tasks[task_id] = {"status": "done", "result": {"audio_b64": result_b64}, "created": _async_tasks[task_id]["created"]}
+            else:
+                _async_tasks[task_id]["status"] = "error"
+                _async_tasks[task_id]["result"] = {"error": f"Unknown task type or service not loaded: {task_type}"}
+                return
+            # Deliver webhook if requested
+            if callback_url:
+                try:
+                    import urllib.request
+                    req = urllib.request.Request(
+                        callback_url, method="POST",
+                        data=json.dumps({"task_id": task_id, **_async_tasks[task_id]}).encode(),
+                        headers={"Content-Type": "application/json"},
+                    )
+                    urllib.request.urlopen(req, timeout=10)
+                except Exception as e:
+                    log.warning(f"Webhook delivery failed for {task_id}: {e}")
+        except Exception as e:
+            _async_tasks[task_id] = {"status": "error", "result": {"error": str(e)}, "created": _async_tasks.get(task_id, {}).get("created", 0)}
+
+    asyncio.create_task(_run_task())
+    return {"task_id": task_id, "status": "queued"}
+
+
+@app.get("/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    info = _async_tasks.get(task_id)
+    if info is None:
+        raise HTTPException(404, "Task not found")
+    return {"task_id": task_id, **info}
+
+
+# -- LLM prompt templates (Feature 8) ---------------------------------
+
+_TEMPLATES_FILE = Path(__file__).parent / "prompt_templates.json"
+
+
+def _load_templates() -> dict:
+    if _TEMPLATES_FILE.exists():
+        try:
+            return json.loads(_TEMPLATES_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_templates(templates: dict):
+    _TEMPLATES_FILE.write_text(json.dumps(templates, indent=2), encoding="utf-8")
+
+
+@app.get("/api/templates")
+async def list_templates():
+    return {"templates": _load_templates()}
+
+
+@app.post("/api/templates")
+async def save_template(request: Request):
+    body = await request.json()
+    name = body.get("name", "").strip()
+    if not name:
+        raise HTTPException(400, "name is required")
+    templates = _load_templates()
+    templates[name] = {
+        "system_prompt": body.get("system_prompt", ""),
+        "description": body.get("description", ""),
+        "temperature": body.get("temperature", 0.7),
+        "max_tokens": body.get("max_tokens", 512),
+        "updated": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    _save_templates(templates)
+    return {"status": "saved", "name": name}
+
+
+@app.delete("/api/templates/{name}")
+async def delete_template(name: str):
+    templates = _load_templates()
+    if name not in templates:
+        raise HTTPException(404, f"Template '{name}' not found")
+    del templates[name]
+    _save_templates(templates)
+    return {"status": "deleted", "name": name}
+
+
+# -- Application log streaming (Feature 9) ----------------------------
+
+class _WebSocketLogHandler(logging.Handler):
+    """Logging handler that broadcasts log records to connected WebSocket clients."""
+    def __init__(self):
+        super().__init__()
+        self._clients: list = []
+        self._lock = Lock()
+        self._buffer: collections.deque = collections.deque(maxlen=200)
+
+    def add_client(self, q):
+        with self._lock:
+            self._clients.append(q)
+
+    def remove_client(self, q):
+        with self._lock:
+            try:
+                self._clients.remove(q)
+            except ValueError:
+                pass
+
+    def emit(self, record):
+        entry = {
+            "time": self.format(record),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "logger": record.name,
+        }
+        with self._lock:
+            self._buffer.append(entry)
+            for q in self._clients:
+                try:
+                    q.append(entry)
+                except Exception:
+                    pass
+
+    def get_recent(self, n=50):
+        with self._lock:
+            return list(self._buffer)[-n:]
+
+
+_ws_log_handler = _WebSocketLogHandler()
+_ws_log_handler.setFormatter(logging.Formatter("%(asctime)s", datefmt="%H:%M:%S"))
+_ws_log_handler.setLevel(logging.INFO)
+logging.getLogger("tars-server").addHandler(_ws_log_handler)
+
+
+@app.websocket("/ws/logs")
+async def ws_logs(ws: WebSocket):
+    """Stream application logs in real-time."""
+    await ws.accept()
+    client_buffer = collections.deque(maxlen=100)
+    _ws_log_handler.add_client(client_buffer)
+    try:
+        # Send recent history first
+        for entry in _ws_log_handler.get_recent(50):
+            await ws.send_json(entry)
+        while True:
+            while client_buffer:
+                entry = client_buffer.popleft()
+                try:
+                    await ws.send_json(entry)
+                except Exception:
+                    return
+            await asyncio.sleep(0.5)
+    except (WebSocketDisconnect, Exception):
+        pass
+    finally:
+        _ws_log_handler.remove_client(client_buffer)
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+
+# -- VRAM budget per service (Feature 11) ------------------------------
+
+def _get_vram_budget(service: str) -> float:
+    """Get VRAM budget in GB for a service (0 = unlimited)."""
+    cfg = _active_config or load_config()
+    return cfg.getfloat(service, "vram_limit_gb", fallback=0.0)
+
+
+def _check_vram_budget(service: str) -> bool:
+    """Check if loading a service would exceed VRAM budget. Returns True if OK."""
+    budget = _get_vram_budget(service)
+    if budget <= 0:
+        return True  # no limit
+    vram = _gpu_vram()
+    if vram is None:
+        return True  # can't check
+    free_gb = vram[1]
+    if free_gb < budget * 0.5:
+        log.warning(f"{service.upper()}: only {free_gb:.1f} GB free, budget is {budget:.1f} GB — may not fit")
+    return True  # warn but don't block
+
+
+# -- OpenAI-compatible STT endpoint (Feature 12) ----------------------
+
+@app.post("/v1/audio/transcriptions")
+async def openai_stt(
+    file: UploadFile = File(...),
+    model: str = Form("whisper-1"),
+    language: Optional[str] = Form(None),
+    response_format: str = Form("json"),
+):
+    """OpenAI Whisper-compatible transcription endpoint.
+    Accepts the same parameters as https://platform.openai.com/docs/api-reference/audio/createTranscription
+    """
+    if "stt" not in SERVICES:
+        raise HTTPException(503, "STT service not loaded")
+    audio_bytes = BytesIO(await file.read())
+    loop = asyncio.get_running_loop()
+    try:
+        samples = await loop.run_in_executor(_INFERENCE_POOL, SERVICES["stt"]._wav_to_float32, audio_bytes)
+        has_speech = await loop.run_in_executor(_INFERENCE_POOL, lambda: SERVICES["stt"].has_speech(audio_bytes, samples=samples))
+        if not has_speech:
+            if response_format == "text":
+                return HTMLResponse("")
+            return {"text": ""}
+        audio_bytes.seek(0)
+        transcription, info = await loop.run_in_executor(
+            _INFERENCE_POOL, lambda: SERVICES["stt"].transcribe(audio_bytes, language=language, samples=samples)
+        )
+        full_text = " ".join(t["text"] for t in transcription).strip()
+        log.info(f"STT (OpenAI compat): \"{full_text}\"")
+        if response_format == "text":
+            return HTMLResponse(full_text, media_type="text/plain")
+        elif response_format == "verbose_json":
+            return {
+                "task": "transcribe",
+                "language": info.language,
+                "duration": transcription[-1]["end"] if transcription else 0,
+                "text": full_text,
+                "segments": transcription,
+            }
+        else:
+            return {"text": full_text}
+    except Exception as e:
+        log.error(f"STT error: {traceback.format_exc()}")
+        raise HTTPException(500, str(e))
+
+
 # ===================================================================
 # Settings API + HUD-themed Settings Page
 # ===================================================================
@@ -3639,19 +4148,29 @@ def _load_single_service(name: str, args):
         kvt = cfg.getint("llm", "kv_cache_ttl", fallback=300)
         dev = resolve_service_device(cfg.get("llm", "device", fallback="auto"))
         backend = cfg.get("llm", "backend", fallback="auto")
+        if backend == "auto":
+            backend = _detect_llm_backend(args.llm_model)
         n_ctx = cfg.getint("llm", "n_ctx", fallback=4096)
         n_gpu = cfg.getint("llm", "n_gpu_layers", fallback=-1)
         n_batch = cfg.getint("llm", "n_batch", fallback=2048)
         flash_attn = cfg.getboolean("llm", "flash_attn", fallback=True)
 
-        _ensure_llamacpp()
-        ctk = cfg.get("llm", "cache_type_k", fallback="q8_0")
-        ctv = cfg.get("llm", "cache_type_v", fallback="q8_0")
-        SERVICES["llm"] = LlamaCppService(
-            model_path=args.llm_model, n_ctx=n_ctx, n_gpu_layers=n_gpu,
-            n_batch=n_batch, flash_attn=flash_attn,
-            cache_type_k=ctk, cache_type_v=ctv,
-            kv_cache_sessions=kvs, kv_cache_ttl=kvt)
+        if backend == "llamacpp":
+            _ensure_llamacpp()
+            ctk = cfg.get("llm", "cache_type_k", fallback="q8_0")
+            ctv = cfg.get("llm", "cache_type_v", fallback="q8_0")
+            SERVICES["llm"] = LlamaCppService(
+                model_path=args.llm_model, n_ctx=n_ctx, n_gpu_layers=n_gpu,
+                n_batch=n_batch, flash_attn=flash_attn,
+                cache_type_k=ctk, cache_type_v=ctv,
+                kv_cache_sessions=kvs, kv_cache_ttl=kvt)
+        else:
+            quant = cfg.get("llm", "quantize", fallback="none")
+            kv_bits = cfg.getint("llm", "kv_cache_quant_bits", fallback=4)
+            SERVICES["llm"] = LLMService(
+                model_name=args.llm_model, dtype=cfg.get("llm", "dtype", fallback="auto"),
+                quantize=quant, kv_cache_quant_bits=kv_bits,
+                kv_cache_sessions=kvs, kv_cache_ttl=kvt, device=dev)
     elif name == "vision":
         vision_model = cfg.get("vision", "model", fallback=args.vision_model)
         if vision_model == "llm":
@@ -3778,9 +4297,9 @@ def _cleanup_failed_service(name: str):
 
 def _get_vram_used_gb():
     """Get current VRAM usage in GB (for measuring per-service deltas)."""
-    smi = _nvidia_smi_vram()
-    if smi is not None:
-        return smi[0]
+    vram = _gpu_vram()
+    if vram is not None:
+        return vram[0]
     if DEVICE == "cuda":
         return torch.cuda.memory_allocated(0) / 1024**3
     return 0.0
@@ -3792,13 +4311,11 @@ def _load_service_safe(name: str, args):
     _smi_cache["ts"] = 0.0
     vram_before = _get_vram_used_gb() if DEVICE == "cuda" else 0.0
     try:
-        with contextlib.redirect_stdout(io.StringIO()):
-            _load_single_service(name, args)
+        _load_single_service(name, args)
     except (ImportError, ModuleNotFoundError):
         if _try_install_service_deps(name):
             try:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    _load_single_service(name, args)
+                _load_single_service(name, args)
             except (ImportError, ModuleNotFoundError) as retry_exc:
                 _cleanup_stale_pip_dirs()
                 missing_mod = getattr(retry_exc, 'name', None) or str(retry_exc)
