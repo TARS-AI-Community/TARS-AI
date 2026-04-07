@@ -174,7 +174,8 @@ if !errorlevel! == 0 (
         "diffusers>=0.27.0" ^
         "sentence-transformers>=2.2.0" ^
         "qrcode[pil]>=7.0" ^
-        "psutil>=5.9.0"
+        "psutil>=5.9.0" ^
+        "httpx>=0.27.0"
 
     if !errorlevel! neq 0 (
         echo  [FAIL] Failed to install dependencies.

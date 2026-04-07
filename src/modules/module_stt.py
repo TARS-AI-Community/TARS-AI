@@ -996,38 +996,32 @@ class STTManager:
             external_url = self.config['STT'].get('external_url', '')
             if self.DEBUG:
                 total_samples = sum(len(c) for c in chunks)
-                queue_message(f"DEBUG STT: Sending {total_samples} samples to {external_url}/save_audio")
+                queue_message(f"DEBUG STT: Sending {total_samples} samples to {external_url}/v1/audio/transcriptions")
 
             wav_buf = self._chunks_to_wav_buffer(chunks, self.MODEL_RATE)
-            files = {"audio": ("audio.wav", wav_buf, "audio/wav")}
+            # Use OpenAI-compatible endpoint: POST /v1/audio/transcriptions
+            files = {"file": ("audio.wav", wav_buf, "audio/wav")}
             headers = {}
             api_key = os.environ.get('EXTERNAL_API_KEY', '')
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
             response = requests.post(
-                f"{external_url}/save_audio",
-                files=files, headers=headers, timeout=10
+                f"{external_url}/v1/audio/transcriptions",
+                files=files, headers=headers, timeout=60
             )
             if response.status_code != 200:
                 queue_message(f"ERROR: Server STT returned {response.status_code}: {response.text[:200]}")
                 return None
 
-            transcription = response.json().get("transcription", [])
-            if not transcription:
+            raw_text = response.json().get("text", "").strip()
+            if not raw_text:
                 if self.DEBUG:
                     queue_message("DEBUG STT: Server returned empty transcription (VAD filtered or no speech)")
                 return None
 
-            raw_text = transcription[0].get("text", "").strip()
             if self.DEBUG:
                 queue_message(f"DEBUG STT: Server transcribed: '{raw_text}'")
-            extra = {
-                "result": [
-                    {"conf": 1.0, "start": seg.get("start", 0),
-                     "end": seg.get("end", 0), "word": seg.get("text", "")}
-                    for seg in transcription
-                ]
-            }
+            extra = {"result": [{"conf": 1.0, "start": 0, "end": 0, "word": raw_text}]}
             return self._emit_result(raw_text, extra)
         except requests.RequestException as e:
             queue_message(f"ERROR: Server transcription request failed: {e}")

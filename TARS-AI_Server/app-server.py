@@ -760,6 +760,8 @@ _SERVICE_VRAM: dict = {}  # service_name -> vram_gb (measured delta at load time
 START_TIME = time.time()
 _LAUNCH_ARGS = None
 _LLM_SEMAPHORE: asyncio.Semaphore = None  # initialized at startup
+_llm_oom_count = 0          # consecutive OOM restarts (reset after 60s quiet)
+_llm_oom_last = 0.0         # timestamp of last OOM
 
 # Dedicated thread pool for ML inference — default pool is too small (min(32, os.cpu_count()+4))
 from concurrent.futures import ThreadPoolExecutor
@@ -1305,6 +1307,18 @@ class TTSService:
                     piper_voice.synthesize(text, wav_file)
         return wav_buf.getvalue()
 
+    def synthesize_streaming(self, text: str, voice: str = None, speed: float = 1.0):
+        """Split text on sentence boundaries and yield WAV bytes per sentence.
+        Callers get the first audio chunk in ~50ms instead of waiting for the full response.
+        """
+        import re as _re_tts
+        # Split on sentence-ending punctuation followed by whitespace (or end of string)
+        sentences = [s.strip() for s in _re_tts.split(r'(?<=[.!?])\s+', text) if s.strip()]
+        if not sentences:
+            return
+        for sentence in sentences:
+            yield self.synthesize(sentence, voice=voice, speed=speed)
+
     def unload(self):
         self._cache.clear()
         self._loaded_voices.clear()
@@ -1429,25 +1443,33 @@ class LLMService:
         except Exception:
             pass
 
-        # torch.compile + static KV cache for CUDA graphs (2-3x speedup on non-quantized)
-        # Skipped on Windows: inductor backend requires Triton which is Linux-only
+        # torch.compile: on Linux use reduce-overhead+static cache (CUDA graphs, 2-3x speedup).
+        # On Windows, Triton is unavailable so inductor falls back to "default" mode (~10-15%
+        # speedup via kernel fusion, no CUDA graphs). Both paths are worth enabling.
         self._compiled = False
-        if device == "cuda" and weight_quant in ("none", "") and sys.platform != "win32":
+        if device == "cuda" and weight_quant in ("none", ""):
             try:
                 _orig_model = self.model
-                self.model.generation_config.cache_implementation = "static"
-                self.model = torch.compile(self.model, mode="reduce-overhead", fullgraph=True)
-                # Test with actual inference to catch Triton/inductor errors early
+                if sys.platform != "win32":
+                    self.model.generation_config.cache_implementation = "static"
+                    compile_mode = "reduce-overhead"
+                    compile_fullgraph = True
+                else:
+                    compile_mode = "default"
+                    compile_fullgraph = False
+                self.model = torch.compile(self.model, mode=compile_mode, fullgraph=compile_fullgraph)
+                # Test with actual inference to catch compile errors early
                 _warm = self.tokenizer("compile test", return_tensors="pt").input_ids.to(device)
                 with torch.inference_mode():
                     self.model.generate(_warm, attention_mask=torch.ones_like(_warm),
                                         max_new_tokens=2, do_sample=False, use_cache=True)
                 self._compiled = True
-                log.info("LLM torch.compile enabled (reduce-overhead + static cache)")
+                log.info(f"LLM torch.compile enabled (mode={compile_mode})")
             except Exception as e:
                 log.info(f"torch.compile skipped: {e}")
                 self.model = _orig_model
-                self.model.generation_config.cache_implementation = None
+                if sys.platform != "win32":
+                    self.model.generation_config.cache_implementation = None
 
         # Warmup: run a forward pass to pre-allocate CUDA memory
         if device == "cuda":
@@ -1482,9 +1504,16 @@ class LLMService:
                 log.warning(f"TurboQuant init failed: {e}")
 
         # KV cache for prompt reuse
-        self._kv_cache: dict = {}  # session_id -> (token_count, past_kv, timestamp)
+        self._kv_cache: dict = {}  # session_id -> (token_count, past_kv, timestamp, prefix_list)
         self._kv_max_sessions = kv_cache_sessions
         self._kv_ttl = kv_cache_ttl
+        self._kv_lock = Lock()
+
+        # System-prompt prefix cache: caches the KV states for just the system prompt so that
+        # the first user turn doesn't need to re-prefill the entire system prompt.
+        # Key: sha256 of the system prompt text; Value: (token_count, past_kv, token_ids_list)
+        self._sys_prefix_cache: dict = {}  # hash -> (token_len, past_kv, token_ids)
+        self._sys_prefix_lock = Lock()
 
         # Multimodal detection
         self.supports_vision = self._check_vision_support()
@@ -1498,6 +1527,71 @@ class LLMService:
             return None
         from turboquant import TurboQuantCache
         return TurboQuantCache(bits=self._turboquant_bits)
+
+    def _get_system_prompt(self, messages: list) -> str:
+        """Extract the system prompt text from a messages list, or '' if absent."""
+        for m in messages:
+            if m.get("role") == "system":
+                return m.get("content", "")
+        return ""
+
+    def _prime_sys_prefix(self, sys_text: str):
+        """Prefill and cache KV states for `sys_text` if not already cached.
+        Returns (cached_len, past_kv) or (0, None) if unavailable/unsupported.
+        """
+        if not sys_text:
+            return 0, None
+        key = hashlib.sha256(sys_text.encode()).hexdigest()
+        with self._sys_prefix_lock:
+            if key in self._sys_prefix_cache:
+                return self._sys_prefix_cache[key][0], self._sys_prefix_cache[key][1]
+
+        # Build a minimal single-message chat for the system prompt only
+        try:
+            template_kwargs = dict(return_tensors="pt", add_generation_prompt=False)
+            try:
+                result = self.tokenizer.apply_chat_template(
+                    [{"role": "system", "content": sys_text}],
+                    enable_thinking=False, **template_kwargs
+                )
+            except TypeError:
+                result = self.tokenizer.apply_chat_template(
+                    [{"role": "system", "content": sys_text}], **template_kwargs
+                )
+            sys_ids = (result if isinstance(result, torch.Tensor) else result["input_ids"]).to(self.model.device)
+
+            with torch.inference_mode():
+                out = self.model(input_ids=sys_ids, use_cache=True, return_dict=True)
+            past_kv = out.past_key_values
+            token_len = sys_ids.shape[-1]
+            token_ids = sys_ids[0].tolist()
+            with self._sys_prefix_lock:
+                self._sys_prefix_cache[key] = (token_len, past_kv, token_ids)
+            log.info(f"LLM system-prefix cached ({token_len} tokens, key={key[:8]})")
+            return token_len, past_kv
+        except Exception as e:
+            log.debug(f"System-prefix cache skipped: {e}")
+            return 0, None
+
+    def _try_reuse_sys_prefix(self, full_ids: torch.Tensor, messages: list):
+        """Try to reuse the cached system-prompt KV for a fresh (no session) request.
+        Returns (input_ids_to_process, past_kv_or_None).
+        """
+        sys_text = self._get_system_prompt(messages)
+        if not sys_text:
+            return full_ids, None
+        key = hashlib.sha256(sys_text.encode()).hexdigest()
+        with self._sys_prefix_lock:
+            entry = self._sys_prefix_cache.get(key)
+        if entry is None:
+            # Not cached yet — prime it in background for next request
+            Thread(target=self._prime_sys_prefix, args=(sys_text,), daemon=True).start()
+            return full_ids, None
+        cached_len, past_kv, cached_ids = entry
+        # Verify the prefix tokens match (tokeniser may differ between calls)
+        if full_ids.shape[-1] > cached_len and full_ids[0, :cached_len].tolist() == cached_ids:
+            return full_ids[:, cached_len:], past_kv
+        return full_ids, None
 
     def _check_vision_support(self) -> bool:
         model_lower = self.model_name.lower()
@@ -1605,8 +1699,12 @@ class LLMService:
         full_ids = (result if isinstance(result, torch.Tensor) else result["input_ids"]).to(self.model.device)
 
         input_ids, past_kv = self._try_reuse_kv(full_ids, session_id)
+        # No session KV hit — try system-prompt prefix cache for faster first-turn prefill
+        if past_kv is None:
+            input_ids, past_kv = self._try_reuse_sys_prefix(full_ids, messages)
 
         do_sample = temperature > 0
+        gen_start = time.perf_counter()
         with torch.inference_mode():
             gen_kwargs = {
                 "input_ids": input_ids,
@@ -1626,6 +1724,7 @@ class LLMService:
             elif self._turboquant_active:
                 gen_kwargs["past_key_values"] = self._make_turboquant_cache()
             outputs = self.model.generate(**gen_kwargs)
+        decode_ms = max(1, int((time.perf_counter() - gen_start) * 1000))
 
         # Save KV cache for this session
         if session_id and hasattr(outputs, "past_key_values") and outputs.past_key_values:
@@ -1637,7 +1736,7 @@ class LLMService:
         completion_tokens = len(new_tokens)
         text = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
         # Record metrics for non-streaming requests (streaming records in generator)
-        LLM_METRICS.record(prompt_tokens, completion_tokens, 0, 0)
+        LLM_METRICS.record(prompt_tokens, completion_tokens, decode_ms, 0)
         TRACKER.update_last_llm_info(LLM_METRICS.pop_last())
         return self._format_response(text, prompt_tokens, completion_tokens)
 
@@ -1655,6 +1754,9 @@ class LLMService:
         full_ids = (result if isinstance(result, torch.Tensor) else result["input_ids"]).to(self.model.device)
 
         input_ids, past_kv = self._try_reuse_kv(full_ids, session_id)
+        # No session KV hit — try system-prompt prefix cache for faster first-turn prefill
+        if past_kv is None:
+            input_ids, past_kv = self._try_reuse_sys_prefix(full_ids, messages)
         prompt_tokens = full_ids.shape[-1]
 
         streamer = TextIteratorStreamer(
@@ -1732,31 +1834,35 @@ class LLMService:
 
     def _try_reuse_kv(self, full_ids: torch.Tensor, session_id: str):
         """Try to reuse cached KV. Returns (input_ids_to_process, past_kv_or_None)."""
-        if not session_id or session_id not in self._kv_cache:
+        if not session_id:
             return full_ids, None
+        with self._kv_lock:
+            if session_id not in self._kv_cache:
+                return full_ids, None
 
-        cached_len, cached_kv, ts, cached_prefix = self._kv_cache[session_id]
-        if time.time() - ts > self._kv_ttl:
+            cached_len, cached_kv, ts, cached_prefix = self._kv_cache[session_id]
+            if time.time() - ts > self._kv_ttl:
+                del self._kv_cache[session_id]
+                return full_ids, None
+
+            # New input must be longer and the prefix tokens must match exactly
+            if full_ids.shape[-1] > cached_len:
+                current_prefix = full_ids[0, :cached_len].tolist()
+                if current_prefix == cached_prefix:
+                    return full_ids[:, cached_len:], cached_kv
+
+            # Input changed (shorter, different prefix, or same length), start fresh
             del self._kv_cache[session_id]
             return full_ids, None
 
-        # New input must be longer and the prefix tokens must match exactly
-        if full_ids.shape[-1] > cached_len:
-            current_prefix = full_ids[0, :cached_len].tolist()
-            if current_prefix == cached_prefix:
-                return full_ids[:, cached_len:], cached_kv
-
-        # Input changed (shorter, different prefix, or same length), start fresh
-        del self._kv_cache[session_id]
-        return full_ids, None
-
     def _save_kv(self, session_id: str, prompt_len: int, past_kv, full_ids: torch.Tensor = None):
         prefix = full_ids[0, :prompt_len].tolist() if full_ids is not None else []
-        self._kv_cache[session_id] = (prompt_len, past_kv, time.time(), prefix)
-        # Evict oldest if over limit
-        while len(self._kv_cache) > self._kv_max_sessions:
-            oldest = min(self._kv_cache, key=lambda k: self._kv_cache[k][2])
-            del self._kv_cache[oldest]
+        with self._kv_lock:
+            self._kv_cache[session_id] = (prompt_len, past_kv, time.time(), prefix)
+            # Evict oldest if over limit
+            while len(self._kv_cache) > self._kv_max_sessions:
+                oldest = min(self._kv_cache, key=lambda k: self._kv_cache[k][2])
+                del self._kv_cache[oldest]
 
     def _format_response(self, text: str, prompt_tokens: int = 0, completion_tokens: int = 0) -> dict:
         return {
@@ -1773,7 +1879,8 @@ class LLMService:
         }
 
     def unload(self):
-        self._kv_cache.clear()
+        with self._kv_lock:
+            self._kv_cache.clear()
         del self.model
         del self.tokenizer
         self.model = None
@@ -1805,13 +1912,20 @@ class LlamaCppService:
         type_k = self._GGML_TYPES.get(cache_type_k, 8)
         type_v = self._GGML_TYPES.get(cache_type_v, 8)
         log.info(f"KV cache type: keys={cache_type_k}({type_k}), values={cache_type_v}({type_v})")
+        # n_threads: CPU threads for token generation (each new token).
+        # n_threads_batch: CPU threads for prompt prefill (parallel over the prompt).
+        # Default llama-cpp is 1 thread — on multi-core CPUs this is a major bottleneck.
+        _n_threads = min(max(os.cpu_count() or 4, 1), 8)
         llama_kwargs = dict(
             n_gpu_layers=n_gpu_layers, n_ctx=n_ctx,
             n_batch=n_batch, flash_attn=flash_attn,
             verbose=False,
             type_k=type_k,
             type_v=type_v,
+            n_threads=_n_threads,
+            n_threads_batch=_n_threads,
         )
+        log.info(f"llama.cpp CPU threads: n_threads={_n_threads}, n_threads_batch={_n_threads}")
 
         # Determine load method:
         #   Local file:          C:\path\to\model.gguf  or  /path/to/model.gguf
@@ -1828,16 +1942,23 @@ class LlamaCppService:
             log.info(f"Downloading GGUF from HuggingFace: {repo_id} / {filename} ...")
             llm_dir = MODELS_DIR / "llm"
             llm_dir.mkdir(exist_ok=True)
+            _task_id = f"{repo_id.replace('/', '--')}::{filename}"
+            _download_progress[_task_id] = {"status": "downloading", "pct": 0, "speed_mbps": 0.0, "file": filename}
+            try:
+                from huggingface_hub import hf_hub_download as _hf_dl
+                _local_path = _hf_dl(repo_id=repo_id, filename=filename, cache_dir=str(llm_dir))
+                _download_progress[_task_id] = {"status": "complete", "pct": 100, "speed_mbps": 0.0, "file": filename}
+            except Exception:
+                _download_progress.pop(_task_id, None)
+                raise
             with _mute_output():
-                self._llm = Llama.from_pretrained(repo_id=repo_id, filename=filename,
-                                                  cache_dir=str(llm_dir),
-                                                  **llama_kwargs)
+                self._llm = Llama(model_path=_local_path, **llama_kwargs)
         elif "/" in model_path and not model_path.startswith(("C:", "D:", "/")):
             # HuggingFace repo ID — auto-pick best available GGUF (prefer Q4_K_M)
             # List repo files first, then pick the single best match to avoid downloading extras
             self.model_name = model_path.split("/")[-1]
             log.info(f"Downloading GGUF from HuggingFace: {model_path} (searching for Q4_K_M) ...")
-            from huggingface_hub import list_repo_files
+            from huggingface_hub import list_repo_files, hf_hub_download as _hf_dl
             try:
                 all_files = [f for f in list_repo_files(model_path) if f.endswith(".gguf")]
             except Exception:
@@ -1855,10 +1976,16 @@ class LlamaCppService:
             log.info(f"Selected GGUF: {chosen}")
             llm_dir = MODELS_DIR / "llm"
             llm_dir.mkdir(exist_ok=True)
+            _task_id = f"{model_path.replace('/', '--')}::{chosen}"
+            _download_progress[_task_id] = {"status": "downloading", "pct": 0, "speed_mbps": 0.0, "file": chosen}
+            try:
+                _local_path = _hf_dl(repo_id=model_path, filename=chosen, cache_dir=str(llm_dir))
+                _download_progress[_task_id] = {"status": "complete", "pct": 100, "speed_mbps": 0.0, "file": chosen}
+            except Exception:
+                _download_progress.pop(_task_id, None)
+                raise
             with _mute_output():
-                self._llm = Llama.from_pretrained(repo_id=model_path, filename=chosen,
-                                                  cache_dir=str(llm_dir),
-                                                  **llama_kwargs)
+                self._llm = Llama(model_path=_local_path, **llama_kwargs)
         else:
             raise FileNotFoundError(
                 f"GGUF model not found: {model_path}\n"
@@ -2012,14 +2139,16 @@ class VisionService:
         from transformers import BlipProcessor, BlipForConditionalGeneration
         self.processor = BlipProcessor.from_pretrained(self.model_name, cache_dir=str(self._cache_dir))
         self.model = BlipForConditionalGeneration.from_pretrained(
-            self.model_name, cache_dir=str(self._cache_dir), torch_dtype=self._dtype)
+            self.model_name, cache_dir=str(self._cache_dir), torch_dtype=self._dtype,
+            use_safetensors=False)
         self.model.to(self._device).eval()
 
     def _load_blip2(self):
         from transformers import Blip2Processor, Blip2ForConditionalGeneration
         self.processor = Blip2Processor.from_pretrained(self.model_name, cache_dir=str(self._cache_dir))
         self.model = Blip2ForConditionalGeneration.from_pretrained(
-            self.model_name, cache_dir=str(self._cache_dir), torch_dtype=self._dtype)
+            self.model_name, cache_dir=str(self._cache_dir), torch_dtype=self._dtype,
+            use_safetensors=False)
         self.model.to(self._device).eval()
 
     def _load_moondream(self):
@@ -2679,12 +2808,49 @@ async def stt_transcribe_v2(audio: UploadFile = File(...), language: Optional[st
 
 @app.websocket("/ws/stt")
 async def websocket_stt(ws: WebSocket):
+    """WebSocket STT endpoint.
+
+    Protocol:
+      - Send binary frames: raw audio bytes appended to buffer.
+      - Send text "end":     transcribe full buffer, return {is_final: true}, clear buffer.
+      - Send text "partial": transcribe current buffer snapshot, return {is_final: false}.
+                             Buffer is NOT cleared — keep streaming audio after partial requests.
+                             Use this every ~1s to get interim results while audio is still coming.
+      - Send text "reset":   clear buffer without transcribing.
+    """
     if "stt" not in SERVICES:
         await ws.close(code=1013, reason="STT service not loaded")
         return
     await ws.accept()
     audio_buffer = BytesIO()
+    loop = asyncio.get_running_loop()
     log.info("WebSocket STT: client connected")
+
+    async def _transcribe_buffer(buf: BytesIO, is_final: bool) -> dict:
+        """Run transcription on a copy of the buffer in the inference pool."""
+        buf.seek(0)
+        snapshot = BytesIO(buf.read())
+        snapshot.seek(0)
+        try:
+            samples = await loop.run_in_executor(
+                _INFERENCE_POOL, SERVICES["stt"]._wav_to_float32, snapshot
+            )
+            has_speech = await loop.run_in_executor(
+                _INFERENCE_POOL, lambda: SERVICES["stt"].has_speech(snapshot, samples=samples)
+            )
+            if not has_speech:
+                return {"text": "", "segments": [], "is_final": is_final}
+            snapshot.seek(0)
+            transcription, info = await loop.run_in_executor(
+                _INFERENCE_POOL,
+                lambda: SERVICES["stt"].transcribe(snapshot, samples=samples)
+            )
+            full_text = " ".join(t["text"] for t in transcription).strip()
+            return {"text": full_text, "segments": transcription,
+                    "language": info.language, "is_final": is_final}
+        except Exception as e:
+            return {"error": str(e), "is_final": is_final}
+
     try:
         while True:
             message = await ws.receive()
@@ -2697,16 +2863,18 @@ async def websocket_stt(ws: WebSocket):
                         if audio_buffer.tell() == 0:
                             await ws.send_json({"text": "", "segments": [], "is_final": True})
                             continue
-                        audio_buffer.seek(0)
-                        try:
-                            transcription, info = SERVICES["stt"].transcribe(audio_buffer)
-                            full_text = " ".join(t["text"] for t in transcription).strip()
-                            log.info(f"WS-STT: \"{full_text}\"")
-                            await ws.send_json({"text": full_text, "segments": transcription,
-                                                "language": info.language, "is_final": True})
-                        except Exception as e:
-                            await ws.send_json({"error": str(e), "is_final": True})
+                        result = await _transcribe_buffer(audio_buffer, is_final=True)
+                        log.info(f"WS-STT (final): \"{result.get('text', '')}\"")
+                        await ws.send_json(result)
                         audio_buffer = BytesIO()
+                    elif cmd == "partial":
+                        if audio_buffer.tell() == 0:
+                            await ws.send_json({"text": "", "segments": [], "is_final": False})
+                            continue
+                        result = await _transcribe_buffer(audio_buffer, is_final=False)
+                        log.debug(f"WS-STT (partial): \"{result.get('text', '')}\"")
+                        await ws.send_json(result)
+                        # Buffer intentionally NOT cleared — audio keeps accumulating
                     elif cmd == "reset":
                         audio_buffer = BytesIO()
                         await ws.send_json({"status": "buffer_cleared"})
@@ -2749,13 +2917,24 @@ async def llm_chat(request: Request):
         stream = body.get("stream", False)
         session_id = request.headers.get("x-session-id")
 
+        # Apply named prompt template if requested (injects system prompt + default params)
+        template_name = body.get("template")
+        if template_name:
+            tmpl = _load_templates().get(template_name)
+            if tmpl:
+                if not any(m.get("role") == "system" for m in messages):
+                    messages = [{"role": "system", "content": tmpl["system_prompt"]}] + messages
+                max_tokens = body.get("max_tokens", tmpl.get("max_tokens", max_tokens))
+                temperature = body.get("temperature", tmpl.get("temperature", temperature))
+                log.debug(f"LLM: applied template '{template_name}'")
+
         if stream:
             generator = SERVICES["llm"].chat(
                 messages, max_tokens, temperature, top_p, stream=True, session_id=session_id
             )
             # Wrap generator to hold semaphore until streaming is done.
-            # Track whether iteration started — if not, finally still releases.
             _stream_started = False
+
             def _guarded_stream(gen):
                 nonlocal _stream_started
                 _stream_started = True
@@ -2763,22 +2942,26 @@ async def llm_chat(request: Request):
                     yield from gen
                 finally:
                     _LLM_SEMAPHORE.release()
-            released = True  # the wrapper will release it
-            resp = StreamingResponse(
-                _guarded_stream(generator), media_type="text/event-stream",
-                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-            )
-            # Safety: if the response is discarded without iterating, release semaphore
-            _original_del = getattr(resp, "__del__", None)
-            def _safety_release(self_ref=resp):
+
+            released = True  # _guarded_stream will release it
+
+            # Safety: background task releases semaphore if the response is discarded
+            # without being iterated (e.g. client disconnects before first byte arrives).
+            # asyncio.create_task is reliable; weakref.finalize is not (GC timing).
+            async def _stream_start_watchdog():
+                await asyncio.sleep(30)
                 if not _stream_started:
+                    log.warning("LLM stream watchdog: response discarded without iteration — releasing semaphore")
                     try:
                         _LLM_SEMAPHORE.release()
                     except Exception:
                         pass
-            import weakref
-            weakref.finalize(resp, _safety_release)
-            return resp
+
+            asyncio.create_task(_stream_start_watchdog())
+            return StreamingResponse(
+                _guarded_stream(generator), media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
         else:
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
@@ -2791,22 +2974,35 @@ async def llm_chat(request: Request):
     except (torch.cuda.OutOfMemoryError, RuntimeError) as e:
         is_oom = isinstance(e, torch.cuda.OutOfMemoryError) or "out of memory" in str(e).lower()
         if is_oom:
+            global _llm_oom_count, _llm_oom_last
             LLM_METRICS.record_error()
-            log.error("LLM: GPU out of memory — restarting LLM service...")
+            now = time.time()
+            if now - _llm_oom_last > 60:
+                _llm_oom_count = 0  # reset counter after 60s without OOM
+            _llm_oom_count += 1
+            _llm_oom_last = now
             gc.collect()
             torch.cuda.empty_cache()
-            # Auto-restart: unload and reload the LLM service in a background task
-            try:
-                if "llm" in SERVICES:
-                    SERVICES["llm"].unload()
-                    del SERVICES["llm"]
-                    _SERVICE_VRAM.pop("llm", None)
-                gc.collect()
-                torch.cuda.empty_cache()
-                _load_single_service("llm", _LAUNCH_ARGS)
-                log.info("LLM service restarted after OOM")
-            except Exception as reload_err:
-                log.error(f"LLM service restart failed: {reload_err}")
+            if _llm_oom_count <= 3:
+                log.error(f"LLM: GPU out of memory (OOM #{_llm_oom_count}) — restarting LLM service...")
+                # Auto-restart: unload and reload the LLM service
+                try:
+                    if "llm" in SERVICES:
+                        SERVICES["llm"].unload()
+                        del SERVICES["llm"]
+                        _SERVICE_VRAM.pop("llm", None)
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    _load_single_service("llm", _LAUNCH_ARGS)
+                    log.info("LLM service restarted after OOM")
+                except Exception as reload_err:
+                    log.error(f"LLM service restart failed: {reload_err}")
+            else:
+                log.error(
+                    f"LLM: GPU OOM limit reached ({_llm_oom_count} consecutive) — "
+                    "skipping auto-restart to prevent infinite loop. "
+                    "Reduce n_gpu_layers or unload other services, then restart the server."
+                )
             raise HTTPException(503, "GPU out of memory — LLM service restarted. Please retry.")
         raise  # re-raise non-OOM RuntimeErrors
     except Exception as e:
@@ -2857,6 +3053,50 @@ async def tts_generate(request: Request):
         raise HTTPException(500, str(e))
 
 
+@app.post("/tts/generate/stream")
+async def tts_generate_stream(request: Request):
+    """Stream TTS audio sentence-by-sentence. Returns audio/wav chunks as they're synthesized.
+    Clients receive the first audio ~50ms after the request instead of waiting for the full text.
+    Each chunk is a complete, independently playable WAV file.
+    """
+    if "tts" not in SERVICES:
+        raise HTTPException(503, "TTS service not loaded")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "text is required")
+    voice = body.get("voice", None)
+    speed = float(body.get("speed", 1.0))
+
+    loop = asyncio.get_running_loop()
+
+    async def _generate():
+        try:
+            sentences = list(SERVICES["tts"].synthesize_streaming.__func__.__code__.co_consts)
+        except Exception:
+            pass
+        # Run each sentence synthesis in the inference pool, yield chunks as they complete
+        import re as _re_tts
+        parts = [s.strip() for s in _re_tts.split(r'(?<=[.!?])\s+', text) if s.strip()]
+        if not parts:
+            parts = [text]
+        for part in parts:
+            try:
+                wav = await loop.run_in_executor(
+                    _INFERENCE_POOL, lambda p=part: SERVICES["tts"].synthesize(p, voice=voice, speed=speed)
+                )
+                yield wav
+            except Exception as e:
+                log.warning(f"TTS stream chunk error: {e}")
+
+    log.info(f"TTS stream: \"{text[:60]}\" voice={voice}")
+    return StreamingResponse(_generate(), media_type="audio/wav",
+                             headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+
+
 @app.get("/tts/voices")
 async def tts_voices():
     if "tts" not in SERVICES:
@@ -2883,9 +3123,8 @@ async def vision_caption(image: UploadFile = File(...), prompt: str = Form(None)
             raise HTTPException(503, "GPU out of memory — try a smaller image or lighter vision model.")
         except Exception:
             log.error(f"Vision error: {traceback.format_exc()}")
-    if "vision" not in SERVICES:
-        raise HTTPException(503, "Vision service not loaded")
-    raise HTTPException(500, "Vision captioning failed")
+            raise HTTPException(500, "Vision captioning failed")
+    raise HTTPException(503, "Vision service not loaded")
 
 
 # -- Image Generation Routes -------------------------------------------
@@ -3225,7 +3464,7 @@ async def models_status():
 @app.post("/models/{service}/unload")
 async def unload_model(service: str):
     if service not in SERVICES:
-        raise HTTPException(404, f"Service '{service}' not loaded")
+        return JSONResponse(status_code=404, content={"error": f"Service '{service}' not loaded"})
     svc = SERVICES[service]
     svc_name = getattr(svc, "model_name", service)
     if hasattr(svc, "unload"):
@@ -3627,6 +3866,18 @@ async def list_devices():
 # -- Webhook/callback for async tasks (Feature 7) --------------------
 
 _async_tasks: dict = {}  # task_id -> {"status": str, "result": any, "created": float}
+_ASYNC_TASK_TTL = 600   # seconds — completed/errored tasks evicted after 10 min (results can be 3MB+ base64)
+
+
+def _evict_old_tasks():
+    """Remove completed/errored tasks older than _ASYNC_TASK_TTL. Called on each new submission."""
+    cutoff = time.time() - _ASYNC_TASK_TTL
+    stale = [tid for tid, t in _async_tasks.items()
+             if t.get("status") in ("done", "error") and t.get("created", 0) < cutoff]
+    for tid in stale:
+        del _async_tasks[tid]
+    if stale:
+        log.debug(f"Evicted {len(stale)} stale async task(s)")
 
 
 @app.post("/tasks/submit")
@@ -3640,6 +3891,7 @@ async def submit_async_task(request: Request):
     task_type = body.get("type", "")
     callback_url = body.get("callback_url", None)
     task_id = f"task-{uuid.uuid4().hex[:12]}"
+    _evict_old_tasks()
     _async_tasks[task_id] = {"status": "queued", "result": None, "created": time.time()}
 
     async def _run_task():
@@ -3683,13 +3935,9 @@ async def submit_async_task(request: Request):
             # Deliver webhook if requested
             if callback_url:
                 try:
-                    import urllib.request
-                    req = urllib.request.Request(
-                        callback_url, method="POST",
-                        data=json.dumps({"task_id": task_id, **_async_tasks[task_id]}).encode(),
-                        headers={"Content-Type": "application/json"},
-                    )
-                    urllib.request.urlopen(req, timeout=10)
+                    import httpx
+                    async with httpx.AsyncClient(timeout=10) as _hc:
+                        await _hc.post(callback_url, json={"task_id": task_id, **_async_tasks[task_id]})
                 except Exception as e:
                     log.warning(f"Webhook delivery failed for {task_id}: {e}")
         except Exception as e:
@@ -3842,17 +4090,23 @@ def _get_vram_budget(service: str) -> float:
 
 
 def _check_vram_budget(service: str) -> bool:
-    """Check if loading a service would exceed VRAM budget. Returns True if OK."""
+    """Check if loading a service would exceed VRAM budget. Returns True if OK to load."""
     budget = _get_vram_budget(service)
     if budget <= 0:
-        return True  # no limit
+        return True  # no limit configured
     vram = _gpu_vram()
     if vram is None:
-        return True  # can't check
+        return True  # can't check, allow
     free_gb = vram[1]
-    if free_gb < budget * 0.5:
-        log.warning(f"{service.upper()}: only {free_gb:.1f} GB free, budget is {budget:.1f} GB — may not fit")
-    return True  # warn but don't block
+    if free_gb < budget:
+        log.warning(
+            f"{service.upper()}: insufficient VRAM — need {budget:.1f} GB budget but only "
+            f"{free_gb:.1f} GB free. Skipping load. Set vram_limit_gb=0 to disable this check."
+        )
+        return False
+    if free_gb < budget * 1.25:
+        log.warning(f"{service.upper()}: VRAM is tight — {free_gb:.1f} GB free for {budget:.1f} GB budget")
+    return True
 
 
 # -- OpenAI-compatible STT endpoint (Feature 12) ----------------------
@@ -4307,6 +4561,9 @@ def _get_vram_used_gb():
 
 def _load_service_safe(name: str, args):
     """Load a single service with error handling, OOM recovery, and auto-install retry."""
+    # Check VRAM budget before attempting load
+    if DEVICE == "cuda" and not _check_vram_budget(name):
+        return
     # Snapshot VRAM before loading (invalidate cache for fresh reading)
     _smi_cache["ts"] = 0.0
     vram_before = _get_vram_used_gb() if DEVICE == "cuda" else 0.0
