@@ -40,23 +40,40 @@ _device_info = None  # cached (device_idx, native_rate)
 _device_lock = threading.Lock()
 
 
+def _is_real_hw_device(info):
+    """Return True if the device looks like real hardware, not an ALSA plugin.
+
+    ALSA plugin devices (default, dmix, etc.) report 128 channels which is
+    a dead giveaway. Real USB mics report 1-2 channels.
+    """
+    return 1 <= info.get("max_input_channels", 0) <= 32
+
+
 def _find_input_device():
     """Try to find a working input device. Returns (idx, rate) or raises."""
-    # 1. Try the system default
+    # 1. Try the system default — but only if it looks like real hardware.
+    #    ALSA plugin devices (e.g. "default") report 128 channels and may
+    #    hide the actual hardware rate, causing wrong device selection.
     idx = sd.default.device[0]
     if idx is not None and idx >= 0:
         info = sd.query_devices(idx, kind="input")
-        if info.get("max_input_channels", 0) >= 1:
+        if _is_real_hw_device(info):
             return idx, int(info.get("default_samplerate", MODEL_RATE))
 
-    # 2. Default failed — scan all devices
+    # 2. Default failed or is a plugin — scan for real hardware devices
     devices = sd.query_devices()
+    for i, dev in enumerate(devices):
+        if _is_real_hw_device(dev):
+            rate = int(dev.get("default_samplerate", MODEL_RATE))
+            return i, rate
+
+    # 3. Fall back to any device with input channels (including plugins)
     for i, dev in enumerate(devices):
         if dev.get("max_input_channels", 0) >= 1:
             rate = int(dev.get("default_samplerate", MODEL_RATE))
             return i, rate
 
-    # 3. Last resort: ask PortAudio C-level for the default input
+    # 4. Last resort: ask PortAudio C-level for the default input
     try:
         from sounddevice import _lib
         pa_idx = _lib.Pa_GetDefaultInputDevice()
