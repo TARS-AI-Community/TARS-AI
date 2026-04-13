@@ -235,9 +235,10 @@ def _describe_openai(image_data, prompt):
 
 def _describe_server(image_data, prompt):
     """Send image to external vision server for captioning."""
-    base_url = CONFIG['VISION'].get('base_url', '')
+    # vision_server_url is the preferred key (explicit); base_url is accepted for compatibility
+    base_url = CONFIG['VISION'].get('vision_server_url', '') or CONFIG['VISION'].get('base_url', '')
     if not base_url:
-        return "Error: No base_url configured for server_hosted vision"
+        return "Error: No vision_server_url configured for server_hosted vision (set vision_server_url in [VISION] config)"
     img_bytes = _to_bytes(image_data)
     files = {'image': ('image.jpg', BytesIO(img_bytes), 'image/jpeg')}
     headers = {}

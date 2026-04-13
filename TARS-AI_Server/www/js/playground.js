@@ -466,22 +466,3 @@ loadMusicGallery();
   });
 })();
 
-// Dim tabs for services that aren't loaded, auto-select first available
-fetch(base+'/health').then(r=>r.json()).then(d=>{
-  const active=Object.keys(d.services||{});
-  const tabs=document.querySelectorAll('.tab[data-svc]');
-  let firstAvail=null;
-  tabs.forEach(tab=>{
-    if(!active.includes(tab.dataset.svc)){
-      tab.classList.add('disabled');
-      tab.classList.remove('active');
-    }else if(!firstAvail){firstAvail=tab}
-  });
-  const cur=document.querySelector('.tab.active');
-  if(!cur||cur.classList.contains('disabled')){
-    if(firstAvail){
-      const map={llm:'chat',stt:'stt',tts:'tts',vision:'vis',imagegen:'img',musicgen:'mus'};
-      switchTab(map[firstAvail.dataset.svc]||'chat');
-    }
-  }
-}).catch(()=>{});

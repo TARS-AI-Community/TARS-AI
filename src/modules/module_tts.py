@@ -275,11 +275,27 @@ async def generate_tts_audio(text, ttsoption, is_wakeword=False, ttsurl=None, to
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
             try:
-                response = requests.post(f"{external_url}/tts/generate", json=payload, headers=headers, timeout=30)
+                import struct as _struct
+                # Use sentence-streaming endpoint — yields WAV chunks as they're synthesised
+                # so playback can start before the full response is generated.
+                # Wire format: 4-byte little-endian uint32 length prefix + WAV bytes per chunk.
+                response = requests.post(
+                    f"{external_url}/tts/stream", json=payload, headers=headers,
+                    timeout=60, stream=True
+                )
                 if response.status_code == 200:
-                    audio_buffer = BytesIO(response.content)
-                    audio_buffer.seek(0)
-                    yield audio_buffer
+                    buf = b""
+                    for chunk in response.iter_content(chunk_size=4096):
+                        if not chunk:
+                            continue
+                        buf += chunk
+                        while len(buf) >= 4:
+                            length = _struct.unpack("<I", buf[:4])[0]
+                            if len(buf) < 4 + length:
+                                break
+                            wav_bytes = buf[4:4 + length]
+                            buf = buf[4 + length:]
+                            yield BytesIO(wav_bytes)
                 else:
                     queue_message(f"ERROR: External TTS server returned {response.status_code}")
             except requests.exceptions.ConnectionError:

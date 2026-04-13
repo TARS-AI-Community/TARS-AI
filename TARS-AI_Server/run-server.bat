@@ -104,7 +104,7 @@ if "!NEED_VENV!"=="1" (
 :: Step 3 — Upgrade pip
 :: ---------------------------------------------------------------------------
 echo  [....] Upgrading pip...
-"%VENV_PYTHON%" -m pip install --upgrade pip setuptools wheel
+"%VENV_PYTHON%" -m pip install --upgrade pip setuptools wheel -q
 if !errorlevel! neq 0 (
     echo  [ !! ] pip upgrade failed - continuing anyway...
 ) else (
@@ -128,9 +128,9 @@ if !errorlevel! == 0 (
 :: ---------------------------------------------------------------------------
 echo  [....] Checking PyTorch...
 
-"%VENV_PYTHON%" -c "import torch" >nul 2>&1
+call "%VENV_PYTHON%" -c "import torch" >nul 2>&1
 if !errorlevel! == 0 (
-    for /f %%V in ('"%VENV_PYTHON%" -c "import torch; print(torch.__version__)"') do (
+    for /f %%V in ('call "%VENV_PYTHON%" -c "import torch; print(torch.__version__)"') do (
         echo  [ OK ] PyTorch %%V already installed - skipping.
     )
 ) else (
@@ -174,7 +174,8 @@ if !errorlevel! == 0 (
         "diffusers>=0.27.0" ^
         "sentence-transformers>=2.2.0" ^
         "qrcode[pil]>=7.0" ^
-        "psutil>=5.9.0"
+        "psutil>=5.9.0" ^
+        "httpx>=0.27.0"
 
     if !errorlevel! neq 0 (
         echo  [FAIL] Failed to install dependencies.

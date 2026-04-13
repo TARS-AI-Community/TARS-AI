@@ -16,15 +16,18 @@ python-multipart
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 
-# STT - Speech to Text (faster-whisper + Silero VAD)
-faster-whisper>=1.0.0
+# STT - Speech to Text (sherpa-onnx SenseVoice preferred, faster-whisper fallback)
+sherpa-onnx>=1.10.0
+# faster-whisper>=1.0.0  # fallback — uncomment if you prefer Whisper via CTranslate2
 
 # TTS - Text to Speech (Piper)
 piper-tts>=1.2.0
 
-# LLM - Language Model (transformers + Qwen)
+# LLM - Language Model (transformers + Gemma 4 with audio)
 transformers>=4.51.0
 accelerate>=0.27.0
+sentencepiece>=0.2.0
+librosa>=0.10.0
 
 # Vision - Image Captioning (BLIP)
 Pillow>=10.0.0
@@ -38,8 +41,14 @@ sentence-transformers>=2.2.0
 # QR code generation for tunnel URLs
 qrcode[pil]>=7.0
 
+# Async HTTP client (used for webhook delivery in task system)
+httpx>=0.27.0
+
 # Quantization (8-bit / 4-bit LLM inference)
 bitsandbytes>=0.43.0
+
+# TurboQuant KV cache compression (Google ICLR 2026)
+turboquant>=0.2.0
 
 # LLM - llama.cpp backend (GGUF models)
 # NOT listed here — installed automatically at runtime by app-server.py using
